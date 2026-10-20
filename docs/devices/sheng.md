@@ -258,6 +258,8 @@ git submodule update --init --recursive
 
 The platform seed, trust cache and Data seed are device inputs. The board reports the accepted trust cache hashes.
 
+To use the tablet's full storage, grow the Data seed with `python3 scripts/seed-data-grow.py --auto <seed>.dbr <output>.dbr`. With `sheng-data-persist=2`, the store writes through to the end of userdata, below the 1024 MiB log reserve.
+
 ## Boot
 
 ```sh

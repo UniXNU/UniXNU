@@ -55,6 +55,9 @@
 | `sheng-gpu-power=<n>` | 选择 GPU 电源序列 |
 | `sheng-gpu-metal=1` | 启用 Metal 路径 |
 | `sheng-gpu-addon=1` | 挂载 GPU addon 内容 |
+| `sheng-data-persist=<n>` | 1 只验证 Data store 窗口，2 打开写窗口 |
+| `sheng-data-reset=<n>` | 1 丢弃 Data overlay，2 同时要求 Setup |
+| `sheng-log-reserve=<mib>` | userdata 末尾为诊断日志和导出区保留的空间，默认 1024 |
 | `sheng-disable-watchdogd=1` | 停止 watchdog daemon |
 | `sheng-disable-jobs=<list>` | 跳过指定 launch job |
 | `offline-legacy-*=1` | 启用 legacy 显示和输入探针 |

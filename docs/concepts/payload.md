@@ -106,6 +106,8 @@ A Data seed can be delivered in two forms:
 
 The packed form carries a header with the magic `DBRDISK1`, version 1, the page size, the expanded size and an extent table of `(offset, length)` pairs. Omitted ranges are zeroed RAM.
 
+`scripts/seed-data-grow.py` grows a packed seed to the tablet's storage. The kernel accepts a Data disk of up to 1 TiB, and above 2 GiB the typed provider keeps only the nonzero pages of the seed.
+
 ## Determinism
 
 The boot image is deterministic for a given firmware volume, device tree and ramdisk. The ADT random seed makes each payload build differ. The payload report records the kernel, ADT, trust cache, Data seed and payload hashes.

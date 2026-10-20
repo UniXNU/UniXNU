@@ -37,6 +37,11 @@ UniXNU prints its version and configuration summary to the serial port and draws
 | Move the highlight | Up and Down |
 | Boot the selected entry | Enter |
 | Stop the countdown | Any key |
+| Confirm an entry | Enter |
+| Cancel a confirmation | Any key without choices, or Enter on Cancel |
+| Choose a confirmation option | Up and Down, then Enter |
+
+An entry with `confirm` shows a question before it boots. The countdown skips entries that require confirmation. With `confirm_titles`, Cancel is selected first and the chosen `confirm_args` entry is appended to the entry's arguments. See [Boot configuration](/reference/boot-configuration).
 
 The menu entries come from `\EFI\UniXNU\unixnu.toml`. An entry can start an EFI image, a Linux image with an EFI stub, an action, or a Darwin kernel through the loader protocol.
 

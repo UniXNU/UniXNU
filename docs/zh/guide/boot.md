@@ -37,6 +37,11 @@ UniXNU 把版本和配置摘要写到串口并绘制菜单。默认配置包含�
 | 移动高亮 | 上、下 |
 | 启动选中项 | Enter |
 | 停止倒计时 | 任意键 |
+| 确认菜单项 | Enter |
+| 取消确认 | 没有选项时任意键，或在 Cancel 上按 Enter |
+| 选择确认选项 | 上、下，然后 Enter |
+
+带 `confirm` 的菜单项在启动前显示问题。倒计时跳过需要确认的菜单项。给出 `confirm_titles` 时，Cancel 默认选中，选中的 `confirm_args` 追加到菜单项参数。见[启动配置](/zh/reference/boot-configuration)。
 
 菜单项来自 `\EFI\UniXNU\unixnu.toml`。菜单项可以启动 EFI 程序、带 EFI stub 的 Linux、执行动作，或通过加载器协议启动 Darwin 内核。
 

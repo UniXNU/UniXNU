@@ -21,6 +21,8 @@ skip_setup_tool = "scripts/seed-data-skip-setup.py"
 
 The original seed stays unchanged. The payload uses the edited copy as `Payloads/scratch-data.img`.
 
+Grow the seed first with `scripts/seed-data-grow.py` when the tablet's storage is larger than the seed. The payload edits the grown seed and keeps its size.
+
 ## What the tool changes
 
 `scripts/seed-data-skip-setup.py` expands the packed APFS Data seed, attaches it read-write, merges preferences into `/private/var/mobile/Library/Preferences`, and packs the result again.

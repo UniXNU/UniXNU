@@ -85,6 +85,18 @@ The writable Data volume comes from the Data ramdisk seed in the payload. The se
 ./unixnu build payload --data-ramdisk data.img
 ```
 
+A seed can grow to the tablet's storage without mounting a volume:
+
+```sh
+python3 scripts/seed-data-grow.py --auto data.dbr data-grow.dbr
+```
+
+`--auto` reads `fastboot getvar partition-size:userdata`, subtracts the root image, a 4 MiB guard, the log reserve and the store header and bitmap, rounds down to a whole GiB and keeps 1 GiB free. It needs `build/userdata-root/userdata-root.json` from the userdata build and a tablet in fastboot, unless `--userdata-bytes` is given. `--gib N` sets the size directly, `--userdata-bytes BYTES` skips the fastboot query, and `--reserve-mib` overrides the 1024 MiB log reserve. The accepted range is 3 to 1024 GiB.
+
+The grown output keeps only the nonzero pages, so it is about as large as the input. The volume UUID is unchanged. The seed identity covers the size, so a different size starts the Data volume over. The kernel refuses a seed whose store window does not fit the real userdata partition.
+
+The kernel accepts a Data disk of up to 1 TiB. The typed block provider holds only the nonzero pages of the seed, and the persistent store writes changed pages through to the end of the userdata partition with forced unit access.
+
 `--skip-setup` marks Setup as done in a copy of the seed. The payload report records the seed hash and the resulting image hash. See [Skip Setup](/guide/skip-setup) for the preference changes.
 
 ## Next steps

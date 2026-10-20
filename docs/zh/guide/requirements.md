@@ -6,7 +6,7 @@
 
 | 工具 | 用途 | 安装方式 |
 | --- | --- | --- |
-| macOS 与 Xcode | 内核、skip-setup | App Store 或 developer.apple.com |
+| macOS 与 Xcode | 内核、skip-setup、seed-data-grow | App Store 或 developer.apple.com |
 | Python 3.11 或更新 | 所有步骤 | python.org 或 Homebrew |
 | git、make | 拉取、固件 | Xcode command line tools 或 Homebrew |
 | cmake、ninja | 内核参考源码 | `brew install cmake ninja` |
@@ -14,6 +14,7 @@
 | LLVM 与 lld | 内核、固件、启动镜像 | `brew install llvm` |
 | mtools | 负载卷 | `brew install mtools` |
 | dtc | 设备树属性 | `brew install dtc` |
+| fastboot | seed-data-grow `--auto`、userdata 刷写 | Android platform tools |
 | QEMU 与 AAVMF | 可选冒烟测试 | `brew install qemu` |
 
 驱动会直接找到 Homebrew 的 `/opt/homebrew/opt/llvm/bin`，无需修改 `PATH`。其他工具需要在 `PATH` 中。

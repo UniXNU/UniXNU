@@ -48,6 +48,7 @@
 | 内核入口 panic | 页表、内核窗口、启动参数 | 用 QEMU fixture 和启动进度日志 |
 | panic 给出 provider | 设备树节点或驱动静态库 | 加入节点或启用驱动 |
 | 无根设备 | userdata 镜像、UUID、容量 | 刷写镜像，检查 UUID 和窗口偏移 |
+| Data store 窗口被拒绝 | 种子大小、`sheng-log-reserve`、根镜像 | 增长种子使其适配 userdata，或调整 `sheng-log-reserve` |
 | 用户态显示断言 | 显示 provider 和启动参数 | 检查显示驱动和 focus 参数 |
 
 ## 日志

@@ -6,7 +6,7 @@ The build driver runs on macOS. The kernel step invokes `xcodebuild` with the `i
 
 | Tool | Used by | Install |
 | --- | --- | --- |
-| macOS with Xcode | kernel, skip-setup | App Store or developer.apple.com |
+| macOS with Xcode | kernel, skip-setup, seed-data-grow | App Store or developer.apple.com |
 | Python 3.11 or newer | every step | python.org or Homebrew |
 | git, make | fetch, firmware | Xcode command line tools or Homebrew |
 | cmake, ninja | kernel references | `brew install cmake ninja` |
@@ -14,6 +14,7 @@ The build driver runs on macOS. The kernel step invokes `xcodebuild` with the `i
 | LLVM with lld | kernel, firmware, boot image | `brew install llvm` |
 | mtools | payload volume | `brew install mtools` |
 | dtc | device tree properties | `brew install dtc` |
+| fastboot | seed-data-grow `--auto`, userdata flash | Android platform tools |
 | QEMU and AAVMF | optional smoke tests | `brew install qemu` |
 
 The driver finds the keg-only Homebrew LLVM at `/opt/homebrew/opt/llvm/bin` without `PATH` changes. Other tools must be on `PATH`.

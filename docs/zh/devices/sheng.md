@@ -258,6 +258,8 @@ git submodule update --init --recursive
 
 平台种子、trust cache 和 Data 种子是设备输入。板级文件报告接受的 trust cache 哈希。
 
+要使用平板的全部存储，用 `python3 scripts/seed-data-grow.py --auto <seed>.dbr <output>.dbr` 增长 Data 种子。使用 `sheng-data-persist=2` 时，store 写回 userdata 末尾，位于 1024 MiB 日志保留区之下。
+
 ## 启动
 
 ```sh

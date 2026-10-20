@@ -21,6 +21,8 @@ skip_setup_tool = "scripts/seed-data-skip-setup.py"
 
 原始种子保持不变。负载使用修改后的副本作为 `Payloads/scratch-data.img`。
 
+平板存储大于种子时，先用 `scripts/seed-data-grow.py` 增长种子。负载编辑增长后的种子并保留其大小。
+
 ## 工具修改的内容
 
 `scripts/seed-data-skip-setup.py` 展开打包的 APFS Data 种子，以读写方式挂载，把偏好合入 `/private/var/mobile/Library/Preferences`，然后重新打包。

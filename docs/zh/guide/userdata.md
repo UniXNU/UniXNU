@@ -85,6 +85,18 @@ ADT 生成器写入 `/chosen/root-matching`，包含 `IOProviderClass = IOMedia`
 ./unixnu build payload --data-ramdisk data.img
 ```
 
+种子可以增长到平板的存储大小，不需要挂载卷：
+
+```sh
+python3 scripts/seed-data-grow.py --auto data.dbr data-grow.dbr
+```
+
+`--auto` 读取 `fastboot getvar partition-size:userdata`，减去根镜像、4 MiB guard、日志保留区和 store header 与 bitmap，向下取整到整 GiB，并保留 1 GiB 余量。它需要 userdata 构建生成的 `build/userdata-root/userdata-root.json` 和处于 fastboot 的平板，除非给出 `--userdata-bytes`。`--gib N` 直接指定大小，`--userdata-bytes BYTES` 跳过 fastboot 查询，`--reserve-mib` 覆盖默认 1024 MiB 日志保留区。范围为 3 到 1024 GiB。
+
+增长后的输出只保留非零页，大小接近输入。卷 UUID 不变。种子身份包含大小，所以改变大小会重新开始 Data 卷。store 窗口不适合真实 userdata 分区时，内核拒绝该种子。
+
+内核接受最大 1 TiB 的 Data 磁盘。typed block provider 只保存种子的非零页，持久 store 用 forced unit access 把变化的页写回 userdata 分区末尾。
+
 `--skip-setup` 在种子副本中把 Setup 标记为完成。负载报告记录种子哈希和结果镜像哈希。偏好改动见[跳过 Setup](/zh/guide/skip-setup)。
 
 ## 下一步

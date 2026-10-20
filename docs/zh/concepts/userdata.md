@@ -63,6 +63,12 @@ UUID 是 OS 窗口的卷 UUID。原生块驱动发布 userdata 分区，分区�
 
 可写 Data 卷独立于 userdata 镜像，来自负载中的 Data ramdisk 种子。种子是负载步骤的输入，负载报告记录其哈希。
 
+内核接受最大 1 TiB 的 Data 磁盘。超过 2 GiB 时，typed block provider 只保存种子的非零页，内存占用随内容而不是磁盘大小增长。种子身份对大小和非零页及其索引做哈希。
+
+持久 store 从 userdata 分区末尾的窗口提供磁盘。写入使用 forced unit access，命令完成时页已写入介质。store 与根镜像和日志保留区保持距离。`sheng-log-reserve=<MiB>` 设置该保留区，默认 1024 MiB。`sheng-data-persist=1` 只验证窗口，`sheng-data-persist=2` 打开写窗口。
+
+`scripts/seed-data-grow.py` 把打包种子的 APFS 容器增长到指定大小或平板的 userdata 分区。输出只保留非零页，卷 UUID 不变。改变大小会重新开始 Data 卷。store 窗口不适合真实分区时，内核拒绝该种子。
+
 `--skip-setup` 写出把 Setup 标记为完成的种子副本，副本按种子哈希缓存。
 
 ## 报告

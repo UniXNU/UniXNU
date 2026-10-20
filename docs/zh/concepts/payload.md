@@ -106,6 +106,8 @@ Data 种子有两种交付形式：
 
 Packed 形式包含 magic `DBRDISK1`、版本 1、页大小、展开大小和 `(offset, length)` extent 表。未列出的范围是零填充 RAM。
 
+`scripts/seed-data-grow.py` 把 packed 种子增长到平板的存储大小。内核接受最大 1 TiB 的 Data 磁盘，超过 2 GiB 时 typed provider 只保存种子的非零页。
+
 ## 确定性
 
 给定固件卷、设备树和 ramdisk 时启动镜像确定。ADT 的随机种子使每次负载构建不同。负载报告记录内核、ADT、trust cache、Data 种子和负载哈希。
