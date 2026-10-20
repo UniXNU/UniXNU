@@ -51,7 +51,7 @@ def parse_config(text):
         elif raw.startswith('"') and raw.endswith('"') and len(raw) >= 2:
             values[name] = raw[1:-1]
         elif re.fullmatch(r'-?(0x[0-9a-fA-F]+|\d+)', raw):
-            values[name] = int(raw, 0)
+            values[name] = int(raw, 16 if raw.lstrip('-').startswith('0x') else 10)
         else:
             raise Error(f'defconfig line {number}: value must be y, n, a number or a quoted string: {line}')
     return values

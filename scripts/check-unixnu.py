@@ -50,6 +50,13 @@ def der(tag, body):
 def main():
     config = parse_config('# c\nCONFIG_A=y\nCONFIG_B=n\n# CONFIG_C is not set\nCONFIG_D="x y"\nCONFIG_E=0x10\n')
     expect(config == {'A': True, 'B': False, 'C': False, 'D': 'x y', 'E': 16}, 'defconfig values')
+    for raw, value in (
+        ('0', 0), ('-0', 0), ('00', 0), ('-00', 0),
+        ('8', 8), ('-8', -8), ('08', 8), ('-08', -8),
+        ('010', 10), ('-010', -10), ('00042', 42), ('-00042', -42),
+        ('0x10', 16), ('-0x10', -16), ('0x00FF', 255), ('-0x00FF', -255),
+    ):
+        expect(parse_config(f'CONFIG_NUMBER={raw}\n') == {'NUMBER': value}, f'defconfig number: {raw}')
     try:
         parse_config('CONFIG_A=maybe\n')
         expect(False, 'bad defconfig value accepted')
