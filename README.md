@@ -18,7 +18,7 @@
 
 # UniXNU
 
-🎉 **News:** Native Metal is now fully working on the Xiaomi Pad 6S Pro (sheng). The render server composites the system UI through the Adreno 740, and listed processes get their own Metal devices. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/native-adreno).
+🎉 **News:** The native Metal GPU driver is now fully working on the Xiaomi Pad 6S Pro (sheng). The render server composites the system UI through the Adreno 740, and listed processes get their own Metal devices. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/native-adreno).
 
 An independent project to run iOS and macOS on non-Apple ARM64 hardware through UEFI.
 

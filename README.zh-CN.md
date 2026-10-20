@@ -18,7 +18,7 @@
 
 # UniXNU
 
-🎉 **News:** 原生 Metal 已完全工作在小米平板 6S Pro（sheng）上。render server 通过 Adreno 740 合成系统界面，列入白名单的进程会获得各自的 Metal 设备。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/native-adreno)。
+🎉 **News:** 原生 Metal GPU 驱动已完全工作在小米平板 6S Pro（sheng）上。render server 通过 Adreno 740 合成系统界面，列入白名单的进程会获得各自的 Metal 设备。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/native-adreno)。
 
 一个独立项目，通过 UEFI 在非 Apple ARM64 硬件上运行 iOS 与 macOS。
 
