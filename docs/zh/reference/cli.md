@@ -51,6 +51,8 @@ unixnu build [kernel] [package] [firmware] [payload] [prelink] [userdata]
 
 `build prelink` 只重做预链接。
 
+`build kernel` 在链接前运行生成编译记录的构建和 `[kernel] archives` 中的静态库脚本。
+
 `build userdata --dry-run` 检查 IPSW 和分区大小。
 
 ### bootimg
@@ -96,8 +98,9 @@ unixnu clean
 | `--kernelcache FILE` | 原始解压 kernelcache |
 | `--skip-preflight` | 跳过板级预检 |
 | `--kernel FILE` | 负载使用的预链接内核 |
-| `--kernel-arg NAME[=VALUE]` | 追加内核参数，可重复 |
+| `--kernel-arg NAME[=VALUE]` | 额外内核参数；与 `[payload] kernel_args` 同名时替换，可重复 |
 | `--trust-cache FILE` | trust cache 包 |
+| `--owner-trust-cache FILE` | owner 签名的包，包含原始缓存和额外模块。替换 `--trust-cache`，并跳过板级允许列表 |
 | `--skip-setup` | 在 Data 种子副本中标记 Setup 完成 |
 | `--data-ramdisk FILE` | Data ramdisk 种子 |
 | `--unique-chip-id HEX` | ADT 平台种子 |
@@ -135,6 +138,7 @@ unixnu clean
 | 固件卷大小不匹配 | 报错并给出大小 |
 | 负载超过 `size_mib` | 报错并给出需要提高的大小 |
 | 内核参数非法 | 报错并给出参数 |
+| 内核命令行超过 1000 字节 | 报错并给出长度和上限 |
 | 缺少平台种子 | 提示 `--unique-chip-id` |
 | 示例设备仓库 | `build` 或 `bootimg` 前报错 |
 

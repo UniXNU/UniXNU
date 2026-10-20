@@ -74,7 +74,7 @@ tree/
   .cache/
 ```
 
-Module directories are symbolic links. `scripts/` is copied. The device package appears as `kits/<board.kit>`.
+Module directories are symbolic links. `scripts/` is copied. The device package appears as `kits/<board.kit>`. `.cache/firmware` is a symbolic link to the device repository's `.cache/firmware`.
 
 ## logs
 
@@ -83,7 +83,8 @@ One log per step:
 | File | Step |
 | --- | --- |
 | `kernel.log` | XNU build |
-| `kernel-bootstrap.log` | First pass without boot progress |
+| `kernel-bootstrap.log` | First XNU pass for the compile records |
+| `archive-NN-<name>.log` | Archive builder `NN` from `[kernel] archives` |
 | `prelink.log` | Prelink |
 | `package.log` | EDK II package build |
 | `firmware-preflight.log` | Board preflight |

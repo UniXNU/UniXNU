@@ -121,6 +121,8 @@ subprocess.run(command, cwd=record["directory"], check=True)
 xcrun ar rcs build/my-driver/libMyDriver.a build/my-driver/MyDriver.o
 ```
 
+把构建脚本加入 `board.toml` 的 `[kernel] archives`。`unixnu build kernel` 在链接内核前运行它。
+
 ## 链接进内核
 
 在 `scripts/build-xnu-4k-baseline.sh` 中加入：

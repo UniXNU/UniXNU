@@ -31,12 +31,13 @@
 | 解压后的 kernelcache | 内核预链接 | `--kernelcache FILE` | `UNIXNU_KERNELCACHE` |
 | 编译后的设备树 | 启动镜像 | `--dtb FILE` | `UNIXNU_DTB` |
 | trust cache 包 | 负载 | `--trust-cache FILE` | |
+| owner trust cache 包 | 负载 | `--owner-trust-cache FILE` | |
 | Data ramdisk 种子 | 负载 | `--data-ramdisk FILE` | |
 | 平台种子 | 负载 | `--unique-chip-id HEX` | `UNIXNU_UNIQUE_CHIP_ID` |
 | 预编译静态库 | 内核 | 负载可用 `--kernel FILE` | |
 | edk2 或 Mu_Basecore 树 | package、固件 | `--edk2 DIR` | `UNIXNU_EDK2` |
 
-设备仓库提供板级描述、内核 defconfig 和生成设备静态库的脚本。
+设备仓库提供板级描述、内核 defconfig 和 `[kernel] archives` 中列出的静态库脚本。
 
 ## 设备
 

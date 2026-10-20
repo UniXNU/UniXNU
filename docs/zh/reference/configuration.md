@@ -47,6 +47,7 @@
 | 键 | 类型 | 含义 |
 | --- | --- | --- |
 | `defconfig` | 字符串 | `configs/` 下的文件名 |
+| `archives` | 数组 | 构建树中的静态库脚本，在链接内核前按顺序执行 |
 
 ### [kernel.prelink]
 
@@ -108,7 +109,7 @@
 | `title` | 字符串 | 菜单标题 |
 | `dram_size` | 字符串 | ADT 使用的 DRAM 大小 |
 | `panic_screen` | 布尔 | 把 panic 屏幕打进负载内核 |
-| `trust_cache_sha256` | 数组 | 接受的 trust cache 哈希 |
+| `trust_cache_sha256` | 数组 | 接受的 trust cache 哈希。用 `--owner-trust-cache` 传入的 owner 包跳过此列表 |
 | `kernel_args` | 数组 | 默认内核参数 |
 | `timeout` | 整数 | 菜单超时 |
 | `skip_setup_tool` | 字符串 | `--skip-setup` 使用的脚本 |

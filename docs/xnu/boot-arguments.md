@@ -1,6 +1,6 @@
 # Boot arguments
 
-The kernel command line comes from `[payload] kernel_args` in the board file plus every `--kernel-arg`. The payload step writes the joined line into `unixnu.toml`, and DarwinBoot copies it into `boot_args`.
+The kernel command line comes from `[payload] kernel_args` in the board file. An extra `--kernel-arg NAME=VALUE` replaces the board argument with the same name. The payload step writes the joined line into `unixnu.toml`, and DarwinBoot copies it into `boot_args`.
 
 ## Format
 

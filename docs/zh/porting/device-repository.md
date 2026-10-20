@@ -16,6 +16,7 @@ UniXNU-<device>/
   scripts/                    构建和 bring-up 脚本
   package/                    UniXNU kit 内容
   .gitmodules                 模块子模块
+  .cache/firmware/            专有输入，不跟踪
   unixnu.lock                 unixnu fetch 写入
 ```
 
@@ -84,6 +85,12 @@ windows = [
 ```toml
 [kernel]
 defconfig = "<name>_defconfig"
+archives = [
+  "scripts/build-native-aes-bindings.py",
+  "scripts/build-libpthread-kernel.py",
+  "scripts/build-corecrypto-14.py",
+  "scripts/build-corecrypto-14.py --namespace",
+]
 
 [kernel.prelink]
 tool = "kits/NativePrelink/emit_prelink.py"
@@ -101,6 +108,7 @@ extra_args = []
 | 键 | 含义 |
 | --- | --- |
 | `defconfig` | `configs/` 下的文件名 |
+| `archives` | 静态库脚本，在链接内核前按顺序执行 |
 | `tool` | 构建树中的预链接工具 |
 | `kernel` | 构建树中的原生内核 |
 | `kernelcache_sha256` | 固定原始 kernelcache |
@@ -202,6 +210,8 @@ unique_chip_id = "required"
 | `timeout` | 菜单超时 |
 | `kernel_args` | 默认内核命令行 |
 
+`--owner-trust-cache` 传入 owner 签名的包，包含原始缓存和额外模块。它替换 `--trust-cache`，并跳过 `trust_cache_sha256`。
+
 `[payload.adt]` 的键传给 ADT 工具。工具契约由设备决定，通用键见[设备树](/zh/porting/device-tree)。
 
 ## defconfig
@@ -237,7 +247,11 @@ local = "~/Code/device-kit"
 
 kind 为 `driver`、`kit`、`patch`、`package` 或 `refer`。`path` 只拉取子目录，`local` 使用本地目录。
 
-基础 `feeds.toml` 提供 `xnu`、`libplatform`、`libdispatch`、`AvailabilityVersions` 和 `edk2`。
+基础 `feeds.toml` 提供 `xnu`、`libplatform`、`libdispatch`、`AvailabilityVersions`、`edk2`、`libpthread` 和 `corecrypto-2023`。
+
+## 专有文件
+
+设备仓库把专有输入放在 `.cache/firmware`。构建树链接到该目录，每个构建树和每次重建都使用同一份文件，不把它们复制进仓库。
 
 ## 本地开发
 

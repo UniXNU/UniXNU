@@ -53,8 +53,9 @@ git submodule update --init --recursive
 | `--edk2 DIR` | Mu_Basecore 仓库。 |
 | `--kernelcache FILE` | 原始解压 kernelcache。 |
 | `--kernel FILE` | 负载使用的预链接内核。 |
-| `--kernel-arg NAME[=VALUE]` | 追加内核参数，可重复。 |
+| `--kernel-arg NAME[=VALUE]` | 额外内核参数；与 `[payload] kernel_args` 同名时替换，可重复。 |
 | `--trust-cache FILE` | trust cache 包。 |
+| `--owner-trust-cache FILE` | owner 签名的包，包含原始缓存和额外模块。替换 `--trust-cache`，并跳过板级允许列表。 |
 | `--data-ramdisk FILE` | Data ramdisk 种子。 |
 | `--skip-setup` | 在 Data 种子副本中把 Setup 标记为完成，需要 `--data-ramdisk`。 |
 | `--unique-chip-id HEX` | 设备树平台种子。 |
@@ -85,7 +86,7 @@ tree/
   build/ .cache/
 ```
 
-模块是指向源码的符号链接，脚本会复制。设备 `package/` 出现在 `kits/<board.kit>`。
+模块是指向源码的符号链接，脚本会复制。设备 `package/` 出现在 `kits/<board.kit>`。`.cache/firmware` 指向设备仓库的 `.cache/firmware`，每个构建树使用同一份专有文件。
 
 ### ipsw
 
@@ -99,8 +100,10 @@ IPSW 按成员读取，远程 IPSW 不会整体下载。zip 目录和需要的�
 
 1. 把 `patches/xnu` 和 `kits/NativePrelink/patches` 应用到固定版本的 XNU 源码。
 2. 运行 `prepare-xnu-source.py` 恢复缺失的 DriverKit 头文件。
-3. 为 `ARM64`、机型 `BCM2837`、配置 `DEVELOPMENT`、iOS 17 构建 XNU。
-4. 用 `kits/NativePrelink` 把原生内核与原始 kernelcache 预链接。
+3. `startup.o.json` 不存在时，先运行一次 XNU 以生成编译记录。该轮可以在链接前停止。
+4. 按 `[kernel] archives` 的顺序运行静态库脚本。
+5. 为 `ARM64`、机型 `BCM2837`、配置 `DEVELOPMENT`、iOS 17 构建 XNU，并链接静态库。
+6. 用 `kits/NativePrelink` 把原生内核与原始 kernelcache 预链接。重建会替换上一轮的结果。
 
 kernelcache 来自 IPSW，除非 `--kernelcache` 指定文件。`KernelCache` IM4P 的 LZFSE 负载由 macOS `compression_tool` 解码，选出 arm64 切片，并按 `[kernel.prelink] kernelcache_sha256` 校验。
 
@@ -130,7 +133,9 @@ package 步骤用 EDK II 构建 `package/`，输出到 `out/<board>/package/Buil
 - 可选的 `kernel.macho.trustcache`
 - 可选的 `scratch-data.img`
 
-内核命令行来自 `[payload] kernel_args` 和每个 `--kernel-arg`。卷用 mtools 写入，不挂载。输出为 `out/<board>/payload/payload.img` 和 `payload.json`。
+内核命令行来自 `[payload] kernel_args`。额外的 `--kernel-arg NAME=VALUE` 替换板级同名参数。卷用 mtools 写入，不挂载。输出为 `out/<board>/payload/payload.img` 和 `payload.json`。
+
+`--owner-trust-cache` 传入 owner 签名的包，包含原始缓存和额外模块。它替换 `--trust-cache`，并跳过 `[payload] trust_cache_sha256`。
 
 `--skip-setup` 在 `--data-ramdisk` 提供的 Data 种子副本中把 Setup 标记为完成。
 

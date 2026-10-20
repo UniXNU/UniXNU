@@ -1,6 +1,6 @@
 # 启动参数
 
-内核命令行来自板级文件的 `[payload] kernel_args` 和每个 `--kernel-arg`。负载步骤把合并后的行写入 `unixnu.toml`，DarwinBoot 复制到 `boot_args`。
+内核命令行来自板级文件的 `[payload] kernel_args`。额外的 `--kernel-arg NAME=VALUE` 会替换板级同名参数。负载步骤把合并后的行写入 `unixnu.toml`，DarwinBoot 复制到 `boot_args`。
 
 ## 格式
 

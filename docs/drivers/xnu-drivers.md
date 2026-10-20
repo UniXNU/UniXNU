@@ -121,6 +121,8 @@ The compile record carries the flags that make these values match the kernel.
 xcrun ar rcs build/my-driver/libMyDriver.a build/my-driver/MyDriver.o
 ```
 
+Add the builder script to `[kernel] archives` in `board.toml`. `unixnu build kernel` runs it before the kernel link.
+
 ## Link into the kernel
 
 Add the archive to `scripts/build-xnu-4k-baseline.sh`:

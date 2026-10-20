@@ -31,12 +31,13 @@ These inputs live outside the UniXNU repositories.
 | Decompressed kernelcache | kernel prelink | `--kernelcache FILE` | `UNIXNU_KERNELCACHE` |
 | Compiled device tree | boot image | `--dtb FILE` | `UNIXNU_DTB` |
 | Trust cache bundle | payload | `--trust-cache FILE` | |
+| Owner trust cache bundle | payload | `--owner-trust-cache FILE` | |
 | Data ramdisk seed | payload | `--data-ramdisk FILE` | |
 | Platform seed | payload | `--unique-chip-id HEX` | `UNIXNU_UNIQUE_CHIP_ID` |
 | Prebuilt static archives | kernel | `--kernel FILE` for the payload, archives in the build tree | |
 | edk2 or Mu_Basecore tree | package, firmware | `--edk2 DIR` | `UNIXNU_EDK2` |
 
-The device repository supplies the board description, the kernel defconfig and the scripts that produce device-specific archives.
+The device repository supplies the board description, the kernel defconfig and the archive builders listed in `[kernel] archives`.
 
 ## Device
 

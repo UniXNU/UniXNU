@@ -51,6 +51,8 @@ Runs the named steps in this order: kernel, prelink, package, payload, firmware.
 
 `build prelink` repeats the prelink without rebuilding XNU.
 
+`build kernel` runs the compile-record pass and the `[kernel] archives` builders before the link.
+
 `build userdata --dry-run` checks the IPSW and the partition size.
 
 ### bootimg
@@ -96,8 +98,9 @@ Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the bo
 | `--kernelcache FILE` | Original decompressed kernelcache |
 | `--skip-preflight` | Skips the board preflight scripts |
 | `--kernel FILE` | Prelinked kernel for the payload |
-| `--kernel-arg NAME[=VALUE]` | Extra kernel argument. Repeatable |
+| `--kernel-arg NAME[=VALUE]` | Extra kernel argument. A name already in `[payload] kernel_args` is replaced. Repeatable |
 | `--trust-cache FILE` | Trust cache bundle |
+| `--owner-trust-cache FILE` | Owner-signed bundle with the original caches and extra modules. Replaces `--trust-cache` and skips the board allow-list |
 | `--skip-setup` | Marks Setup as done in a copy of the Data seed |
 | `--data-ramdisk FILE` | Data ramdisk seed |
 | `--unique-chip-id HEX` | Platform seed for the ADT |
@@ -135,6 +138,7 @@ Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the bo
 | Firmware volume size mismatch | Error naming the size |
 | Payload larger than `size_mib` | Error with the size to raise |
 | Invalid kernel argument | Error naming the argument |
+| Kernel command line over 1000 bytes | Error naming the length and the limit |
 | Missing platform seed | Error with the `--unique-chip-id` hint |
 | Example device repository | Error before build or bootimg |
 

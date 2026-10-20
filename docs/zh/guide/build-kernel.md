@@ -12,6 +12,7 @@
 | `out/<board>/tree/build/xnu/ios-sym` | 符号 |
 | `out/<board>/tree/build/xnu/ios-dst` | 安装头文件 |
 | `out/<board>/tree/.cache/fakeroot` | 内核 SDK 根 |
+| `out/<board>/tree/.cache/firmware` | 设备专有输入，链接自设备仓库 |
 | `out/<board>/kernel/kernel.macho` | 预链接内核 |
 
 源码版本来自 `feeds.toml`：
@@ -30,6 +31,8 @@ trustcache_tag = "xnu-8796.101.5"
 ```
 
 `unixnu build kernel` 把这些值作为 `UNIXNU_XNU_TAG`、`UNIXNU_XNU_COMMIT`、`UNIXNU_XNU_DARWIN`、`UNIXNU_XNU_VERSION`、`UNIXNU_DRIVERKIT_TAG` 和 `UNIXNU_TRUSTCACHE_TAG` 传给 `scripts/build-xnu-4k-baseline.sh`。
+
+内核参考源码还固定了 `libpthread`（`libpthread-519.120.4`）和 `corecrypto-2023`（commit `11fba65`）。源码提供者按 XNU 编译记录构建。
 
 构建目标：
 
@@ -74,15 +77,35 @@ DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 | `XNU_BOOT_PROGRESS` | 加入启动进度层 | `build/boot-progress/libBootProgress.a` |
 | `XNU_SOURCE_MOCKFS` | 加入 mockfs 测试文件 | `build/mockfs-fixture/libmockfs_fixture.a` |
 
-设备仓库负责生成自己的静态库。先构建一次内核得到编译命令记录，再运行设备脚本，然后重新构建内核。
+`board.toml` 的 `[kernel] archives` 按顺序列出静态库脚本。每个条目是构建树中的脚本及其参数。例如：
+
+```toml
+[kernel]
+defconfig = "sheng_defconfig"
+archives = [
+  "scripts/build-native-aes-bindings.py",
+  "scripts/build-libpthread-kernel.py",
+  "scripts/build-corecrypto-14.py",
+  "scripts/build-corecrypto-14.py --namespace",
+]
+```
+
+`unixnu build kernel` 在编译记录存在后运行这些脚本，然后链接内核。条目按顺序执行，依赖另一个脚本输出的条目排在它后面。没有脚本生成的静态库需要放入构建树。
+
+脚本通过 `scripts/xnu_symbols.py` 读取符号名。它使用已记录的 checkpoint 内核，或 `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist` 中的目标文件以及 `all-alias.exp` 中的别名。新构建树因此只需要一轮生成编译记录的内核构建，静态库输出也不会与上一次链接的内核冲突。
+
+`build-native-aes-bindings.py` 和 `build-native-adreno-accelerator.py` 在原始硬件证据缺失时使用 `scripts/data/` 中记录的审计结果。记录的地址属于 `board.toml` 固定的 kernelcache。
 
 ## 构建顺序
 
-1. `unixnu fetch` 克隆 XNU 和 Apple 参考源码。
-2. `unixnu build kernel` 应用补丁并构建 XNU。当 `XNU_BOOT_PROGRESS=1` 且 `startup.o.json` 不存在时，先用关闭进度层的配置构建一次，再开启进度层构建。
-3. 构建设备静态库。脚本使用 `build/xnu/ios-obj/.../*.cpo.json` 中记录的实际编译参数。
-4. `unixnu build kernel` 把静态库链接进内核。
-5. `unixnu build prelink` 生成 `out/<board>/kernel/kernel.macho`。
+1. `unixnu fetch` 克隆 XNU、libpthread、corecrypto-2023 和 Apple 参考源码。
+2. `unixnu build kernel` 应用补丁并恢复缺失头文件。
+3. 编译记录不存在时，先运行一次 XNU 生成记录。该轮可以在链接前停止。
+4. 按 `[kernel] archives` 的顺序运行静态库脚本。
+5. 构建并链接内核，然后与原始 kernelcache 预链接。
+6. `unixnu build prelink` 只重做预链接。它会替换上一轮的结果和报告。
+
+预链接内核为 `out/<board>/kernel/kernel.macho`。
 
 预链接读取 `board.toml` 的 `[kernel.prelink]`：
 
@@ -106,7 +129,7 @@ roots = [
 1. 在设备 defconfig 中加入 `CONFIG_XNU_<NAME>=y`。
 2. 在 `scripts/build-xnu-4k-baseline.sh` 中读取 `XNU_<NAME>`。
 3. 用 `EXTRA_MAKE_ARGS+=("<file>.o_CFLAGS_ADD=-DXNU_<NAME>=$VALUE")` 加入目标文件开关。
-4. 把静态库加入 `KERNEL_EXTRA_ARCHIVES` 和 `KERNEL_ARCHIVE_DEPENDENCIES`。
+4. 把构建脚本加入 `[kernel] archives`，再把静态库加入 `KERNEL_EXTRA_ARCHIVES` 和 `KERNEL_ARCHIVE_DEPENDENCIES`。
 5. 通过补丁把 personality 加入 `iokit/KernelConfigTables.cpp`。
 
 ## 使用已有内核

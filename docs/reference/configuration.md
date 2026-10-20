@@ -47,6 +47,7 @@ A device repository has four configuration files: `board.toml`, `configs/<name>_
 | Key | Type | Meaning |
 | --- | --- | --- |
 | `defconfig` | string | File name under `configs/` |
+| `archives` | array | Archive builder scripts of the build tree, run in order before the kernel link |
 
 ### [kernel.prelink]
 
@@ -108,7 +109,7 @@ Types are `s` for string, `x` for hex cells, `i` for decimal cells, `u` for unsi
 | `title` | string | Menu title |
 | `dram_size` | string | DRAM size for the ADT |
 | `panic_screen` | boolean | Patch the panic screen into the payload kernel |
-| `trust_cache_sha256` | array | Accepted trust cache hashes |
+| `trust_cache_sha256` | array | Accepted trust cache hashes. An owner bundle passed with `--owner-trust-cache` skips this list |
 | `kernel_args` | array | Default kernel arguments |
 | `timeout` | integer | Menu timeout |
 | `skip_setup_tool` | string | Script used by `--skip-setup` |

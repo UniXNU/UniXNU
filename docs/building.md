@@ -53,8 +53,9 @@ The boot image is `out/<board>/boot/boot.img` with `out/<board>/boot/boot.json` 
 | `--edk2 DIR` | Mu_Basecore checkout. |
 | `--kernelcache FILE` | Original decompressed kernelcache. |
 | `--kernel FILE` | Prelinked kernel Mach-O for the payload. |
-| `--kernel-arg NAME[=VALUE]` | Extra kernel argument. Repeatable. |
+| `--kernel-arg NAME[=VALUE]` | Extra kernel argument. A name already in `[payload] kernel_args` is replaced. Repeatable. |
 | `--trust-cache FILE` | Trust cache bundle. |
+| `--owner-trust-cache FILE` | Owner-signed bundle with the original caches and extra modules. Replaces `--trust-cache` and skips the board allow-list. |
 | `--data-ramdisk FILE` | Data ramdisk seed. |
 | `--skip-setup` | Marks Setup as done in a copy of the Data seed. Requires `--data-ramdisk`. |
 | `--unique-chip-id HEX` | Platform seed for the device tree. |
@@ -85,7 +86,7 @@ tree/
   build/ .cache/
 ```
 
-Modules are symbolic links to their sources. Scripts are copied. The device `package/` appears as `kits/<board.kit>`.
+Modules are symbolic links to their sources. Scripts are copied. The device `package/` appears as `kits/<board.kit>`. `.cache/firmware` links to the device repository's `.cache/firmware`, so every tree uses the same proprietary files.
 
 ### ipsw
 
@@ -99,8 +100,10 @@ The kernel step:
 
 1. Applies `patches/xnu` and `kits/NativePrelink/patches` to the pinned XNU source.
 2. Runs `prepare-xnu-source.py` to restore omitted DriverKit headers.
-3. Builds XNU for `ARM64`, machine `BCM2837`, configuration `DEVELOPMENT`, iOS 17.
-4. Prelinks the native kernel against the original kernelcache with `kits/NativePrelink`.
+3. Runs one XNU pass for the compile records when `startup.o.json` is absent. The pass may stop at the link.
+4. Runs the archive builders in `[kernel] archives` order.
+5. Builds XNU for `ARM64`, machine `BCM2837`, configuration `DEVELOPMENT`, iOS 17, and links the archives.
+6. Prelinks the native kernel against the original kernelcache with `kits/NativePrelink`. A rebuild replaces the earlier candidate.
 
 The kernelcache comes from the IPSW unless `--kernelcache` supplies one. The LZFSE payload of the `KernelCache` IM4P is decoded with macOS `compression_tool`, the arm64 slice is selected, and the result is checked against `[kernel.prelink] kernelcache_sha256`.
 
@@ -130,7 +133,9 @@ The payload step writes a FAT volume with:
 - the optional `kernel.macho.trustcache`
 - the optional `scratch-data.img`
 
-The kernel command line comes from `[payload] kernel_args` plus every `--kernel-arg`. The volume is written with mtools without mounting. The output is `out/<board>/payload/payload.img` with `payload.json`.
+The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-arg NAME=VALUE` replaces the board argument with the same name. The volume is written with mtools without mounting. The output is `out/<board>/payload/payload.img` with `payload.json`.
+
+`--owner-trust-cache` supplies an owner-signed bundle with the original caches and extra modules. It replaces `--trust-cache` and skips `[payload] trust_cache_sha256`.
 
 `--skip-setup` marks Setup as done in a copy of the Data seed supplied with `--data-ramdisk`.
 

@@ -58,7 +58,7 @@ python3 package/Scripts/qemu-run.py out/esp \
 JOBS=8 bash package/Scripts/smoke.sh
 ```
 
-脚本构建 package 并运行五个场景：
+脚本构建 package 并运行六个场景：
 
 | 场景 | 检查 |
 | --- | --- |
@@ -67,6 +67,7 @@ JOBS=8 bash package/Scripts/smoke.sh
 | 降级 | 无 GOP、无配置、内置菜单项、文本控制台 |
 | 块切片 | FAT 分区头部的配置，尾部发布为块设备 |
 | kext 暂存 | revision 2 交接、revision 1 拒绝、非法包、重复 |
+| 布局 | 1080x2400 显示器使用竖屏，800x1000 显示器保持横屏 |
 
 日志和截图位于 `package/Build/Smoke/`。
 

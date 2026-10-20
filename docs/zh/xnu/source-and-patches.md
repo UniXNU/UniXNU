@@ -12,6 +12,8 @@ UniXNU 从固定版本的 Apple 源码构建 XNU，并按名称顺序应用补�
 | `libplatform` | `libplatform-316.100.10` | 平台头文件 |
 | `libdispatch` | `libdispatch-1477.100.9` | dispatch 头文件 |
 | `AvailabilityVersions` | `AvailabilityVersions-141.1` | availability 宏 |
+| `libpthread` | `libpthread-519.120.4` | 源码 pthread 组件 |
+| `corecrypto-2023` | commit `11fba65` | 源码 corecrypto 组件 |
 | `edk2` | `release/202608` | package 和固件的 EDK II 基础 |
 
 XNU 条目还包含：
@@ -134,7 +136,7 @@ out/<board>/tree/
 1. 在 `feeds.toml` 中设置新的 `ref` 和 `commit`。
 2. 更新 `darwin`、`version`、`driverkit_tag` 和 `trustcache_tag`。
 3. 把补丁 rebase 到新 tag。
-4. 按新的编译记录重建设备静态库。
+4. 按新的编译记录更新 `[kernel] archives` 中的静态库脚本。
 5. 重建预链接并重新验证 kernelcache 固定。
 
 预链接输出依赖原始 kernelcache ABI。新的源码版本可能需要新的 kernelcache 固定和 roots。

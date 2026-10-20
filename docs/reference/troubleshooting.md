@@ -11,11 +11,13 @@
 | `no Mu-Silicium checkout` | `--uefi` path | Pass a checkout with `Resources/Scripts/mkbootimg.py` |
 | `is not a Mu-Silicium checkout` | Path | Point `--uefi` at the root of the checkout |
 | `no edk2 tree` | `--edk2` or fetched edk2 | Run `unixnu fetch` or pass a Mu_Basecore tree |
-| Missing archive in the kernel step | `build/<component>/lib<Name>.a` | Run the device archive scripts |
+| Missing archive in the kernel step | `[kernel] archives` and `logs/archive-NN-*.log` | Fix the builder entry or supply the archive |
+| `no builder makes it` | The named `*_ARCHIVE` path | Add a builder to `[kernel] archives` or place the archive in the build tree |
 | `kernelcache not found` | `--kernelcache` or IPSW | Fetch the IPSW or pass the file |
 | `does not match the kernelcache` | `[kernel.prelink] kernelcache_sha256` | Use the pinned image |
 | Firmware volume size mismatch | `[uefi_fd] size` | Rebuild the firmware or correct the config |
 | Payload larger than `size_mib` | `[payload] size_mib` | Raise the size or remove files |
+| `not one of the trust caches this board accepts` | `[payload] trust_cache_sha256` | Use an accepted bundle or pass the owner-signed bundle with `--owner-trust-cache` |
 | `unsupported kernel argument` | Argument characters | Use letters, digits, `_`, `.`, `-` |
 | `command line is ... bytes` | Argument count | Shorten the line to 1000 bytes |
 

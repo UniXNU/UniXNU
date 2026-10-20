@@ -12,6 +12,8 @@ UniXNU builds XNU from the pinned Apple source and applies its patches in name o
 | `libplatform` | `libplatform-316.100.10` | Platform headers |
 | `libdispatch` | `libdispatch-1477.100.9` | Dispatch headers |
 | `AvailabilityVersions` | `AvailabilityVersions-141.1` | Availability macros |
+| `libpthread` | `libpthread-519.120.4` | Source pthread component |
+| `corecrypto-2023` | commit `11fba65` | Source corecrypto component |
 | `edk2` | `release/202608` | EDK II base for the package and firmware |
 
 The XNU entry also carries:
@@ -136,7 +138,7 @@ out/<board>/tree/
 1. Set a new `ref` and `commit` in `feeds.toml`.
 2. Update `darwin`, `version`, `driverkit_tag` and `trustcache_tag`.
 3. Rebase the patches onto the new tag.
-4. Rebuild the device archives against the new compile records.
+4. Update the archive builders in `[kernel] archives` for the new compile records.
 5. Rebuild the prelink and re-qualify the kernelcache pin.
 
 The prelink output depends on the original kernelcache ABI. A new source version can require a new kernelcache pin and new roots.

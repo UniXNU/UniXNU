@@ -16,6 +16,7 @@ UniXNU-<device>/
   scripts/                    build and bring-up scripts
   package/                    UniXNU kit contents
   .gitmodules                 module submodules
+  .cache/firmware/            proprietary inputs, not tracked
   unixnu.lock                 written by unixnu fetch
 ```
 
@@ -86,6 +87,12 @@ windows = [
 ```toml
 [kernel]
 defconfig = "<name>_defconfig"
+archives = [
+  "scripts/build-native-aes-bindings.py",
+  "scripts/build-libpthread-kernel.py",
+  "scripts/build-corecrypto-14.py",
+  "scripts/build-corecrypto-14.py --namespace",
+]
 
 [kernel.prelink]
 tool = "kits/NativePrelink/emit_prelink.py"
@@ -103,6 +110,7 @@ extra_args = []
 | Key | Meaning |
 | --- | --- |
 | `defconfig` | File name under `configs/` |
+| `archives` | Archive builder scripts, run in order before the kernel link |
 | `tool` | Prelink tool path in the build tree |
 | `kernel` | Native kernel path in the build tree |
 | `kernelcache_sha256` | Pins the original kernelcache |
@@ -204,6 +212,8 @@ unique_chip_id = "required"
 | `timeout` | Menu timeout in seconds |
 | `kernel_args` | Default kernel command line |
 
+`--owner-trust-cache` supplies an owner-signed bundle with the original caches and extra modules. It replaces `--trust-cache` and skips `trust_cache_sha256`.
+
 The `[payload.adt]` keys are passed to the ADT tool. The tool contract is device specific. The generic keys are documented in [Device tree](/porting/device-tree).
 
 ## Defconfig
@@ -241,7 +251,11 @@ local = "~/Code/device-kit"
 
 Kinds are `driver`, `kit`, `patch`, `package` and `refer`. `path` fetches only a subdirectory. `local` uses a local directory.
 
-The base `feeds.toml` supplies `xnu`, `libplatform`, `libdispatch`, `AvailabilityVersions` and `edk2`.
+The base `feeds.toml` supplies `xnu`, `libplatform`, `libdispatch`, `AvailabilityVersions`, `edk2`, `libpthread` and `corecrypto-2023`.
+
+## Proprietary files
+
+The device repository keeps its proprietary inputs under `.cache/firmware`. The build tree links to that directory, so every tree and every rebuild uses the same files without copying them into the repository.
 
 ## Local development
 

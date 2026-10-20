@@ -72,14 +72,15 @@ tree/
   .cache/
 ```
 
-模块目录是符号链接，`scripts/` 是副本。设备 package 出现在 `kits/<board.kit>`。
+模块目录是符号链接，`scripts/` 是副本。设备 package 出现在 `kits/<board.kit>`。`.cache/firmware` 是指向设备仓库 `.cache/firmware` 的符号链接。
 
 ## logs
 
 | 文件 | 步骤 |
 | --- | --- |
 | `kernel.log` | XNU 构建 |
-| `kernel-bootstrap.log` | 关闭进度层的首轮构建 |
+| `kernel-bootstrap.log` | 为编译记录执行的首次 XNU 构建 |
+| `archive-NN-<name>.log` | `[kernel] archives` 中第 `NN` 个静态库脚本 |
 | `prelink.log` | 预链接 |
 | `package.log` | EDK II package 构建 |
 | `firmware-preflight.log` | 板级预检 |

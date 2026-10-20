@@ -12,6 +12,7 @@ The kernel step builds Apple's XNU source with UniXNU patches, then prelinks the
 | `out/<board>/tree/build/xnu/ios-sym` | Symbols |
 | `out/<board>/tree/build/xnu/ios-dst` | Install headers |
 | `out/<board>/tree/.cache/fakeroot` | Kernel SDK root with restored headers |
+| `out/<board>/tree/.cache/firmware` | Device proprietary inputs, linked from the device repository |
 | `out/<board>/kernel/kernel.macho` | Prelinked kernel |
 
 The source version comes from `feeds.toml`:
@@ -30,6 +31,8 @@ trustcache_tag = "xnu-8796.101.5"
 ```
 
 `unixnu build kernel` passes these values to `scripts/build-xnu-4k-baseline.sh` as `UNIXNU_XNU_TAG`, `UNIXNU_XNU_COMMIT`, `UNIXNU_XNU_DARWIN`, `UNIXNU_XNU_VERSION`, `UNIXNU_DRIVERKIT_TAG` and `UNIXNU_TRUSTCACHE_TAG`.
+
+The kernel reference set also pins `libpthread` at `libpthread-519.120.4` and `corecrypto-2023` at commit `11fba65`. The source providers compile against the XNU compile records.
 
 The build target is:
 
@@ -74,15 +77,35 @@ Each `CONFIG_XNU_<NAME>` line becomes `XNU_<NAME>` in the kernel build environme
 | `XNU_BOOT_PROGRESS` | Adds the boot progress layer | `build/boot-progress/libBootProgress.a` |
 | `XNU_SOURCE_MOCKFS` | Adds the mockfs test file | `build/mockfs-fixture/libmockfs_fixture.a` |
 
-The device repository owns the scripts that produce its archives. Run them after the first kernel build produces the compile command records, then run `unixnu build kernel` again.
+`[kernel] archives` in `board.toml` lists the archive builders in order. Each entry is a script of the build tree and its arguments. For example:
+
+```toml
+[kernel]
+defconfig = "sheng_defconfig"
+archives = [
+  "scripts/build-native-aes-bindings.py",
+  "scripts/build-libpthread-kernel.py",
+  "scripts/build-corecrypto-14.py",
+  "scripts/build-corecrypto-14.py --namespace",
+]
+```
+
+`unixnu build kernel` runs the builders after the compile records exist, then links. Entries run in order, so a builder that consumes another builder's output follows it. An archive that no builder makes must be supplied in the build tree.
+
+The builders read symbol names through `scripts/xnu_symbols.py`. It uses the recorded checkpoint kernel, or the objects in `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist` plus the aliases in `all-alias.exp`. A fresh tree therefore needs one kernel pass for the records, and the archive output cannot collide with a previously linked kernel.
+
+`build-native-aes-bindings.py` and `build-native-adreno-accelerator.py` use the recorded audit results in `scripts/data/` when the original hardware evidence is absent. The recorded addresses belong to the kernelcache pinned in `board.toml`.
 
 ## Build sequence
 
-1. `unixnu fetch` clones XNU and the Apple references.
-2. `unixnu build kernel` applies patches and builds XNU. When `XNU_BOOT_PROGRESS=1` and `startup.o.json` is absent, the step runs once with boot progress disabled, then again with it enabled.
-3. Build the device archives. Each device script compiles against the actual XNU compile flags recorded in `build/xnu/ios-obj/.../*.cpo.json`.
-4. `unixnu build kernel` links the archives into the kernel.
-5. `unixnu build prelink` produces `out/<board>/kernel/kernel.macho`.
+1. `unixnu fetch` clones XNU, libpthread, corecrypto-2023 and the Apple references.
+2. `unixnu build kernel` applies the patches and restores the omitted headers.
+3. When the compile records are absent, it runs one XNU pass for them. The pass may stop at the link.
+4. It runs the `[kernel] archives` builders in order.
+5. It builds and links the kernel with the archives, then prelinks it against the original kernelcache.
+6. `unixnu build prelink` repeats only the prelink. It replaces the earlier candidate and its report.
+
+The prelinked kernel is `out/<board>/kernel/kernel.macho`.
 
 The prelink reads `[kernel.prelink]` from `board.toml`:
 
@@ -106,7 +129,7 @@ roots = [
 1. Add `CONFIG_XNU_<NAME>=y` to the device defconfig.
 2. Read `XNU_<NAME>` in `scripts/build-xnu-4k-baseline.sh`.
 3. Add the object flags with `EXTRA_MAKE_ARGS+=("<file>.o_CFLAGS_ADD=-DXNU_<NAME>=$VALUE")`.
-4. Add the archive to `KERNEL_EXTRA_ARCHIVES` and `KERNEL_ARCHIVE_DEPENDENCIES`.
+4. Add the builder script to `[kernel] archives`, then add the archive to `KERNEL_EXTRA_ARCHIVES` and `KERNEL_ARCHIVE_DEPENDENCIES`.
 5. Add the personality to `iokit/KernelConfigTables.cpp` through a patch.
 
 ## Prebuilt kernel
