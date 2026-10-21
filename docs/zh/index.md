@@ -10,12 +10,12 @@ hero:
     - theme: brand
       text: 从这里开始
       link: /zh/guide/overview
+    - theme: brand
+      text: 支持的设备
+      link: /zh/devices/
     - theme: alt
       text: 移植设备
       link: /zh/porting/
-    - theme: alt
-      text: 设备说明
-      link: /zh/devices/
     - theme: alt
       text: GitHub
       link: https://github.com/UniXNU/UniXNU

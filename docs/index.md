@@ -10,12 +10,12 @@ hero:
     - theme: brand
       text: Start here
       link: /guide/overview
+    - theme: brand
+      text: Supported devices
+      link: /devices/
     - theme: alt
       text: Port a device
       link: /porting/
-    - theme: alt
-      text: Device notes
-      link: /devices/
     - theme: alt
       text: GitHub
       link: https://github.com/UniXNU/UniXNU
