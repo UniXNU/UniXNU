@@ -52,6 +52,10 @@
 
 阅读 [CONTRIBUTING.md](CONTRIBUTING.md)（英文），或查看[文档站的贡献页面](https://unixnu.com/zh/contributing/documentation)。
 
+## 私有 blob
+
+不要把 Apple IPSW、kernelcache、磁盘镜像、trust cache、Data 种子或厂商固件提交到本仓库。把它们放在本地缓存或外部存储。
+
 ## 许可证
 
 BSD-2-Clause-Patent。见 [LICENSE](LICENSE)。

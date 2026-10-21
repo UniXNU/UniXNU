@@ -52,6 +52,10 @@ Device repositories use the same layout as this repository. Their modules overri
 
 Read [CONTRIBUTING.md](CONTRIBUTING.md) for the repository scope, the development workflow, the commit format and the documentation rules.
 
+## Private blobs
+
+Do not add Apple IPSW files, kernelcaches, disk images, trust caches, Data seeds or vendor firmware to this repository. Keep them in a local cache or external storage.
+
 ## License
 
 BSD-2-Clause-Patent. See [LICENSE](LICENSE).
