@@ -40,12 +40,14 @@
 .VPHero .actions {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
+  gap: 8px;
+  margin: 0;
   max-width: 720px;
 }
 
 .VPHero .action {
   width: 100%;
+  padding: 0;
 }
 
 .VPHero .action .VPButton {
