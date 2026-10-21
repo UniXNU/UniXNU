@@ -27,6 +27,10 @@ on:
         description: IPSW URL (empty uses board.toml)
         required: false
         default: ""
+      pre_build:
+        description: Optional shell commands run in the UniXNU checkout before the kernel build
+        required: false
+        default: ""
       trust_cache_url:
         description: Trust cache bundle URL (optional)
         required: false
@@ -132,6 +136,12 @@ jobs:
             exit 1
           fi
 
+      - name: Run pre-build steps
+        if: inputs.pre_build != ''
+        env:
+          PRE_BUILD: ${{ inputs.pre_build }}
+        run: bash -euo pipefail -c "$PRE_BUILD"
+
       - name: Build kernel
         env:
           IPSW_URL: ${{ inputs.ipsw_url }}
@@ -192,5 +202,5 @@ jobs:
       - name: Remove proprietary inputs
         if: always()
         run: |
-          rm -rf out/ipsw out/feeds device/.cache/firmware
+          rm -rf out/ipsw out/feeds device/.cache/firmware out/*/tree/.cache/firmware
           rm -f "$RUNNER_TEMP/trustcache" "$RUNNER_TEMP/data.dbr" "$RUNNER_TEMP/data-grow.dbr"
