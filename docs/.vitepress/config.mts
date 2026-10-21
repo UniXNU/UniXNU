@@ -16,6 +16,167 @@ export default withMermaid(defineConfig({
       label: '简体中文',
       lang: 'zh-CN',
       link: '/zh/',
+      themeConfig: {
+        nav: [
+          { text: '指南', link: '/zh/guide/overview', activeMatch: '^/zh/(guide/|building)' },
+          { text: '移植', link: '/zh/porting/', activeMatch: '^/zh/porting/' },
+          { text: '驱动', link: '/zh/drivers/overview', activeMatch: '^/zh/drivers/' },
+          { text: 'XNU', link: '/zh/xnu/source-and-patches', activeMatch: '^/zh/xnu/' },
+          { text: '设备', link: '/zh/devices/', activeMatch: '^/zh/devices/' },
+          { text: '参考', link: '/zh/reference/cli', activeMatch: '^/zh/reference/' },
+          { text: '参与贡献', link: '/zh/contributing/documentation', activeMatch: '^/zh/contributing/' },
+          { text: 'GitHub', link: 'https://github.com/UniXNU/UniXNU', target: '_blank', rel: 'noopener' },
+        ],
+        sidebar: {
+          '/zh/guide/': [
+            {
+              text: '指南',
+              items: [
+                { text: '总览', link: '/zh/guide/overview' },
+                { text: '构建环境', link: '/zh/guide/requirements' },
+                { text: '构建', link: '/zh/building' },
+                { text: '构建内核', link: '/zh/guide/build-kernel' },
+                { text: '启动镜像', link: '/zh/guide/boot' },
+                { text: '调试与日志', link: '/zh/guide/debugging' },
+                { text: '跳过 Setup', link: '/zh/guide/skip-setup' },
+                { text: 'userdata 镜像', link: '/zh/guide/userdata' },
+              ],
+            },
+          ],
+          '/zh/building': [
+            {
+              text: '指南',
+              items: [
+                { text: '总览', link: '/zh/guide/overview' },
+                { text: '构建环境', link: '/zh/guide/requirements' },
+                { text: '构建', link: '/zh/building' },
+                { text: '构建内核', link: '/zh/guide/build-kernel' },
+                { text: '启动镜像', link: '/zh/guide/boot' },
+                { text: '调试与日志', link: '/zh/guide/debugging' },
+                { text: '跳过 Setup', link: '/zh/guide/skip-setup' },
+                { text: 'userdata 镜像', link: '/zh/guide/userdata' },
+              ],
+            },
+          ],
+          '/zh/concepts/': [
+            {
+              text: '原理',
+              items: [
+                { text: '启动链', link: '/zh/concepts/boot-chain' },
+                { text: '启动负载', link: '/zh/concepts/payload' },
+                { text: '内核预链接', link: '/zh/concepts/prelink' },
+                { text: 'userdata 布局', link: '/zh/concepts/userdata' },
+                { text: '完整性与启动策略', link: '/zh/concepts/security' },
+              ],
+            },
+          ],
+          '/zh/porting/': [
+            {
+              text: '移植',
+              items: [
+                { text: '移植总览', link: '/zh/porting/' },
+                { text: '设备仓库', link: '/zh/porting/device-repository' },
+                { text: 'UEFI 固件', link: '/zh/porting/uefi-firmware' },
+                { text: '设备树', link: '/zh/porting/device-tree' },
+                { text: 'bring-up 顺序', link: '/zh/porting/bring-up' },
+              ],
+            },
+          ],
+          '/zh/drivers/': [
+            {
+              text: '驱动',
+              items: [
+                { text: '驱动分层', link: '/zh/drivers/overview' },
+                { text: 'UEFI 驱动', link: '/zh/drivers/uefi-drivers' },
+                { text: 'XNU 驱动', link: '/zh/drivers/xnu-drivers' },
+                { text: 'Adreno 740 驱动', link: '/zh/drivers/native-adreno' },
+                { text: 'Novatek 触控驱动', link: '/zh/drivers/native-novatek-touch' },
+                { text: 'kext 包', link: '/zh/drivers/kexts' },
+                { text: '设备树匹配', link: '/zh/drivers/device-tree-matching' },
+              ],
+            },
+          ],
+          '/zh/xnu/': [
+            {
+              text: 'XNU',
+              items: [
+                { text: '源码与补丁', link: '/zh/xnu/source-and-patches' },
+                { text: '4 KiB 页表', link: '/zh/xnu/four-k-page-tables' },
+                { text: '补丁参考', link: '/zh/xnu/patch-reference' },
+                { text: '启动参数', link: '/zh/xnu/boot-arguments' },
+              ],
+            },
+          ],
+          '/zh/devices/': [
+            {
+              text: '设备',
+              items: [
+                { text: '支持的设备', link: '/zh/devices/' },
+                { text: '小米平板 6S Pro（sheng）', link: '/zh/devices/sheng' },
+                { text: '无人值守测试', link: '/zh/devices/sheng-unattended-test' },
+                {
+                  text: '社区移植',
+                  collapsed: true,
+                  items: [
+                    { text: '小米 13（fuxi）', link: '/zh/devices/fuxi' },
+                    { text: '小米平板 7 / POCO Pad X1（uke）', link: '/zh/devices/uke' },
+                    { text: 'Redmi Note 10 Pro（sweet）', link: '/zh/devices/sweet' },
+                    { text: '一加 Ace 5 Pro（hummer）', link: '/zh/devices/hummer' },
+                    { text: '小米 6（sagit）', link: '/zh/devices/sagit' },
+                    { text: '小米平板 8 Pro（piano）', link: '/zh/devices/piano' },
+                    { text: 'Redmi Note 14 Pro+ 5G（amethyst）', link: '/zh/devices/amethyst' },
+                    { text: 'Redmi K70（vermeer）', link: '/zh/devices/vermeer' },
+                    { text: 'DroidVM 客户机', link: '/zh/devices/droidvm' },
+                    { text: 'QEMU virt', link: '/zh/devices/qemu' },
+                    { text: 'Redmi 9A（dandelion）', link: '/zh/devices/dandelion' },
+                    { text: 'Galaxy Z Fold3（q2q）', link: '/zh/devices/q2q' },
+                    { text: '小米 15（dada）', link: '/zh/devices/dada' },
+                    { text: '小米平板 6（pipa）', link: '/zh/devices/pipa' },
+                    { text: 'Redmi K40 Pro（haydn）', link: '/zh/devices/haydn' },
+                    { text: '小米平板 5（nabu）', link: '/zh/devices/nabu' },
+                    { text: 'Galaxy Tab A7 10.4（gta4l）', link: '/zh/devices/gta4l' },
+                    { text: '一加 13T（oneplus13t）', link: '/zh/devices/oneplus13t' },
+                  ],
+                },
+              ],
+            },
+          ],
+          '/zh/reference/': [
+            {
+              text: '参考',
+              items: [
+                { text: '命令行', link: '/zh/reference/cli' },
+                { text: '设备配置', link: '/zh/reference/configuration' },
+                { text: '启动配置', link: '/zh/reference/boot-configuration' },
+                { text: '输出布局', link: '/zh/reference/output-layout' },
+                { text: 'QEMU 测试', link: '/zh/reference/qemu' },
+                { text: '故障排查', link: '/zh/reference/troubleshooting' },
+                { text: '术语表', link: '/zh/reference/glossary' },
+              ],
+            },
+          ],
+          '/zh/contributing/': [
+            {
+              text: '参与贡献',
+              items: [
+                { text: '文档站', link: '/zh/contributing/documentation' },
+                { text: '仓库布局', link: '/zh/contributing/repository' },
+              ],
+            },
+          ],
+        },
+        outline: { level: [2, 3], label: '本页内容' },
+        docFooter: { prev: '上一页', next: '下一页' },
+        returnToTopLabel: '回到顶部',
+        sidebarMenuLabel: '菜单',
+        darkModeSwitchLabel: '外观',
+        lightModeSwitchTitle: '切换到浅色主题',
+        darkModeSwitchTitle: '切换到深色主题',
+        editLink: {
+          pattern: 'https://github.com/UniXNU/UniXNU/edit/main/docs/:path',
+          text: '在 GitHub 上编辑此页',
+        },
+      },
     },
   },
   head: [
@@ -214,170 +375,5 @@ export default withMermaid(defineConfig({
     darkModeSwitchLabel: 'Appearance',
     lightModeSwitchTitle: 'Use light theme',
     darkModeSwitchTitle: 'Use dark theme',
-    locales: {
-      zh: {
-        label: '简体中文',
-        selectText: '选择语言',
-        nav: [
-          { text: '指南', link: '/zh/guide/overview', activeMatch: '^/zh/(guide/|building)' },
-          { text: '移植', link: '/zh/porting/', activeMatch: '^/zh/porting/' },
-          { text: '驱动', link: '/zh/drivers/overview', activeMatch: '^/zh/drivers/' },
-          { text: 'XNU', link: '/zh/xnu/source-and-patches', activeMatch: '^/zh/xnu/' },
-          { text: '设备', link: '/zh/devices/', activeMatch: '^/zh/devices/' },
-          { text: '参考', link: '/zh/reference/cli', activeMatch: '^/zh/reference/' },
-          { text: '参与贡献', link: '/zh/contributing/documentation', activeMatch: '^/zh/contributing/' },
-          { text: 'GitHub', link: 'https://github.com/UniXNU/UniXNU', target: '_blank', rel: 'noopener' },
-        ],
-        sidebar: {
-          '/zh/guide/': [
-            {
-              text: '指南',
-              items: [
-                { text: '总览', link: '/zh/guide/overview' },
-                { text: '构建环境', link: '/zh/guide/requirements' },
-                { text: '构建', link: '/zh/building' },
-                { text: '构建内核', link: '/zh/guide/build-kernel' },
-                { text: '启动镜像', link: '/zh/guide/boot' },
-                { text: '调试与日志', link: '/zh/guide/debugging' },
-                { text: '跳过 Setup', link: '/zh/guide/skip-setup' },
-                { text: 'userdata 镜像', link: '/zh/guide/userdata' },
-              ],
-            },
-          ],
-          '/zh/building': [
-            {
-              text: '指南',
-              items: [
-                { text: '总览', link: '/zh/guide/overview' },
-                { text: '构建环境', link: '/zh/guide/requirements' },
-                { text: '构建', link: '/zh/building' },
-                { text: '构建内核', link: '/zh/guide/build-kernel' },
-                { text: '启动镜像', link: '/zh/guide/boot' },
-                { text: '调试与日志', link: '/zh/guide/debugging' },
-                { text: '跳过 Setup', link: '/zh/guide/skip-setup' },
-                { text: 'userdata 镜像', link: '/zh/guide/userdata' },
-              ],
-            },
-          ],
-          '/zh/concepts/': [
-            {
-              text: '原理',
-              items: [
-                { text: '启动链', link: '/zh/concepts/boot-chain' },
-                { text: '启动负载', link: '/zh/concepts/payload' },
-                { text: '内核预链接', link: '/zh/concepts/prelink' },
-                { text: 'userdata 布局', link: '/zh/concepts/userdata' },
-                { text: '完整性与启动策略', link: '/zh/concepts/security' },
-              ],
-            },
-          ],
-          '/zh/porting/': [
-            {
-              text: '移植',
-              items: [
-                { text: '移植总览', link: '/zh/porting/' },
-                { text: '设备仓库', link: '/zh/porting/device-repository' },
-                { text: 'UEFI 固件', link: '/zh/porting/uefi-firmware' },
-                { text: '设备树', link: '/zh/porting/device-tree' },
-                { text: 'bring-up 顺序', link: '/zh/porting/bring-up' },
-              ],
-            },
-          ],
-          '/zh/drivers/': [
-            {
-              text: '驱动',
-              items: [
-                { text: '驱动分层', link: '/zh/drivers/overview' },
-                { text: 'UEFI 驱动', link: '/zh/drivers/uefi-drivers' },
-                { text: 'XNU 驱动', link: '/zh/drivers/xnu-drivers' },
-                { text: 'Adreno 740 驱动', link: '/zh/drivers/native-adreno' },
-                { text: 'Novatek 触控驱动', link: '/zh/drivers/native-novatek-touch' },
-                { text: 'kext 包', link: '/zh/drivers/kexts' },
-                { text: '设备树匹配', link: '/zh/drivers/device-tree-matching' },
-              ],
-            },
-          ],
-          '/zh/xnu/': [
-            {
-              text: 'XNU',
-              items: [
-                { text: '源码与补丁', link: '/zh/xnu/source-and-patches' },
-                { text: '4 KiB 页表', link: '/zh/xnu/four-k-page-tables' },
-                { text: '补丁参考', link: '/zh/xnu/patch-reference' },
-                { text: '启动参数', link: '/zh/xnu/boot-arguments' },
-              ],
-            },
-          ],
-          '/zh/devices/': [
-            {
-              text: '设备',
-              items: [
-                { text: '支持的设备', link: '/zh/devices/' },
-                { text: '小米平板 6S Pro（sheng）', link: '/zh/devices/sheng' },
-                { text: '无人值守测试', link: '/zh/devices/sheng-unattended-test' },
-                {
-                  text: '社区移植',
-                  collapsed: true,
-                  items: [
-                    { text: '小米 13（fuxi）', link: '/zh/devices/fuxi' },
-                    { text: '小米平板 7 / POCO Pad X1（uke）', link: '/zh/devices/uke' },
-                    { text: 'Redmi Note 10 Pro（sweet）', link: '/zh/devices/sweet' },
-                    { text: '一加 Ace 5 Pro（hummer）', link: '/zh/devices/hummer' },
-                    { text: '小米 6（sagit）', link: '/zh/devices/sagit' },
-                    { text: '小米平板 8 Pro（piano）', link: '/zh/devices/piano' },
-                    { text: 'Redmi Note 14 Pro+ 5G（amethyst）', link: '/zh/devices/amethyst' },
-                    { text: 'Redmi K70（vermeer）', link: '/zh/devices/vermeer' },
-                    { text: 'DroidVM 客户机', link: '/zh/devices/droidvm' },
-                    { text: 'QEMU virt', link: '/zh/devices/qemu' },
-                    { text: 'Redmi 9A（dandelion）', link: '/zh/devices/dandelion' },
-                    { text: 'Galaxy Z Fold3（q2q）', link: '/zh/devices/q2q' },
-                    { text: '小米 15（dada）', link: '/zh/devices/dada' },
-                    { text: '小米平板 6（pipa）', link: '/zh/devices/pipa' },
-                    { text: 'Redmi K40 Pro（haydn）', link: '/zh/devices/haydn' },
-                    { text: '小米平板 5（nabu）', link: '/zh/devices/nabu' },
-                    { text: 'Galaxy Tab A7 10.4（gta4l）', link: '/zh/devices/gta4l' },
-                    { text: '一加 13T（oneplus13t）', link: '/zh/devices/oneplus13t' },
-                  ],
-                },
-              ],
-            },
-          ],
-          '/zh/reference/': [
-            {
-              text: '参考',
-              items: [
-                { text: '命令行', link: '/zh/reference/cli' },
-                { text: '设备配置', link: '/zh/reference/configuration' },
-                { text: '启动配置', link: '/zh/reference/boot-configuration' },
-                { text: '输出布局', link: '/zh/reference/output-layout' },
-                { text: 'QEMU 测试', link: '/zh/reference/qemu' },
-                { text: '故障排查', link: '/zh/reference/troubleshooting' },
-                { text: '术语表', link: '/zh/reference/glossary' },
-              ],
-            },
-          ],
-          '/zh/contributing/': [
-            {
-              text: '参与贡献',
-              items: [
-                { text: '文档站', link: '/zh/contributing/documentation' },
-                { text: '仓库布局', link: '/zh/contributing/repository' },
-              ],
-            },
-          ],
-        },
-        outline: { level: [2, 3], label: '本页内容' },
-        docFooter: { prev: '上一页', next: '下一页' },
-        returnToTopLabel: '回到顶部',
-        sidebarMenuLabel: '菜单',
-        darkModeSwitchLabel: '外观',
-        lightModeSwitchTitle: '切换到浅色主题',
-        darkModeSwitchTitle: '切换到深色主题',
-        editLink: {
-          pattern: 'https://github.com/UniXNU/UniXNU/edit/main/docs/:path',
-          text: '在 GitHub 上编辑此页',
-        },
-      },
-    },
   },
 }))
