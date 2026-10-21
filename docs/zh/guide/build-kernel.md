@@ -90,7 +90,7 @@ archives = [
 ]
 ```
 
-`unixnu build kernel` 在编译记录存在后运行这些脚本，然后链接内核。条目按顺序执行，依赖另一个脚本输出的条目排在它后面。没有脚本生成的静态库需要放入构建树。
+`unixnu build kernel` 在编译记录存在后运行这些脚本，然后链接内核。条目按顺序执行，依赖另一个脚本输出的条目排在它后面。没有脚本生成的静态库需要放入构建树。配置用 `CONFIG_XNU_BUILD_ARCHIVES=y` 选择运行；bootstrap pass 和 first-console 配置不设置该值。
 
 脚本通过 `scripts/xnu_symbols.py` 读取符号名。它使用已记录的 checkpoint 内核，或 `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist` 中的目标文件以及 `all-alias.exp` 中的别名。新构建树因此只需要一轮生成编译记录的内核构建，静态库输出也不会与上一次链接的内核冲突。
 
