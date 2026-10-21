@@ -1,0 +1,170 @@
+name: macOS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_repository:
+        description: Device repository as owner/name
+        required: true
+        default: UniXNU/UniXNU-sheng
+      device_ref:
+        description: Device repository ref
+        required: true
+        default: main
+      defconfig:
+        description: Defconfig name
+        required: true
+        default: sheng_defconfig
+      steps:
+        description: Steps to run
+        type: choice
+        options:
+          - kernel
+          - kernel userdata
+          - kernel userdata payload
+        default: kernel
+      ipsw_url:
+        description: IPSW URL (empty uses board.toml)
+        required: false
+        default: ""
+      trust_cache_url:
+        description: Trust cache bundle URL (optional)
+        required: false
+        default: ""
+      owner_trust_cache:
+        description: Treat the trust cache URL as an owner-signed bundle
+        type: boolean
+        default: false
+      data_seed_url:
+        description: Data seed URL (optional)
+        required: false
+        default: ""
+      grow_gib:
+        description: Grow the Data seed to this many GiB (optional)
+        required: false
+        default: ""
+      skip_setup:
+        description: Mark Setup as done in the Data seed
+        type: boolean
+        default: false
+      upload_userdata:
+        description: Upload the userdata image (large)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.device_repository }}
+          ref: ${{ inputs.device_ref }}
+          path: device
+          submodules: recursive
+          token: ${{ secrets.UNIXNU_DEVICE_TOKEN || github.token }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install host tools
+        run: |
+          brew install cmake ninja unifdef llvm mtools dtc
+          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
+
+      - name: Select the device
+        run: |
+          ./unixnu defconfig "${{ inputs.defconfig }}" -D "$GITHUB_WORKSPACE/device"
+          ./unixnu fetch
+
+      - name: Prepare inputs
+        env:
+          TRUST_CACHE_URL: ${{ inputs.trust_cache_url }}
+          DATA_SEED_URL: ${{ inputs.data_seed_url }}
+          GROW_GIB: ${{ inputs.grow_gib }}
+          SKIP_SETUP: ${{ inputs.skip_setup }}
+        run: |
+          if [ -n "$TRUST_CACHE_URL" ]; then
+            curl -fL "$TRUST_CACHE_URL" -o "$RUNNER_TEMP/trustcache"
+          fi
+          if [ -n "$DATA_SEED_URL" ]; then
+            curl -fL "$DATA_SEED_URL" -o "$RUNNER_TEMP/data.dbr"
+            if [ -n "$GROW_GIB" ]; then
+              python3 scripts/seed-data-grow.py --gib "$GROW_GIB" "$RUNNER_TEMP/data.dbr" "$RUNNER_TEMP/data-grow.dbr"
+              mv "$RUNNER_TEMP/data-grow.dbr" "$RUNNER_TEMP/data.dbr"
+            fi
+          elif [ -n "$GROW_GIB" ]; then
+            echo "grow_gib needs data_seed_url" >&2
+            exit 1
+          fi
+          if [ "$SKIP_SETUP" = "true" ] && [ ! -f "$RUNNER_TEMP/data.dbr" ]; then
+            echo "skip_setup needs data_seed_url" >&2
+            exit 1
+          fi
+
+      - name: Build kernel
+        env:
+          IPSW_URL: ${{ inputs.ipsw_url }}
+        run: |
+          args=()
+          if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
+          ./unixnu build kernel "${args[@]}"
+
+      - name: Build userdata
+        if: contains(inputs.steps, 'userdata')
+        env:
+          IPSW_URL: ${{ inputs.ipsw_url }}
+        run: |
+          args=()
+          if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
+          ./unixnu build userdata "${args[@]}"
+
+      - name: Build payload
+        if: contains(inputs.steps, 'payload')
+        env:
+          UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          SKIP_SETUP: ${{ inputs.skip_setup }}
+          OWNER_TRUST_CACHE: ${{ inputs.owner_trust_cache }}
+        run: |
+          args=()
+          if [ -f "$RUNNER_TEMP/trustcache" ]; then
+            if [ "$OWNER_TRUST_CACHE" = "true" ]; then
+              args+=(--owner-trust-cache "$RUNNER_TEMP/trustcache")
+            else
+              args+=(--trust-cache "$RUNNER_TEMP/trustcache")
+            fi
+          fi
+          if [ -f "$RUNNER_TEMP/data.dbr" ]; then args+=(--data-ramdisk "$RUNNER_TEMP/data.dbr"); fi
+          if [ -n "$UNIQUE_CHIP_ID" ]; then args+=(--unique-chip-id "$UNIQUE_CHIP_ID"); fi
+          if [ "$SKIP_SETUP" = "true" ]; then args+=(--skip-setup); fi
+          ./unixnu build payload "${args[@]}"
+
+      - name: Upload kernel and payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-${{ inputs.defconfig }}
+          path: |
+            out/*/kernel/**
+            out/*/payload/**
+            out/*/logs/**
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload userdata
+        if: inputs.upload_userdata && contains(inputs.steps, 'userdata')
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-userdata-${{ inputs.defconfig }}
+          path: out/*/userdata/**
+          if-no-files-found: error
+          retention-days: 7
