@@ -6,6 +6,14 @@ A device entry is a pair of repositories and the values that make the generic st
 | --- | --- | --- | --- | --- |
 | Xiaomi Pad 6S Pro (sheng) | SM8550 | Display, Touch, UFS, GPU | [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) | [uefi-sheng](https://github.com/UniXNU/uefi-sheng) |
 
+## Community ports
+
+The port listed here is independent. Its maintainer owns the repository; the UniXNU organization does not maintain it.
+
+| Device | SoC | State | Repository | Maintainer |
+| --- | --- | --- | --- | --- |
+| [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | UniXNU device repository, work in progress | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
+
 ## What a device page records
 
 | Item | Example |

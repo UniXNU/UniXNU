@@ -6,6 +6,14 @@
 | --- | --- | --- | --- | --- |
 | 小米平板 6S Pro（sheng） | SM8550 | 显示、触控、UFS、GPU | [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng) | [uefi-sheng](https://github.com/UniXNU/uefi-sheng) |
 
+## 社区移植
+
+这里列出的移植独立维护。仓库归维护者所有，UniXNU 组织不维护它。
+
+| 设备 | SoC | 状态 | 仓库 | 维护者 |
+| --- | --- | --- | --- | --- |
+| [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | UniXNU 设备仓库，进行中 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
+
 ## 设备页面记录什么
 
 | 项目 | 示例 |
