@@ -42,6 +42,7 @@ git submodule update --init --recursive
 | `defconfig` | defconfig 名称 |
 | `steps` | `kernel`、`kernel userdata` 或 `kernel userdata payload`，默认 `kernel userdata` |
 | `ipsw_url` | 可选 IPSW URL，空值使用 `board.toml` |
+| `pre_build` | 可选 shell 命令，在内核构建前于 UniXNU 检出目录运行 |
 | `trust_cache_url` | 可选 trust cache 包 URL |
 | `owner_trust_cache` | 把该 URL 当作 owner 签名的包 |
 | `data_seed_url` | 可选 Data 种子 URL |
@@ -50,6 +51,8 @@ git submodule update --init --recursive
 | `upload_userdata` | 上传 userdata 镜像。该镜像很大 |
 
 设备仓库为私有仓库时，添加仓库 secret `UNIXNU_DEVICE_TOKEN`。
+
+需要 bootstrap 候选、显示 ABI 证据或预置 kernelcache 的设备静态库链使用 `pre_build`。命令在 `unixnu fetch` 之后、`unixnu build kernel` 之前运行。workflow 在上传 artifact 后删除抓取的 IPSW、抓取的 feeds 和预置的固件缓存。
 
 workflow 运行 kernel、userdata 和 payload。package、firmware 和 boot image 步骤可以在任意系统运行，不在 workflow 中。公开仓库使用免费的 macOS runner 配额，私有仓库消耗 Actions 分钟。
 

@@ -94,6 +94,8 @@ archives = [
 
 The builders read symbol names through `scripts/xnu_symbols.py`. It uses the recorded checkpoint kernel, or the objects in `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist` plus the aliases in `all-alias.exp`. A fresh tree therefore needs one kernel pass for the records, and the archive output cannot collide with a previously linked kernel.
 
+The kernel step prepares the public `IOStorageFamily` headers under `build/storage-abi/include` before the archive builders.
+
 `build-native-aes-bindings.py` and `build-native-adreno-accelerator.py` use the recorded audit results in `scripts/data/` when the original hardware evidence is absent. The recorded addresses belong to the kernelcache pinned in `board.toml`.
 
 ## Build sequence
