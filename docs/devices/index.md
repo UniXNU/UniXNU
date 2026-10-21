@@ -29,7 +29,8 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; not run on hardware | xiaomi-haydn-dev |
 | [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | XNU executes; PMGR and userspace next | Lux12138 |
 | [Galaxy Tab A7 10.4 (gta4l)](/devices/gta4l) | SM6115 | Board, ADT and firmware build; kernel not built | NoNameBuilder |
-| [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | UEFI menu and DarwinBoot handoff; no XNU entry | IssacL04 |
+| [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | XNU S1 to S6 reached; root device search panics | IssacL04 |
+| [OnePlus Pad 2 Pro (erhai)](/devices/erhai) | SM8750 | XNU entry bring-up; root and userland not configured | wally001012-cyber |
 | [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; payload and XNU pending | peiyuesheng666 |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
 | [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |

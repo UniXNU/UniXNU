@@ -29,7 +29,8 @@
 | [Redmi K40 Pro（haydn）](/zh/devices/haydn) | SM8350 | 固件、负载和启动镜像已构建，未在真机运行 | xiaomi-haydn-dev |
 | [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | XNU 已执行，下一步 PMGR 和用户态 | Lux12138 |
 | [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，内核未构建 | NoNameBuilder |
-| [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | UEFI 菜单和 DarwinBoot 交接，尚未进入 XNU | IssacL04 |
+| [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | 已到 XNU S1 到 S6，根设备查找 panic | IssacL04 |
+| [一加平板 2 Pro（erhai）](/zh/devices/erhai) | SM8750 | XNU 入口 bring-up，根和用户态未配置 | wally001012-cyber |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/phy120) | SM8650 | 启动管理器菜单工作，负载和 XNU 待完成 | peiyuesheng666 |
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
 | [Redmi K30 5G（picasso）](/zh/devices/picasso) | SM7250 | 早期骨架，固件未构建 | YinCQL |
