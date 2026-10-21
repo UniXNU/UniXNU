@@ -40,7 +40,7 @@ git submodule update --init --recursive
 | `device_repository` | 设备仓库，格式 `owner/name` |
 | `device_ref` | 设备仓库的 ref |
 | `defconfig` | defconfig 名称 |
-| `steps` | `kernel`、`kernel userdata` 或 `kernel userdata payload` |
+| `steps` | `kernel`、`kernel userdata` 或 `kernel userdata payload`，默认 `kernel userdata` |
 | `ipsw_url` | 可选 IPSW URL，空值使用 `board.toml` |
 | `trust_cache_url` | 可选 trust cache 包 URL |
 | `owner_trust_cache` | 把该 URL 当作 owner 签名的包 |

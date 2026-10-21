@@ -40,7 +40,7 @@ The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A
 | `device_repository` | Device repository as `owner/name` |
 | `device_ref` | Ref of the device repository |
 | `defconfig` | Defconfig name |
-| `steps` | `kernel`, `kernel userdata` or `kernel userdata payload` |
+| `steps` | `kernel`, `kernel userdata` or `kernel userdata payload`. The default is `kernel userdata` |
 | `ipsw_url` | Optional IPSW URL. An empty value uses `board.toml` |
 | `trust_cache_url` | Optional trust cache bundle URL |
 | `owner_trust_cache` | Treat the URL as an owner-signed bundle |
