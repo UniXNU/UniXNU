@@ -26,6 +26,33 @@ The device repository is remembered in `out/state.json` after the first `-D`.
 
 The boot image is `out/<board>/boot/boot.img` with `out/<board>/boot/boot.json` next to it. Options follow the subcommand.
 
+## macOS runner
+
+The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A fork can run them on a GitHub macOS runner without a local Mac.
+
+1. Fork the repository and enable Actions.
+2. Add the repository secret `UNIXNU_UNIQUE_CHIP_ID` when the board requires a platform seed.
+3. Run the `macOS build` workflow. Choose the device repository, ref, defconfig and steps.
+4. Download the artifacts from the run.
+
+| Input | Meaning |
+| --- | --- |
+| `device_repository` | Device repository as `owner/name` |
+| `device_ref` | Ref of the device repository |
+| `defconfig` | Defconfig name |
+| `steps` | `kernel`, `kernel userdata` or `kernel userdata payload` |
+| `ipsw_url` | Optional IPSW URL. An empty value uses `board.toml` |
+| `trust_cache_url` | Optional trust cache bundle URL |
+| `owner_trust_cache` | Treat the URL as an owner-signed bundle |
+| `data_seed_url` | Optional Data seed URL |
+| `grow_gib` | Grow the Data seed to this size |
+| `skip_setup` | Mark Setup as done in the Data seed |
+| `upload_userdata` | Upload the userdata image. The image is large |
+
+Add the repository secret `UNIXNU_DEVICE_TOKEN` when the device repository is private.
+
+The workflow runs kernel, userdata and payload. Package, firmware and boot image steps run on any OS and stay outside the workflow. Public repositories use the free macOS runner quota. Private repositories consume Actions minutes.
+
 ## Commands
 
 | Command | Action |

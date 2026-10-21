@@ -21,6 +21,8 @@
 
 `unixnu fetch` 需要网络，用于更新模块子模块并拉取 Apple 源码参考和 Mu_Basecore 树。
 
+没有 Mac 时，`macOS build` workflow 在 GitHub 的 macOS runner 上运行 Mac 专属步骤。见[构建](/zh/building#macos-runner)。
+
 ## 外部输入
 
 以下输入位于 UniXNU 仓库之外。

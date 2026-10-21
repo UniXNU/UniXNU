@@ -21,6 +21,8 @@ The driver finds the keg-only Homebrew LLVM at `/opt/homebrew/opt/llvm/bin` with
 
 Network access is required for `unixnu fetch`, which updates the module submodules and fetches Apple source references and a Mu_Basecore tree.
 
+Without a Mac, the `macOS build` workflow runs the Mac-only steps on a GitHub macOS runner. See [Build](/building#macos-runner).
+
 ## External inputs
 
 These inputs live outside the UniXNU repositories.
