@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
+# Many checks are bare `test -f`; name the one that stops the build.
+trap 'echo "build-xnu-4k-baseline.sh: line $LINENO: $BASH_COMMAND failed" >&2' ERR
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$ROOT"
 # Source versions come from feeds.toml through the unixnu driver; the defaults are the qualified ones.
