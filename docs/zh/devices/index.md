@@ -30,6 +30,10 @@
 | [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | XNU 已执行，下一步 PMGR 和用户态 | Lux12138 |
 | [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，内核未构建 | NoNameBuilder |
 | [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | UEFI 菜单和 DarwinBoot 交接，尚未进入 XNU | IssacL04 |
+| [OPPO Find X7 Ultra（PHY120）](/zh/devices/phy120) | SM8650 | 启动管理器菜单工作，负载和 XNU 待完成 | peiyuesheng666 |
+| [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
+| [Redmi K30 5G（picasso）](/zh/devices/picasso) | SM7250 | 早期骨架，固件未构建 | YinCQL |
+| [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | 已到 GUI 进度条，安装服务受阻 | jasper2863 |
 
 ## 设备页面记录什么
 

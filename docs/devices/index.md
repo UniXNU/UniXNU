@@ -30,6 +30,10 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | XNU executes; PMGR and userspace next | Lux12138 |
 | [Galaxy Tab A7 10.4 (gta4l)](/devices/gta4l) | SM6115 | Board, ADT and firmware build; kernel not built | NoNameBuilder |
 | [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | UEFI menu and DarwinBoot handoff; no XNU entry | IssacL04 |
+| [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; payload and XNU pending | peiyuesheng666 |
+| [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
+| [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |
+| [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | GUI progress bar reached; installation service blocked | jasper2863 |
 
 ## What a device page records
 
