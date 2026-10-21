@@ -90,6 +90,11 @@ def build(ctx, modules):
         except Error:
             if not record.is_file():
                 raise
+    storage = ctx.tree / 'build/storage-abi/include/IOKit/storage'
+    if (ctx.tree / 'refer/IOStorageFamily').is_dir() and not storage.is_dir():
+        log('kernel: prepare storage headers')
+        run(['python3', ctx.tree / 'scripts/prepare-storage-headers.py'], cwd=ctx.tree, env=env,
+            log_file=ctx.logs / 'storage-headers.log')
     build_archives(ctx, env)
     run(['bash', script], cwd=ctx.tree, env=env, log_file=ctx.logs / 'kernel.log')
 

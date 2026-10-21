@@ -62,3 +62,10 @@ name = "corecrypto-2023"
 kind = "refer"
 git = "https://github.com/ONLYA/corecrypto-2023.git"
 commit = "11fba65b12d8830630e248dfa8344caf8b065f26"
+
+[[source]]
+name = "IOStorageFamily"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/IOStorageFamily.git"
+ref = "main"
+commit = "e45fbe30a7879e0b16e26dddb78538f1b00e0bff"
