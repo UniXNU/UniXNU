@@ -104,7 +104,8 @@ jobs:
       - name: Select the device
         run: |
           ./unixnu defconfig "${{ inputs.defconfig }}" -D "$GITHUB_WORKSPACE/device"
-          ./unixnu fetch
+          ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread \
+                          corecrypto-2023 IOStorageFamily -D "$GITHUB_WORKSPACE/device"
 
       - name: Prepare inputs
         env:
