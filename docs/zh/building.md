@@ -42,7 +42,7 @@ git submodule update --init --recursive
 | `defconfig` | defconfig 名称 |
 | `steps` | `kernel`、`kernel userdata` 或 `kernel userdata payload`，默认 `kernel userdata` |
 | `ipsw_url` | 可选 IPSW URL，空值使用 `board.toml` |
-| `pre_build` | 可选 shell 命令，在内核构建前于 UniXNU 检出目录运行 |
+| `pre_build` | 可选 shell 命令，在内核构建前于 UniXNU 检出目录运行。设备仓库位于 `DEVICE_DIR` |
 | `trust_cache_url` | 可选 trust cache 包 URL |
 | `owner_trust_cache` | 把该 URL 当作 owner 签名的包 |
 | `data_seed_url` | 可选 Data 种子 URL |
