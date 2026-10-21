@@ -12,6 +12,10 @@ Read the [documentation](https://unixnu.com) before changing the build driver, t
 
 A change that applies to one board belongs in the device repository. A change that applies to the stack belongs in this repository.
 
+## Repository topics
+
+Every repository in the UniXNU organization carries the `unixnu` topic. Add the topic before a repository is linked from the documentation or used as a module.
+
 ## Development
 
 ```sh
@@ -64,6 +68,8 @@ Late patches use the `zzy-` and `zzz-` prefixes.
 - A driver that touches hardware reports each stage through a boot argument while it is under bring-up.
 
 ## Documentation
+
+After a device port, contribute the device page and the porting notes to this repository.
 
 The documentation source is in `docs/`. The site is bilingual:
 
