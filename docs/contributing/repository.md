@@ -62,10 +62,15 @@ The build scripts locate the tree from their own path. A script in `scripts/` ca
 
 ## Add a module
 
+Every repository in the organization carries the `unixnu` topic.
+
 1. Create a public repository under the UniXNU organization.
-2. Add it as a submodule under `drivers/` or `kits/`.
-3. Reference it from the board file or the kernel script.
-4. Document the module in the matching section.
+2. Add the `unixnu` topic in the repository settings.
+3. Add it as a submodule under `drivers/` or `kits/`.
+4. Reference it from the board file or the kernel script.
+5. Document the module in the matching section.
+
+After a device port, contribute the device page and the porting notes to this repository.
 
 ## Commit scope
 
