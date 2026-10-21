@@ -69,16 +69,12 @@ jobs:
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
 
       - uses: actions/checkout@v4
         with:
           repository: ${{ inputs.device_repository }}
           ref: ${{ inputs.device_ref }}
           path: device
-          submodules: recursive
           token: ${{ secrets.UNIXNU_DEVICE_TOKEN || github.token }}
 
       - uses: actions/setup-python@v5
