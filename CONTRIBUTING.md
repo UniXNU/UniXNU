@@ -16,6 +16,10 @@ A change that applies to one board belongs in the device repository. A change th
 
 Every repository in the UniXNU organization carries the `unixnu` topic. Add the topic before a repository is linked from the documentation or used as a module.
 
+## Private blobs
+
+Do not commit Apple IPSW files, kernelcaches, disk images, trust caches, Data seeds, vendor firmware or other proprietary binaries. Keep them in a local cache or external storage. The macOS runner deletes these inputs after the artifacts are uploaded.
+
 ## Development
 
 ```sh
