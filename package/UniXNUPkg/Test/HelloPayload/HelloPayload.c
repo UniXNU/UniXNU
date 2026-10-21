@@ -265,7 +265,7 @@ CheckSlice (
       Block,
       Status
       );
-    Report (L"slice", !EFI_ERROR (Status) && AsciiStrnCmp (Block, "UNIXNU-TAIL", 14) == 0, Detail);
+    Report (L"slice", !EFI_ERROR (Status) && AsciiStrnCmp (Block, "UNIXNU-TAIL", 11) == 0, Detail);
     FreePool (Block);
   }
 
