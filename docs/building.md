@@ -54,6 +54,18 @@ Add the repository secret `UNIXNU_DEVICE_TOKEN` when the device repository is pr
 
 A device archive chain that needs a bootstrap candidate, display ABI evidence or a staged kernelcache uses `pre_build`. Its commands run after `unixnu fetch` and before `unixnu build kernel`. The workflow removes the fetched IPSW, the fetched feeds and the staged firmware cache after the artifacts are uploaded.
 
+A bootstrap candidate example:
+
+```sh
+./unixnu defconfig bootstrap_defconfig -D "$DEVICE_DIR"
+./unixnu build kernel -D "$DEVICE_DIR"
+mkdir -p out/<board>/tree/build/native-prelink
+cp out/<board>/kernel/kernel.macho \
+   out/<board>/tree/build/native-prelink/<candidate>.macho
+```
+
+The candidate names and the display or kernelcache inputs come from the device repository.
+
 The workflow runs kernel, userdata and payload. Package, firmware and boot image steps run on any OS and stay outside the workflow. Public repositories use the free macOS runner quota. Private repositories consume Actions minutes.
 
 ## Commands
