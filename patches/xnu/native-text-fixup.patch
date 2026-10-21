@@ -1,0 +1,194 @@
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+index 22c5bf1..05c6504 100644
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -6043,6 +6043,148 @@ cs_validate_hash(
+ 	return validated;
+ }
+ 
++/*
++ * Fixups of signed file text, given as boot arguments text-fixup0..7=<file name>,<file offset>,<original>,<replacement>
++ * (offset in hex, byte strings in hex, at most 16 bytes). A page is changed only after it passed signature validation and
++ * only when the original bytes match, so a different file or build is left alone.
++ */
++#define CS_TEXT_FIXUP_MAX 8
++#define CS_TEXT_FIXUP_BYTES 16
++struct cs_text_fixup {
++	char            name[64];
++	uint64_t        offset;
++	uint8_t         original[CS_TEXT_FIXUP_BYTES];
++	uint8_t         replacement[CS_TEXT_FIXUP_BYTES];
++	uint32_t        length;
++};
++static TUNABLE_STR(cs_text_fixup_arg0, 160, "text-fixup0", "");
++static TUNABLE_STR(cs_text_fixup_arg1, 160, "text-fixup1", "");
++static TUNABLE_STR(cs_text_fixup_arg2, 160, "text-fixup2", "");
++static TUNABLE_STR(cs_text_fixup_arg3, 160, "text-fixup3", "");
++static TUNABLE_STR(cs_text_fixup_arg4, 160, "text-fixup4", "");
++static TUNABLE_STR(cs_text_fixup_arg5, 160, "text-fixup5", "");
++static TUNABLE_STR(cs_text_fixup_arg6, 160, "text-fixup6", "");
++static TUNABLE_STR(cs_text_fixup_arg7, 160, "text-fixup7", "");
++static struct cs_text_fixup cs_text_fixups[CS_TEXT_FIXUP_MAX];
++static uint32_t cs_text_fixup_count;
++uint32_t cs_text_fixup_parsed;
++uint32_t cs_text_fixup_applied;
++
++static int
++cs_text_fixup_hex(char c)
++{
++	if (c >= '0' && c <= '9') {
++		return c - '0';
++	}
++	if (c >= 'a' && c <= 'f') {
++		return c - 'a' + 10;
++	}
++	if (c >= 'A' && c <= 'F') {
++		return c - 'A' + 10;
++	}
++	return -1;
++}
++
++/* Hex bytes up to the next ',' or the end; returns the count or 0 on a malformed field. */
++static uint32_t
++cs_text_fixup_bytes(const char **cursor, uint8_t *out)
++{
++	const char *s = *cursor;
++	uint32_t n = 0;
++	while (*s && *s != ',') {
++		int hi = cs_text_fixup_hex(s[0]), lo = s[1] ? cs_text_fixup_hex(s[1]) : -1;
++		if (hi < 0 || lo < 0 || n == CS_TEXT_FIXUP_BYTES) {
++			return 0;
++		}
++		out[n++] = (uint8_t)(hi << 4 | lo);
++		s += 2;
++	}
++	*cursor = *s ? s + 1 : s;
++	return n;
++}
++
++static bool
++cs_text_fixup_parse(const char *arg, struct cs_text_fixup *f)
++{
++	const char *comma = strchr(arg, ',');
++	if (comma == NULL || comma == arg || (size_t)(comma - arg) >= sizeof(f->name)) {
++		return false;
++	}
++	strlcpy(f->name, arg, (size_t)(comma - arg) + 1);
++	const char *s = comma + 1;
++	f->offset = 0;
++	for (; *s && *s != ','; s++) {
++		int v = cs_text_fixup_hex(*s);
++		if (v < 0) {
++			return false;
++		}
++		f->offset = f->offset << 4 | (uint64_t)v;
++	}
++	if (*s++ != ',') {
++		return false;
++	}
++	uint32_t n = cs_text_fixup_bytes(&s, f->original);
++	if (n == 0 || cs_text_fixup_bytes(&s, f->replacement) != n || *s) {
++		return false;
++	}
++	/* One page holds the whole fixup, so a single validated page carries it. */
++	if ((f->offset & PAGE_MASK) + n > PAGE_SIZE) {
++		return false;
++	}
++	f->length = n;
++	return true;
++}
++
++static void
++cs_text_fixup_init(void)
++{
++	const char *args[CS_TEXT_FIXUP_MAX] = {
++		cs_text_fixup_arg0, cs_text_fixup_arg1, cs_text_fixup_arg2, cs_text_fixup_arg3,
++		cs_text_fixup_arg4, cs_text_fixup_arg5, cs_text_fixup_arg6, cs_text_fixup_arg7,
++	};
++	for (int i = 0; i < CS_TEXT_FIXUP_MAX; i++) {
++		if (args[i][0] == '\0') {
++			continue;
++		}
++		if (cs_text_fixup_parse(args[i], &cs_text_fixups[cs_text_fixup_count])) {
++			cs_text_fixup_count++;
++		} else {
++			printf("text-fixup%d: malformed, ignored\n", i);
++		}
++	}
++	cs_text_fixup_parsed = cs_text_fixup_count;
++}
++STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, cs_text_fixup_init);
++
++/*
++ * Applies the fixups that fall in this validated page of vp. kva is a writable kernel address of the page. Returns the
++ * number of fixups written, so the caller makes the instruction cache coherent.
++ */
++uint32_t
++cs_text_fixup_page(struct vnode *vp, memory_object_offset_t page_offset, void *kva)
++{
++	uint32_t written = 0;
++	for (uint32_t i = 0; i < cs_text_fixup_count; i++) {
++		const struct cs_text_fixup *f = &cs_text_fixups[i];
++		if (f->offset < page_offset || f->offset + f->length > page_offset + PAGE_SIZE) {
++			continue;
++		}
++		if (vp == NULLVP || vp->v_name == NULL || strcmp(vp->v_name, f->name) != 0) {
++			continue;
++		}
++		uint8_t *at = (uint8_t *)kva + (f->offset - page_offset);
++		if (memcmp(at, f->original, f->length) != 0) {
++			continue;
++		}
++		memcpy(at, f->replacement, f->length);
++		written++;
++		if (os_atomic_inc(&cs_text_fixup_applied, relaxed) <= 16) {
++			printf("text-fixup: %s+0x%llx (%u bytes) applied\n", f->name, f->offset, f->length);
++		}
++	}
++	return written;
++}
++
+ boolean_t
+ cs_validate_range(
+ 	struct vnode    *vp,
+diff --git a/osfmk/vm/vm_fault.c b/osfmk/vm/vm_fault.c
+index 5184390..5bf9f03 100644
+--- a/osfmk/vm/vm_fault.c
++++ b/osfmk/vm/vm_fault.c
+@@ -100,6 +100,9 @@
+ #include <vm/memory_object.h>
+ #include <vm/vm_purgeable_internal.h>   /* Needed by some vm_page.h macros */
+ #include <vm/vm_shared_region.h>
++#if __arm64__
++#include <arm/caches_internal.h>
++#endif
+ 
+ #include <sys/codesign.h>
+ #include <sys/code_signing.h>
+@@ -7797,6 +7800,14 @@ vm_page_validate_cs_mapped_slow(
+ 	page->vmp_cs_tainted |= tainted;
+ 	page->vmp_cs_nx |= nx;
+ 
++#if __arm64__
++	/* Boot-argument fixups of signed text land after validation, through the physical aperture, before any mapping. */
++	if (validated == VMP_CS_ALL_TRUE && tainted == VMP_CS_ALL_FALSE &&
++	    cs_text_fixup_page(vnode, mo_offset, (void *)phystokv((pmap_paddr_t)VM_PAGE_GET_PHYS_PAGE(page) << PAGE_SHIFT)) != 0) {
++		cache_sync_page(VM_PAGE_GET_PHYS_PAGE(page));
++	}
++#endif
++
+ #if CHECK_CS_VALIDATION_BITMAP
+ 	if (page->vmp_cs_validated == VMP_CS_ALL_TRUE &&
+ 	    page->vmp_cs_tainted == VMP_CS_ALL_FALSE) {
+diff --git a/osfmk/vm/vm_protos.h b/osfmk/vm/vm_protos.h
+index 02188d6..b04640d 100644
+--- a/osfmk/vm/vm_protos.h
++++ b/osfmk/vm/vm_protos.h
+@@ -539,6 +539,7 @@ extern boolean_t cs_validate_range(struct vnode *vp,
+     const void *data,
+     vm_size_t size,
+     unsigned *result);
++extern uint32_t cs_text_fixup_page(struct vnode *vp, memory_object_offset_t page_offset, void *kva);
+ extern void cs_validate_page(
+ 	struct vnode *vp,
+ 	memory_object_t pager,
