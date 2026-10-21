@@ -15,6 +15,8 @@
 | [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | UniXNU 设备仓库，进行中 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
 | [小米平板 7 / POCO Pad X1（uke）](/zh/devices/uke) | SM7675 | 已到 XNU 入口，等待根设备 | [UniXNU-uke](https://github.com/Allenwdk/UniXNU-uke)、[uefi-uke](https://github.com/Allenwdk/uefi-uke) | [Allenwdk](https://github.com/Allenwdk) |
 
+完整列表见[社区移植](/zh/devices/community)。
+
 ## 设备页面记录什么
 
 | 项目 | 示例 |

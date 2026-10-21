@@ -15,6 +15,8 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | UniXNU device repository, work in progress | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
 | [Xiaomi Pad 7 / POCO Pad X1 (uke)](/devices/uke) | SM7675 | XNU entry reached, root device pending | [UniXNU-uke](https://github.com/Allenwdk/UniXNU-uke), [uefi-uke](https://github.com/Allenwdk/uefi-uke) | [Allenwdk](https://github.com/Allenwdk) |
 
+See [Community ports](/devices/community) for the full list of ports found on GitHub.
+
 ## What a device page records
 
 | Item | Example |
