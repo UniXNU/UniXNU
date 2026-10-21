@@ -48,8 +48,11 @@ def build_archives(ctx, env):
     """Run the board's archive builders ([kernel] archives of board.toml), in order, then check the prebuilt archives.
 
     Each entry is a script of the build tree with its arguments. The kernel link needs their archives, and some of
-    them read the compile records that an XNU pass leaves behind.
+    them read the compile records that an XNU pass leaves behind. A configuration opts in with
+    CONFIG_XNU_BUILD_ARCHIVES; the bootstrap pass and first-console configurations have no archives to build.
     """
+    if not ctx.need_config().get('XNU_BUILD_ARCHIVES'):
+        return
     entries = ctx.board.get('kernel', {}).get('archives', [])
     env = dict(env, PATH=toolchain_path())
     for index, entry in enumerate(entries, 1):
