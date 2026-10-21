@@ -26,6 +26,33 @@ git submodule update --init --recursive
 
 启动镜像位于 `out/<board>/boot/boot.img`，旁边的 `boot.json` 是报告。选项写在子命令之后。
 
+## macOS runner
+
+内核、userdata 和 Data 种子步骤调用 Xcode、`hdiutil` 和 `diskutil`。fork 后可以在 GitHub 的 macOS runner 上运行这些步骤，不需要本地 Mac。
+
+1. fork 仓库并启用 Actions。
+2. 板级需要平台种子时，添加仓库 secret `UNIXNU_UNIQUE_CHIP_ID`。
+3. 运行 `macOS build` workflow，选择设备仓库、ref、defconfig 和步骤。
+4. 从运行结果下载 artifact。
+
+| 输入 | 含义 |
+| --- | --- |
+| `device_repository` | 设备仓库，格式 `owner/name` |
+| `device_ref` | 设备仓库的 ref |
+| `defconfig` | defconfig 名称 |
+| `steps` | `kernel`、`kernel userdata` 或 `kernel userdata payload` |
+| `ipsw_url` | 可选 IPSW URL，空值使用 `board.toml` |
+| `trust_cache_url` | 可选 trust cache 包 URL |
+| `owner_trust_cache` | 把该 URL 当作 owner 签名的包 |
+| `data_seed_url` | 可选 Data 种子 URL |
+| `grow_gib` | 把 Data 种子增长到该大小 |
+| `skip_setup` | 在 Data 种子中标记 Setup 完成 |
+| `upload_userdata` | 上传 userdata 镜像。该镜像很大 |
+
+设备仓库为私有仓库时，添加仓库 secret `UNIXNU_DEVICE_TOKEN`。
+
+workflow 运行 kernel、userdata 和 payload。package、firmware 和 boot image 步骤可以在任意系统运行，不在 workflow 中。公开仓库使用免费的 macOS runner 配额，私有仓库消耗 Actions 分钟。
+
 ## 命令
 
 | 命令 | 作用 |
