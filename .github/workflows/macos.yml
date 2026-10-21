@@ -140,6 +140,7 @@ jobs:
         if: inputs.pre_build != ''
         env:
           PRE_BUILD: ${{ inputs.pre_build }}
+          DEVICE_DIR: ${{ github.workspace }}/device
         run: bash -euo pipefail -c "$PRE_BUILD"
 
       - name: Build kernel
