@@ -54,6 +54,18 @@ git submodule update --init --recursive
 
 需要 bootstrap 候选、显示 ABI 证据或预置 kernelcache 的设备静态库链使用 `pre_build`。命令在 `unixnu fetch` 之后、`unixnu build kernel` 之前运行。workflow 在上传 artifact 后删除抓取的 IPSW、抓取的 feeds 和预置的固件缓存。
 
+bootstrap 候选示例：
+
+```sh
+./unixnu defconfig bootstrap_defconfig -D "$DEVICE_DIR"
+./unixnu build kernel -D "$DEVICE_DIR"
+mkdir -p out/<board>/tree/build/native-prelink
+cp out/<board>/kernel/kernel.macho \
+   out/<board>/tree/build/native-prelink/<candidate>.macho
+```
+
+候选名称以及显示和 kernelcache 输入由设备仓库决定。
+
 workflow 运行 kernel、userdata 和 payload。package、firmware 和 boot image 步骤可以在任意系统运行，不在 workflow 中。公开仓库使用免费的 macOS runner 配额，私有仓库消耗 Actions 分钟。
 
 ## 命令
