@@ -78,14 +78,19 @@ class Qmp:
 
 def ppm_to_png(ppm: Path, png: Path) -> None:
     data = ppm.read_bytes()
-    parts = data.split(maxsplit=4)
-    if parts[0] != b"P6":
-        raise ValueError("not a binary PPM")
-    width, height = int(parts[1]), int(parts[2])
-    # The pixels are the last bytes of the file. Splitting them off the header
-    # would drop leading bytes that happen to be ASCII whitespace (0x09-0x0D,
-    # 0x20), and every channel after them would shift.
-    pixels = data[len(data) - width * height * 3:]
+    # Comments and whitespace separate header tokens, but raster bytes must
+    # never be stripped: every byte value is valid in an RGB channel.
+    separator = rb"(?:[ \t\r\n\v\f]|#[^\r\n]*(?:\r\n|[\r\n]))+"
+    header = re.match(rb"P6" + separator + rb"([0-9]+)" + separator
+                      + rb"([0-9]+)" + separator + rb"([0-9]+)[ \t\r\n\v\f]", data)
+    if header is None:
+        raise ValueError("invalid binary PPM header")
+    width, height, maxval = map(int, header.groups())
+    if width < 1 or height < 1 or maxval != 255:
+        raise ValueError("PPM requires positive dimensions and maxval 255")
+    pixels = data[header.end():]
+    if len(pixels) != width * height * 3:
+        raise ValueError("PPM raster length does not match dimensions")
     raw = b"".join(b"\x00" + pixels[y * width * 3:(y + 1) * width * 3] for y in range(height))
 
     def chunk(tag, body):
