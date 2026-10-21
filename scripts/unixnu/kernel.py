@@ -80,10 +80,11 @@ def build(ctx, modules):
     record = ctx.tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/osfmk/DEVELOPMENT/startup.o.json'
     if not record.is_file():
         # The archive builders and the boot progress layer read compile records of the XNU build, which only an earlier
-        # pass leaves behind. A first build from scratch therefore runs one pass without them; it stops at the link,
-        # which needs their archives, so only the records are required of it.
+        # pass leaves behind. A first build from scratch therefore runs one pass without them; XNU_BOOTSTRAP makes it
+        # skip the archive checks and link without the archives, so it stops at the link and only the records are
+        # required of it.
         log('kernel: bootstrap pass for the compile records')
-        subprocess_env = {**env, 'XNU_BOOT_PROGRESS': '0'}
+        subprocess_env = {**env, 'XNU_BOOT_PROGRESS': '0', 'XNU_BOOTSTRAP': '1'}
         try:
             run(['bash', script], cwd=ctx.tree, env=subprocess_env, log_file=ctx.logs / 'kernel-bootstrap.log')
         except Error:

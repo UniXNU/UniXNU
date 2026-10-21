@@ -48,6 +48,13 @@ for PATCH in "$ROOT"/patches/xnu/*.patch "$ROOT"/kits/NativePrelink/patches/*.pa
 done
 export XNU_AVAILABILITY_PL=$ROOT/.cache/fakeroot/usr/local/libexec/availability.pl
 python3 scripts/prepare-xnu-source.py
+# The first pass of a new tree (XNU_BOOTSTRAP=1, set by the unixnu driver) only has to leave the compile records and
+# link.filelist for the archive builders that run after it, so it links without their archives.
+BOOTSTRAP=${XNU_BOOTSTRAP:-0}
+if [ "$BOOTSTRAP" != 0 ] && [ "$BOOTSTRAP" != 1 ]; then
+  echo 'XNU_BOOTSTRAP must be 0 or 1' >&2
+  exit 1
+fi
 BOOT_PROGRESS=${XNU_BOOT_PROGRESS:-0}
 if [ "$BOOT_PROGRESS" != 0 ] && [ "$BOOT_PROGRESS" != 1 ]; then
   echo 'XNU_BOOT_PROGRESS must be 0 or 1' >&2
@@ -524,9 +531,11 @@ else
   EXTRA_MAKE_ARGS+=("platform_tests.o_CFLAGS_ADD=")
 fi
 if [ "${XNU_SOURCE_CORECRYPTO14:-0}" = 1 ]; then
+  EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_SOURCE_CORECRYPTO14=1"
+fi
+if [ "${XNU_SOURCE_CORECRYPTO14:-0}" = 1 ] && [ "$BOOTSTRAP" = 0 ]; then
   CRYPTO_ARCHIVE=$ROOT/build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a
   test -f "$CRYPTO_ARCHIVE"
-  EXTRA_CFLAGS="$EXTRA_CFLAGS -DXNU_SOURCE_CORECRYPTO14=1"
   KERNEL_EXTRA_ARCHIVES="-L$KERNEL_SDKROOT/usr/local/lib/kernel -lfirehose_kernel $CRYPTO_ARCHIVE"
   KERNEL_ARCHIVE_DEPENDENCIES=$CRYPTO_ARCHIVE
   if [ "$ADRENO_FIRMWARE_PROBE" = 1 ]; then
@@ -732,8 +741,17 @@ from pathlib import Path
 import sys
 directory = Path('build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837')
 stamp = directory / '.native-aes-link-input'
-identity = '|'.join(mode + ':' + (hashlib.sha256(Path(archive).read_bytes()).hexdigest() if mode == '1' else 'disabled')
-                    for mode, archive in zip(sys.argv[1::2], sys.argv[2::2]))
+
+
+def state(mode, archive):
+    if mode != '1':
+        return 'disabled'
+    # The bootstrap pass of a new tree links before the archive builders have run.
+    path = Path(archive)
+    return hashlib.sha256(path.read_bytes()).hexdigest() if path.is_file() else 'missing'
+
+
+identity = '|'.join(mode + ':' + state(mode, archive) for mode, archive in zip(sys.argv[1::2], sys.argv[2::2]))
 if not stamp.exists() or stamp.read_text() != identity:
     # Make does not track selection of an older alternative external archive.
     # Rebuild the conditional personality and relink when this input changes.
