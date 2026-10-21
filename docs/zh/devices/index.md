@@ -8,11 +8,12 @@
 
 ## 社区移植
 
-这里列出的移植独立维护。仓库归维护者所有，UniXNU 组织不维护它。
+这里列出的移植独立维护。仓库归各自维护者所有，UniXNU 组织不维护它们。
 
 | 设备 | SoC | 状态 | 仓库 | 维护者 |
 | --- | --- | --- | --- | --- |
 | [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | UniXNU 设备仓库，进行中 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
+| [小米平板 7 / POCO Pad X1（uke）](/zh/devices/uke) | SM7675 | 已到 XNU 入口，等待根设备 | [UniXNU-uke](https://github.com/Allenwdk/UniXNU-uke)、[uefi-uke](https://github.com/Allenwdk/uefi-uke) | [Allenwdk](https://github.com/Allenwdk) |
 
 ## 设备页面记录什么
 
