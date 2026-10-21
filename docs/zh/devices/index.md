@@ -8,14 +8,28 @@
 
 ## 社区移植
 
-这里列出的移植独立维护。仓库归各自维护者所有，UniXNU 组织不维护它们。
+这里列出的移植独立维护。仓库归各自维护者所有，UniXNU 组织不维护它们。每个条目有自己的页面。
 
-| 设备 | SoC | 状态 | 仓库 | 维护者 |
-| --- | --- | --- | --- | --- |
-| [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | UniXNU 设备仓库，进行中 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) |
-| [小米平板 7 / POCO Pad X1（uke）](/zh/devices/uke) | SM7675 | 已到 XNU 入口，等待根设备 | [UniXNU-uke](https://github.com/Allenwdk/UniXNU-uke)、[uefi-uke](https://github.com/Allenwdk/uefi-uke) | [Allenwdk](https://github.com/Allenwdk) |
-
-完整列表见[社区移植](/zh/devices/community)。
+| 设备 | SoC | 状态 | 维护者 |
+| --- | --- | --- | --- |
+| [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | 设备仓库，进行中 | matejkoo217、hanzi123-bilp |
+| [小米平板 7 / POCO Pad X1（uke）](/zh/devices/uke) | SM7675 | 已到 XNU 入口，等待根设备 | Allenwdk |
+| [Redmi Note 10 Pro（sweet）](/zh/devices/sweet) | SM7150 | 平台和加载器 bring-up，无可启动镜像 | dipa-studio |
+| [一加 Ace 5 Pro（hummer）](/zh/devices/hummer) | SM8750 | UEFI 层工作，XNU 在 CI 试水 | 2426120557 |
+| [小米 6（sagit）](/zh/devices/sagit) | MSM8998 | 设备仓库，状态未记录 | dmnakzkahziamnk-a11y |
+| [小米平板 8 Pro（piano）](/zh/devices/piano) | SM8750 | 内核在 CI 编译并预链接，未在平板上运行 | code002-2 |
+| [Redmi Note 14 Pro+ 5G（amethyst）](/zh/devices/amethyst) | SM7635 | 进行中，状态未记录 | andr0d1v |
+| [Redmi K70（vermeer）](/zh/devices/vermeer) | SM8550 | 源码构建基线和从 sheng 派生的设备仓库 | mansar1337、yyx2025 |
+| [DroidVM 客户机（Gunyah 上的 crosvm）](/zh/devices/droidvm) | crosvm-gunyah | iPadOS 17 锁屏和主屏幕，CPU 渲染 | Droid-VM |
+| [QEMU virt](/zh/devices/qemu) | QEMU virt | iPadOS 17 主屏幕和 Settings，CPU 渲染 | xVanTuring |
+| [Redmi 9A（dandelion）](/zh/devices/dandelion) | MT6765 | 早期 bring-up，UEFI 移植进行中 | licg89 |
+| [Galaxy Z Fold3（q2q）](/zh/devices/q2q) | SM8350 | 仅源码内核构建工具 | agcarbajo |
+| [小米 15（dada）](/zh/devices/dada) | SM8750 | UEFI 固件工作，UniXNU 和 XNU 未运行 | 7Night-kqx |
+| [小米平板 6（pipa）](/zh/devices/pipa) | SM8250 | 无平板时准备 | xVanTuring |
+| [Redmi K40 Pro（haydn）](/zh/devices/haydn) | SM8350 | 固件、负载和启动镜像已构建，未在真机运行 | xiaomi-haydn-dev |
+| [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | XNU 已执行，下一步 PMGR 和用户态 | Lux12138 |
+| [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，内核未构建 | NoNameBuilder |
+| [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | UEFI 菜单和 DarwinBoot 交接，尚未进入 XNU | IssacL04 |
 
 ## 设备页面记录什么
 
