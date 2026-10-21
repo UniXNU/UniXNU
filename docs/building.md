@@ -42,6 +42,7 @@ The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A
 | `defconfig` | Defconfig name |
 | `steps` | `kernel`, `kernel userdata` or `kernel userdata payload`. The default is `kernel userdata` |
 | `ipsw_url` | Optional IPSW URL. An empty value uses `board.toml` |
+| `pre_build` | Optional shell commands run in the UniXNU checkout before the kernel build |
 | `trust_cache_url` | Optional trust cache bundle URL |
 | `owner_trust_cache` | Treat the URL as an owner-signed bundle |
 | `data_seed_url` | Optional Data seed URL |
@@ -50,6 +51,8 @@ The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A
 | `upload_userdata` | Upload the userdata image. The image is large |
 
 Add the repository secret `UNIXNU_DEVICE_TOKEN` when the device repository is private.
+
+A device archive chain that needs a bootstrap candidate, display ABI evidence or a staged kernelcache uses `pre_build`. Its commands run after `unixnu fetch` and before `unixnu build kernel`. The workflow removes the fetched IPSW, the fetched feeds and the staged firmware cache after the artifacts are uploaded.
 
 The workflow runs kernel, userdata and payload. Package, firmware and boot image steps run on any OS and stay outside the workflow. Public repositories use the free macOS runner quota. Private repositories consume Actions minutes.
 

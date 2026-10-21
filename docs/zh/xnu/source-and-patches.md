@@ -14,6 +14,7 @@ UniXNU 从固定版本的 Apple 源码构建 XNU，并按名称顺序应用补�
 | `AvailabilityVersions` | `AvailabilityVersions-141.1` | availability 宏 |
 | `libpthread` | `libpthread-519.120.4` | 源码 pthread 组件 |
 | `corecrypto-2023` | commit `11fba65` | 源码 corecrypto 组件 |
+| `IOStorageFamily` | commit `e45fbe3` | 块驱动的公开存储头文件 |
 | `edk2` | `release/202608` | package 和固件的 EDK II 基础 |
 
 XNU 条目还包含：

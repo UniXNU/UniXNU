@@ -94,6 +94,8 @@ archives = [
 
 脚本通过 `scripts/xnu_symbols.py` 读取符号名。它使用已记录的 checkpoint 内核，或 `build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/link.filelist` 中的目标文件以及 `all-alias.exp` 中的别名。新构建树因此只需要一轮生成编译记录的内核构建，静态库输出也不会与上一次链接的内核冲突。
 
+内核步骤还会在静态库脚本运行前，把公开的 `IOStorageFamily` 头文件放到 `build/storage-abi/include`。
+
 `build-native-aes-bindings.py` 和 `build-native-adreno-accelerator.py` 在原始硬件证据缺失时使用 `scripts/data/` 中记录的审计结果。记录的地址属于 `board.toml` 固定的 kernelcache。
 
 ## 构建顺序
