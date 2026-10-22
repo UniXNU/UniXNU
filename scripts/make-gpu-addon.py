@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Pack the owner-built Adreno Metal plugin into a GPU addon file for the boot payload.
 
-  make-gpu-addon.py [--publish] [--clients NAME,...] [--wallpaper DIR] OUTPUT
+  make-gpu-addon.py [--publish] [--clients NAME,...] [--wallpaper DIR] [--prime-list FILE] OUTPUT
 
 The files are the ones add-gpu-plugin-data.py stages into a Data seed, with the same paths below /private/var/ngpu and the same modes:
 addons/NativeAdrenoMetal.bundle/*, addons/NativeAdrenoMetal.publish (--publish), addons/NativeAdrenoMetal.clients (--clients),
 bin/adrenoprobed and daemons/*.plist. --wallpaper adds the files of DIR (scripts/make-wallpaper-overlay.py) as wallpaper/*, which the
-kernel mounts over the default wallpaper's layered animation. The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
+kernel mounts over the default wallpaper's layered animation. --prime-list adds FILE (the absolute paths of the OS image's .metallib
+files, one per line) as addons/NativeAdrenoMetal.primelist, the libraries the render server compiles ahead (PrimeShaders.h). The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
 hands it to the kernel as /chosen/memory-map/GpuAddon, and the kernel writes every file whose content or mode differs into the mounted
 Data volume before its addon mounts (sheng-gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
 (whose identity is the seed's content) survives a plugin rebuild. The kernel creates missing directories.
@@ -41,6 +42,14 @@ def main():
         del args[at:at + 2]
         if not wallpaper.is_dir():
             sys.exit('--wallpaper takes a directory')
+    prime_list = None
+    if '--prime-list' in args:
+        at = args.index('--prime-list')
+        prime_list = Path(args[at + 1])
+        del args[at:at + 2]
+        lines = prime_list.read_text().split()
+        if not lines or any(not line.startswith('/') or not line.endswith('.metallib') for line in lines):
+            sys.exit('--prime-list takes a file of absolute .metallib paths')
     if '--clients' in args:
         at = args.index('--clients')
         clients = [name for name in args[at + 1].split(',') if name]
@@ -62,6 +71,8 @@ def main():
         files.append(('addons/NativeAdrenoMetal.publish', 0o644, b'1\n'))
     if clients:
         files.append(('addons/NativeAdrenoMetal.clients', 0o644, ('\n'.join(clients) + '\n').encode()))
+    if prime_list:
+        files.append(('addons/NativeAdrenoMetal.primelist', 0o644, prime_list.read_bytes()))
     files.append(('bin/adrenoprobed', 0o755, (PLUGIN / 'adrenoprobed').read_bytes()))
     for plist in sorted(PLUGIN.glob('*.plist')):
         if not plist.name.endswith('-entitlements.plist'):   # build input, not a launchd job
