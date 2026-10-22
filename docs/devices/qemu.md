@@ -4,7 +4,7 @@ The QEMU target runs UniXNU on the AArch64 `virt` machine. It substitutes for a 
 
 | Repository | Maintainer | State |
 | --- | --- | --- |
-| [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 home screen and Settings |
+| [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 home screen and Settings; Metal on the Mac GPU with `--metal` |
 
 ## State
 
@@ -17,11 +17,12 @@ The QEMU target runs UniXNU on the AArch64 `virt` machine. It substitutes for a 
 | AMFI and original launchd | start with the original trust cache |
 | SystemOS union and dyld shared cache | work |
 | Data ramdisk | works |
-| Display | NativeLegacyDisplay on ramfb; CPU-rendered |
+| Display | NativeLegacyDisplay on ramfb; CPU-rendered without `--metal`, and composed on the Mac's GPU with `--metal` |
 | Touch and Home | work; typing not yet |
-| GPU | no Metal device |
+| GPU | QemuMetal device; `--metal` runs the render server's Metal work on the Mac's GPU. Without it there is no Metal device and QuartzCore uses the CPU renderer |
+| Settings | without `--metal` it stays white; with it the app opens and lists everything, with some row icons missing |
 
-The repository README records the commands that stage the ESP and boot QEMU.
+`--metal` needs the plugin, owner trust cache and Data seed built by `scripts/build-qemu-metal.py`. The repository README records the commands that stage the ESP and boot QEMU.
 
 ## Maintenance
 
