@@ -2,16 +2,18 @@ diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
 index 22c5bf1..05c6504 100644
 --- a/bsd/kern/ubc_subr.c
 +++ b/bsd/kern/ubc_subr.c
-@@ -6043,6 +6043,148 @@ cs_validate_hash(
+@@ -6043,6 +6043,172 @@ cs_validate_hash(
  	return validated;
  }
  
 +/*
-+ * Fixups of signed file text, given as boot arguments text-fixup0..7=<file name>,<file offset>,<original>,<replacement>
-+ * (offset in hex, byte strings in hex, at most 16 bytes). A page is changed only after it passed signature validation and
-+ * only when the original bytes match, so a different file or build is left alone.
++ * Fixups of signed file text, each <file name>,<file offset>,<original>,<replacement> (offset in hex, byte strings in hex, at
++ * most 16 bytes): the board's table in the device tree (/chosen/text-fixups, NUL-separated entries, so it takes no command line
++ * space), then the boot arguments text-fixup0..7. A page is changed only after it passed signature validation and only when
++ * the original bytes match, so a different file or build is left alone.
 + */
-+#define CS_TEXT_FIXUP_MAX 8
++#include <pexpert/device_tree.h>
++#define CS_TEXT_FIXUP_MAX 32
 +#define CS_TEXT_FIXUP_BYTES 16
 +struct cs_text_fixup {
 +	char            name[64];
@@ -101,12 +103,34 @@ index 22c5bf1..05c6504 100644
 +static void
 +cs_text_fixup_init(void)
 +{
-+	const char *args[CS_TEXT_FIXUP_MAX] = {
++	DTEntry chosen;
++	void const *table;
++	unsigned int size;
++	if (SecureDTLookupEntry(NULL, "/chosen", &chosen) == kSuccess &&
++	    SecureDTGetProperty(chosen, "text-fixups", &table, &size) == kSuccess) {
++		const char *s = table, *end = s + size;
++		for (int i = 0; s < end && *s; i++) {
++			char entry[160];
++			size_t length = strnlen(s, (size_t)(end - s));
++			if (length < sizeof(entry) && cs_text_fixup_count < CS_TEXT_FIXUP_MAX) {
++				strlcpy(entry, s, length + 1);
++				if (cs_text_fixup_parse(entry, &cs_text_fixups[cs_text_fixup_count])) {
++					cs_text_fixup_count++;
++				} else {
++					printf("text-fixups[%d]: malformed, ignored\n", i);
++				}
++			} else {
++				printf("text-fixups[%d]: too long or table full, ignored\n", i);
++			}
++			s += length + 1;
++		}
++	}
++	const char *args[] = {
 +		cs_text_fixup_arg0, cs_text_fixup_arg1, cs_text_fixup_arg2, cs_text_fixup_arg3,
 +		cs_text_fixup_arg4, cs_text_fixup_arg5, cs_text_fixup_arg6, cs_text_fixup_arg7,
 +	};
-+	for (int i = 0; i < CS_TEXT_FIXUP_MAX; i++) {
-+		if (args[i][0] == '\0') {
++	for (int i = 0; i < (int)(sizeof(args) / sizeof(args[0])); i++) {
++		if (args[i][0] == '\0' || cs_text_fixup_count == CS_TEXT_FIXUP_MAX) {
 +			continue;
 +		}
 +		if (cs_text_fixup_parse(args[i], &cs_text_fixups[cs_text_fixup_count])) {
