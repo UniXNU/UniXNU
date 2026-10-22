@@ -1,0 +1,20 @@
+diff --git a/src/freedreno/vulkan/tu_image.cc b/src/freedreno/vulkan/tu_image.cc
+index fa2ca90..8b0aef1 100644
+--- a/src/freedreno/vulkan/tu_image.cc
++++ b/src/freedreno/vulkan/tu_image.cc
+@@ -1169,8 +1169,14 @@ tu_get_image_memory_requirements(struct tu_device *dev, struct tu_image *image,
+       case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS: {
+          VkMemoryDedicatedRequirements *req =
+             (VkMemoryDedicatedRequirements *) ext;
++         /* Host pointer imports carry no per-image metadata, so an image
++          * over one may be bound at any offset of a shared import.
++          */
++         const VkExternalMemoryHandleTypeFlags host_types =
++            VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
++            VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT;
+          req->requiresDedicatedAllocation =
+-            image->vk.external_handle_types != 0;
++            (image->vk.external_handle_types & ~host_types) != 0;
+          req->prefersDedicatedAllocation = req->requiresDedicatedAllocation;
+          break;
+       }

@@ -52,7 +52,8 @@
     "patches/mesa/turnip-darwin-kmd.patch",
     "patches/mesa/turnip-graphics-cache-feedback.patch",
     "patches/mesa/turnip-empty-scissor.patch",
-    "patches/mesa/turnip-builtin-shader-pack.patch"
+    "patches/mesa/turnip-builtin-shader-pack.patch",
+    "patches/mesa/turnip-host-import-images.patch"
   ],
   "integer_fma_reference": {
     "repository": "https://github.com/ucb-bar/berkeley-softfloat-3",
