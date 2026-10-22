@@ -12,17 +12,22 @@ on:
         required: true
         default: main
       defconfig:
-        description: Defconfig name
+        description: Defconfig name (configs/ of the device repository)
         required: true
         default: sheng_defconfig
       steps:
-        description: Steps to run
+        description: Steps to run (userdata is a multi-GiB image of the IPSW disk images)
         type: choice
         options:
           - kernel
+          - kernel payload
           - kernel userdata
           - kernel userdata payload
-        default: kernel userdata
+        default: kernel
+      xcode:
+        description: Xcode version of the macos-26 image (/Applications/Xcode_<version>.app)
+        required: true
+        default: "26.6"
       ipsw_url:
         description: IPSW URL (empty uses board.toml)
         required: false
@@ -32,7 +37,7 @@ on:
         required: false
         default: ""
       trust_cache_url:
-        description: Trust cache bundle URL (optional)
+        description: Trust cache bundle URL (optional; masked in the logs)
         required: false
         default: ""
       owner_trust_cache:
@@ -40,7 +45,7 @@ on:
         type: boolean
         default: false
       data_seed_url:
-        description: Data seed URL (optional)
+        description: Data seed URL (optional; masked in the logs)
         required: false
         default: ""
       grow_gib:
@@ -59,81 +64,141 @@ on:
 permissions:
   contents: read
 
+# One build per device configuration and ref. A dispatch for another device or defconfig runs next to it,
+# and a running build is never cancelled by a later dispatch.
 concurrency:
-  group: macos-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: macos-build-${{ github.ref }}-${{ inputs.device_repository }}-${{ inputs.device_ref }}-${{ inputs.defconfig }}
+  cancel-in-progress: false
 
 env:
   HOMEBREW_NO_AUTO_UPDATE: 1
   HOMEBREW_NO_INSTALL_CLEANUP: 1
+  HOMEBREW_NO_ENV_HINTS: 1
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   build:
-    runs-on: macos-latest
+    # Pinned: macos-latest moves between images (macos-15 had an Xcode whose clang rejects the warning options the
+    # build passes with -Werror). macos-26 is arm64 and carries the Xcode 26 line the build is developed with.
+    runs-on: macos-26
     timeout-minutes: 360
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_${{ inputs.xcode }}.app/Contents/Developer
+      UNIXNU_DEVICE: ${{ github.workspace }}/device
+      UNIXNU_IPSW: ${{ inputs.ipsw_url }}
+      DEFCONFIG: ${{ inputs.defconfig }}
+      STEPS: ${{ inputs.steps }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out UniXNU
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
-      - uses: actions/checkout@v4
+      - name: Check out the device repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.device_repository }}
           ref: ${{ inputs.device_ref }}
           path: device
           token: ${{ secrets.UNIXNU_DEVICE_TOKEN || github.token }}
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.12"
+          python-version: "3.13"
+
+      - name: Check the inputs
+        id: check
+        env:
+          HAS_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID != '' }}
+          OWNER_TRUST_CACHE: ${{ inputs.owner_trust_cache }}
+          GROW_GIB: ${{ inputs.grow_gib }}
+          SKIP_SETUP: ${{ inputs.skip_setup }}
+        run: |
+          # The URLs can carry access tokens and the logs of a public repository are public: read them from the
+          # event payload, never from step environments, and mask them before any later step prints its env.
+          trust_cache_url=$(jq -r '.inputs.trust_cache_url // ""' "$GITHUB_EVENT_PATH")
+          data_seed_url=$(jq -r '.inputs.data_seed_url // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$trust_cache_url" ]; then echo "::add-mask::$trust_cache_url"; fi
+          if [ -n "$data_seed_url" ]; then echo "::add-mask::$data_seed_url"; fi
+          fail() { echo "::error::$1"; exit 1; }
+          [ -f device/board.toml ] || fail "the device repository has no board.toml"
+          [ -f "device/configs/$DEFCONFIG" ] || fail "device/configs/$DEFCONFIG not found: $(cd device/configs 2>/dev/null && printf '%s ' *_defconfig)"
+          [ -d "$DEVELOPER_DIR" ] || fail "Xcode not found at $DEVELOPER_DIR; installed: $(printf '%s ' /Applications/Xcode_*.app)"
+          if [ -n "$GROW_GIB" ] && ! [[ "$GROW_GIB" =~ ^[0-9]+$ ]]; then fail "grow_gib must be a whole number of GiB"; fi
+          if [ -n "$GROW_GIB" ] && [ -z "$data_seed_url" ]; then fail "grow_gib needs data_seed_url"; fi
+          if [ "$SKIP_SETUP" = true ] && [ -z "$data_seed_url" ]; then fail "skip_setup needs data_seed_url"; fi
+          if [ "$OWNER_TRUST_CACHE" = true ] && [ -z "$trust_cache_url" ]; then fail "owner_trust_cache needs trust_cache_url"; fi
+          if [[ "$STEPS" != *payload* ]] && { [ -n "$trust_cache_url" ] || [ -n "$data_seed_url" ] || [ "$SKIP_SETUP" = true ]; }; then
+            fail "trust_cache_url, data_seed_url and skip_setup only apply to the payload step"
+          fi
+          python3 - <<'PY'
+          import os, sys, tomllib
+          board = tomllib.load(open('device/board.toml', 'rb'))
+          name = board.get('board', {}).get('name')
+          if not name:
+              sys.exit('::error::board.toml needs [board] name')
+          adt = board.get('payload', {}).get('adt', {})
+          if 'payload' in os.environ['STEPS'] and adt.get('unique_chip_id') == 'required' and os.environ['HAS_CHIP_ID'] != 'true':
+              sys.exit('::error::this board needs the platform seed for its payload: set the UNIXNU_UNIQUE_CHIP_ID secret')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+              out.write(f'board={name}\n')
+          PY
+
+      - name: Install host tools
+        run: |
+          # cmake and ninja come with the image. Homebrew LLVM is keg-only and stays off PATH: the driver finds it for
+          # the archive builders, and everything else uses Xcode's clang. LLD is a separate formula since LLVM 23;
+          # the payload step links the panic screen with ld.lld.
+          brew install llvm lld mtools dtc
+          if ! command -v unifdef >/dev/null; then
+            brew install unifdef
+            echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
+          fi
 
       - name: Report the runner toolchain
         run: |
           sw_vers
           uname -m
           xcodebuild -version
-          xcode-select -p
-          xcrun --sdk iphoneos --find mig || echo 'mig not found for iphoneos'
-
-      - name: Install host tools
-        run: |
-          brew install cmake ninja unifdef llvm mtools dtc
-          echo "$(brew --prefix llvm)/bin" >> "$GITHUB_PATH"
-          echo "$(brew --prefix unifdef)/bin" >> "$GITHUB_PATH"
-
-      - name: Verify the host tools
-        run: |
-          for tool in git make clang cmake ninja unifdef mtools dtc xcodebuild; do
-            printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
+          xcrun --sdk iphoneos --show-sdk-version
+          xcrun --sdk iphoneos --find mig
+          clang --version | head -n 1
+          "$(brew --prefix llvm)/bin/clang" --version | head -n 1
+          python3 --version
+          missing=0
+          for tool in git make clang cmake ninja unifdef ld.lld mformat mcopy dtc xcodebuild; do
+            path=$(command -v "$tool" || true)
+            printf '%-10s %s\n' "$tool" "${path:-MISSING}"
+            [ -n "$path" ] || missing=1
           done
+          df -h "$GITHUB_WORKSPACE"
+          exit "$missing"
 
       - name: Select the device
-        run: |
-          ./unixnu defconfig "${{ inputs.defconfig }}" -D "$GITHUB_WORKSPACE/device"
-          ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread \
-                          corecrypto-2023 IOStorageFamily -D "$GITHUB_WORKSPACE/device"
+        run: ./unixnu defconfig "$DEFCONFIG"
 
       - name: Prepare inputs
+        if: contains(inputs.steps, 'payload')
         env:
-          TRUST_CACHE_URL: ${{ inputs.trust_cache_url }}
-          DATA_SEED_URL: ${{ inputs.data_seed_url }}
           GROW_GIB: ${{ inputs.grow_gib }}
-          SKIP_SETUP: ${{ inputs.skip_setup }}
         run: |
-          if [ -n "$TRUST_CACHE_URL" ]; then
-            curl -fL "$TRUST_CACHE_URL" -o "$RUNNER_TEMP/trustcache"
+          trust_cache_url=$(jq -r '.inputs.trust_cache_url // ""' "$GITHUB_EVENT_PATH")
+          data_seed_url=$(jq -r '.inputs.data_seed_url // ""' "$GITHUB_EVENT_PATH")
+          if [ -n "$trust_cache_url" ]; then
+            curl -fsSL --retry 3 "$trust_cache_url" -o "$RUNNER_TEMP/trustcache"
           fi
-          if [ -n "$DATA_SEED_URL" ]; then
-            curl -fL "$DATA_SEED_URL" -o "$RUNNER_TEMP/data.dbr"
+          if [ -n "$data_seed_url" ]; then
+            curl -fsSL --retry 3 "$data_seed_url" -o "$RUNNER_TEMP/data.dbr"
             if [ -n "$GROW_GIB" ]; then
+              # seed-data-grow.py imports drivers/DarwinBoot/Test and keeps its scratch image in build/.
+              git submodule update --init --depth 1 drivers/DarwinBoot
+              mkdir -p build
               python3 scripts/seed-data-grow.py --gib "$GROW_GIB" "$RUNNER_TEMP/data.dbr" "$RUNNER_TEMP/data-grow.dbr"
               mv "$RUNNER_TEMP/data-grow.dbr" "$RUNNER_TEMP/data.dbr"
             fi
-          elif [ -n "$GROW_GIB" ]; then
-            echo "grow_gib needs data_seed_url" >&2
-            exit 1
-          fi
-          if [ "$SKIP_SETUP" = "true" ] && [ ! -f "$RUNNER_TEMP/data.dbr" ]; then
-            echo "skip_setup needs data_seed_url" >&2
-            exit 1
           fi
 
       - name: Run pre-build steps
@@ -141,67 +206,87 @@ jobs:
         env:
           PRE_BUILD: ${{ inputs.pre_build }}
           DEVICE_DIR: ${{ github.workspace }}/device
+          GITHUB_TOKEN: ${{ github.token }}
         run: bash -euo pipefail -c "$PRE_BUILD"
 
       - name: Build kernel
+        id: kernel
         env:
-          IPSW_URL: ${{ inputs.ipsw_url }}
-        run: |
-          args=()
-          if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
-          ./unixnu build kernel "${args[@]}"
+          # prepare-xnu-source.py lists Apple sources through the GitHub API; anonymous calls from hosted runners hit
+          # the shared rate limit (HTTP 403).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ./unixnu build kernel
 
       - name: Build userdata
+        id: userdata
         if: contains(inputs.steps, 'userdata')
-        env:
-          IPSW_URL: ${{ inputs.ipsw_url }}
         run: |
-          args=()
-          if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
-          ./unixnu build userdata "${args[@]}"
+          ./unixnu build userdata
+          df -h "$GITHUB_WORKSPACE"
 
       - name: Build payload
+        id: payload
         if: contains(inputs.steps, 'payload')
         env:
-          UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
           SKIP_SETUP: ${{ inputs.skip_setup }}
           OWNER_TRUST_CACHE: ${{ inputs.owner_trust_cache }}
         run: |
           args=()
           if [ -f "$RUNNER_TEMP/trustcache" ]; then
-            if [ "$OWNER_TRUST_CACHE" = "true" ]; then
+            if [ "$OWNER_TRUST_CACHE" = true ]; then
               args+=(--owner-trust-cache "$RUNNER_TEMP/trustcache")
             else
               args+=(--trust-cache "$RUNNER_TEMP/trustcache")
             fi
           fi
           if [ -f "$RUNNER_TEMP/data.dbr" ]; then args+=(--data-ramdisk "$RUNNER_TEMP/data.dbr"); fi
-          if [ -n "$UNIQUE_CHIP_ID" ]; then args+=(--unique-chip-id "$UNIQUE_CHIP_ID"); fi
-          if [ "$SKIP_SETUP" = "true" ]; then args+=(--skip-setup); fi
+          if [ "$SKIP_SETUP" = true ]; then args+=(--skip-setup); fi
           ./unixnu build payload "${args[@]}"
 
-      - name: Upload kernel and payload
-        uses: actions/upload-artifact@v4
+      - name: Upload the build logs
+        if: always() && steps.check.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: unixnu-${{ inputs.defconfig }}
+          name: unixnu-${{ steps.check.outputs.board }}-logs-${{ github.run_attempt }}
+          path: out/${{ steps.check.outputs.board }}/logs/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload the kernel
+        if: steps.kernel.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unixnu-${{ steps.check.outputs.board }}-kernel-${{ github.run_attempt }}
+          path: out/${{ steps.check.outputs.board }}/kernel/
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload the payload
+        if: steps.payload.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: unixnu-${{ steps.check.outputs.board }}-payload-${{ github.run_attempt }}
+          # The skip-setup copy of the Data seed stays behind: it is already inside payload.img.
           path: |
-            out/*/kernel/**
-            out/*/payload/**
-            out/*/logs/**
+            out/${{ steps.check.outputs.board }}/payload/payload.img
+            out/${{ steps.check.outputs.board }}/payload/payload.json
           if-no-files-found: error
           retention-days: 7
 
       - name: Upload userdata
-        if: inputs.upload_userdata && contains(inputs.steps, 'userdata')
-        uses: actions/upload-artifact@v4
+        if: inputs.upload_userdata && steps.userdata.outcome == 'success'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: unixnu-userdata-${{ inputs.defconfig }}
-          path: out/*/userdata/**
+          name: unixnu-${{ steps.check.outputs.board }}-userdata-${{ github.run_attempt }}
+          path: out/${{ steps.check.outputs.board }}/userdata/
           if-no-files-found: error
-          retention-days: 7
+          # The disk images do not compress; zipping them only costs time.
+          compression-level: 0
+          retention-days: 3
 
       - name: Remove proprietary inputs
         if: always()
         run: |
-          rm -rf out/ipsw out/feeds device/.cache/firmware out/*/tree/.cache/firmware
+          rm -rf out/ipsw out/feeds device/.cache/firmware out/*/tree/.cache/firmware out/*/payload/data-skip-setup-*
           rm -f "$RUNNER_TEMP/trustcache" "$RUNNER_TEMP/data.dbr" "$RUNNER_TEMP/data-grow.dbr"
