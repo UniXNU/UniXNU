@@ -67,7 +67,7 @@ BUILD, VERSION = '21H461', '17.7.11'
 | `certificate-security-mode` | `1` |
 | `effective-security-mode-sep` | `1` |
 
-这些属性描述一个 dev-fused、未 demote 的板子。`mobileactivationd` 通过 MobileGestalt 读取它们，在没有激活记录时走原生激活路径。
+这些属性描述一个 dev-fused、未 demote 的板子。`mobileactivationd` 通过 MobileGestalt 读取它们，在没有激活记录时走原生激活路径。其他身份属性和缓存答案见 [MobileGestalt 身份](/zh/guide/mobilegestalt)。
 
 ## 任务
 

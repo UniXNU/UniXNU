@@ -67,7 +67,7 @@ The ADT adds four `/chosen` properties with `--ipad-identity`:
 | `certificate-security-mode` | `1` |
 | `effective-security-mode-sep` | `1` |
 
-These describe a development-fused, undemoted board. `mobileactivationd` reads them through MobileGestalt and takes its native activation path without an activation record.
+These describe a development-fused, undemoted board. `mobileactivationd` reads them through MobileGestalt and takes its native activation path without an activation record. The other identity properties and their cached answers are in [MobileGestalt identity](/guide/mobilegestalt).
 
 ## Jobs
 

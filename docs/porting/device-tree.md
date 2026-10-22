@@ -125,7 +125,7 @@ arm-io {
 
 ### product and buttons
 
-`/product` supplies the product name and model. `/buttons` supplies the button names and `home-button-type`. MobileGestalt and the platform code read these nodes.
+`/product` supplies the product name and model. `/buttons` supplies the button names and `home-button-type`. MobileGestalt and the platform code read these nodes. The full property set, gesture setup and device family switch are in [MobileGestalt identity](/guide/mobilegestalt).
 
 ### Platform defaults
 

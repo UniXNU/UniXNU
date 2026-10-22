@@ -125,7 +125,7 @@ arm-io {
 
 ### product 与 buttons
 
-`/product` 提供产品名和型号，`/buttons` 提供按钮名称和 `home-button-type`。MobileGestalt 和平台代码读取这些节点。
+`/product` 提供产品名和型号，`/buttons` 提供按钮名称和 `home-button-type`。MobileGestalt 和平台代码读取这些节点。完整属性、手势设置和设备系列切换见 [MobileGestalt 身份](/zh/guide/mobilegestalt)。
 
 ### 平台默认值
 
