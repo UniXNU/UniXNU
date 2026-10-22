@@ -75,12 +75,16 @@ assert (magic, cputype, subtype & 0xffffff) == (0xfeedfacf, 0x100000c, 0), 'expe
 # a process has not been granted (the same refusal an unentitled consumer got in the offline owner tests), so it carries exactly the grant that
 # worked there: com.apple.security.iokit-user-client-class naming the one class it opens, plus no-container.
 entitlements = OUT / 'adrenoprobed-entitlements.plist'
+# The logging grants let it read the whole unified log for the export (NativeOsLogExport.mm).
 entitlements.write_bytes(plistlib.dumps({'com.apple.private.security.no-container': True,
-                                         'com.apple.security.iokit-user-client-class': ['AGXDeviceUserClient']}))
+                                         'com.apple.security.iokit-user-client-class': ['AGXDeviceUserClient'],
+                                         'com.apple.private.logging.admin': True, 'com.apple.private.logging.diagnostic': True,
+                                         'com.apple.private.logging.stream': True}))
 daemon = OUT / 'adrenoprobed'
 subprocess.run(['xcrun', 'clang++', *base[2:], '-std=c++17', '-I', ROOT / 'drivers/NativeAdreno', '-I', ROOT / 'kits/AdrenoPM4', '-I', VULKAN_INCLUDE,
                 '-I', ROOT / 'build/turnip-smoke',
-                ROOT / 'drivers/NativeMetal/NativeAdrenoProbeDaemon.cpp', pm4, '-o', daemon], check=True)
+                ROOT / 'drivers/NativeMetal/NativeAdrenoProbeDaemon.cpp', '-x', 'objective-c++', '-fobjc-arc',
+                ROOT / 'drivers/NativeMetal/NativeOsLogExport.mm', '-x', 'none', pm4, '-framework', 'Foundation', '-lz', '-o', daemon], check=True)
 subprocess.run(['codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.blu-sharky.adrenoprobed',
                 '--entitlements', entitlements, daemon], check=True)
 actual = plistlib.loads(subprocess.check_output(['codesign', '-d', '--entitlements', ':-', str(daemon)], stderr=subprocess.DEVNULL))
