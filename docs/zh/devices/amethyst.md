@@ -1,6 +1,6 @@
 # Redmi Note 14 Pro+ 5G（amethyst）
 
-amethyst 是搭载 SM7635 的 Redmi Note 14 Pro+ 5G。下面的移植是独立的社区项目，UniXNU 组织不维护它。
+amethyst 是搭载 SM7635 的 Redmi Note 14 Pro+ 5G。下面的移植是独立的社区项目，UniXNU 组织不维护它。目标是 iPhone X（iPhone10,3）用户态。
 
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |

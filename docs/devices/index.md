@@ -18,7 +18,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OnePlus Ace 5 Pro (hummer)](/devices/hummer) | SM8750 | UEFI layer works; XNU CI trial | 2426120557 |
 | [Xiaomi Mi 6 (sagit)](/devices/sagit) | MSM8998 | Device repository; status not documented | dmnakzkahziamnk-a11y |
 | [Xiaomi Pad 8 Pro (piano)](/devices/piano) | SM8750 | Kernel builds and prelinks in CI; not run on the tablet | code002-2 |
-| [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Board file and kernel config; no hardware run documented | andr0d1v |
+| [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Board file targets iPhone10,3; no hardware run documented | andr0d1v |
 | [Redmi K70 (vermeer)](/devices/vermeer) | SM8550 | Source build baseline and sheng-derived device repository | mansar1337, yyx2025 |
 | [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 home screen; CPU presentation; Metal widgets and icons; virtio-net works | Droid-VM |
 | [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; CPU-rendered | xVanTuring |
@@ -41,7 +41,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
 | [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Source kernel builds; platform archives and prelink pending | wh1stl3 |
 | [Nubia RedMagic 8 Pro / 8 Pro+ (nx729j)](/devices/nx729j) | SM8550 | Board files ported from sheng; runtime not documented | 2713385115 |
-| [Lenovo Xiaoxin Pad 2022 (tb128fu)](/devices/tb128fu) | SM6225 | iPadOS 17 home screen with touch; CPU-rendered; Adreno 610 kernel driver runs | xVanTuring |
+| [Lenovo Xiaoxin Pad 2022 (tb128fu)](/devices/tb128fu) | SM6225 | iPadOS 17 home screen with touch; Metal frames presented by the GPU; Adreno 610 runs | xVanTuring |
 
 ## What a device page records
 
