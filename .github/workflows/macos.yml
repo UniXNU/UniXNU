@@ -146,6 +146,7 @@ jobs:
       - name: Build kernel
         env:
           IPSW_URL: ${{ inputs.ipsw_url }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           args=()
           if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
