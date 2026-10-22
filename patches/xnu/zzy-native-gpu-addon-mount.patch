@@ -1,8 +1,8 @@
 diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
-index 35c58d2..c0300ef 100644
+index a5ff474..5c72ee5 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7193,6 +7193,82 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
+@@ -7193,6 +7193,281 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
  uint8_t native_owner_data_seed_sha256[32];
  char native_owner_data_device_path[64];
  
@@ -64,6 +64,204 @@ index 35c58d2..c0300ef 100644
 +	}
 +	*status = error;
 +}
++/* The GPU addon of the boot payload (scripts/make-gpu-addon.py, handed over by the loader as /chosen/memory-map/GpuAddon): every file
++ * whose content or mode differs from the mounted Data volume is written there before the addon mounts, so the plugin no longer has to
++ * be part of the Data seed and the seed's persistent store survives a plugin rebuild. Only existing directories below
++ * /private/var/ngpu are written to. A malformed addon is refused as a whole; a file that cannot be written keeps its old content.
++ * Counters for the boot log: files in the addon (-1 none), files written, files already equal, failures and the last error. */
++extern int native_ram_block_gpu_addon(const uint8_t **, uint64_t *) __attribute__((weak_import));
++#include <libkern/zlib.h>
++/* zlib's state, from kalloc with its size in front (the default allocator of the kernel's zlib is not meant for this). */
++static voidpf
++native_gpu_addon_zalloc(voidpf opaque __unused, uInt items, uInt size)
++{
++	size_t bytes = (size_t)items * size + 16;
++	uint8_t *block = kalloc_data(bytes, Z_WAITOK | Z_ZERO);
++	if (!block) {
++		return Z_NULL;
++	}
++	memcpy(block, &bytes, sizeof(bytes));
++	return block + 16;
++}
++static void
++native_gpu_addon_zfree(voidpf opaque __unused, voidpf address)
++{
++	uint8_t *block = (uint8_t *)address - 16;
++	size_t bytes = 0;
++	memcpy(&bytes, block, sizeof(bytes));
++	kfree_data(block, bytes);
++}
++static int
++native_gpu_addon_inflate(const uint8_t *packed, uint64_t packed_size, uint8_t *data, uint64_t size)
++{
++	z_stream stream;
++	memset(&stream, 0, sizeof(stream));
++	stream.zalloc = native_gpu_addon_zalloc;
++	stream.zfree = native_gpu_addon_zfree;
++	stream.next_in = (Bytef *)(uintptr_t)packed;
++	stream.avail_in = (uInt)packed_size;
++	stream.next_out = data;
++	stream.avail_out = (uInt)size;
++	if (inflateInit(&stream) != Z_OK) {
++		return ENOMEM;
++	}
++	int result = inflate(&stream, Z_FINISH);
++	inflateEnd(&stream);
++	return result == Z_STREAM_END && stream.total_out == size && !stream.avail_in ? 0 : EINVAL;
++}
++volatile int native_gpu_addon_files = -1;
++volatile int native_gpu_addon_written = 0;
++volatile int native_gpu_addon_same = 0;
++volatile int native_gpu_addon_failed = 0;
++volatile int native_gpu_addon_error = 0;
++static int
++native_gpu_addon_equal(vnode_t vp, const uint8_t *data, uint64_t size, uint32_t mode, vfs_context_t ctx)
++{
++	struct vnode_attr va;
++	VATTR_INIT(&va);
++	VATTR_WANTED(&va, va_data_size);
++	VATTR_WANTED(&va, va_mode);
++	if (vnode_getattr(vp, &va, ctx) || va.va_data_size != size || (va.va_mode & 07777) != mode) {
++		return 0;
++	}
++	const uint32_t chunk = 1024 * 1024;
++	uint8_t *buffer = kalloc_data(chunk, Z_WAITOK);
++	if (!buffer) {
++		return 0;
++	}
++	int equal = 1;
++	for (uint64_t at = 0; equal && at < size; at += chunk) {
++		int length = (int)(size - at < chunk ? size - at : chunk), resid = 0;
++		if (vn_rdwr(UIO_READ, vp, (caddr_t)buffer, length, (off_t)at, UIO_SYSSPACE, IO_NOAUTH, vfs_context_ucred(ctx), &resid,
++		    vfs_context_proc(ctx)) || resid || memcmp(buffer, data + at, length)) {
++			equal = 0;
++		}
++	}
++	kfree_data(buffer, chunk);
++	return equal;
++}
++static int
++native_gpu_addon_write(const char *path, const uint8_t *data, uint64_t size, uint32_t mode, vfs_context_t ctx)
++{
++	vnode_t vp = NULLVP;
++	int error = vnode_open(path, FREAD | O_NOFOLLOW, 0, 0, &vp, ctx);
++	if (!error) {
++		int equal = native_gpu_addon_equal(vp, data, size, mode, ctx);
++		vnode_close(vp, FREAD, ctx);
++		vp = NULLVP;
++		if (equal) {
++			return -1;
++		}
++	}
++	error = vnode_open(path, O_CREAT | O_TRUNC | FWRITE | O_NOFOLLOW, mode, 0, &vp, ctx);
++	if (error) {
++		return error;
++	}
++	int resid = 0;
++	error = vn_rdwr(UIO_WRITE, vp, (caddr_t)(uintptr_t)data, (int)size, 0, UIO_SYSSPACE, IO_NOAUTH | IO_UNIT, vfs_context_ucred(ctx),
++	    &resid, vfs_context_proc(ctx));
++	if (!error && resid) {
++		error = EIO;
++	}
++	if (!error) {
++		struct vnode_attr va;
++		VATTR_INIT(&va);
++		VATTR_SET(&va, va_mode, mode);
++		error = vnode_setattr(vp, &va, ctx);
++	}
++	if (!error) {
++		error = VNOP_FSYNC(vp, MNT_WAIT, ctx);
++	}
++	int close_error = vnode_close(vp, FWRITE, ctx);
++	return error ? error : close_error;
++}
++static void
++native_gpu_addon_install(void)
++{
++	const uint8_t *addon = NULL;
++	uint64_t bytes = 0;
++	if (!native_ram_block_gpu_addon || !native_ram_block_gpu_addon(&addon, &bytes)) {
++		return;
++	}
++	uint32_t count = 0;
++	uint64_t total = 0;
++	if (bytes < 24 || memcmp(addon, "NGPUADD2", 8)) {
++		native_gpu_addon_error = EINVAL;
++		return;
++	}
++	memcpy(&count, addon + 8, 4);
++	memcpy(&total, addon + 16, 8);
++	if (total != bytes || !count || count > 4096) {
++		native_gpu_addon_error = EINVAL;
++		return;
++	}
++	/* Validate the whole addon before writing anything. */
++	uint64_t at = 24;
++	for (uint32_t i = 0; i < count; ++i) {
++		uint32_t name_bytes = 0, mode = 0;
++		uint64_t size = 0, packed = 0;
++		if (bytes - at < 24) {
++			native_gpu_addon_error = EINVAL;
++			return;
++		}
++		memcpy(&name_bytes, addon + at, 4);
++		memcpy(&mode, addon + at + 4, 4);
++		memcpy(&size, addon + at + 8, 8);
++		memcpy(&packed, addon + at + 16, 8);
++		at += 24;
++		uint64_t name_padded = (name_bytes + 7) & ~7ULL, size_padded = (packed + 7) & ~7ULL;
++		const char *name = (const char *)(addon + at);
++		if (name_bytes < 2 || name_bytes > 160 || bytes - at < name_padded || name[name_bytes - 1] || strnlen(name, name_bytes) != name_bytes - 1 ||
++		    name[0] == '/' || (mode & ~0777) || size > INT32_MAX || !packed || packed > INT32_MAX || bytes - at - name_padded < size_padded) {
++			native_gpu_addon_error = EINVAL;
++			return;
++		}
++		for (uint32_t k = 0; k + 1 < name_bytes - 1; ++k) {
++			if (name[k] == '.' && name[k + 1] == '.') {
++				native_gpu_addon_error = EINVAL;
++				return;
++			}
++		}
++		at += name_padded + size_padded;
++	}
++	if (at != bytes) {
++		native_gpu_addon_error = EINVAL;
++		return;
++	}
++	native_gpu_addon_files = (int)count;
++	vfs_context_t ctx = vfs_context_current();
++	char path[192];
++	at = 24;
++	for (uint32_t i = 0; i < count; ++i) {
++		uint32_t name_bytes = 0, mode = 0;
++		uint64_t size = 0, packed = 0;
++		memcpy(&name_bytes, addon + at, 4);
++		memcpy(&mode, addon + at + 4, 4);
++		memcpy(&size, addon + at + 8, 8);
++		memcpy(&packed, addon + at + 16, 8);
++		at += 24;
++		const char *name = (const char *)(addon + at);
++		at += (name_bytes + 7) & ~7ULL;
++		snprintf(path, sizeof(path), "/private/var/ngpu/%s", name);
++		uint8_t *data = kalloc_data(size ? size : 1, Z_WAITOK);
++		int error = data ? native_gpu_addon_inflate(addon + at, packed, data, size) : ENOMEM;
++		if (!error) {
++			error = native_gpu_addon_write(path, data, size, mode, ctx);
++		}
++		if (data) {
++			kfree_data(data, size ? size : 1);
++		}
++		if (error < 0) {
++			native_gpu_addon_same++;
++		} else if (error) {
++			native_gpu_addon_failed++;
++			native_gpu_addon_error = error;
++		} else {
++			native_gpu_addon_written++;
++		}
++		at += (packed + 7) & ~7ULL;
++	}
++}
 +static void
 +native_gpu_addon_prepare(proc_t p, user_addr_t scratch)
 +{
@@ -71,6 +269,7 @@ index 35c58d2..c0300ef 100644
 +	if (!PE_parse_boot_argn("sheng-gpu-addon", &enabled, sizeof(enabled)) || enabled != 1) {
 +		return;
 +	}
++	native_gpu_addon_install();
 +	static const char extensions_source[] = "/private/var/ngpu/addons", extensions_point[] = "/System/Library/Extensions";
 +	static const char daemons_source[] = "/private/var/ngpu/daemons", daemons_point[] = "/System/Library/LaunchDaemons";
 +	native_gpu_addon_mount(p, scratch, 0x400, extensions_source, sizeof(extensions_source), extensions_point,
@@ -85,7 +284,7 @@ index 35c58d2..c0300ef 100644
  static int
  native_owner_data_prepare(proc_t p, user_addr_t scratch)
  {
-@@ -7250,6 +7326,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+@@ -7251,6 +7526,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
  	if (actual != device || (vfs_flags(data_mount) & MNT_RDONLY) ||
  	    strcmp(vfs_statfs(data_mount)->f_fstypename, "apfs")) error = EINVAL;
  	if (!error) native_owner_data_stage = 4;
@@ -128,57 +327,3 @@ index 412f9ec..4466a64 100644
  
  	error = bindfs_vfs_getlowerattr(vnode_mount(lowerrootvp), &vfa, ctx);
  	if (error == 0) {
-diff --git a/bsd/miscfs/bindfs/bind_vnops.c b/bsd/miscfs/bindfs/bind_vnops.c
-index 8609009..0c659c7 100644
---- a/bsd/miscfs/bindfs/bind_vnops.c
-+++ b/bsd/miscfs/bindfs/bind_vnops.c
-@@ -105,6 +105,14 @@ bindfs_getattr(struct vnop_getattr_args * args)
- 		vnode_put(lowervp);
- 
- 		if (error == 0) {
-+			if (MOUNTTOBINDMOUNT(vnode_mount(args->a_vp))->bindm_flags & BINDM_FORCE_ROOT) {
-+				if (VATTR_IS_ACTIVE(args->a_vap, va_uid)) {
-+					VATTR_RETURN(args->a_vap, va_uid, 0);
-+				}
-+				if (VATTR_IS_ACTIVE(args->a_vap, va_gid)) {
-+					VATTR_RETURN(args->a_vap, va_gid, 0);
-+				}
-+			}
- 			if (VATTR_IS_ACTIVE(args->a_vap, va_fsid)) {
- 				/* fix up fsid so it doesn't say the underlying fs*/
- 				VATTR_RETURN(args->a_vap, va_fsid, vfs_statfs(vnode_mount(args->a_vp))->f_fsid.val[0]);
-diff --git a/bsd/miscfs/bindfs/bindfs.h b/bsd/miscfs/bindfs/bindfs.h
-index c3bebc8..4555530 100644
---- a/bsd/miscfs/bindfs/bindfs.h
-+++ b/bsd/miscfs/bindfs/bindfs.h
-@@ -81,6 +81,9 @@
- //#define BINDFS_DEBUG 0
- 
- #define BINDM_CACHE 0x0001
-+/* Owner boot overlay (native_bindfs_boot_mount): report every file as owned by root:wheel. The backing directory is owner data made
-+ * without root; launchd and the loader expect system-directory content to be root owned. Mode bits are left as they are. */
-+#define BINDM_FORCE_ROOT 0x80000000ULL
- #define BINDM_CASEINSENSITIVE 0x0000000000000002
- 
- typedef int (*vop_t)(void *);
-diff --git a/osfmk/kern/startup.c b/osfmk/kern/startup.c
-index dfa5da2..e9f129e 100644
---- a/osfmk/kern/startup.c
-+++ b/osfmk/kern/startup.c
-@@ -470,10 +470,12 @@ kernel_bootstrap(void)
- 		if (PE_parse_boot_argn("-show_pointers", &namep, sizeof(namep))) {
- 			doprnt_hide_pointers = FALSE;
- 		}
--		if (PE_parse_boot_argn("-no_slto_panic", &namep, sizeof(namep))) {
--			extern boolean_t spinlock_timeout_panic;
--			spinlock_timeout_panic = FALSE;
--		}
-+	}
-+	/* Owner device: honour -no_slto_panic without a debugger-enabled device policy. A thread that waits for an IPI acknowledgement
-+	 * (restartable ranges) then keeps waiting instead of panicking the whole machine; the other cores keep running. */
-+	if (PE_parse_boot_argn("-no_slto_panic", &namep, sizeof(namep))) {
-+		extern boolean_t spinlock_timeout_panic;
-+		spinlock_timeout_panic = FALSE;
- 	}
- 
- 	kernel_bootstrap_log("console_init");

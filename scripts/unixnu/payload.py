@@ -110,6 +110,9 @@ def build(ctx, kernel=None):
         if not spec.get('skip_setup_tool'):
             raise Error('board.toml [payload] has no skip_setup_tool')
         data = skip_setup_seed(ctx, data, spec['skip_setup_tool'])
+    addon = expand(args.gpu_addon) if getattr(args, 'gpu_addon', None) else None
+    if addon and (not addon.is_file() or addon.read_bytes()[:8] != b'NGPUADD2'):
+        raise Error(f'GPU addon not found or not made by scripts/make-gpu-addon.py: {addon}')
     seed = getattr(args, 'unique_chip_id', None) or os.environ.get('UNIXNU_UNIQUE_CHIP_ID')
     adt = spec.get('adt', {})
     if adt.get('unique_chip_id') == 'required' and not seed:
@@ -125,6 +128,8 @@ def build(ctx, kernel=None):
             cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-patch.log')
     if trust:
         shutil.copyfile(trust, payloads / 'kernel.macho.trustcache')
+    if addon:
+        shutil.copyfile(addon, payloads / 'kernel.macho.gpuaddon')
     if data:
         shutil.copyfile(data, payloads / 'scratch-data.img')
     command = ['python3', ctx.tree / adt['tool'], '--output', payloads / 'kernel.macho.adt', '--dram-size', str(spec['dram_size'])]
@@ -138,6 +143,8 @@ def build(ctx, kernel=None):
         command.append('--packed-data-ramdisk' if adt.get('packed_data_ramdisk') else '--data-ramdisk')
     if trust:
         command.append('--trust-cache')
+    if addon:
+        command.append('--gpu-addon')
     if adt.get('ipad_identity'):
         command.append('--ipad-identity')
     run(command, cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-adt.log')
@@ -156,7 +163,7 @@ def build(ctx, kernel=None):
     write_volume(stage, image, spec.get('volume', 'UNIXNU')[:11], size)
     data_report = {'kernel_sha256': sha256_file(kernel), 'payload_kernel_sha256': sha256_file(payloads / 'kernel.macho'),
                    'adt_sha256': sha256_file(payloads / 'kernel.macho.adt'), 'kernel_args': line,
-                   'trust_cache_sha256': sha256_file(trust) if trust else None,
+                   'trust_cache_sha256': sha256_file(trust) if trust else None, 'gpu_addon_sha256': sha256_file(addon) if addon else None,
                    'data_ramdisk_sha256': sha256_file(data) if data else None, 'skip_setup': bool(getattr(args, 'skip_setup', False)), 'panic_screen': bool(spec.get('panic_screen')),
                    'payload_sha256': sha256_file(image), 'payload_bytes': image.stat().st_size, 'hardware_tested': False}
     report.write_text(json.dumps(data_report, indent=2) + '\n')
