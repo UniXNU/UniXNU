@@ -226,9 +226,12 @@ CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
 # CONFIG_XNU_ARMVIRT_PLATFORM is not set
 CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
 CONFIG_XNU_OWNER_DATA_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
+CONFIG_XNU_OWNER_CACHE_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
 ```
 
 取值可以是 `y`、`n`、数字或带引号字符串。每个 `CONFIG_XNU_<NAME>` 变成内核构建的 `XNU_<NAME>`，字符串中的 `{tree}` 替换为构建树路径。
+
+`CONFIG_XNU_OWNER_CACHE_VOLUME_UUID` 指定 owner 链作为缓存载体挂载的 SystemOS cryptex 卷，即签名 SystemOS 策略所覆盖镜像中的 APFS 卷 UUID。不设置时，内核使用 sheng 镜像的卷。
 
 ## feeds.toml
 

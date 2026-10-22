@@ -9,7 +9,7 @@
  
  #include <mach/exclaves.h>
  
-@@ -7013,8 +7013,253 @@
+@@ -7013,8 +7013,256 @@
   *		word width of the kernel. Once the self-exec completes, the
   *		initproc might be different.
   */
@@ -50,7 +50,10 @@
 -load_init_program_at_path(proc_t p, user_addr_t scratch_addr, const char* path)
 +native_owner_cache_prepare(proc_t p, user_addr_t scratch, user_addr_t *envp)
 +{
-+	const char *volume = "8846FE78-2910-4297-AF97-D59BB6F8FC16";
++#ifndef XNU_OWNER_CACHE_VOLUME_UUID
++#define XNU_OWNER_CACHE_VOLUME_UUID "8846FE78-2910-4297-AF97-D59BB6F8FC16"
++#endif
++	const char *volume = XNU_OWNER_CACHE_VOLUME_UUID;
 +#if defined(XNU_OWNER_UNION_SYSTEMOS) && XNU_OWNER_UNION_SYSTEMOS
 +#if !CONFIG_UNION_MOUNTS
 +#error The owner composition requires the original native union-mount implementation
@@ -264,7 +267,7 @@
  {
  	int retval[2];
  	int error;
-@@ -7086,7 +7326,7 @@
+@@ -7086,7 +7329,7 @@
  	 */
  	init_exec_args.fname = argv0;
  	init_exec_args.argp = scratch_addr;
@@ -273,7 +276,7 @@
  
  	/*
  	 * So that init task is set with uid,gid 0 token
-@@ -7148,6 +7388,15 @@
+@@ -7148,6 +7391,15 @@
  	mach_vm_size_t map_page_size = vm_map_page_size(map);
  
  	(void) mach_vm_allocate_kernel(map, &scratch_addr, map_page_size, VM_FLAGS_ANYWHERE, VM_KERN_MEMORY_NONE);
@@ -289,7 +292,7 @@
  #if CONFIG_MEMORYSTATUS
  	(void) memorystatus_init_at_boot_snapshot();
  #endif /* CONFIG_MEMORYSTATUS */
-@@ -7162,7 +7411,7 @@
+@@ -7162,7 +7414,7 @@
  
  		if (is_release_suffix) {
  			printf("load_init_program: attempting to load /sbin/launchd\n");
@@ -298,7 +301,7 @@
  			if (!error) {
  				return;
  			}
-@@ -7173,7 +7422,7 @@
+@@ -7173,7 +7425,7 @@
  			strlcat(launchd_path, launchd_suffix, sizeof(launchd_path));
  
  			printf("load_init_program: attempting to load %s\n", launchd_path);
@@ -307,7 +310,7 @@
  			if (!error) {
  				return;
  			} else if (error != ENOENT) {
-@@ -7186,7 +7435,7 @@
+@@ -7186,7 +7438,7 @@
  	error = ENOENT;
  	for (i = 0; i < sizeof(init_programs) / sizeof(init_programs[0]); i++) {
  		printf("load_init_program: attempting to load %s\n", init_programs[i]);
