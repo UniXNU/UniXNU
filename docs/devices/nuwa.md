@@ -5,8 +5,11 @@ nuwa is the Xiaomi 13 Pro with the SM8550 SoC and 12 GB of RAM. The port below i
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-nuwa](https://github.com/wh1stl3/UniXNU-nuwa) | [wh1stl3](https://github.com/wh1stl3) | Source kernel builds and links; platform archives, prelink and hardware not done |
+| [UniXNU-nuwa](https://github.com/pubglite55/UniXNU-nuwa) | [pubglite55](https://github.com/pubglite55) | Firmware, payload and boot image built; hardware reaches the UniXNU boot manager; payload volume mounting is being investigated |
 
 ## State
+
+The table below is wh1stl3's port.
 
 | Layer | State |
 | --- | --- |
@@ -19,6 +22,20 @@ nuwa is the Xiaomi 13 Pro with the SM8550 SoC and 12 GB of RAM. The port below i
 
 `docs/STATUS.md` in the repository is the current source of truth.
 
+## pubglite55's port
+
+This port uses the restricted sheng configuration and follows the firmware-plus-payload route.
+
+| Layer | State |
+| --- | --- |
+| Source kernel | xnu 8796.141.3 builds, links and prelinks in CI; `kernel.macho` is 54.3 MB |
+| Platform archives | all 13 archives build, based on the sheng kit |
+| Firmware | Mu-Silicium `nuwaPkg` integrates DarwinBoot, UniXNUDxe, the UniXNU application and a boot-memory driver; hardware shows the UniXNU boot manager |
+| Payload and boot image | payload FAT volume of 188 MiB; the Android boot image builds and boots on hardware |
+| Hardware | BootShim → UEFI → BDS → boot manager works; the payload volume is not attached by Fat yet, so the kernel entry is not reached |
+| Board file | some values are still sheng placeholders (for example the userdata LBA); `uefi-nuwa` exists |
+
 ## Maintenance
 
 The maintainer owns the repository and its release decisions. UniXNU documentation lists the port and its state; it does not take over maintenance.
+
