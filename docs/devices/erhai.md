@@ -12,7 +12,7 @@ erhai is the OnePlus Pad 2 Pro (OPD2413) with the SM8750 SoC. The port below is 
 | --- | --- |
 | Board values | measured on the device: FD base `0xA7000000`, GIC, timebase, panel, touch and boot partition |
 | UEFI and payload | `embed_payload` puts the payload in the kernel field because the OnePlus ABL replaces the ramdisk field during `fastboot boot` |
-| Kernel | source-only kernel built in GitHub Actions |
+| Kernel | source-only kernel built in GitHub Actions; the bring-up profile runs on the boot CPU with AMFI removed from the prelink |
 | Screen checkpoints | green bar plus S1 to S6 |
 | Root, UFS and GPU | not enabled in this profile |
 | Hardware result | the repository records the measured values and the expected S1 to S6 sequence |
