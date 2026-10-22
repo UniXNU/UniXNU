@@ -208,6 +208,7 @@ unique_chip_id = "required"
 | `dram_size` | DRAM size passed to the ADT tool |
 | `panic_screen` | Patches the panic screen into the payload copy of the kernel |
 | `skip_setup_tool` | Script used by `--skip-setup` |
+| `skip_setup_args` | Extra arguments for that script, such as `["--no-auto-dim"]` |
 | `trust_cache_sha256` | Accepted trust cache bundle hashes |
 | `timeout` | Menu timeout in seconds |
 | `kernel_args` | Default kernel command line |

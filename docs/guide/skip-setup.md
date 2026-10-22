@@ -17,9 +17,10 @@ A fresh Data seed starts the Setup app on first boot. The payload can mark Setup
 ```toml
 [payload]
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
+skip_setup_args = ["--no-auto-dim"]
 ```
 
-The original seed stays unchanged. The payload uses the edited copy as `Payloads/scratch-data.img`.
+`skip_setup_args` is optional and passed to the tool after the two paths. The original seed stays unchanged. The payload uses the edited copy as `Payloads/scratch-data.img`.
 
 Grow the seed first with `scripts/seed-data-grow.py` when the tablet's storage is larger than the seed. The payload edits the grown seed and keeps its size.
 
@@ -34,6 +35,8 @@ Grow the seed first with `scripts/seed-data-grow.py` when the tablet's storage i
 | `com.apple.managedconfiguration.notbackedup` | `LockdownActivationIndicatesCloudConfigurationAvailable = false` |
 | `com.apple.springboard` | `BKNoWatchdogs = true`, `FBLaunchWatchdogExceptions = { com.apple.purplebuddy: 100 }`, `MCForceShowCloudConfigurationUI = false` |
 | `com.apple.migration` | `LastSystemVersion = 21H461`, `DMUserDataDisposition = { SyntheticDidUpgrade = false, buildVersion = 21H461 }` |
+
+`--no-auto-dim` also sets `SBDisableAutoDim`, `SBDontDimOrLockOnAC` and `SBDisableIdleSleep` in `com.apple.springboard`, as UniXNU-qemu's root builder does. A board without buttons or a working idle timer otherwise turns its display off about 30 seconds after SpringBoard starts and puts the system to sleep.
 
 The tool also creates these directories under `/private/var/containers`:
 
@@ -97,7 +100,7 @@ out/<board>/payload/payload.json
 | `skip_setup` | `true` |
 | `payload_sha256` | Payload image hash |
 
-The edited seed is cached by the hash of the original. A different seed produces a new file.
+The edited seed is cached by the hash of the original and of `skip_setup_args`. A different seed or different arguments produce a new file.
 
 ## Verify
 

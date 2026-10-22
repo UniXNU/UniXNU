@@ -17,9 +17,10 @@
 ```toml
 [payload]
 skip_setup_tool = "scripts/seed-data-skip-setup.py"
+skip_setup_args = ["--no-auto-dim"]
 ```
 
-原始种子保持不变。负载使用修改后的副本作为 `Payloads/scratch-data.img`。
+`skip_setup_args` 可选，接在两个路径参数之后传给工具。原始种子保持不变。负载使用修改后的副本作为 `Payloads/scratch-data.img`。
 
 平板存储大于种子时，先用 `scripts/seed-data-grow.py` 增长种子。负载编辑增长后的种子并保留其大小。
 
@@ -34,6 +35,8 @@ skip_setup_tool = "scripts/seed-data-skip-setup.py"
 | `com.apple.managedconfiguration.notbackedup` | `LockdownActivationIndicatesCloudConfigurationAvailable = false` |
 | `com.apple.springboard` | `BKNoWatchdogs = true`、`FBLaunchWatchdogExceptions = { com.apple.purplebuddy: 100 }`、`MCForceShowCloudConfigurationUI = false` |
 | `com.apple.migration` | `LastSystemVersion = 21H461`、`DMUserDataDisposition = { SyntheticDidUpgrade = false, buildVersion = 21H461 }` |
+
+`--no-auto-dim` 还会在 `com.apple.springboard` 里设置 `SBDisableAutoDim`、`SBDontDimOrLockOnAC` 和 `SBDisableIdleSleep`，与 UniXNU-qemu 的根文件系统构建脚本相同。没有按键或空闲计时不可用的板子，否则会在 SpringBoard 启动约 30 秒后关闭屏幕并让系统休眠。
 
 工具还会在 `/private/var/containers` 下创建目录：
 
@@ -97,7 +100,7 @@ out/<board>/payload/payload.json
 | `skip_setup` | `true` |
 | `payload_sha256` | 负载镜像哈希 |
 
-修改后的种子按原始种子的哈希缓存。换一个种子会生成新文件。
+修改后的种子按原始种子和 `skip_setup_args` 的哈希缓存。换一个种子或换一组参数会生成新文件。
 
 ## 验证
 
