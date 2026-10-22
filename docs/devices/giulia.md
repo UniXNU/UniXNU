@@ -5,6 +5,7 @@ giulia is the OnePlus Ace 5 (PKG110) with the SM8650 SoC. The port below is an i
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-giulia](https://github.com/jasper2863/UniXNU-giulia) | [jasper2863](https://github.com/jasper2863) | GUI progress bar reached; installation service blocked |
+| [UniXNU-OnePlus-Ace5](https://github.com/tycykp/UniXNU-OnePlus-Ace5) | [tycykp](https://github.com/tycykp) | Hello and Setup reached; touch in progress |
 
 ## State
 
@@ -22,6 +23,10 @@ giulia is the OnePlus Ace 5 (PKG110) with the SM8650 SoC. The port below is an i
 | Baseband, audio, GPU and DRM | not implemented |
 
 The repository keeps the full boot logs, host checks and image hashes. The current blocker is the system app installation and migration path.
+
+## tycykp repository
+
+`UniXNU-OnePlus-Ace5` records a separate iOS 16 / Darwin 22 bring-up. Its latest device test reached the Hello and Setup interface. UEFI handoff, XNU startup, native UFS reads, USB CDC serial, HFSX root mount and `launchd` startup are recorded for the tested configuration. Touch identity and reports are observed; the GPIO fallback is unverified. Wi-Fi stays at `Detect.Quiet`, and GPU, audio, cellular and DRM have no complete device validation.
 
 ## Maintenance
 

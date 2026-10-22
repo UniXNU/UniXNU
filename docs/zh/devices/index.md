@@ -26,7 +26,7 @@
 | [Galaxy Z Fold3（q2q）](/zh/devices/q2q) | SM8350 | 仅源码内核构建工具 | agcarbajo |
 | [小米 15（dada）](/zh/devices/dada) | SM8750 | UEFI 固件工作，UniXNU 和 XNU 未运行 | 7Night-kqx |
 | [小米平板 6（pipa）](/zh/devices/pipa) | SM8250 | 无平板时准备 | xVanTuring |
-| [Redmi K40 Pro（haydn）](/zh/devices/haydn) | SM8350 | 固件、负载和启动镜像已构建，未在真机运行 | xiaomi-haydn-dev |
+| [Redmi K40 Pro（haydn）](/zh/devices/haydn) | SM8350 | 固件、负载和启动镜像已构建，haydn4 从 guacamole 导入 | xiaomi-haydn-dev |
 | [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | XNU 已执行，下一步 PMGR 和用户态 | Lux12138 |
 | [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，内核未构建 | NoNameBuilder |
 | [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | 已到 XNU S1 到 S6，根设备查找 panic | IssacL04 |
@@ -34,7 +34,11 @@
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/phy120) | SM8650 | 启动管理器菜单工作，负载和 XNU 待完成 | peiyuesheng666 |
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
 | [Redmi K30 5G（picasso）](/zh/devices/picasso) | SM7250 | 早期骨架，固件未构建 | YinCQL |
-| [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | 已到 GUI 进度条，安装服务受阻 | jasper2863 |
+| [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | 已到 Hello/Setup 和 GUI 进度条，触控和安装待完成 | jasper2863、tycykp |
+| [一加 5（cheeseburger）](/zh/devices/cheeseburger) | MSM8998 | 已观察到 XNU 入口色条，MMU 和根未验证 | DinnerABC |
+| [Microsoft Surface Duo 2（zeta）](/zh/devices/zeta) | SM8350 | UEFI、菜单和负载工作，内核步骤受阻 | none24smu |
+| [Redmi K20 Pro / Mi 9T Pro（raphael）](/zh/devices/raphael) | SM8150 | 新仓库，内核构建未通过 | penYo22 |
+| [一加 6T（fajita）](/zh/devices/fajita) | SDM845 | XNU 已到根挂载，无存储驱动 | johnpanos |
 
 ## 设备页面记录什么
 

@@ -26,7 +26,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Galaxy Z Fold3 (q2q)](/devices/q2q) | SM8350 | Source kernel build harness only | agcarbajo |
 | [Xiaomi 15 (dada)](/devices/dada) | SM8750 | UEFI firmware works; UniXNU and XNU not run | 7Night-kqx |
 | [Xiaomi Pad 6 (pipa)](/devices/pipa) | SM8250 | Prepared without the tablet | xVanTuring |
-| [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; not run on hardware | xiaomi-haydn-dev |
+| [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; haydn4 imported from guacamole | xiaomi-haydn-dev |
 | [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | XNU executes; PMGR and userspace next | Lux12138 |
 | [Galaxy Tab A7 10.4 (gta4l)](/devices/gta4l) | SM6115 | Board, ADT and firmware build; kernel not built | NoNameBuilder |
 | [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | XNU S1 to S6 reached; root device search panics | IssacL04 |
@@ -34,7 +34,11 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; payload and XNU pending | peiyuesheng666 |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
 | [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |
-| [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | GUI progress bar reached; installation service blocked | jasper2863 |
+| [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | Hello/Setup and GUI progress reached; touch and installation pending | jasper2863, tycykp |
+| [OnePlus 5 (cheeseburger)](/devices/cheeseburger) | MSM8998 | XNU entry bar observed; MMU and root unverified | DinnerABC |
+| [Microsoft Surface Duo 2 (zeta)](/devices/zeta) | SM8350 | UEFI, menu and payload work; kernel step blocked | none24smu |
+| [Redmi K20 Pro / Mi 9T Pro (raphael)](/devices/raphael) | SM8150 | New repository; kernel build not passing | penYo22 |
+| [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
 
 ## What a device page records
 
