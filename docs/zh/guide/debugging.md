@@ -152,6 +152,21 @@ python3 scripts/patch-xnu-entry-probe.py <kernel> --panic-screen --no-reset
 
 panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并保持显示。`--no-reset` 停止自动复位，屏幕保留到拍照完成。
 
+### 入口探针复位
+
+内核还不能绘图之前，重启是唯一的信号。`entry_probe_reset_delay` 保留入口探针的复位：打过补丁的内核在 MMU 打开后等待这么多秒，然后用 PSCI SYSTEM_RESET 复位。过了这段时间设备自己重启，说明 CPU 已经通过 MMU 打开这一步。
+
+```toml
+[payload]
+entry_probe_reset_delay = 6
+entry_probe_reset_after = "_arm_vm_init"   # 可选：改为在这个调用之后复位
+entry_probe_reset_in = "_arm_init"         # 发出调用的函数（默认值）
+entry_probe_reset_occurrence = 1           # 第几次调用（默认 1）
+entry_probe_reset_before = false           # 在调用点复位，不执行调用，也不等待
+```
+
+设置 `entry_probe_reset_after` 后，复位移到该调用之后，一次运行只回答一个问题：内核有没有走过这个调用。这些键对应板级 `patch-xnu-entry-probe.py` 的 `--reset-delay`、`--reset-after`、`--in`、`--occurrence` 和 `--reset-before`，可以和 `panic_screen` 同时使用。不设置 `entry_probe_reset_delay` 时，负载仍传 `--no-reset`。
+
 第一条 panic 消息也会复制到 `boot_progress_panic_text`。secondary core 上的 panic 只停住该 core，实时横幅在屏幕重绘后仍保留文本。
 
 设备树 panic 区域需要：

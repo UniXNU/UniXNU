@@ -207,6 +207,7 @@ unique_chip_id = "required"
 | `title` | Menu entry title |
 | `dram_size` | DRAM size passed to the ADT tool |
 | `panic_screen` | Patches the panic screen into the payload copy of the kernel |
+| `entry_probe_reset_*` | Keeps the entry probe's timed reset, optionally after a given call (see [Debugging](/guide/debugging)) |
 | `skip_setup_tool` | Script used by `--skip-setup` |
 | `trust_cache_sha256` | Accepted trust cache bundle hashes |
 | `timeout` | Menu timeout in seconds |

@@ -123,8 +123,19 @@ def build(ctx, kernel=None):
     payloads = stage / 'EFI/UniXNU/Payloads'
     payloads.mkdir(parents=True)
     shutil.copyfile(kernel, payloads / 'kernel.macho')
-    if spec.get('panic_screen'):
-        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', '--panic-screen', '--no-reset'],
+    # The entry probe (stage bars, optional reset) is wanted with either setting; the panic screen is only one part of it.
+    if spec.get('panic_screen') or spec.get('entry_probe_reset_delay'):
+        probe = (['--reset-delay', str(int(spec['entry_probe_reset_delay']))]
+                 if spec.get('entry_probe_reset_delay') else ['--no-reset'])
+        screen = ['--panic-screen'] if spec.get('panic_screen') else []
+        if spec.get('entry_probe_reset_delay') and spec.get('entry_probe_reset_after'):
+            # Stage 4 in place of stage 3: reset after the Nth call to SYMBOL in FUNCTION.
+            probe += ['--reset-after', spec['entry_probe_reset_after'], '--in', spec.get('entry_probe_reset_in', '_arm_init'),
+                      '--occurrence', str(int(spec.get('entry_probe_reset_occurrence', 1)))]
+            if spec.get('entry_probe_reset_before'):
+                # At the call site, without making the call (and without the delay).
+                probe.append('--reset-before')
+        run(['python3', ctx.tree / 'scripts/patch-xnu-entry-probe.py', payloads / 'kernel.macho', *screen, *probe],
             cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-patch.log')
     if trust:
         shutil.copyfile(trust, payloads / 'kernel.macho.trustcache')
