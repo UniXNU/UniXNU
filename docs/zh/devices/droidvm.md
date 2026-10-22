@@ -17,7 +17,7 @@ DroidVM 目标把 UniXNU 作为客户机运行在高通手机 Gunyah hypervisor 
 | Data | SM8650 上通过 store 磁盘持久化 |
 | 输入 | 触控屏和 Home 通过 virtio-input |
 | 网络 | en0 通过 virtio-mmio 上的 virtio-net，桥接到手机 Wi-Fi；SM8650 上 DHCP IPv4 和 IPv6 工作 |
-| GPU | 缺失，虚拟机需要 virtio-gpu native context 路径 |
+| GPU | 通过 crosvm `--droidvm-gpu` 在手机主机的 KGSL 上运行 NativeAdreno；widget 渲染器和图标服务通过 Metal 插件绘制，完整 GPU 应用尚未验证 |
 
 `BigfootACA/unixnu-droidvm-ci` 为 QEMU/KVM 和 DroidVM 目标提供 CI 构建。
 

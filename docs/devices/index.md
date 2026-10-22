@@ -12,31 +12,31 @@ The ports listed here are independent. Their maintainers own the repositories; t
 
 | Device | SoC | State | Maintainer |
 | --- | --- | --- | --- |
-| [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | Device repositories, work in progress | matejkoo217, hanzi123-bilp |
-| [Xiaomi Pad 7 / POCO Pad X1 (uke)](/devices/uke) | SM7675 | XNU entry reached; root device pending | Allenwdk |
+| [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | Device repositories; stage A and B build inputs | matejkoo217, hanzi123-bilp |
+| [Xiaomi Pad 7 / POCO Pad X1 (uke)](/devices/uke) | SM7675 | Root mounted and launchd starts; display surface pending | Allenwdk |
 | [Redmi Note 10 Pro (sweet)](/devices/sweet) | SM7150 | Platform and loader bring-up; no bootable image | dipa-studio |
 | [OnePlus Ace 5 Pro (hummer)](/devices/hummer) | SM8750 | UEFI layer works; XNU CI trial | 2426120557 |
 | [Xiaomi Mi 6 (sagit)](/devices/sagit) | MSM8998 | Device repository; status not documented | dmnakzkahziamnk-a11y |
 | [Xiaomi Pad 8 Pro (piano)](/devices/piano) | SM8750 | Kernel builds and prelinks in CI; not run on the tablet | code002-2 |
-| [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Work in progress; status not documented | andr0d1v |
+| [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Board file and kernel config; no hardware run documented | andr0d1v |
 | [Redmi K70 (vermeer)](/devices/vermeer) | SM8550 | Source build baseline and sheng-derived device repository | mansar1337, yyx2025 |
-| [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 lock screen and home screen; CPU-rendered; virtio-net works | Droid-VM |
+| [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 home screen; CPU presentation; Metal widgets and icons; virtio-net works | Droid-VM |
 | [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; CPU-rendered | xVanTuring |
 | [Redmi 9A (dandelion)](/devices/dandelion) | MT6765 | Early bring-up; UEFI port in progress | licg89 |
 | [Galaxy Z Fold3 (q2q)](/devices/q2q) | SM8350 | Source kernel build harness only | agcarbajo |
 | [Xiaomi 15 (dada)](/devices/dada) | SM8750 | UEFI firmware works; UniXNU and XNU not run | 7Night-kqx |
-| [Xiaomi Pad 6 (pipa)](/devices/pipa) | SM8250 | Prepared without the tablet | xVanTuring |
+| [Xiaomi Pad 6 (pipa)](/devices/pipa) | SM8250 | Board and userdata values measured; not run on the tablet | xVanTuring |
 | [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; haydn4 imported from guacamole | xiaomi-haydn-dev |
 | [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | XNU executes; PMGR and userspace next | Lux12138 |
 | [Galaxy Tab A7 10.4 (gta4l)](/devices/gta4l) | SM6115 | Board, ADT and firmware build; kernel not built | NoNameBuilder |
 | [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | XNU S1 to S6 reached; root device search panics | IssacL04 |
 | [OnePlus Pad 2 Pro (erhai)](/devices/erhai) | SM8750 | XNU entry bring-up; root and userland not configured | wally001012-cyber |
-| [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; payload and XNU pending | peiyuesheng666 |
+| [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; kernel builds in CI | peiyuesheng666 |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
 | [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |
 | [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | Hello/Setup and GUI progress reached; touch and installation pending | jasper2863, tycykp |
 | [OnePlus 5 (cheeseburger)](/devices/cheeseburger) | MSM8998 | XNU entry bar observed; MMU and root unverified | DinnerABC |
-| [Microsoft Surface Duo 2 (zeta)](/devices/zeta) | SM8350 | UEFI, menu and payload work; kernel step blocked | none24smu |
+| [Microsoft Surface Duo 2 (zeta)](/devices/zeta) | SM8350 | UEFI, menu and payload work; kernel builds, not booted | none24smu |
 | [Redmi K20 Pro / Mi 9T Pro (raphael)](/devices/raphael) | SM8150 | New repository; kernel build not passing | penYo22 |
 | [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
 | [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Source kernel builds; platform archives and prelink pending | wh1stl3 |

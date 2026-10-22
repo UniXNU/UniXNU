@@ -5,7 +5,7 @@ fuxi is the Xiaomi 13 with the SM8550 SoC. The repositories below are independen
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) | Device repository, work in progress |
-| [unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi), [uefi-fuxi](https://github.com/hanzi123-bilp/uefi-fuxi) | [hanzi123-bilp](https://github.com/hanzi123-bilp) | Device and firmware repositories, status not documented |
+| [unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi), [uefi-fuxi](https://github.com/hanzi123-bilp/uefi-fuxi) | [hanzi123-bilp](https://github.com/hanzi123-bilp) | Stage A and stage B build inputs; no hardware run documented |
 
 ## UniXNU-fuxi
 
@@ -13,7 +13,7 @@ UniXNU-fuxi is a fork of UniXNU-sheng with fuxi board data. It targets the same 
 
 ## hanzi123-bilp repositories
 
-The `hanzi123-bilp` repositories are a separate device and firmware port. Their README uses the sheng template and does not document a current state.
+The `hanzi123-bilp` repositories are a separate device and firmware port. The device repository has a stage A minimal kernel that links before any prelink exists, and a stage B full configuration with 19 archives. The storage audit runs headers-only until live metadata exists. The firmware repository maps the SM8550 register apertures. No hardware run is documented.
 
 ## Maintenance
 
