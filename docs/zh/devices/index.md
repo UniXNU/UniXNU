@@ -33,6 +33,7 @@
 | [一加平板 2 Pro（erhai）](/zh/devices/erhai) | SM8750 | XNU 入口 bring-up，根和用户态未配置 | wally001012-cyber |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/phy120) | SM8650 | 启动管理器菜单工作，负载和 XNU 待完成 | peiyuesheng666 |
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
+| [小米 Poco F6 / Redmi Turbo 3（peridot）](/zh/devices/peridot) | SM8635 | 已在真机到达 iOS 16.7.16 用户态 | hoshikv |
 | [Redmi K30 5G（picasso）](/zh/devices/picasso) | SM7250 | 早期骨架，固件未构建 | YinCQL |
 | [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | 已到 GUI 进度条，安装服务受阻 | jasper2863 |
 

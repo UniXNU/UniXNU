@@ -33,6 +33,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OnePlus Pad 2 Pro (erhai)](/devices/erhai) | SM8750 | XNU entry bring-up; root and userland not configured | wally001012-cyber |
 | [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; payload and XNU pending | peiyuesheng666 |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
+| [Xiaomi Poco F6 / Redmi Turbo 3 (peridot)](/devices/peridot) | SM8635 | iOS 16.7.16 userland reached on hardware | hoshikv |
 | [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |
 | [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | GUI progress bar reached; installation service blocked | jasper2863 |
 
