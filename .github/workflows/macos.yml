@@ -1,6 +1,12 @@
 name: macOS build
 
 on:
+  push:
+    paths:
+      - '.ci/**'
+      - 'patches/**'
+      - 'scripts/**'
+      - '.github/workflows/macos.yml'
   workflow_dispatch:
     inputs:
       device_repository:
@@ -14,7 +20,7 @@ on:
       defconfig:
         description: Defconfig name
         required: true
-        default: sheng_defconfig
+        default: sheng-full_defconfig
       steps:
         description: Steps to run
         type: choice
@@ -22,7 +28,7 @@ on:
           - kernel
           - kernel userdata
           - kernel userdata payload
-        default: kernel userdata
+        default: kernel
       ipsw_url:
         description: IPSW URL (empty uses board.toml)
         required: false
@@ -76,8 +82,8 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.device_repository }}
-          ref: ${{ inputs.device_ref }}
+          repository: ${{ inputs.device_repository || 'UniXNU/UniXNU-sheng' }}
+          ref: ${{ inputs.device_ref || 'main' }}
           path: device
           token: ${{ secrets.UNIXNU_DEVICE_TOKEN || github.token }}
 
@@ -105,9 +111,12 @@ jobs:
             printf '%-10s %s\n' "$tool" "$(command -v "$tool" || echo MISSING)"
           done
 
+      - name: Prepare the device tree
+        run: python3 .ci/setup_device.py
+
       - name: Select the device
         run: |
-          ./unixnu defconfig "${{ inputs.defconfig }}" -D "$GITHUB_WORKSPACE/device"
+          ./unixnu defconfig "${{ inputs.defconfig || 'sheng-full_defconfig' }}" -D "$GITHUB_WORKSPACE/device"
           ./unixnu fetch xnu libplatform libdispatch AvailabilityVersions libpthread \
                           corecrypto-2023 IOStorageFamily -D "$GITHUB_WORKSPACE/device"
 
@@ -143,16 +152,68 @@ jobs:
           DEVICE_DIR: ${{ github.workspace }}/device
         run: bash -euo pipefail -c "$PRE_BUILD"
 
+      - name: Assemble the tree and seed the Apple caches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          ./unixnu tree -D "$GITHUB_WORKSPACE/device"
+          dir=out/sheng/tree/.cache/sources
+          mkdir -p "$dir"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/apple-oss-distributions/xnu/contents/iokit/DriverKit?ref=xnu-10063.121.3" \
+            -o "$dir/xnu-driverkit-10063.121.3.json"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/apple-oss-distributions/xnu/contents/iokit/DriverKit/crypto?ref=xnu-10063.121.3" \
+            -o "$dir/xnu-driverkit-crypto-10063.121.3.json"
+          curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/apple-oss-distributions/xnu/contents/EXTERNAL_HEADERS/TrustCache?ref=xnu-8796.101.5" \
+            -o "$dir/xnu-trustcache-8796.101.5.json"
+          python3 .ci/patch_bringup.py
+
       - name: Build kernel
         env:
           IPSW_URL: ${{ inputs.ipsw_url }}
+          UNIXNU_DRIVERKIT_TAG: xnu-10063.121.3
+          UNIXNU_TRUSTCACHE_TAG: xnu-8796.101.5
+          MAKEFLAGS: "-k"
+          XNU_EXTRA_CFLAGS: "-Wno-unknown-warning-option -Wno-reserved-identifier -Wno-missing-designated-field-initializers -Wno-pre-c11-compat -Wno-suggest-override -Wno-unnecessary-virtual-specifier -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
+        run: |
+          args=()
+          if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
+          ./unixnu build kernel "${args[@]}"
+
+      - name: Generate the prelink candidates
+        run: python3 .ci/make_candidates.py
+
+      - name: Switch to the full driver configuration
+        run: |
+          set -eu
+          python3 .ci/setup_device.py --full
+          ./unixnu defconfig sheng-drivers_defconfig -D "$GITHUB_WORKSPACE/device"
+          ./unixnu tree -D "$GITHUB_WORKSPACE/device"
+          python3 .ci/patch_bringup.py
+          mkdir -p out/sheng/tree/.cache/firmware/kernelcache.macho
+          cp -f out/ipsw/*/kernelcache.decompressed \
+                out/sheng/tree/.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed
+          rm -f out/sheng/kernel/kernel.macho
+          find out/sheng/tree/build/xnu -name 'mach.development.*.unstripped.noctf' -delete
+          echo 'second pass prepared'
+
+      - name: Rebuild with the full driver set
+        env:
+          IPSW_URL: ${{ inputs.ipsw_url }}
+          UNIXNU_DRIVERKIT_TAG: xnu-10063.121.3
+          UNIXNU_TRUSTCACHE_TAG: xnu-8796.101.5
+          MAKEFLAGS: "-k"
+          XNU_EXTRA_CFLAGS: "-Wno-unknown-warning-option -Wno-reserved-identifier -Wno-missing-designated-field-initializers -Wno-pre-c11-compat -Wno-suggest-override -Wno-unnecessary-virtual-specifier -Wno-suggest-destructor-override -Wno-ms-bitfield-padding"
         run: |
           args=()
           if [ -n "$IPSW_URL" ]; then args+=(--ipsw "$IPSW_URL"); fi
           ./unixnu build kernel "${args[@]}"
 
       - name: Build userdata
-        if: contains(inputs.steps, 'userdata')
+        if: contains(inputs.steps || 'kernel', 'userdata')
         env:
           IPSW_URL: ${{ inputs.ipsw_url }}
         run: |
@@ -161,7 +222,7 @@ jobs:
           ./unixnu build userdata "${args[@]}"
 
       - name: Build payload
-        if: contains(inputs.steps, 'payload')
+        if: contains(inputs.steps || 'kernel', 'payload')
         env:
           UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
           SKIP_SETUP: ${{ inputs.skip_setup }}
@@ -180,22 +241,37 @@ jobs:
           if [ "$SKIP_SETUP" = "true" ]; then args+=(--skip-setup); fi
           ./unixnu build payload "${args[@]}"
 
+      - name: Summarise the build result
+        if: always()
+        run: |
+          {
+            echo "### macOS build $( [ "${{ job.status }}" = success ] && echo succeeded || echo failed )"
+            for f in out/sheng/logs/*.log; do
+              [ -f "$f" ] || continue
+              echo "#### $(basename "$f")"
+              echo '```'
+              tail -n 30 "$f"
+              echo '```'
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload kernel and payload
         uses: actions/upload-artifact@v4
         with:
-          name: unixnu-${{ inputs.defconfig }}
+          name: unixnu-${{ inputs.defconfig || 'sheng-full_defconfig' }}
           path: |
             out/*/kernel/**
             out/*/payload/**
             out/*/logs/**
-          if-no-files-found: error
+            out/*/tree/build/*/compile.log
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Upload userdata
-        if: inputs.upload_userdata && contains(inputs.steps, 'userdata')
+        if: inputs.upload_userdata && contains(inputs.steps || 'kernel', 'userdata')
         uses: actions/upload-artifact@v4
         with:
-          name: unixnu-userdata-${{ inputs.defconfig }}
+          name: unixnu-userdata-${{ inputs.defconfig || 'sheng-full_defconfig' }}
           path: out/*/userdata/**
           if-no-files-found: error
           retention-days: 7

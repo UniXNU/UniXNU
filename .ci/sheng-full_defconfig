@@ -1,0 +1,46 @@
+# sheng full configuration: everything the reproducible archive chain can supply.
+#
+# Derived from configs/uke-full_defconfig of the reference port (Allenwdk/UniXNU-uke),
+# which established which gates can be satisfied from the pinned sources alone:
+#
+#   * the AES subclass binds to the recorded original addresses in scripts/data/
+#   * CONFIG_XNU_BUILD_ARCHIVES makes the unixnu driver run the board archive list
+#     before the final link; the bootstrap pass leaves it unset
+#
+# The hardware-qualification gates stay off: each needs inputs that only a device run,
+# the target-volume DMGs or the reference port's recorded prelink candidates can produce.
+
+CONFIG_XNU_BUILD_ARCHIVES=y
+CONFIG_XNU_SOURCE_CORECRYPTO14=y
+CONFIG_XNU_SOURCE_PTHREAD=y
+CONFIG_XNU_ARM_DT_PLATFORM=y
+CONFIG_XNU_ARMCPU=y
+CONFIG_XNU_NATIVE_AES=y
+CONFIG_XNU_TRUST_CACHE_RUNTIME=y
+CONFIG_XNU_NATIVE_CS_HASH_CACHE=y
+CONFIG_XNU_DT_PANIC_REGION=y
+CONFIG_XNU_ZONE_PGZ_ALIGNMENT_PROBE=y
+CONFIG_XNU_NATIVE_ARCH_TIMER=y
+CONFIG_XNU_NATIVE_PAN=y
+
+# CONFIG_XNU_NATIVE_UFS is not set
+# CONFIG_XNU_SOURCE_MOCKFS is not set
+# CONFIG_XNU_SHENG_PMGR is not set
+# CONFIG_XNU_NATIVE_LEGACY_DISPLAY is not set
+# CONFIG_XNU_NATIVE_VIRTIO_BLOCK is not set
+# CONFIG_XNU_NATIVE_RAM_BLOCK is not set
+# CONFIG_XNU_VERIFIED_ROOT_PROBE is not set
+# CONFIG_XNU_OWNER_ROOT_AUDIT is not set
+# CONFIG_XNU_OWNER_ROOT_TRUST is not set
+# CONFIG_XNU_OWNER_CACHE_MOUNT is not set
+# CONFIG_XNU_OWNER_CACHE_STARTUP is not set
+# CONFIG_XNU_OWNER_BOOT_MANIFEST is not set
+# CONFIG_XNU_OWNER_DATA_MOUNT is not set
+# CONFIG_XNU_OWNER_UNION_SYSTEMOS is not set
+# CONFIG_XNU_BOOT_PROGRESS is not set
+# CONFIG_XNU_NATIVE_ADRENO is not set
+
+CONFIG_XNU_CRYPTO_BOOTSTRAP="prelinked"
+CONFIG_XNU_EXTRA_LD_ARCHIVES=""
+CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n
+CONFIG_XNU_ARMVIRT_PLATFORM=n
