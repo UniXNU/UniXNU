@@ -1,8 +1,8 @@
 diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
-index a5ff474..5c72ee5 100644
+index a5ff474..4704203 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7193,6 +7193,281 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
+@@ -7193,6 +7193,321 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
  uint8_t native_owner_data_seed_sha256[32];
  char native_owner_data_device_path[64];
  
@@ -17,6 +17,8 @@ index a5ff474..5c72ee5 100644
 +volatile int native_gpu_addon_status = -1;
 +volatile int native_gpu_addon2_stage = 0;
 +volatile int native_gpu_addon2_status = -1;
++volatile int native_gpu_addon3_stage = 0;
++volatile int native_gpu_addon3_status = -1;
 +static void
 +native_gpu_addon_mount(proc_t p, user_addr_t scratch, user_addr_t offset, const char *source, size_t source_size,
 +    const char *point, size_t point_size, const char *visible, const char *own, volatile int *stage, volatile int *status)
@@ -66,8 +68,8 @@ index a5ff474..5c72ee5 100644
 +}
 +/* The GPU addon of the boot payload (scripts/make-gpu-addon.py, handed over by the loader as /chosen/memory-map/GpuAddon): every file
 + * whose content or mode differs from the mounted Data volume is written there before the addon mounts, so the plugin no longer has to
-+ * be part of the Data seed and the seed's persistent store survives a plugin rebuild. Only existing directories below
-+ * /private/var/ngpu are written to. A malformed addon is refused as a whole; a file that cannot be written keeps its old content.
++ * be part of the Data seed and the seed's persistent store survives a plugin rebuild. Missing directories below /private/var/ngpu are
++ * created. A malformed addon is refused as a whole; a file that cannot be written keeps its old content.
 + * Counters for the boot log: files in the addon (-1 none), files written, files already equal, failures and the last error. */
 +extern int native_ram_block_gpu_addon(const uint8_t **, uint64_t *) __attribute__((weak_import));
 +#include <libkern/zlib.h>
@@ -175,8 +177,33 @@ index a5ff474..5c72ee5 100644
 +	int close_error = vnode_close(vp, FWRITE, ctx);
 +	return error ? error : close_error;
 +}
++/* Creates the missing parent directories of an addon path with the mkdir syscall. The scratch is one 4 KiB page; the mount arguments
++ * end below 0xa00. */
++static int
++native_gpu_addon_parents(proc_t p, user_addr_t scratch, const char *path)
++{
++	char parent[192];
++	strlcpy(parent, path, sizeof(parent));
++	for (size_t i = sizeof("/private/var/ngpu/") - 1; parent[i]; ++i) {
++		if (parent[i] != '/') {
++			continue;
++		}
++		parent[i] = 0;
++		struct mkdir_args request = {.path = scratch + 0xc00, .mode = 0755};
++		int32_t result = 0;
++		int error = copyout(parent, request.path, i + 1);
++		if (!error) {
++			error = mkdir(p, &request, &result);
++		}
++		parent[i] = '/';
++		if (error && error != EEXIST) {
++			return error;
++		}
++	}
++	return 0;
++}
 +static void
-+native_gpu_addon_install(void)
++native_gpu_addon_install(proc_t p, user_addr_t scratch)
 +{
 +	const uint8_t *addon = NULL;
 +	uint64_t bytes = 0;
@@ -247,6 +274,9 @@ index a5ff474..5c72ee5 100644
 +		int error = data ? native_gpu_addon_inflate(addon + at, packed, data, size) : ENOMEM;
 +		if (!error) {
 +			error = native_gpu_addon_write(path, data, size, mode, ctx);
++			if (error == ENOENT && !(error = native_gpu_addon_parents(p, scratch, path))) {
++				error = native_gpu_addon_write(path, data, size, mode, ctx);
++			}
 +		}
 +		if (data) {
 +			kfree_data(data, size ? size : 1);
@@ -269,7 +299,7 @@ index a5ff474..5c72ee5 100644
 +	if (!PE_parse_boot_argn("sheng-gpu-addon", &enabled, sizeof(enabled)) || enabled != 1) {
 +		return;
 +	}
-+	native_gpu_addon_install();
++	native_gpu_addon_install(p, scratch);
 +	static const char extensions_source[] = "/private/var/ngpu/addons", extensions_point[] = "/System/Library/Extensions";
 +	static const char daemons_source[] = "/private/var/ngpu/daemons", daemons_point[] = "/System/Library/LaunchDaemons";
 +	native_gpu_addon_mount(p, scratch, 0x400, extensions_source, sizeof(extensions_source), extensions_point,
@@ -279,12 +309,22 @@ index a5ff474..5c72ee5 100644
 +	native_gpu_addon_mount(p, scratch, 0x600, daemons_source, sizeof(daemons_source), daemons_point, sizeof(daemons_point),
 +	    "/System/Library/LaunchDaemons/com.apple.backboardd.plist",
 +	    "/System/Library/LaunchDaemons/org.blu-sharky.adrenoprobed.plist", &native_gpu_addon2_stage, &native_gpu_addon2_status);
++	/* The default iPadOS 17 wallpaper's layered animation with PNG images in place of its HEIC ones (no hardware HEVC decoder here).
++	 * The overlay carries the animation's documents and the PNG images; the sealed assets directory stays visible below it. */
++	static const char wallpaper_source[] = "/private/var/ngpu/wallpaper",
++	    wallpaper_point[] = "/Library/Wallpaper/Collections/iPadOS_17~ipad.wallpaperCollection/Wallpapers/"
++	    "7570.iPadOS_17_Flat-1024w-1366h@2x~ipad.wallpaper/7570.iPadOS_17_Flat_Background-1024w-1366h@2x~ipad.ca";
++	native_gpu_addon_mount(p, scratch, 0x800, wallpaper_source, sizeof(wallpaper_source), wallpaper_point, sizeof(wallpaper_point),
++	    "/Library/Wallpaper/Collections/iPadOS_17~ipad.wallpaperCollection/Wallpapers/7570.iPadOS_17_Flat-1024w-1366h@2x~ipad.wallpaper/"
++	    "7570.iPadOS_17_Flat_Background-1024w-1366h@2x~ipad.ca/assets/J120.HEIC",
++	    "/Library/Wallpaper/Collections/iPadOS_17~ipad.wallpaperCollection/Wallpapers/7570.iPadOS_17_Flat-1024w-1366h@2x~ipad.wallpaper/"
++	    "7570.iPadOS_17_Flat_Background-1024w-1366h@2x~ipad.ca/J120.png", &native_gpu_addon3_stage, &native_gpu_addon3_status);
 +}
 +
  static int
  native_owner_data_prepare(proc_t p, user_addr_t scratch)
  {
-@@ -7251,6 +7526,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+@@ -7251,6 +7566,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
  	if (actual != device || (vfs_flags(data_mount) & MNT_RDONLY) ||
  	    strcmp(vfs_statfs(data_mount)->f_fstypename, "apfs")) error = EINVAL;
  	if (!error) native_owner_data_stage = 4;

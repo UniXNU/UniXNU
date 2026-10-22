@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Pack the owner-built Adreno Metal plugin into a GPU addon file for the boot payload.
 
-  make-gpu-addon.py [--publish] [--clients NAME,...] OUTPUT
+  make-gpu-addon.py [--publish] [--clients NAME,...] [--wallpaper DIR] OUTPUT
 
 The files are the ones add-gpu-plugin-data.py stages into a Data seed, with the same paths below /private/var/ngpu and the same modes:
 addons/NativeAdrenoMetal.bundle/*, addons/NativeAdrenoMetal.publish (--publish), addons/NativeAdrenoMetal.clients (--clients),
-bin/adrenoprobed and daemons/*.plist. The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
+bin/adrenoprobed and daemons/*.plist. --wallpaper adds the files of DIR (scripts/make-wallpaper-overlay.py) as wallpaper/*, which the
+kernel mounts over the default wallpaper's layered animation. The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
 hands it to the kernel as /chosen/memory-map/GpuAddon, and the kernel writes every file whose content or mode differs into the mounted
 Data volume before its addon mounts (sheng-gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
-(whose identity is the seed's content) survives a plugin rebuild. The target directories must already exist in the Data volume; the
-kernel does not create directories.
+(whose identity is the seed's content) survives a plugin rebuild. The kernel creates missing directories.
 
 The data of every file is zlib-compressed: the payload FAT (the boot image's ramdisk) has to stay at 192 MiB, which the tablet's boot
 loader accepts (a 256 MiB ramdisk does not start the firmware), and the kernel and the Data seed already take most of it.
@@ -34,6 +34,13 @@ def main():
     args = [a for a in sys.argv[1:] if a != '--publish']
     publish = len(args) != len(sys.argv) - 1
     clients = None
+    wallpaper = None
+    if '--wallpaper' in args:
+        at = args.index('--wallpaper')
+        wallpaper = Path(args[at + 1])
+        del args[at:at + 2]
+        if not wallpaper.is_dir():
+            sys.exit('--wallpaper takes a directory')
     if '--clients' in args:
         at = args.index('--clients')
         clients = [name for name in args[at + 1].split(',') if name]
@@ -59,6 +66,9 @@ def main():
     for plist in sorted(PLUGIN.glob('*.plist')):
         if not plist.name.endswith('-entitlements.plist'):   # build input, not a launchd job
             files.append(('daemons/' + plist.name, 0o644, plist.read_bytes()))
+    if wallpaper:
+        for path in sorted(p for p in wallpaper.rglob('*') if p.is_file()):
+            files.append(('wallpaper/' + path.relative_to(wallpaper).as_posix(), 0o644, path.read_bytes()))
     body = b''
     for name, mode, data in files:
         encoded = name.encode() + b'\0'
