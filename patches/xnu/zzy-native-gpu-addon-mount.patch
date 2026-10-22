@@ -367,3 +367,36 @@ index 412f9ec..4466a64 100644
  
  	error = bindfs_vfs_getlowerattr(vnode_mount(lowerrootvp), &vfa, ctx);
  	if (error == 0) {
+diff --git a/bsd/miscfs/bindfs/bind_vnops.c b/bsd/miscfs/bindfs/bind_vnops.c
+index 8609009..0c659c7 100644
+--- a/bsd/miscfs/bindfs/bind_vnops.c
++++ b/bsd/miscfs/bindfs/bind_vnops.c
+@@ -105,6 +105,14 @@ bindfs_getattr(struct vnop_getattr_args * args)
+ 		vnode_put(lowervp);
+
+ 		if (error == 0) {
++			if (MOUNTTOBINDMOUNT(vnode_mount(args->a_vp))->bindm_flags & BINDM_FORCE_ROOT) {
++				if (VATTR_IS_ACTIVE(args->a_vap, va_uid)) {
++					VATTR_RETURN(args->a_vap, va_uid, 0);
++				}
++				if (VATTR_IS_ACTIVE(args->a_vap, va_gid)) {
++					VATTR_RETURN(args->a_vap, va_gid, 0);
++				}
++			}
+ 			if (VATTR_IS_ACTIVE(args->a_vap, va_fsid)) {
+ 				/* fix up fsid so it doesn't say the underlying fs*/
+ 				VATTR_RETURN(args->a_vap, va_fsid, vfs_statfs(vnode_mount(args->a_vp))->f_fsid.val[0]);
+diff --git a/bsd/miscfs/bindfs/bindfs.h b/bsd/miscfs/bindfs/bindfs.h
+index c3bebc8..4555530 100644
+--- a/bsd/miscfs/bindfs/bindfs.h
++++ b/bsd/miscfs/bindfs/bindfs.h
+@@ -81,6 +81,9 @@
+ //#define BINDFS_DEBUG 0
+
+ #define BINDM_CACHE 0x0001
++/* Owner boot overlay (native_bindfs_boot_mount): report every file as owned by root:wheel. The backing directory is owner data made
++ * without root; launchd and the loader expect system-directory content to be root owned. Mode bits are left as they are. */
++#define BINDM_FORCE_ROOT 0x80000000ULL
+ #define BINDM_CASEINSENSITIVE 0x0000000000000002
+
+ typedef int (*vop_t)(void *);
