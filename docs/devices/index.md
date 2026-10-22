@@ -13,7 +13,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | Device | SoC | State | Maintainer |
 | --- | --- | --- | --- |
 | [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 home screen; CPU presentation; Metal widgets and icons; virtio-net works | Droid-VM |
-| [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; CPU-rendered | xVanTuring |
+| [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; Metal on the Mac GPU with `--metal` | xVanTuring |
 | [Lenovo Xiaoxin Pad 2022 (tb128fu)](/devices/tb128fu) | SM6225 | iPadOS 17 home screen with touch; Metal frames presented by the GPU; Adreno 610 runs | xVanTuring |
 | [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | Kernel links and prelinks; stage B archive chain near complete; no hardware run | matejkoo217, hanzi123-bilp |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |

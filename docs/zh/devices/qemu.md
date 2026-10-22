@@ -4,7 +4,7 @@ QEMU 目标在 AArch64 `virt` 机器上运行 UniXNU，用于在没有平板时�
 
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
-| [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 主屏幕和 Settings |
+| [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 主屏幕和 Settings；使用 `--metal` 时在 Mac GPU 上运行 Metal |
 
 ## 状态
 
@@ -17,11 +17,12 @@ QEMU 目标在 AArch64 `virt` 机器上运行 UniXNU，用于在没有平板时�
 | AMFI 和原始 launchd | 使用原始 trust cache 启动 |
 | SystemOS union 和 dyld shared cache | 工作 |
 | Data ramdisk | 工作 |
-| 显示 | ramfb 上的 NativeLegacyDisplay，CPU 渲染 |
+| 显示 | ramfb 上的 NativeLegacyDisplay；不带 `--metal` 时 CPU 渲染，带 `--metal` 时由 Mac GPU 合成 |
 | 触控和 Home | 工作，键盘输入尚未工作 |
-| GPU | 没有 Metal 设备 |
+| GPU | QemuMetal 设备；`--metal` 让 render server 的 Metal 工作跑在 Mac GPU 上。不带该选项时没有 Metal 设备，QuartzCore 使用 CPU 渲染 |
+| Settings | 不带 `--metal` 时为白屏；带上后可以打开并列出全部项目，部分行图标缺失 |
 
-仓库 README 记录了构建 ESP 和启动 QEMU 的命令。
+`--metal` 需要 `scripts/build-qemu-metal.py` 生成的插件、owner trust cache 和 Data 种子。仓库 README 记录了构建 ESP 和启动 QEMU 的命令。
 
 ## 维护
 
