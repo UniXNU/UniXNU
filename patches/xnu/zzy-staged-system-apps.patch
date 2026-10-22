@@ -1,0 +1,326 @@
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 4704203..2c6f346 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -7508,6 +7508,313 @@ native_gpu_addon_prepare(proc_t p, user_addr_t scratch)
+ 	    "7570.iPadOS_17_Flat_Background-1024w-1366h@2x~ipad.ca/J120.png", &native_gpu_addon3_stage, &native_gpu_addon3_status);
+ }
+ 
++/* The deletable system apps (Weather, Notes, Calendar, ...) ship in the OS volume's /private/var/staged_system_apps. A restore copies
++ * them into the Data volume, where SystemAppMigrator installs them during the first-boot data migration; until then only the
++ * placeholders in /System/Library/AppPlaceholders exist and the widgets of those apps stay blank. The owner Data mount hides the OS
++ * directory, so with boot-arg sheng-staged-apps=1 it is copied once, through the vnode the Data mount covers, into Data's
++ * /private/var/staged_system_apps before launchd starts. /private/var/db/.sheng-staged-apps marks a complete copy. Directories and
++ * regular files only (the 21H461 set has nothing else), owned by mobile (uid and gid 501): installcoordinationd and the migration plugin,
++ * which move and remove them, run as mobile.
++ * Counters for the boot log: stage (1 copying, 2 copied, 3 copied before, -1 no
++ * source, -2 out of memory), directories, files, MiB, failures and the last error. */
++#include <sys/dirent.h>
++volatile int native_staged_apps_stage = 0;
++volatile int native_staged_apps_dirs = 0;
++volatile int native_staged_apps_files = 0;
++volatile int native_staged_apps_mib = 0;
++volatile int native_staged_apps_failed = 0;
++volatile int native_staged_apps_error = 0;
++static uint64_t native_staged_apps_bytes;
++char native_staged_apps_path[96];   /* the file being copied, for the boot log */
++static const char native_staged_apps_marker[] = "/private/var/db/.sheng-staged-apps";
++#define NATIVE_STAGED_APPS_OWNER 501
++static void
++native_staged_apps_fail(int error)
++{
++	native_staged_apps_failed++;
++	native_staged_apps_error = error;
++}
++static int
++native_staged_apps_mkdir(proc_t p, user_addr_t scratch, const char *path)
++{
++	/* The scratch is one 4 KiB page; the mount arguments above end below 0xa00. */
++	struct mkdir_args request = {.path = scratch + 0xa00, .mode = 0755};
++	int32_t result = 0;
++	int error = copyout(path, request.path, strlen(path) + 1);
++	if (!error) {
++		error = mkdir(p, &request, &result);
++	}
++	if (error && error != EEXIST) {
++		return error;
++	}
++	vnode_t vp = NULLVP;
++	error = vnode_lookup(path, VNODE_LOOKUP_NOFOLLOW, &vp, vfs_context_current());
++	if (!error) {
++		struct vnode_attr va;
++		VATTR_INIT(&va);
++		VATTR_SET(&va, va_uid, NATIVE_STAGED_APPS_OWNER);
++		VATTR_SET(&va, va_gid, NATIVE_STAGED_APPS_OWNER);
++		error = vnode_setattr(vp, &va, vfs_context_current());
++		vnode_put(vp);
++	}
++	return error;
++}
++/* Reads to the end of the source rather than trusting a size: most of these files are compressed on the OS volume. */
++static int
++native_staged_apps_file(vnode_t source, const char *path, int mode, uint8_t *buffer, uint32_t chunk, vfs_context_t ctx)
++{
++	int error = VNOP_OPEN(source, FREAD, ctx);
++	if (error) {
++		return error;
++	}
++	vnode_t vp = NULLVP;
++	size_t length = strlen(path);
++	strlcpy(native_staged_apps_path, path + (length > sizeof(native_staged_apps_path) - 1 ? length - (sizeof(native_staged_apps_path) - 1) : 0),
++	    sizeof(native_staged_apps_path));
++	error = vnode_open(path, O_CREAT | O_TRUNC | FWRITE | O_NOFOLLOW, mode, 0, &vp, ctx);
++	for (off_t at = 0; !error;) {
++		int resid = 0;
++		error = vn_rdwr(UIO_READ, source, (caddr_t)buffer, (int)chunk, at, UIO_SYSSPACE, IO_NOAUTH, vfs_context_ucred(ctx), &resid,
++		    vfs_context_proc(ctx));
++		int length = (int)chunk - resid;
++		if (error || !length) {
++			break;
++		}
++		error = vn_rdwr(UIO_WRITE, vp, (caddr_t)buffer, length, at, UIO_SYSSPACE, IO_NOAUTH | IO_UNIT, vfs_context_ucred(ctx), &resid,
++		    vfs_context_proc(ctx));
++		if (!error && resid) {
++			error = EIO;
++		}
++		at += length;
++		native_staged_apps_bytes += (uint64_t)length;
++	}
++	if (vp) {
++		if (!error) {
++			struct vnode_attr va;
++			VATTR_INIT(&va);
++			VATTR_SET(&va, va_mode, mode);
++			VATTR_SET(&va, va_uid, NATIVE_STAGED_APPS_OWNER);
++			VATTR_SET(&va, va_gid, NATIVE_STAGED_APPS_OWNER);
++			error = vnode_setattr(vp, &va, ctx);
++		}
++		/* Each file goes to the medium before the next: without it the copy piled up dirty pages until it stalled (int-220). */
++		if (!error) {
++			error = VNOP_FSYNC(vp, MNT_WAIT, ctx);
++		}
++		int close_error = vnode_close(vp, FWRITE, ctx);
++		if (!error) {
++			error = close_error;
++		}
++	}
++	VNOP_CLOSE(source, FREAD, ctx);
++	return error;
++}
++/* Directories still to copy, as paths relative to the staged directory: the walk is iterative, because APFS operations need much of the
++ * kernel stack and a recursion as deep as the app bundles overflowed it (int-221). */
++struct native_staged_apps_pending {
++	char *pool;
++	uint32_t *at;
++	uint32_t used, count;
++};
++#define NATIVE_STAGED_APPS_POOL (2 * 1024 * 1024)
++#define NATIVE_STAGED_APPS_DIRS 16384
++/* Copies the entries of DIR into the Data directory PATH (appending each name to PATH and cutting it off again) and queues its
++ * subdirectories, whose source-relative paths start at REL inside PATH. */
++static void
++native_staged_apps_dir(proc_t p, user_addr_t scratch, vnode_t dir, char *path, size_t path_size, size_t rel,
++    struct native_staged_apps_pending *pending, uint8_t *entries, uint32_t entries_size, uint8_t *buffer, uint32_t chunk, vfs_context_t ctx)
++{
++	size_t base = strlen(path);
++	int error = VNOP_OPEN(dir, FREAD, ctx);
++	if (error) {
++		native_staged_apps_fail(error);
++		return;
++	}
++	off_t offset = 0;
++	for (int eof = 0; !error && !eof;) {
++		uio_t uio = uio_create(1, offset, UIO_SYSSPACE, UIO_READ);
++		if (!uio) {
++			error = ENOMEM;
++			break;
++		}
++		uio_addiov(uio, CAST_USER_ADDR_T(entries), entries_size);
++		int count = 0;
++		error = vnode_readdir64(dir, uio, VNODE_READDIR_EXTENDED, &eof, &count, ctx);
++		uint32_t filled = entries_size - (uint32_t)uio_resid(uio);
++		offset = uio_offset(uio);
++		uio_free(uio);
++		if (error || !filled) {
++			break;
++		}
++		for (uint32_t at = 0; at + offsetof(struct direntry, d_name) < filled;) {
++			struct direntry *entry = (struct direntry *)(entries + at);
++			if (!entry->d_reclen || at + entry->d_reclen > filled) {
++				error = EINVAL;
++				break;
++			}
++			at += entry->d_reclen;
++			const char *name = entry->d_name;
++			if (!entry->d_ino || !strcmp(name, ".") || !strcmp(name, "..")) {
++				continue;
++			}
++			if (base + 1 + strlen(name) >= path_size) {
++				native_staged_apps_fail(ENAMETOOLONG);
++				continue;
++			}
++			path[base] = '/';
++			strlcpy(path + base + 1, name, path_size - base - 1);
++			vnode_t child = NULLVP;
++			int child_error = vnode_lookupat(name, VNODE_LOOKUP_NOFOLLOW | VNODE_LOOKUP_NOCROSSMOUNT, &child, ctx, dir);
++			if (!child_error) {
++				struct vnode_attr va;
++				VATTR_INIT(&va);
++				VATTR_WANTED(&va, va_mode);
++				child_error = vnode_getattr(child, &va, ctx);
++				int mode = VATTR_IS_SUPPORTED(&va, va_mode) ? (int)(va.va_mode & 0777) : 0644;
++				if (child_error) {
++				} else if (vnode_vtype(child) == VDIR) {
++					child_error = native_staged_apps_mkdir(p, scratch, path);
++					size_t length = strlen(path + rel) + 1;
++					if (!child_error && (pending->count == NATIVE_STAGED_APPS_DIRS || NATIVE_STAGED_APPS_POOL - pending->used < length)) {
++						child_error = ENOSPC;
++					}
++					if (!child_error) {
++						memcpy(pending->pool + pending->used, path + rel, length);
++						pending->at[pending->count++] = pending->used;
++						pending->used += (uint32_t)length;
++						native_staged_apps_dirs++;
++					}
++				} else if (vnode_vtype(child) == VREG) {
++					child_error = native_staged_apps_file(child, path, mode, buffer, chunk, ctx);
++					if (!child_error) {
++						native_staged_apps_files++;
++						native_staged_apps_mib = (int)(native_staged_apps_bytes >> 20);
++					}
++				} else {
++					child_error = ENOTSUP;
++				}
++				vnode_put(child);
++			}
++			if (child_error) {
++				native_staged_apps_fail(child_error);
++			}
++			path[base] = '\0';
++		}
++	}
++	if (error) {
++		native_staged_apps_fail(error);
++	}
++	VNOP_CLOSE(dir, FREAD, ctx);
++}
++/* Copies the tree below SOURCE into the Data directory PATH, which exists. */
++static void
++native_staged_apps_walk(proc_t p, user_addr_t scratch, vnode_t source, char *path, size_t path_size, uint8_t *buffer, uint32_t chunk,
++    vfs_context_t ctx)
++{
++	const uint32_t entries_size = 8192;
++	struct native_staged_apps_pending pending = {
++		.pool = kalloc_data(NATIVE_STAGED_APPS_POOL, Z_WAITOK),
++		.at = kalloc_data(NATIVE_STAGED_APPS_DIRS * sizeof(uint32_t), Z_WAITOK),
++	};
++	uint8_t *entries = kalloc_data(entries_size, Z_WAITOK);
++	size_t root = strlen(path);
++	if (pending.pool && pending.at && entries) {
++		native_staged_apps_dir(p, scratch, source, path, path_size, root + 1, &pending, entries, entries_size, buffer, chunk, ctx);
++		while (pending.count) {
++			const char *rel = pending.pool + pending.at[--pending.count];
++			if (root + 1 + strlen(rel) >= path_size) {
++				native_staged_apps_fail(ENAMETOOLONG);
++				continue;
++			}
++			path[root] = '/';
++			strlcpy(path + root + 1, rel, path_size - root - 1);
++			vnode_t dir = NULLVP;
++			int error = vnode_lookupat(rel, VNODE_LOOKUP_NOFOLLOW | VNODE_LOOKUP_NOCROSSMOUNT, &dir, ctx, source);
++			if (!error) {
++				native_staged_apps_dir(p, scratch, dir, path, path_size, root + 1, &pending, entries, entries_size, buffer, chunk, ctx);
++				vnode_put(dir);
++			} else {
++				native_staged_apps_fail(error);
++			}
++			path[root] = '\0';
++		}
++	} else {
++		native_staged_apps_fail(ENOMEM);
++	}
++	if (entries) {
++		kfree_data(entries, entries_size);
++	}
++	if (pending.at) {
++		kfree_data(pending.at, NATIVE_STAGED_APPS_DIRS * sizeof(uint32_t));
++	}
++	if (pending.pool) {
++		kfree_data(pending.pool, NATIVE_STAGED_APPS_POOL);
++	}
++}
++static void
++native_staged_apps_prepare(proc_t p, user_addr_t scratch, mount_t data_mount)
++{
++	uint32_t enabled = 0;
++	if (!PE_parse_boot_argn("sheng-staged-apps", &enabled, sizeof(enabled)) || enabled != 1) {
++		return;
++	}
++	vfs_context_t ctx = vfs_context_current();
++	vnode_t vp = NULLVP, covered = data_mount->mnt_vnodecovered;
++	if (!vnode_lookup(native_staged_apps_marker, VNODE_LOOKUP_NOFOLLOW, &vp, ctx)) {
++		vnode_put(vp);
++		native_staged_apps_stage = 3;
++		return;
++	}
++	int error = covered ? vnode_getwithref(covered) : ENOENT;
++	if (!error) {
++		error = vnode_lookupat("staged_system_apps", VNODE_LOOKUP_NOFOLLOW | VNODE_LOOKUP_NOCROSSMOUNT, &vp, ctx, covered);
++		vnode_put(covered);
++	}
++	if (!error && vnode_vtype(vp) != VDIR) {
++		vnode_put(vp);
++		error = ENOTDIR;
++	}
++	if (error) {
++		native_staged_apps_error = error;
++		native_staged_apps_stage = -1;
++		return;
++	}
++	const uint32_t chunk = 1024 * 1024;
++	uint8_t *buffer = kalloc_data(chunk, Z_WAITOK);
++	char *path = kalloc_data(MAXPATHLEN, Z_WAITOK);
++	if (buffer && path) {
++		native_staged_apps_stage = 1;
++		strlcpy(path, "/private/var/staged_system_apps", MAXPATHLEN);
++		error = native_staged_apps_mkdir(p, scratch, path);
++		if (error) {
++			native_staged_apps_fail(error);
++		} else {
++			native_staged_apps_walk(p, scratch, vp, path, MAXPATHLEN, buffer, chunk, ctx);
++		}
++		if (!native_staged_apps_failed) {
++			vnode_t marker = NULLVP;
++			error = vnode_open(native_staged_apps_marker, O_CREAT | O_TRUNC | FWRITE | O_NOFOLLOW, 0644, 0, &marker, ctx);
++			if (!error) {
++				error = vnode_close(marker, FWRITE, ctx);
++			}
++			if (error) {
++				native_staged_apps_fail(error);
++			} else {
++				native_staged_apps_stage = 2;
++			}
++		}
++	} else {
++		native_staged_apps_stage = -2;
++	}
++	if (buffer) {
++		kfree_data(buffer, chunk);
++	}
++	if (path) {
++		kfree_data(path, MAXPATHLEN);
++	}
++	vnode_put(vp);
++}
++
+ static int
+ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+ {
+@@ -7567,6 +7874,7 @@ native_owner_data_prepare(proc_t p, user_addr_t scratch)
+ 	    strcmp(vfs_statfs(data_mount)->f_fstypename, "apfs")) error = EINVAL;
+ 	if (!error) native_owner_data_stage = 4;
+ 	if (!error) native_gpu_addon_prepare(p, scratch);
++	if (!error) native_staged_apps_prepare(p, scratch, data_mount);
+ done:
+ 	if (data_root) vnode_put(data_root);
+ 	native_owner_data_status = error;

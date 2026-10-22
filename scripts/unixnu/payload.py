@@ -147,6 +147,8 @@ def build(ctx, kernel=None):
         command.append('--gpu-addon')
     if adt.get('ipad_identity'):
         command.append('--ipad-identity')
+    if data and adt.get('persistent_data'):
+        command.append('--persistent-data')
     # Fixups of signed text (patches/xnu/native-text-fixup.patch) travel in /chosen/text-fixups, outside the 1000-byte command line.
     for fixup in spec.get('text_fixups', []):
         if not re.fullmatch(r'[A-Za-z0-9_.\-]{1,63},[0-9a-fA-F]{1,16},(?:[0-9a-fA-F]{2}){1,16},(?:[0-9a-fA-F]{2}){1,16}', fixup) or len(fixup) >= 160:
