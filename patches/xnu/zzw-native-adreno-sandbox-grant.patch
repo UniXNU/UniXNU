@@ -1,32 +1,45 @@
 diff --git a/iokit/Kernel/IOUserClient.cpp b/iokit/Kernel/IOUserClient.cpp
-index e7d6592..5d99754 100644
+index e7d6592..f940ab2 100644
 --- a/iokit/Kernel/IOUserClient.cpp
 +++ b/iokit/Kernel/IOUserClient.cpp
-@@ -4325,6 +4325,23 @@ is_io_service_set_authorization_id(
+@@ -4325,6 +4325,36 @@ is_io_service_set_authorization_id(
  }
  
  /* Routine io_service_open_ndr */
 +/*
-+ * The native GPU driver names, by the property NativeSandboxGrantProcess on its accelerator service, the one process (the render server) to which it
-+ * grants its own user client in place of the sandbox's verdict: the original profiles name no class of that driver. Nothing else is affected.
++ * The native GPU driver names, by the property NativeSandboxGrantProcess on its accelerator service, the processes (a comma-separated list of
++ * process names, the render server and the other processes that run its Metal plugin) to which it grants its own user client in place of the
++ * sandbox's verdict: the original profiles name no class of that driver. Nothing else is affected.
 + */
 +extern "C" void proc_selfname(char * buf, int size);
 +static bool
 +native_sandbox_grant(IOService * service)
 +{
-+	OSString * process = OSDynamicCast(OSString, service->getProperty("NativeSandboxGrantProcess"));
++	OSString * list = OSDynamicCast(OSString, service->getProperty("NativeSandboxGrantProcess"));
 +	char name[17] = {};
-+	if (!process) {
++	if (!list) {
 +		return false;
 +	}
 +	proc_selfname(name, sizeof(name));
-+	return 0 == strncmp(name, process->getCStringNoCopy(), sizeof(name) - 1);
++	for (const char * at = list->getCStringNoCopy(); *at;) {
++		size_t length = 0;
++		while (at[length] && at[length] != ',') {
++			++length;
++		}
++		/* A process name holds 16 characters, so a longer entry is compared by its first 16. */
++		if (length && 0 == strncmp(name, at, length < sizeof(name) - 1 ? length : sizeof(name) - 1)
++		    && (length >= sizeof(name) - 1 || name[length] == 0)) {
++			return true;
++		}
++		at += length + (at[length] == ',' ? 1 : 0);
++	}
++	return false;
 +}
 +
  kern_return_t
  is_io_service_open_extended(
  	io_object_t _service,
-@@ -4353,7 +4370,7 @@ is_io_service_open_extended(
+@@ -4353,7 +4383,7 @@ is_io_service_open_extended(
  	}
  
  #if CONFIG_MACF
@@ -35,7 +48,7 @@ index e7d6592..5d99754 100644
  		return kIOReturnNotPermitted;
  	}
  #endif
-@@ -4512,7 +4529,9 @@ is_io_service_open_extended(
+@@ -4512,7 +4542,9 @@ is_io_service_open_extended(
  				res = kIOReturnNotPrivileged;
  			}
  #if CONFIG_MACF
@@ -46,7 +59,7 @@ index e7d6592..5d99754 100644
  				IOLog("IOUC %s failed MACF in process %s\n",
  				    client->getMetaClass()->getClassName(), creatorNameCStr);
  				res = kIOReturnNotPermitted;
-@@ -4520,6 +4539,7 @@ is_io_service_open_extended(
+@@ -4520,6 +4552,7 @@ is_io_service_open_extended(
  #endif
  
  			if ((kIOReturnSuccess == res)
