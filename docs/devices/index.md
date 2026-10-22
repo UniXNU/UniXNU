@@ -41,6 +41,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
 | [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Source kernel builds; platform archives and prelink pending | wh1stl3 |
 | [Nubia RedMagic 8 Pro / 8 Pro+ (nx729j)](/devices/nx729j) | SM8550 | Board files ported from sheng; runtime not documented | 2713385115 |
+| [Lenovo Xiaoxin Pad 2022 (tb128fu)](/devices/tb128fu) | SM6225 | iPadOS 17 home screen with touch; CPU-rendered; Adreno 610 kernel driver runs | xVanTuring |
 
 ## What a device page records
 

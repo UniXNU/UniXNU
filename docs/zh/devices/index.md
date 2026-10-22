@@ -41,6 +41,7 @@
 | [一加 6T（fajita）](/zh/devices/fajita) | SDM845 | XNU 已到根挂载，无存储驱动 | johnpanos |
 | [小米 13 Pro（nuwa）](/zh/devices/nuwa) | SM8550 | 源内核可编译，平台静态库和预链接待完成 | wh1stl3 |
 | [努比亚红魔 8 Pro / 8 Pro+（nx729j）](/zh/devices/nx729j) | SM8550 | 板级文件从 sheng 移植，运行时未记录 | 2713385115 |
+| [联想小新 Pad 2022（tb128fu）](/zh/devices/tb128fu) | SM6225 | 已到 iPadOS 17 主屏幕，触控可用；CPU 渲染；Adreno 610 内核驱动已运行 | xVanTuring |
 
 ## 设备页面记录什么
 
