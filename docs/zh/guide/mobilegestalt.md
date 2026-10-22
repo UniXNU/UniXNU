@@ -45,6 +45,8 @@ ADT 身份和用户态镜像属于同一设备系列。iPadOS 根使用 pad 身�
 | iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` |
 | iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` |
 
+恢复镜像见[构建环境](/zh/guide/requirements#target-ipsw)。
+
 在 UniXNU 板级文件中，`[payload.adt] ipad_identity = true` 把 `--ipad-identity` 传给板级 ADT 工具，由工具写入 iPad 身份。目标为 iPhone 时，在 ADT 工具中写入 phone 值，或增加一个选择身份的板级选项。
 
 身份向用户态描述硬件。已安装的系统仍来自 IPSW，iPadOS 根保持 iPadOS，iOS 根保持 iOS。

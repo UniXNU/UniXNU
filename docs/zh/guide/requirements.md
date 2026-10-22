@@ -40,6 +40,17 @@
 | 预编译静态库 | 内核 | 负载可用 `--kernel FILE` | |
 | edk2 或 Mu_Basecore 树 | package、固件 | `--edk2 DIR` | `UNIXNU_EDK2` |
 
+### 目标 IPSW
+
+sheng 板级文件仍以 iPadOS 17.7.11 为默认目标。iPhone X iOS 16.7.16 镜像是第二个目标，不替换默认。
+
+| 目标 | 版本 | Build | 恢复镜像 |
+| --- | --- | --- | --- |
+| iPadOS，sheng 默认 | 17.7.11 | 21H461 | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
+| iOS，iPhone X | 16.7.16 | 20H392 | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+
+设备仓库的 `[ipsw] url` 是默认来源，`--ipsw` 或 `UNIXNU_IPSW` 覆盖它。镜像下载到仓库外。
+
 设备仓库提供板级描述、内核 defconfig 和 `[kernel] archives` 中列出的静态库脚本。
 
 ## 设备

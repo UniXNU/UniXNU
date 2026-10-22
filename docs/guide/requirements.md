@@ -40,6 +40,17 @@ These inputs live outside the UniXNU repositories.
 | Prebuilt static archives | kernel | `--kernel FILE` for the payload, archives in the build tree | |
 | edk2 or Mu_Basecore tree | package, firmware | `--edk2 DIR` | `UNIXNU_EDK2` |
 
+### Target IPSW
+
+The sheng board keeps iPadOS 17.7.11 as its default target. The iPhone X iOS 16.7.16 image is a second target and does not replace it.
+
+| Target | Version | Build | Restore image |
+| --- | --- | --- | --- |
+| iPadOS, sheng default | 17.7.11 | 21H461 | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
+| iOS, iPhone X | 16.7.16 | 20H392 | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+
+`[ipsw] url` in the device repository is the default. `--ipsw` or `UNIXNU_IPSW` overrides it. Download the image outside the repository.
+
 The device repository supplies the board description, the kernel defconfig and the archive builders listed in `[kernel] archives`.
 
 ## Device

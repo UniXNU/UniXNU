@@ -45,6 +45,8 @@ The ADT identity and the userland image belong to the same device family. Use a 
 | iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` |
 | iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` |
 
+The restore images are listed in [Requirements](/guide/requirements#target-ipsw).
+
 On a UniXNU board, `[payload.adt] ipad_identity = true` passes `--ipad-identity` to the board ADT tool, and the tool writes the iPad identity. For an iPhone target, write the phone values in the ADT tool or add a board option that selects them.
 
 The identity describes the hardware to the userland. The installed system still comes from the IPSW, so an iPadOS root stays iPadOS and an iOS root stays iOS.
