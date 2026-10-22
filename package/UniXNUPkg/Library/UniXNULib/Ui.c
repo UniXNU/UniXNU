@@ -764,9 +764,16 @@ UniXNUUiDrawFrame (
     Y += Logo + Ch / 2;
   }
 
-  DrawCentered (Ui, Y, Config->Title, Ui->Scale * 2, mText);
-  Y += Ch * 2 + Ch / 2;
-  UnicodeSPrint (Line, sizeof (Line), L"UniXNU %a  |  %s", UNIXNU_VERSION_STRING, Config->SourceLabel);
+  //
+  // The logo's wordmark already reads UniXNU: as in the portrait header, the
+  // title is drawn only without the logo or when it says something else.
+  //
+  if (!Config->ShowLogo || (StrCmp (Config->Title, L"UniXNU") != 0)) {
+    DrawCentered (Ui, Y, Config->Title, Ui->Scale * 2, mText);
+    Y += Ch * 2 + Ch / 2;
+  }
+
+  UnicodeSPrint (Line, sizeof (Line), L"version %a  |  %s", UNIXNU_VERSION_STRING, Config->SourceLabel);
   DrawCentered (Ui, Y, Line, Ui->Scale, mDim);
   Y += Ch + Ch / 2;
 
