@@ -40,10 +40,19 @@ SpringBoard 通过 `BSPlatform homeButtonType` 读取该值。值为 2 时，锁
 
 ADT 身份和用户态镜像属于同一设备系列。iPadOS 根使用 pad 身份，iOS 根使用 phone 身份。
 
-| 目标 | `model` | `target-type` | `product-name` | `artwork-device-idiom` |
-| --- | --- | --- | --- | --- |
-| iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` |
-| iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` |
+| 目标 | `model` | `target-type` | `product-name` | `artwork-device-idiom` | IPSW |
+| --- | --- | --- | --- | --- | --- |
+| iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` | 17.7.11（21H461），sheng 默认 |
+| iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` | 16.7.16（20H392），iPhone X 最新 |
+
+恢复镜像：
+
+| 目标 | 恢复镜像 |
+| --- | --- |
+| iPadOS | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
+| iOS | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+
+sheng 板级文件仍以 iPadOS 17.7.11 镜像为默认。iPhone X 镜像是第二个目标，不替换默认。两个镜像都下载到仓库外。
 
 在 UniXNU 板级文件中，`[payload.adt] ipad_identity = true` 把 `--ipad-identity` 传给板级 ADT 工具，由工具写入 iPad 身份。目标为 iPhone 时，在 ADT 工具中写入 phone 值，或增加一个选择身份的板级选项。
 

@@ -40,10 +40,19 @@ SpringBoard reads the value through `BSPlatform homeButtonType`. With value 2 th
 
 The ADT identity and the userland image belong to the same device family. Use a pad identity with an iPadOS root and a phone identity with an iOS root.
 
-| Target | `model` | `target-type` | `product-name` | `artwork-device-idiom` |
-| --- | --- | --- | --- | --- |
-| iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` |
-| iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` |
+| Target | `model` | `target-type` | `product-name` | `artwork-device-idiom` | IPSW |
+| --- | --- | --- | --- | --- | --- |
+| iPadOS | `iPad7,1` | `J120` | `iPad Pro (12.9-inch) (2nd generation)` | `pad` | 17.7.11 (21H461), the sheng default |
+| iOS | `iPhone10,3` | `D22` | `iPhone X` | `phone` | 16.7.16 (20H392), latest iPhone X |
+
+The restore images are:
+
+| Target | Restore image |
+| --- | --- |
+| iPadOS | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
+| iOS | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
+
+The sheng board keeps the iPadOS 17.7.11 image as its default. The iPhone X image is a second target and does not replace it. Download either image outside the repository.
 
 On a UniXNU board, `[payload.adt] ipad_identity = true` passes `--ipad-identity` to the board ADT tool, and the tool writes the iPad identity. For an iPhone target, write the phone values in the ADT tool or add a board option that selects them.
 
