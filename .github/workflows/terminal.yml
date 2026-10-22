@@ -1,0 +1,30 @@
+name: USB terminal tests
+on:
+  push:
+    paths: &terminal-paths
+      - 'scripts/debug_terminal.py'
+      - 'scripts/debug_screen.py'
+      - 'scripts/debug_screen_viewer.html'
+      - 'scripts/debug-terminal.cmd'
+      - 'scripts/terminal-requirements.txt'
+      - 'tests/terminal/**'
+      - '.github/workflows/terminal.yml'
+  pull_request:
+    paths: *terminal-paths
+permissions:
+  contents: read
+jobs:
+  test:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ['3.10', '3.14']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install -r scripts/terminal-requirements.txt
+      - run: python scripts/debug_terminal.py --help
+      - run: python -m unittest discover -s tests/terminal -v

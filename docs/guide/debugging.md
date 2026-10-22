@@ -2,6 +2,54 @@
 
 A bring-up produces four kinds of evidence: serial output, the on-screen diagnostic page, the panic screen and build reports. Collect them together.
 
+## USB debug terminal
+
+The host tools from the giulia port are available as `scripts/debug_terminal.py` and the Windows CMD launcher `scripts/debug-terminal.cmd`. They capture CDC logs, queue bounded diagnostic commands, export topic logs and decode GSC1 framebuffer packets. Python 3.10 or newer is required. Interactive editing and PTY keyboard input require Windows CMD; scripted capture works on Windows, Linux and macOS.
+
+```sh
+python -m pip install -r scripts/terminal-requirements.txt
+python scripts/debug_terminal.py --list
+python scripts/debug_terminal.py --port COM21 --command collect --seconds 20
+# Linux example (use the device's actual port):
+python3 scripts/debug_terminal.py --port /dev/ttyACM0 --command status --seconds 5
+```
+
+On Windows, run `scripts\debug-terminal.cmd --port COM21` for an interactive session. Use `:help` for the command list. Select a port explicitly, or supply all three identity options: `--vid 0x1209 --pid 0x0001 --usb-serial ACE5DBG001` for the giulia development device. The tool refuses missing or ambiguous automatic selection. It uses 115200 baud and asserts DTR; close other port owners first.
+
+| Command | Result |
+| --- | --- |
+| `all` / `collect` | Queue bounded queries; `collect` also requests replay/sample and saves after at least 15 seconds |
+| `logs wifi` / `logs gpu` / `logs panic` | Filter retained session text, not fresh hardware measurements |
+| `save` | Export topic text and session metadata |
+| `watch status 2` / `unwatch` | Poll a read-only status query / stop polling |
+| `screen.start` / `screen.stop` | Open a localhost viewer / stop framebuffer transfer |
+| `screen.snapshot` | Save an actual framebuffer PNG when supplied by the device |
+| `shell` | Enter the device PTY; Ctrl+] returns to diagnostics |
+| `reboot.fastboot` | Request a device-side synchronized reset |
+
+Sessions are written under `out/terminal/<timestamp>/`: rotated `device-*.log` files, topic text, `session.json` and separate screen images. Topic exports retain the latest 20,000 complete lines. Screen packets are separated from the text log. The viewer keeps the last real frame and checks device input capabilities before enabling optional mouse/keyboard controls.
+
+```sh
+python scripts/debug_terminal.py --port COM21 --command screen.start --seconds 60 --max-size 695 --max-fps 1
+python scripts/debug_terminal.py --port COM21 --command reboot.fastboot --fastboot-serial DEVICE_SERIAL --seconds 20
+```
+
+Fastboot verification requires `fastboot` on PATH and matches the exact requested serial number after the kernel reset acknowledgement and CDC disconnect.
+
+### Device compatibility
+
+These are host tools, not a kernel upgrade. The initial backend implements the giulia protocol 2 command set, `GIULIA` shell/input/reset markers and GSC1 screen framing (up to 1264 × 2780 RGB565 pixels). Other boards must implement that protocol or add a corresponding backend. Changing USB IDs alone does not provide protocol compatibility. Board drivers, addresses, boot arguments and daemon installation stay in the device repository; see the [giulia terminal implementation and setup](https://github.com/tycykp/UniXNU-OnePlus-Ace5/blob/main/docs/USB_TERMINAL.md).
+
+Basic kernels may only support `help`, `ping`, `status` and `replay`; extended queries require the matching terminal implementation. Screen capture requires a framebuffer producer, and remote input requires the device HID provider. PTY shell requires the development boot argument and staged daemon/shell; it has not been validated on hardware. MMIO commands retain the giulia backend's low peripheral aperture and explicit development gates; consult the device documentation for clocks, mappings and supported operations. GPU/HFI commands require the corresponding development kernel. Unsupported commands are reported by the device, and host installation does not enable them.
+
+The imported code originates from `UniXNU-OnePlus-Ace5` at `694b39e` plus local terminal/screen changes. Host verification:
+
+```sh
+python -m unittest discover -s tests/terminal -v
+```
+
+The optional C-sender interoperability test needs `GIULIA_SCREEN_FIXTURE` pointing to the output of the device repository's screen test runner. Default tests use synthetic packets and mocked serial sessions; they do not establish hardware readiness.
+
 ## Log sources
 
 | Source | Transport | Use |

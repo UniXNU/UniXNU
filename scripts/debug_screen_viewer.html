@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>UniXNU · USB 投屏</title>
+<style>
+:root{font:14px/1.5 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:#e8edf5;background:#0b0e13;--line:#2a313e;--muted:#929dac;--panel:#141922;--accent:#9bbdff}
+*{box-sizing:border-box}body{margin:0}button,input,select{font:inherit}button,select,input{border:1px solid #343e4d;background:#1a212d;color:inherit;border-radius:7px}button{padding:7px 11px;cursor:pointer;white-space:nowrap}button:hover:not(:disabled){background:#283345;border-color:#6d83a5}button:disabled,input:disabled,select:disabled{opacity:.4;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}button.primary{background:#abc8ff;color:#11213e;border-color:#abc8ff;font-weight:600}button.primary:hover:not(:disabled){background:#c2d7ff}a{color:var(--accent);text-underline-offset:3px}select,input[type=number]{padding:7px 9px;min-width:0;width:100%}input[type=checkbox]{accent-color:#abc8ff;width:16px;height:16px;margin:0}.app{height:100dvh;min-height:440px;display:flex;flex-direction:column;background:#0b0e13}.toolbar{display:flex;gap:8px;align-items:center;padding:12px 18px;border-bottom:1px solid var(--line);background:var(--panel);flex-wrap:wrap}.brand{display:flex;align-items:center;gap:10px;margin-right:14px}.brand-icon{display:grid;place-items:center;width:30px;height:34px;border:2px solid #abc8ff;border-radius:7px;color:#abc8ff;font-size:13px}.brand strong{font-size:16px}.brand small{color:var(--muted);display:block;font-size:11px;letter-spacing:.06em}.spacer{flex:1}.toggle{display:flex;align-items:center;gap:8px;border:1px solid #343e4d;border-radius:7px;padding:7px 10px;white-space:nowrap}.toggle.enabled{border-color:#8cb3f8;background:#20314e;color:#c5d9ff}.workspace{display:grid;grid-template-columns:minmax(0,1fr) 264px;flex:1;min-height:0}.stage{position:relative;display:grid;place-items:center;overflow:auto;min-width:0;min-height:0;padding:24px;outline:none;background:radial-gradient(ellipse at 50% 40%,#151c29 0%,#0c1017 65%)}.stage:focus-visible{box-shadow:inset 0 0 0 2px #8daee1}.display{position:relative;flex-shrink:0;background:#000;box-shadow:0 8px 42px #0008;touch-action:none;user-select:none;-webkit-user-select:none}.display[hidden]{display:none}.display img{position:absolute;left:50%;top:50%;max-width:none;display:block;pointer-events:none;user-select:none;-webkit-user-drag:none}.display.interactive{cursor:crosshair}.empty{max-width:330px;text-align:center;color:var(--muted);padding:24px}.empty .outline-phone{width:54px;height:88px;border:2px solid #455168;border-radius:11px;margin:0 auto 23px;position:relative}.outline-phone:after{content:"";position:absolute;bottom:8px;left:18px;right:18px;border-top:2px solid #455168}.empty h1{font-size:18px;color:#d3deed;font-weight:500;margin:0 0 9px}.empty p{margin:0;font-size:13px}.inspector{background:#10151e;border-left:1px solid var(--line);padding:21px 18px;overflow:auto}.section-title{font-size:12px;letter-spacing:.08em;color:#c0ccdc;margin:0 0 16px;font-weight:600}.setting{margin-bottom:15px}.setting label{display:block;color:#b9c3d2;font-size:12px;margin-bottom:6px}.custom{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:8px}.custom[hidden]{display:none}.hint{font-size:12px;color:var(--muted);margin:9px 0 0;line-height:1.7}.divider{border:0;border-top:1px solid var(--line);margin:23px 0}.device-keys{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}.device-keys button{padding:8px 4px;font-size:12px}.facts{margin:0;display:grid;grid-template-columns:auto 1fr;gap:9px 12px;font-size:12px}.facts dt{color:var(--muted)}.facts dd{margin:0;text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}.shortcuts{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:12px;color:var(--muted)}kbd{font:11px ui-monospace,Consolas,monospace;color:#cbd8e9;background:#1c2430;border:1px solid #354050;border-radius:4px;padding:1px 5px;white-space:nowrap}.footer{display:flex;gap:12px;align-items:center;padding:9px 18px;background:var(--panel);border-top:1px solid var(--line);font-size:12px;color:#b4bfce;min-height:39px}.connection{display:flex;gap:7px;align-items:center;white-space:nowrap}.dot{height:7px;width:7px;border-radius:50%;background:#8e99a9}.dot.online{background:#76d2a0}.dot.error{background:#ef9b91}.message{flex:1;min-width:0;overflow-wrap:anywhere}.message.error{color:#ffb4a9}.download{font-size:12px}.rotation{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}.toolbar .zoom{width:111px;font-size:12px}.toast{position:fixed;bottom:54px;left:50%;transform:translateX(-50%);max-width:min(600px,90vw);background:#25344c;border:1px solid #50698f;border-radius:8px;padding:11px 16px;box-shadow:0 5px 30px #0008;z-index:10;font-size:13px}.toast[hidden]{display:none}
+.settings-toggle{display:none}
+@media(max-width:840px){.workspace{grid-template-columns:minmax(0,1fr) 226px}.toolbar{padding:10px;gap:6px}.brand{margin-right:0}.brand small{display:none}.toolbar button{padding:7px 9px}.inspector{padding:17px 12px}.spacer{display:none}.footer{padding:9px 10px}.rotation{display:none}}
+@media(max-width:620px){.workspace{grid-template-columns:minmax(0,1fr)}.inspector{display:none}.inspector.open{display:block;position:absolute;top:var(--toolbar-height,110px);bottom:39px;right:0;width:264px;z-index:5;box-shadow:-12px 0 35px #0009}.settings-toggle{display:block}.brand strong{font-size:14px}.toolbar{gap:5px}.toolbar button{font-size:12px}.toolbar .zoom{display:none}.brand-icon{display:none}.download{display:none}.stage{padding:14px}.toggle{font-size:12px;padding:7px}.footer{font-size:11px}.app{min-height:320px}}
+</style>
+</head>
+<body>
+<main class="app" id="app">
+  <header class="toolbar">
+    <div class="brand"><span class="brand-icon" aria-hidden="true">↗</span><div><strong>UniXNU 投屏</strong><small>USB DISPLAY & CONTROL</small></div></div>
+    <button id="start" class="primary" title="开始或恢复投屏">开始投屏</button>
+    <button id="stop" title="暂停传输并保留最后一帧">暂停</button>
+    <label class="toggle" id="controlLabel" title="开启后可在画面中使用鼠标和物理键盘"><input type="checkbox" id="control" disabled>电脑控制</label>
+    <span class="spacer"></span>
+    <button id="snapshot" title="请求手机截图并保存 PNG">截图</button>
+    <button id="rotate" title="顺时针旋转预览；Alt + →">旋转</button>
+    <span class="rotation" id="rotation">0°</span>
+    <select id="zoom" class="zoom" aria-label="显示缩放"><option value="fit">适应窗口</option><option value="1">100%</option><option value="0.5">50%</option><option value="1.5">150%</option></select>
+    <button id="fullscreen" title="全屏；Alt + F">全屏</button>
+    <button id="settings" class="settings-toggle" aria-controls="inspector" aria-expanded="false">设置</button>
+  </header>
+  <div class="workspace">
+    <div class="stage" id="stage" tabindex="0" aria-label="手机画面；开启电脑控制后可用鼠标和键盘操作">
+      <div class="empty" id="empty"><div class="outline-phone" aria-hidden="true"></div><h1>等待手机画面</h1><p>收到真实屏幕帧后显示。首次连接或切换分辨率时，传输可能需要几秒。</p></div>
+      <div class="display" id="display" hidden><img id="screen" alt="手机实际屏幕画面" draggable="false"></div>
+    </div>
+    <aside class="inspector" id="inspector" aria-label="投屏设置">
+      <h2 class="section-title">画面设置</h2>
+      <div class="setting"><label for="size">分辨率 · 最长边</label><select id="size"><option value="480">480 px · 节省带宽</option><option value="695" selected>695 px · 默认</option><option value="960">960 px</option><option value="1280">1280 px</option><option value="1920">1920 px</option><option value="2780">2780 px · 原生上限</option><option value="custom">自定义…</option></select><div class="custom" id="customSize" hidden><input id="maxSize" type="number" min="160" max="2780" value="695" step="1" aria-label="最长边像素"><span style="align-self:center;color:var(--muted)">px</span></div></div>
+      <div class="setting"><label for="fps">目标帧率上限</label><select id="fps"><option value="1">1 FPS · 默认</option><option value="2">2 FPS</option><option value="5">5 FPS</option><option value="10">10 FPS</option><option value="15">15 FPS</option><option value="30">30 FPS</option></select></div>
+      <button id="apply" style="width:100%">应用设置</button>
+      <p class="hint">保持手机画面比例。USB 原始像素传输的实际帧率取决于分辨率和带宽，目标值不是实测帧率。</p>
+      <hr class="divider">
+      <h2 class="section-title">设备操作</h2>
+      <div class="device-keys"><button data-key="back" disabled title="右键 / Alt + B">返回</button><button data-key="home" disabled title="中键 / Alt + H">主屏幕</button><button data-key="power" disabled title="Alt + P">电源</button><button data-key="volumedown" disabled title="Alt + ↓">音量 −</button><button data-key="volumeup" disabled title="Alt + ↑">音量 ＋</button><button id="release" disabled title="释放所有按下的鼠标和键盘按键">释放按键</button></div>
+      <p class="hint" id="inputStatus">正在查询设备控制能力…</p>
+      <hr class="divider">
+      <h2 class="section-title">传输状态</h2>
+      <dl class="facts"><dt>收到的分辨率</dt><dd id="dimensions">—</dd><dt>实际接收帧率</dt><dd id="actualFps">—</dd><dt>累计接收</dt><dd id="frameCount">0 帧</dd><dt>最近一帧</dt><dd id="age">—</dd></dl>
+      <hr class="divider">
+      <div class="shortcuts"><span>点击 / 长按 / 拖动</span><kbd>鼠标左键</kbd><span>上下滑动</span><kbd>滚轮</kbd><span>全屏</span><kbd>Alt F</kbd><span>向左 / 向右旋转</span><kbd>Alt ← / →</kbd></div>
+      <p class="hint">点击画面后使用物理键盘。输入法组字和剪贴板文本同步暂不支持。旋转仅改变电脑预览。</p>
+    </aside>
+  </div>
+  <footer class="footer"><span class="connection"><span class="dot" id="dot"></span><span id="connection">正在连接</span></span><span class="message" id="message" role="status" aria-live="polite">等待本地投屏服务…</span><a class="download" href="/frame.png" download="unixnu-screen.png" id="download" hidden>保存最新 PNG</a></footer>
+</main>
+<div class="toast" id="toast" hidden role="status"></div>
+<script>
+'use strict';
+const TOKEN = '__VIEWER_TOKEN__';
+const $ = id => document.getElementById(id);
+const screen = $('screen'), stage = $('stage'), display = $('display');
+let state = {}, frame = 0, rotation = 0, online = false, enabled = false, busyControl = false, controlFailed = false;
+let width = 0, height = 0, receivedAt = 0, paused = false, settingsDirty = false;
+let activePointer = null, pendingMove = null, moveTimer = null, lastMoveAt = 0;
+let pendingScroll = null, scrollTimer = null;
+let lastPoint = {x:32768,y:32768}, heldKeys = new Set(), requestQueue = [], sending = false;
+let toastTimer = null, sampleAt = performance.now(), sampleFrames = 0, sampled = false;
+const keyboardCodes=new Set(['Enter','Escape','Backspace','Tab','Space','Minus','Equal','BracketLeft','BracketRight','Backslash','Semicolon','Quote','Backquote','Comma','Period','Slash','CapsLock','PrintScreen','ScrollLock','Pause','Insert','Home','PageUp','Delete','End','PageDown','ArrowRight','ArrowLeft','ArrowDown','ArrowUp','NumLock','NumpadDivide','NumpadMultiply','NumpadSubtract','NumpadAdd','NumpadEnter','NumpadDecimal','ContextMenu','ControlLeft','ControlRight','ShiftLeft','ShiftRight','AltLeft','AltRight','MetaLeft','MetaRight',...Array.from({length:26},(_,i)=>'Key'+String.fromCharCode(65+i)),...Array.from({length:10},(_,i)=>'Digit'+i),...Array.from({length:10},(_,i)=>'Numpad'+i),...Array.from({length:12},(_,i)=>'F'+(i+1))]);
+
+function message(text, error=false) { $('message').textContent=text; $('message').classList.toggle('error',error); }
+function toast(text) { $('toast').textContent=text; $('toast').hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(() => $('toast').hidden=true,3200); }
+function canControl() { return enabled && online && state.input_available === true && state.connection === 'diagnostic' && !paused && frame > 0; }
+function hasCapability(name) { return state.input_capabilities?.[name] === true; }
+function canTouch() { return canControl() && hasCapability('touch'); }
+function modifiers(event) {
+  let mask=0;
+  for(const [flag,left,right,bit] of [['ctrlKey','ControlLeft','ControlRight',1],['shiftKey','ShiftLeft','ShiftRight',2],['altKey','AltLeft','AltRight',4],['metaKey','MetaLeft','MetaRight',8]]) {
+    if(heldKeys.has(left)) mask|=bit;
+    if(heldKeys.has(right)) mask|=bit<<4;
+    if(event[flag]&&!heldKeys.has(left)&&!heldKeys.has(right)) mask|=bit;
+  }
+  return mask;
+}
+
+function send(payload) {
+  return new Promise((resolve,reject) => {
+    if (requestQueue.length >= 96) { reject(new Error('操作积压，请等待设备响应')); return; }
+    requestQueue.push({payload,resolve,reject});
+    pump();
+  });
+}
+async function pump() {
+  if(sending) return;
+  sending=true;
+  while(requestQueue.length) {
+    const item=requestQueue.shift();
+    try {
+      const response=await fetch('/control',{method:'POST',headers:{'Content-Type':'application/json','X-Screen-Token':TOKEN},body:JSON.stringify(item.payload),signal:AbortSignal.timeout(5000)});
+      const result=await response.json();
+      if(!response.ok) throw new Error(result.error||'设备未接受操作');
+      item.resolve(result);
+    } catch(error) {
+      item.reject(error);
+      if(['touch','key','scroll'].includes(item.payload.action)) {
+        enabled=false;controlFailed=true;$('control').checked=false;activePointer=null;heldKeys.clear();cancelMove();cancelScroll();
+        requestQueue=requestQueue.filter(queued=>{
+          if(['touch','key','scroll','heartbeat'].includes(queued.payload.action)) {queued.resolve(null);return false;}
+          return true;
+        });
+        emergencyRelease(true);refreshControls();
+      }
+    }
+  }
+  sending=false;
+}
+function operate(payload) { return send(payload).catch(error => { message(error.message,true);toast(error.message);return null; }); }
+function emergencyRelease(disable=false) {
+  fetch('/control',{method:'POST',headers:{'Content-Type':'application/json','X-Screen-Token':TOKEN},body:JSON.stringify(disable?{action:'control',enabled:false}:{action:'release'}),keepalive:true}).catch(()=>{});
+}
+function cancelMove() { clearTimeout(moveTimer); moveTimer=null; pendingMove=null; }
+function cancelScroll() { clearTimeout(scrollTimer);scrollTimer=null;pendingScroll=null; }
+function release() {
+  cancelMove();cancelScroll();
+  activePointer=null; heldKeys.clear();
+  requestQueue=requestQueue.filter(item => {
+    if(['touch','key','scroll'].includes(item.payload.action)) { item.resolve({discarded:true}); return false; }
+    return true;
+  });
+  return operate({action:'release'});
+}
+function refreshControls() {
+  const diagnostic=online && state.connection==='diagnostic';
+  $('control').disabled=!diagnostic || !state.input_available || busyControl;
+  $('control').checked=enabled;
+  $('controlLabel').classList.toggle('enabled',enabled);
+  display.classList.toggle('interactive',canTouch());
+  for(const button of document.querySelectorAll('[data-key]')) button.disabled=!canControl()||!hasCapability(button.dataset.key==='back'?'keyboard':'buttons');
+  $('release').disabled=!canControl();
+  for(const id of ['start','stop','snapshot','apply']) $(id).disabled=!diagnostic;
+  $('download').hidden=!frame;
+  $('inputStatus').textContent=state.connection==='shell'?'Shell 会话中，电脑控制已暂停。':state.input_available?(enabled?'电脑控制已开启；窗口失焦时自动释放按键。':'设备支持控制，开启「电脑控制」后操作。'):(state.input_status||'设备尚未报告控制能力；需要包含远程输入支持的新内核。');
+}
+function layout() {
+  $('app').style.setProperty('--toolbar-height',document.querySelector('.toolbar').getBoundingClientRect().height+'px');
+  if(!width || !height) return;
+  const sideways=rotation%180!==0, rw=sideways?height:width, rh=sideways?width:height;
+  const padding=innerWidth<=620?28:48;
+  const scale=$('zoom').value==='fit'?Math.min(Math.max(1,stage.clientWidth-padding)/rw,Math.max(1,stage.clientHeight-padding)/rh):Number($('zoom').value);
+  display.style.width=(rw*scale)+'px'; display.style.height=(rh*scale)+'px';
+  screen.style.width=(width*scale)+'px'; screen.style.height=(height*scale)+'px';
+  screen.style.transform=`translate(-50%,-50%) rotate(${rotation}deg)`;
+}
+function point(event,clamp=false) {
+  const bounds=display.getBoundingClientRect();
+  if(!bounds.width || !bounds.height) return null;
+  let x=(event.clientX-bounds.left)/bounds.width, y=(event.clientY-bounds.top)/bounds.height;
+  if(!clamp && (x<0 || x>1 || y<0 || y>1)) return null;
+  x=Math.max(0,Math.min(1,x)); y=Math.max(0,Math.min(1,y));
+  let u=x,v=y;
+  if(rotation===90) {u=y;v=1-x;}
+  else if(rotation===180) {u=1-x;v=1-y;}
+  else if(rotation===270) {u=1-y;v=x;}
+  return {x:Math.round(u*65535),y:Math.round(v*65535)};
+}
+function flushMove() {
+  clearTimeout(moveTimer); moveTimer=null;
+  if(pendingMove) { const payload=pendingMove; pendingMove=null; lastMoveAt=performance.now(); operate(payload); }
+}
+function flushScroll() {
+  scrollTimer=null;
+  if(!pendingScroll) return;
+  const payload=pendingScroll;pendingScroll=null;
+  payload.delta_x=Math.round(payload.delta_x);payload.delta_y=Math.round(payload.delta_y);
+  if(payload.delta_x||payload.delta_y) operate(payload);
+}
+function rotate(delta) { release(); rotation=(rotation+delta+360)%360; $('rotation').textContent=rotation+'°'; layout(); }
+async function fullscreen() {
+  try { if(document.fullscreenElement) await document.exitFullscreen(); else await $('app').requestFullscreen(); }
+  catch(error) { message('无法进入全屏：'+error.message,true); }
+}
+async function buttonPress(key) {
+  if(!canControl() || !hasCapability(key==='back'?'keyboard':'buttons')) return;
+  if(!await operate({action:'key',key,pressed:true})) return;
+  await operate({action:'key',key,pressed:false});
+}
+
+display.addEventListener('pointerdown',event => {
+  stage.focus({preventScroll:true});
+  if(!canControl() || activePointer!==null) return;
+  if(event.button===2) {event.preventDefault();buttonPress('back');return;}
+  if(event.button===1) {event.preventDefault();buttonPress('home');return;}
+  if(event.button!==0 || !canTouch()) return;
+  const at=point(event); if(!at) return;
+  cancelScroll();
+  event.preventDefault(); activePointer=event.pointerId; lastPoint=at;
+  display.setPointerCapture(event.pointerId);
+  operate({action:'touch',phase:'down',...at});
+});
+display.addEventListener('pointermove',event => {
+  if(event.pointerId!==activePointer || !canTouch()) return;
+  event.preventDefault(); lastPoint=point(event,true);
+  pendingMove={action:'touch',phase:'move',...lastPoint};
+  if(!moveTimer) moveTimer=setTimeout(flushMove,Math.max(0,34-(performance.now()-lastMoveAt)));
+});
+function endPointer(event,cancel=false) {
+  if(event.pointerId!==activePointer) return;
+  event.preventDefault(); flushMove();
+  const at=point(event,true)||lastPoint;
+  activePointer=null;
+  if(display.hasPointerCapture(event.pointerId)) display.releasePointerCapture(event.pointerId);
+  operate({action:'touch',phase:cancel?'cancel':'up',...at});
+}
+display.addEventListener('pointerup',event=>endPointer(event));
+display.addEventListener('pointercancel',event=>endPointer(event,true));
+display.addEventListener('lostpointercapture',()=>{if(activePointer!==null) release();});
+display.addEventListener('contextmenu',event=>{if(canControl()) event.preventDefault();});
+display.addEventListener('auxclick',event=>{if(canControl()) event.preventDefault();});
+display.addEventListener('wheel',event=>{
+  if(!canTouch() || activePointer!==null) return;
+  const at=point(event); if(!at) return;
+  event.preventDefault();
+  const unit=event.deltaMode===1?16:event.deltaMode===2?stage.clientHeight:1;
+  let dx=Math.max(-1000,Math.min(1000,event.deltaX*unit)),dy=Math.max(-1000,Math.min(1000,event.deltaY*unit));
+  if(rotation===90) [dx,dy]=[dy,-dx];
+  else if(rotation===180) [dx,dy]=[-dx,-dy];
+  else if(rotation===270) [dx,dy]=[-dy,dx];
+  pendingScroll={action:'scroll',...at,delta_x:Math.max(-1000,Math.min(1000,(pendingScroll?.delta_x||0)+dx)),delta_y:Math.max(-1000,Math.min(1000,(pendingScroll?.delta_y||0)+dy))};
+  if(!scrollTimer) scrollTimer=setTimeout(flushScroll,100);
+},{passive:false});
+stage.addEventListener('keydown',event=>{
+  if(event.altKey && !event.ctrlKey && !event.metaKey) {
+    const shortcuts={KeyF:fullscreen,ArrowLeft:()=>rotate(-90),ArrowRight:()=>rotate(90),KeyH:()=>buttonPress('home'),KeyB:()=>buttonPress('back'),KeyP:()=>buttonPress('power'),ArrowUp:()=>buttonPress('volumeup'),ArrowDown:()=>buttonPress('volumedown')};
+    if(shortcuts[event.code]) {event.preventDefault();if(!event.repeat) {release();shortcuts[event.code]();}return;}
+  }
+  if(!canControl() || !hasCapability('keyboard') || event.isComposing || !keyboardCodes.has(event.code) || event.key==='Unidentified') return;
+  event.preventDefault();
+  if(event.repeat || heldKeys.has(event.code)) return;
+  heldKeys.add(event.code);
+  operate({action:'key',code:event.code,pressed:true,modifiers:modifiers(event)});
+});
+stage.addEventListener('keyup',event=>{
+  if(!heldKeys.delete(event.code)) return;
+  event.preventDefault();operate({action:'key',code:event.code,pressed:false,modifiers:modifiers(event)});
+});
+stage.addEventListener('compositionstart',()=>{release();toast('暂不支持输入法组字，请切换到物理键盘输入。');});
+stage.addEventListener('blur',()=>{if(enabled) release();});
+window.addEventListener('blur',()=>{if(enabled) release();});
+window.addEventListener('pagehide',()=>{cancelMove();cancelScroll();emergencyRelease();});
+document.addEventListener('visibilitychange',()=>{if(document.hidden && enabled) release();});
+$('control').addEventListener('change',async()=>{
+  const requested=$('control').checked; busyControl=true;refreshControls();
+  if(!requested) await release();
+  const result=await operate({action:'control',enabled:requested});
+  if(result!==null) controlFailed=false;
+  enabled=result!==null && requested; busyControl=false;refreshControls();
+  if(enabled) {stage.focus({preventScroll:true});toast('电脑控制已开启；左键触控，右键返回，中键主屏幕。');}
+});
+$('start').onclick=async()=>{if(await operate({action:'start'})) {paused=false;message('投屏请求已排队，等待手机返回画面。');refreshControls();}};
+$('stop').onclick=async()=>{await release();if(await operate({action:'stop'})) {paused=true;message('暂停请求已排队，保留最后一帧。');refreshControls();}};
+$('snapshot').onclick=async()=>{if(await operate({action:'snapshot'})) toast('截图请求已排队，完整画面收到后保存 PNG。');};
+$('rotate').onclick=()=>rotate(90); $('fullscreen').onclick=fullscreen; $('zoom').onchange=layout; $('release').onclick=release;
+$('settings').onclick=()=>{$('settings').setAttribute('aria-expanded',String($('inspector').classList.toggle('open')));};
+document.addEventListener('fullscreenchange',()=>{$('fullscreen').textContent=document.fullscreenElement?'退出全屏':'全屏';layout();});
+for(const button of document.querySelectorAll('[data-key]')) button.onclick=()=>buttonPress(button.dataset.key);
+$('size').onchange=()=>{$('customSize').hidden=$('size').value!=='custom';settingsDirty=true;};
+$('maxSize').oninput=$('fps').onchange=()=>{settingsDirty=true;};
+$('apply').onclick=async()=>{
+  const max_size=Number($('size').value==='custom'?$('maxSize').value:$('size').value),max_fps=Number($('fps').value);
+  if(!Number.isInteger(max_size)||max_size<160||max_size>2780) {message('最长边请填写 160–2780 之间的整数。',true);$('maxSize').focus();return;}
+  await release();
+  const result=await operate({action:'configure',max_size,max_fps});
+  if(result) {settingsDirty=false;toast('设置请求已排队，收到新帧后显示新的分辨率。');}
+};
+new ResizeObserver(layout).observe(stage);
+function updateAge() {
+  if(!receivedAt) return;
+  const seconds=Math.max(0,(Date.now()-receivedAt)/1000);
+  $('age').textContent=seconds<1?'刚刚':seconds<60?Math.floor(seconds)+' 秒前':Math.floor(seconds/60)+' 分钟前';
+}
+async function update() {
+  try {
+    const response=await fetch('/status',{cache:'no-store',signal:AbortSignal.timeout(4000)});
+    if(!response.ok) throw new Error('读取投屏状态失败');
+    const next=await response.json();
+    const hadControl=canControl(); state=next; online=next.connection!=='disconnected';
+    if(next.connection!=='diagnostic'||!next.input_available) enabled=false;
+    else if(typeof next.settings?.control==='boolean'&&!busyControl) enabled=next.settings.control&&!controlFailed;
+    if(hadControl && !canControl()) release();
+    if(next.frames && next.frames!==frame) {
+      const incoming=next.frames;
+      screen.onload=()=>{
+        width=screen.naturalWidth;height=screen.naturalHeight;
+        display.hidden=false;$('empty').hidden=true;layout();
+      };
+      screen.src='/frame.png?v='+incoming;frame=incoming;
+      if(!sampled) {sampleAt=performance.now();sampleFrames=frame;sampled=true;}
+      receivedAt=Date.parse(next.received_utc)||0;
+      $('dimensions').textContent=next.width+' × '+next.height;
+      $('frameCount').textContent=frame+' 帧';
+      if(!next.state?.includes('stopped')) paused=false;
+    }
+    const now=performance.now();
+    if(now-sampleAt>=2000) {$('actualFps').textContent=((frame-sampleFrames)*1000/(now-sampleAt)).toFixed(1)+' FPS';sampleAt=now;sampleFrames=frame;}
+    if(next.state?.includes('stopped')) paused=true;
+    if(!settingsDirty && next.settings) {
+      const max=String(next.settings.max_size);
+      const preset=[...$('size').options].some(option=>option.value===max);
+      $('size').value=preset?max:'custom';$('customSize').hidden=preset;$('maxSize').value=max;
+      const fpsValue=String(next.settings.max_fps);
+      if(![...$('fps').options].some(option=>option.value===fpsValue)) {
+        const option=document.createElement('option');option.value=fpsValue;option.textContent=fpsValue+' FPS';$('fps').append(option);
+      }
+      $('fps').value=fpsValue;
+    }
+    $('dot').className='dot '+(online?'online':'error');
+    $('connection').textContent=!online?'连接已断开':next.connection==='shell'?'Shell 会话':'USB 已连接';
+    if(next.connection==='shell') message('Shell 使用中，投屏与电脑控制暂时停用。');
+    else if(!online) message('设备已断开；当前显示的是最后收到的画面。',true);
+    else if(paused) message('投屏已暂停，保留最后一帧。');
+    else if(frame) message('真实 framebuffer · '+(next.received_utc?new Date(next.received_utc).toLocaleTimeString():'等待更新'));
+    else message(next.state||'已连接，等待手机返回真实屏幕帧。');
+    refreshControls();updateAge();
+  } catch(error) {
+    if(online||enabled) {enabled=false;cancelMove();cancelScroll();activePointer=null;heldKeys.clear();emergencyRelease();}
+    online=false;$('dot').className='dot error';$('connection').textContent='服务已断开';
+    message('本地投屏服务不可用；请检查电脑终端是否仍在运行。',true);refreshControls();updateAge();
+  }
+  setTimeout(update,300);
+}
+setInterval(()=>{
+  if(enabled && online && document.hasFocus() && !document.hidden) operate({action:'heartbeat'});
+},1000);
+update();
+</script>
+</body>
+</html>
