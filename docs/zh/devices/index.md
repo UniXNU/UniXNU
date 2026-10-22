@@ -39,7 +39,7 @@
 | [Microsoft Surface Duo 2（zeta）](/zh/devices/zeta) | SM8350 | UEFI、菜单和负载工作，内核步骤受阻 | none24smu |
 | [Redmi K20 Pro / Mi 9T Pro（raphael）](/zh/devices/raphael) | SM8150 | 新仓库，内核构建未通过 | penYo22 |
 | [一加 6T（fajita）](/zh/devices/fajita) | SDM845 | XNU 已到根挂载，无存储驱动 | johnpanos |
-| [小米 13 Pro（nuwa）](/zh/devices/nuwa) | SM8550 | 源内核可编译，平台静态库和预链接待完成 | wh1stl3 |
+| [小米 13 Pro（nuwa）](/zh/devices/nuwa) | SM8550 | 源内核可编译；固件与负载已到 UniXNU 启动管理器 | wh1stl3、pubglite55 |
 | [努比亚红魔 8 Pro / 8 Pro+（nx729j）](/zh/devices/nx729j) | SM8550 | 板级文件从 sheng 移植，运行时未记录 | 2713385115 |
 
 ## 设备页面记录什么
@@ -71,3 +71,4 @@
 ## sheng
 
 [sheng 页面](/zh/devices/sheng)记录小米平板 6S Pro 移植。它是一个设备条目。[Novatek 触控驱动](/zh/drivers/native-novatek-touch)把 sheng 的触控驱动作为内置 XNU 驱动的完整示例。
+
