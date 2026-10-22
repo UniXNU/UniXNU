@@ -24,12 +24,12 @@ nuwa 是搭载 SM8550、12 GB 内存的小米 13 Pro。下面的移植是独立�
 
 ## pubglite55 移植的状态
 
-这个移植以 sheng 的受限配置为基座，走「固件 + 负载」路线。
+这个移植基于 sheng 的受限配置，构建固件和负载。
 
 | 层 | 状态 |
 | --- | --- |
 | 源内核 | xnu 8796.141.3 在 CI 编译、链接并预链接；`kernel.macho` 54.3 MB |
-| 平台静态库 | 13 个 archive 全部构建，以 sheng kit 为基座 |
+| 平台静态库 | 13 个 archive 全部构建，使用 sheng kit |
 | 固件 | Mu-Silicium `nuwaPkg` 集成 DarwinBoot、UniXNUDxe、UniXNU 应用和启动内存驱动；真机显示 UniXNU 启动管理器 |
 | 负载与启动镜像 | payload FAT 卷 188 MiB；Android boot image 打包完成并刷入真机 |
 | 真机 | BootShim → UEFI → BDS → 启动管理器已跑通；负载卷尚未被 Fat 挂载，内核入口未到 |
