@@ -20,7 +20,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Xiaomi Pad 8 Pro (piano)](/devices/piano) | SM8750 | Kernel builds and prelinks in CI; not run on the tablet | code002-2 |
 | [Redmi Note 14 Pro+ 5G (amethyst)](/devices/amethyst) | SM7635 | Work in progress; status not documented | andr0d1v |
 | [Redmi K70 (vermeer)](/devices/vermeer) | SM8550 | Source build baseline and sheng-derived device repository | mansar1337, yyx2025 |
-| [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 lock screen and home screen; CPU-rendered | Droid-VM |
+| [DroidVM guest (crosvm on Gunyah)](/devices/droidvm) | crosvm-gunyah | iPadOS 17 lock screen and home screen; CPU-rendered; virtio-net works | Droid-VM |
 | [QEMU virt](/devices/qemu) | QEMU virt | iPadOS 17 home screen and Settings; CPU-rendered | xVanTuring |
 | [Redmi 9A (dandelion)](/devices/dandelion) | MT6765 | Early bring-up; UEFI port in progress | licg89 |
 | [Galaxy Z Fold3 (q2q)](/devices/q2q) | SM8350 | Source kernel build harness only | agcarbajo |
@@ -39,6 +39,8 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Microsoft Surface Duo 2 (zeta)](/devices/zeta) | SM8350 | UEFI, menu and payload work; kernel step blocked | none24smu |
 | [Redmi K20 Pro / Mi 9T Pro (raphael)](/devices/raphael) | SM8150 | New repository; kernel build not passing | penYo22 |
 | [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
+| [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Source kernel builds; platform archives and prelink pending | wh1stl3 |
+| [Nubia RedMagic 8 Pro / 8 Pro+ (nx729j)](/devices/nx729j) | SM8550 | Board files ported from sheng; runtime not documented | 2713385115 |
 
 ## What a device page records
 
