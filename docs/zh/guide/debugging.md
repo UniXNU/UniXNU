@@ -152,6 +152,18 @@ python3 scripts/patch-xnu-entry-probe.py <kernel> --panic-screen --no-reset
 
 panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并保持显示。`--no-reset` 停止自动复位，屏幕保留到拍照完成。
 
+### 颜色条
+
+早期启动会在 framebuffer 上画三条 1/16 屏幕高度的色条。正常方向下从上到下：
+
+| 色条 | 绘制者 | 含义 |
+| --- | --- | --- |
+| 绿色 | DarwinBoot `DarwinEnter` | 已退出 boot services，控制权到达内核入口 |
+| 蓝色 | 入口探针阶段 1 | 内核入口代码已执行，MMU 仍关闭 |
+| 品红 | 入口探针阶段 2 | 内核到达打开 MMU 之前的位置 |
+
+入口探针把每条画在绿色条下方。阶段 3 没有色条：它在 MMU 打开后等待 `--reset-delay` 秒再复位。过了这段时间设备重启，说明 MMU 已打开。
+
 ### 入口探针复位
 
 内核还不能绘图之前，重启是唯一的信号。`entry_probe_reset_delay` 保留入口探针的复位：打过补丁的内核在 MMU 打开后等待这么多秒，然后用 PSCI SYSTEM_RESET 复位。过了这段时间设备自己重启，说明 CPU 已经通过 MMU 打开这一步。

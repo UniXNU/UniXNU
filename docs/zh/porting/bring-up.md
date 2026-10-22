@@ -75,6 +75,8 @@ fastboot boot out/<board>/boot/boot.img
 - 平台专家匹配 ADT 根节点。
 - `/cpus`、`/arm-io`、`/defaults`、`/options` 和 NVRAM proxy 存在。
 
+内核在视频控制台出现前停止时，会改为显示颜色条。见[颜色条](/zh/guide/debugging#颜色条)。
+
 缺少平台 provider 时 panic 会给出 provider 名称。加入驱动或修正 ADT。
 
 ## 阶段 6：存储与根卷

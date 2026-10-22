@@ -152,6 +152,18 @@ python3 scripts/patch-xnu-entry-probe.py <kernel> --panic-screen --no-reset
 
 The panic screen writes the formatted panic message and registers to the framebuffer and keeps the image visible. `--no-reset` stops the automatic reset, so the screen stays for a photograph.
 
+### Color bars
+
+The early boot draws three bands of 1/16 screen height in the frame buffer. In the normal orientation they run from the top:
+
+| Bar | Painted by | Meaning |
+| --- | --- | --- |
+| Green | DarwinBoot `DarwinEnter` | boot services exited and control reached the kernel entry |
+| Blue | Entry probe stage 1 | the kernel entry code ran with the MMU off |
+| Magenta | Entry probe stage 2 | the kernel reached the point just before the MMU is enabled |
+
+The probe places each band below the green one. Stage 3 has no bar: it waits `--reset-delay` seconds after the MMU is on and resets. A reboot after that delay shows the MMU enable completed.
+
 ### Entry probe reset
 
 Before the kernel can draw, a reboot is the only signal. `entry_probe_reset_delay` keeps the entry probe's reset: the patched kernel waits that many seconds and resets with PSCI SYSTEM_RESET right after the MMU is on. A reboot after that time shows the CPU got through the MMU enable.

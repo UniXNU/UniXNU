@@ -15,6 +15,7 @@
 | [DroidVM 客户机（Gunyah 上的 crosvm）](/zh/devices/droidvm) | crosvm-gunyah | iPadOS 17 主屏幕，CPU 呈现，Metal widget 和图标，virtio-net 工作 | Droid-VM |
 | [QEMU virt](/zh/devices/qemu) | QEMU virt | iPadOS 17 主屏幕和 Settings；使用 `--metal` 时在 Mac GPU 上运行 Metal | xVanTuring |
 | [联想小新 Pad 2022（tb128fu）](/zh/devices/tb128fu) | SM6225 | 已到 iPadOS 17 主屏幕，触控可用；Metal 帧由 GPU 呈现；Adreno 610 已运行 | xVanTuring |
+| [一加 10 Pro 5G（negroni）](/zh/devices/negroni) | SM8450 | 已到 iOS 16.7.16 SpringBoard，触控可用；CPU 渲染；Wi-Fi 待完成 | pawlickerr |
 | [小米 17 Pro（pandora）](/zh/devices/pandora) | SM8850 | 已到 iOS 16.7.16 锁屏，触控和按键可用；自有加载器，不经 UEFI 链 | ShueiTsuki |
 | [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | 内核可链接和预链接，阶段 B archive 链接近完成，未在真机运行 | matejkoo217、hanzi123-bilp |
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
@@ -35,7 +36,7 @@
 | [Redmi K70（vermeer）](/zh/devices/vermeer) | SM8550 | 源码构建基线和从 sheng 派生的设备仓库 | mansar1337、yyx2025 |
 | [努比亚红魔 8 Pro / 8 Pro+（nx729j）](/zh/devices/nx729j) | SM8550 | 板级文件从 sheng 移植，运行时未记录 | 2713385115 |
 | [小米平板 6（pipa）](/zh/devices/pipa) | SM8250 | 已读取板级和 userdata 数值，未在平板运行 | xVanTuring |
-| [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，内核未构建 | NoNameBuilder |
+| [Galaxy Tab A7 10.4（gta4l）](/zh/devices/gta4l) | SM6115 | 板级、ADT 和固件可构建，第二个仓库在 CI 构建内核 | NoNameBuilder、ilovemykedi |
 | [Redmi Note 10 Pro（sweet）](/zh/devices/sweet) | SM7150 | 平台和加载器 bring-up，无可启动镜像 | dipa-studio |
 | [一加 5（cheeseburger）](/zh/devices/cheeseburger) | MSM8998 | 已观察到 XNU 入口色条，MMU 和根未验证 | DinnerABC |
 | [Redmi K20 Pro / Mi 9T Pro（raphael）](/zh/devices/raphael) | SM8150 | 新仓库，内核构建未通过 | penYo22 |

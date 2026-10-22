@@ -77,6 +77,8 @@ Checks:
 - The platform expert matches the ADT root.
 - `/cpus`, `/arm-io`, `/defaults`, `/options` and the NVRAM proxy are present.
 
+A kernel that stops before its video console draws the color bars instead. See [Color bars](/guide/debugging#color-bars).
+
 A missing platform provider produces a panic that names the provider. Add the driver or correct the ADT.
 
 ## Stage 6: Storage and root
