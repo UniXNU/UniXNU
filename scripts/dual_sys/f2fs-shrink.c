@@ -2,17 +2,24 @@
 /* Resize through F2FS, never by editing its on-disk allocation metadata. */
 #define _GNU_SOURCE
 #include <assert.h>
-#include <dirent.h>
 #include <errno.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+/* Non-Linux hosts build the same rounding self-test without device I/O. */
+#if !defined(__linux__) && !defined(F2FS_SELF_TEST_ONLY)
+#define F2FS_SELF_TEST_ONLY
+#endif
+
+#ifndef F2FS_SELF_TEST_ONLY
+#include <dirent.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
 #include <linux/fs.h>
 #include <mntent.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/statfs.h>
@@ -21,6 +28,7 @@
 #define F2FS_MAGIC 0xf2f52010U
 #define F2FS_IOC_RESIZE_FS _IOW(0xf5, 16, uint64_t)
 #define BLOCK_BYTES UINT64_C(4096)
+#endif
 #define SEG_BLOCKS UINT64_C(512)
 
 static void fail(const char *message)
@@ -30,6 +38,16 @@ static void fail(const char *message)
     exit(1);
 }
 
+static uint64_t request_blocks(uint64_t before, uint64_t limit)
+{
+    uint64_t remainder = before % SEG_BLOCKS;
+    if (limit <= remainder + SEG_BLOCKS)
+        fail("target is too small");
+    /* The kernel removes whole sections and retains the original remainder. */
+    return (limit - remainder) / SEG_BLOCKS * SEG_BLOCKS;
+}
+
+#ifndef F2FS_SELF_TEST_ONLY
 static uint64_t number(const char *s)
 {
     char *end;
@@ -153,14 +171,7 @@ static void require_unmounted(dev_t raw, dev_t mapped)
     endmntent(mounts);
 }
 
-static uint64_t request_blocks(uint64_t before, uint64_t limit)
-{
-    uint64_t remainder = before % SEG_BLOCKS;
-    if (limit <= remainder + SEG_BLOCKS)
-        fail("target is too small");
-    /* The kernel removes whole sections and retains the original remainder. */
-    return (limit - remainder) / SEG_BLOCKS * SEG_BLOCKS;
-}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -176,6 +187,10 @@ int main(int argc, char **argv)
         puts("PASS: F2FS section rounding");
         return 0;
     }
+#ifdef F2FS_SELF_TEST_ONLY
+    fprintf(stderr, "This host build supports self-test only. Device operations require a Linux/Android build.\n");
+    return 2;
+#else
     int probe = argc == 3 && !strcmp(argv[1], "probe");
     int shrink = argc == 6 && !strcmp(argv[1], "shrink");
     int offline = argc == 7 && !strcmp(argv[1], "offline");
@@ -243,4 +258,5 @@ int main(int argc, char **argv)
     close(fs);
     close(block);
     return 0;
+#endif
 }

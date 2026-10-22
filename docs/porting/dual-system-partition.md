@@ -19,7 +19,7 @@ It preserves userdata's start, type, GUID and attributes. The new block device i
 
 Unsupported layouts stop the script: Ext4, multi-device or zoned F2FS, multiple segments per section, encryption footers, stacked mappings and intervening partitions.
 
-## Prepare recovery and backups
+## Prepare recovery (optional partition backup)
 
 1. Enter compatible TWRP. If already installed:
 
@@ -34,7 +34,7 @@ Unsupported layouts stop the script: Ext4, multi-device or zoned F2FS, multiple 
    python3 scripts/dual_sys/partition.py inspect
    ```
 
-3. Keep the original boot/recovery images and recovery instructions. Back up offline `userdata` and `metadata` together to another physical disk with enough capacity. TWRP file backups may omit encryption metadata.
+3. Optional: save the original boot/recovery images and back up offline `userdata` and `metadata` together to another physical disk. TWRP file backups may omit encryption metadata. To skip partition backups, continue to step 4.
 
    Disable MTP; unmount Data, its bind mounts and Metadata. Confirm that neither partition nor its decrypted view remains mounted:
 
@@ -55,7 +55,7 @@ Unsupported layouts stop the script: Ext4, multi-device or zoned F2FS, multiple 
    adb -s SERIAL shell blockdev --getsize64 /dev/block/by-name/metadata
    adb -s SERIAL shell blockdev --getsize64 /dev/block/by-name/userdata
    wc -c /external-disk/phone-backup/metadata.img /external-disk/phone-backup/userdata.img
-   sha256sum /external-disk/phone-backup/metadata.img /external-disk/phone-backup/userdata.img
+   shasum -a 256 /external-disk/phone-backup/metadata.img /external-disk/phone-backup/userdata.img
    ```
 
    Require successful copies and matching file/device sizes. On Windows, use a binary-safe backup tool, not a PowerShell text pipeline. Retain these backups.
@@ -69,7 +69,7 @@ Unsupported layouts stop the script: Ext4, multi-device or zoned F2FS, multiple 
    adb -s SERIAL shell cat /proc/mounts
    ```
 
-5. It's acceptable to skip the backup.Preserve important data before shrinking.
+5. Partition backups are optional. Consider saving important data before shrinking.
 
 ## Build the recovery helper
 
@@ -107,16 +107,16 @@ python3 scripts/dual_sys/partition.py plan \
 | `twrp.sh`, `f2fs-shrink` | Recovery execution script and compiled helper |
 | `SHA256SUMS` | Detects incomplete transfer or changes to the generated bundle |
 
-Keep this bundle with the userdata/metadata backups. GPT backups cannot restore lost file contents.
+Keep this bundle; if you made userdata/metadata backups, store them alongside it. GPT backups cannot restore lost file contents.
 
 ## Apply the split
 
-`apply` generates a fresh plan. Use the same size and a new output directory. `--backup-confirmed` acknowledges an offline backup; it does not verify it.
+`apply` generates a fresh plan. Use the same size and a new output directory.
 
 ```sh
 python3 scripts/dual_sys/partition.py apply \
   --size-gib 32 --helper out/dual_sys/f2fs-shrink \
-  --output out/dual_sys/applied --backup-confirmed
+  --output out/dual_sys/applied
 ```
 
 Check the device and layout, then enter the displayed confirmation phrase exactly. Keep power connected and leave TWRP idle.
@@ -183,7 +183,7 @@ Do not format unreadable Data. Restoring GPT does not undo F2FS relocation. A fu
 
 ## Offline tests
 
-No phone required:
+Linux, WSL and macOS; a C compiler is required. No phone required:
 
 ```sh
 python3 scripts/dual_sys/test_dual_sys.py
@@ -191,5 +191,7 @@ cc -O2 -Wall -Wextra -Werror scripts/dual_sys/f2fs-shrink.c -o /tmp/f2fs-shrink-
 /tmp/f2fs-shrink-test self-test
 sh -n scripts/dual_sys/twrp.sh
 ```
+
+On macOS, `cc` builds only the shared rounding self-test, without Linux headers or device operations. Use the Linux/Android ELF build above for recovery.
 
 Coverage: GPT, F2FS rounding, ADB selection and simulated failure ordering. Recovery-kernel behavior, data integrity and Android boot still require hardware tests.

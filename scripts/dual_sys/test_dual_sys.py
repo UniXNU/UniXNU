@@ -124,7 +124,7 @@ class LayoutTests(unittest.TestCase):
 
 
 class HostTests(unittest.TestCase):
-    def test_plan_and_declined_apply_do_not_start_resize(self):
+    def test_apply_requires_confirmation_without_a_backup_flag(self):
         gpt = fixture()
         user = gpt.entries[1]
         part_bytes = (user['end'] - user['start'] + 1) * 4096
@@ -133,7 +133,7 @@ class HostTests(unittest.TestCase):
                     sector=4096, machine='aarch64')
         fs = dict(partition_bytes=part_bytes, blocks=part_bytes // 4096,
                   available_blocks=part_bytes // 4096, mapped='/dev/block/dm-0')
-        for command in ('plan', 'apply'):
+        for command, confirm in (('plan', 'wrong'), ('apply', 'wrong'), ('apply', 'test unixnu 8589934592')):
             with tempfile.TemporaryDirectory() as name:
                 root = Path(name)
                 elf = bytearray(64)
@@ -150,23 +150,50 @@ class HostTests(unittest.TestCase):
                         return str(user['start'] * 8)
                     return ''
 
-                adb = SimpleNamespace(serial='test', shell=shell, push=lambda *a: None,
+                adb = SimpleNamespace(executable='adb', serial='test', shell=shell, push=lambda *a: None,
                                       run=lambda *a: calls.append(' '.join(a)))
                 args = SimpleNamespace(helper=root / 'helper', output=root / 'bundle', size_gib='8',
-                                       command=command, backup_confirmed=True)
-                with redirect_stdout(io.StringIO()), patch('builtins.input', return_value='wrong'), \
+                                       command=command)
+                def snapshot(*_):
+                    return SimpleNamespace(primary=(root / 'bundle/gpt-primary.after').read_bytes(),
+                                           backup=(root / 'bundle/gpt-backup.after').read_bytes())
+
+                with redirect_stdout(io.StringIO()), patch('builtins.input', return_value=confirm), \
+                        patch('partition.snapshot', side_effect=snapshot), \
                         patch('partition.subprocess.Popen') as process:
-                    if command == 'apply':
+                    process.return_value.stdout = []
+                    process.return_value.wait.return_value = 0
+                    if command == 'apply' and confirm == 'wrong':
                         with self.assertRaisesRegex(ValueError, 'confirmation'):
                             prepare(adb, args, info, gpt)
                     else:
                         prepare(adb, args, info, gpt)
-                    process.assert_not_called()
+                    if command == 'apply' and confirm != 'wrong':
+                        process.assert_called_once()
+                        self.assertIn('twrp.sh apply', process.call_args.args[0][-1])
+                    else:
+                        process.assert_not_called()
                 plan = json.loads((root / 'bundle/plan.json').read_text())
                 self.assertEqual(plan['layout']['unixnu_bytes'], 8 << 30)
                 self.assertNotIn(b'\r', (root / 'bundle/plan.env').read_bytes())
                 self.assertTrue(any('twrp.sh check' in call for call in calls))
                 self.assertFalse(any('twrp.sh apply' in call for call in calls))
+
+
+class PortableHelperTests(unittest.TestCase):
+    def test_self_test_build_rejects_device_operations(self):
+        with tempfile.TemporaryDirectory() as name:
+            executable = str(Path(name) / 'f2fs-shrink')
+            compiler = shlex.split(os.environ.get('CC', 'cc'))
+            subprocess.run([*compiler, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+                            '-DF2FS_SELF_TEST_ONLY', str(HERE / 'f2fs-shrink.c'), '-o', executable], check=True)
+            result = subprocess.run([executable, 'self-test'], capture_output=True, text=True, check=True)
+            self.assertIn('PASS: F2FS section rounding', result.stdout)
+            for args in (['probe', '/dev/block/test'], ['shrink', '/dev/block/test', '100', '100', '50'],
+                         ['offline', '/dev/block/test', '100', '50', '50', '/dev/block/dm-0']):
+                result = subprocess.run([executable, *args], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn('self-test only', result.stderr)
 
 
 class RecoveryTests(unittest.TestCase):
@@ -189,7 +216,7 @@ class RecoveryTests(unittest.TestCase):
             (root / 'plan.env').write_text(''.join(f'{k}={shlex.quote(str(v))}\n' for k, v in values.items()))
             shutil.copyfile(HERE / 'twrp.sh', root / 'twrp.sh')
             fake = '''#!/usr/bin/env python3
-import os, pathlib, sys
+import hashlib, os, pathlib, sys
 cmd = pathlib.Path(sys.argv[0]).name
 args = sys.argv[1:]
 failure = os.environ.get('TEST_FAILURE', '')
@@ -202,6 +229,10 @@ elif cmd == 'blockdev': print(4096 if args[0] == '--getss' else (100 if args[1].
 elif cmd == 'cat': print('2048')
 elif cmd == 'umount': sys.exit(1 if failure == 'unmount' else 0)
 elif cmd == 'f2fs-shrink': sys.exit(1 if failure == args[0] else 0)
+elif cmd == 'sha256sum':
+    for line in pathlib.Path(args[-1]).read_text().splitlines():
+        digest, name = line.split('  ', 1)
+        if hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest() != digest: sys.exit(1)
 elif cmd == 'mkdir':
     target = 'global-lock' if args[0] == '/tmp/unixnu-dual.lock' else args[0]
     if failure == 'locked' and target == 'global-lock': sys.exit(1)
@@ -217,7 +248,7 @@ elif cmd == 'dd':
         if failure == 'readback' and target == 'disk-backup': data = bytes(len(data))
         pathlib.Path(target).write_bytes(data)
 '''
-            for command in ('id', 'getprop', 'uname', 'readlink', 'blockdev', 'cat', 'umount', 'dd', 'sync', 'mkdir'):
+            for command in ('id', 'getprop', 'uname', 'readlink', 'blockdev', 'cat', 'umount', 'dd', 'sync', 'mkdir', 'sha256sum'):
                 (bindir / command).write_text(fake)
                 (bindir / command).chmod(0o700)
             (root / 'f2fs-shrink').write_text(fake)

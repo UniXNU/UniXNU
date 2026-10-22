@@ -164,8 +164,7 @@ def prepare(adb, args, info, gpt):
     if args.command == 'plan':
         print('Plan only. No filesystem or partition-table writes performed.')
         return
-    require(args.backup_confirmed, 'apply requires --backup-confirmed after an offline backup of userdata and metadata')
-    print('This changes the filesystem and GPT. Confirm your offline data backup is on another disk.')
+    print('This changes the filesystem and GPT. Review the device and partition size before continuing.')
     confirmation = input(f"Type exactly: {variables['CONFIRM']}\n> ")
     require(confirmation == variables['CONFIRM'], 'confirmation did not match; nothing resized')
     # No timeout/retry: the kernel may take a long time to move allocated sections.
@@ -219,7 +218,6 @@ def main():
     parser.add_argument('--size-gib', help='new unixnu capacity in GiB; whole MiB increments')
     parser.add_argument('--helper', help='statically linked f2fs-shrink executable for the phone ABI')
     parser.add_argument('--output', help='new host directory for the plan, GPT backup and recovery bundle')
-    parser.add_argument('--backup-confirmed', action='store_true', help='confirm a separate offline userdata/metadata backup')
     parser.add_argument('--plan', help='plan.json from a completed apply, for verify')
     args = parser.parse_args()
     try:
