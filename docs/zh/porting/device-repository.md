@@ -206,6 +206,7 @@ unique_chip_id = "required"
 | `dram_size` | 传给 ADT 工具的 DRAM 大小 |
 | `panic_screen` | 把 panic 屏幕打进负载内核副本 |
 | `skip_setup_tool` | `--skip-setup` 使用的脚本 |
+| `skip_setup_args` | 传给该脚本的额外参数，例如 `["--no-auto-dim"]` |
 | `trust_cache_sha256` | 接受的 trust cache 哈希 |
 | `timeout` | 菜单超时 |
 | `kernel_args` | 默认内核命令行 |
