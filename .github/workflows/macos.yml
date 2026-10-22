@@ -16,7 +16,7 @@ on:
         required: true
         default: sheng_defconfig
       steps:
-        description: Steps to run (userdata is a multi-GiB image of the IPSW disk images)
+        description: Steps to build (nothing is uploaded except text logs; userdata needs about 16 GB of disk)
         type: choice
         options:
           - kernel
@@ -54,10 +54,6 @@ on:
         default: ""
       skip_setup:
         description: Mark Setup as done in the Data seed
-        type: boolean
-        default: false
-      upload_userdata:
-        description: Upload the userdata image (large)
         type: boolean
         default: false
 
@@ -244,46 +240,70 @@ jobs:
           if [ "$SKIP_SETUP" = true ]; then args+=(--skip-setup); fi
           ./unixnu build payload "${args[@]}"
 
-      - name: Upload the build logs
+      - name: Collect the text logs
+        id: logs
         if: always() && steps.check.outcome == 'success'
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          BOARD: ${{ steps.check.outputs.board }}
+        run: |
+          # Only *.log files are copied, with the secrets and the input URLs replaced. Kernels, payloads, disk images,
+          # kernelcaches and IPSW members are never uploaded: they derive from Apple software.
+          python3 - <<'PY'
+          import os, re, shutil
+          from pathlib import Path
+          source = Path('out') / os.environ['BOARD'] / 'logs'
+          target = Path(os.environ['RUNNER_TEMP']) / 'public-logs'
+          shutil.rmtree(target, ignore_errors=True)
+          target.mkdir(parents=True)
+          event = Path(os.environ['GITHUB_EVENT_PATH']).read_text()
+          import json
+          inputs = json.loads(event).get('inputs', {})
+          secrets = [os.environ.get('UNIXNU_UNIQUE_CHIP_ID', ''), inputs.get('trust_cache_url', ''), inputs.get('data_seed_url', '')]
+          secrets = [value for value in secrets if value]
+          count = 0
+          for path in sorted(source.glob('*.log')) if source.is_dir() else []:
+              data = path.read_bytes()
+              if b'\0' in data:
+                  continue
+              text = data.decode('utf-8', 'replace')
+              for value in secrets:
+                  text = text.replace(value, '***')
+              text = re.sub(r'https?://[^\s"\']*[?&](?:token|sig|signature|key|X-Amz-Signature)=[^\s"\']*', '***', text, flags=re.I)
+              (target / path.name).write_text(text)
+              count += 1
+          print(f'{count} text logs staged')
+          PY
+
+      - name: Upload the build logs
+        if: always() && steps.logs.outcome == 'success'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unixnu-${{ steps.check.outputs.board }}-logs-${{ github.run_attempt }}
-          path: out/${{ steps.check.outputs.board }}/logs/
+          path: ${{ runner.temp }}/public-logs/*.log
           if-no-files-found: warn
           retention-days: 7
 
-      - name: Upload the kernel
-        if: steps.kernel.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unixnu-${{ steps.check.outputs.board }}-kernel-${{ github.run_attempt }}
-          path: out/${{ steps.check.outputs.board }}/kernel/
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload the payload
-        if: steps.payload.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unixnu-${{ steps.check.outputs.board }}-payload-${{ github.run_attempt }}
-          # The skip-setup copy of the Data seed stays behind: it is already inside payload.img.
-          path: |
-            out/${{ steps.check.outputs.board }}/payload/payload.img
-            out/${{ steps.check.outputs.board }}/payload/payload.json
-          if-no-files-found: error
-          retention-days: 7
-
-      - name: Upload userdata
-        if: inputs.upload_userdata && steps.userdata.outcome == 'success'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: unixnu-${{ steps.check.outputs.board }}-userdata-${{ github.run_attempt }}
-          path: out/${{ steps.check.outputs.board }}/userdata/
-          if-no-files-found: error
-          # The disk images do not compress; zipping them only costs time.
-          compression-level: 0
-          retention-days: 3
+      - name: Summary
+        if: always()
+        env:
+          BOARD: ${{ steps.check.outputs.board }}
+          KERNEL: ${{ steps.kernel.outcome }}
+          USERDATA: ${{ steps.userdata.outcome }}
+          PAYLOAD: ${{ steps.payload.outcome }}
+        run: |
+          {
+            echo "## macOS build: ${BOARD:-unknown} (${DEFCONFIG}, ${STEPS})"
+            echo
+            echo "| Step | Result |"
+            echo "| --- | --- |"
+            echo "| kernel | ${KERNEL:-skipped} |"
+            echo "| userdata | ${USERDATA:-skipped} |"
+            echo "| payload | ${PAYLOAD:-skipped} |"
+            echo
+            echo "This workflow only checks that the build works. It publishes text logs (7 days) and no images."
+            xcodebuild -version | head -n 1
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove proprietary inputs
         if: always()
