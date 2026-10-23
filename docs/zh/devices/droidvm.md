@@ -20,7 +20,7 @@ DroidVM 目标把 UniXNU 作为客户机运行在高通手机 Gunyah hypervisor 
 | Keychain | 条目通过 AppleKeyStore 的 wrap 和 unwrap 存储；bluetoothd 运行 |
 | GPU | 通过 crosvm `--droidvm-gpu` 在手机主机的 KGSL 上运行 NativeAdreno；widget 渲染器、图标、Safari 和壁纸 overlay 通过 Metal 插件绘制。每个客户机进程使用自己的 KGSL context，单个客户端故障不会拖垮 render server；完整 GPU 应用尚未验证 |
 
-`BigfootACA/unixnu-droidvm-ci` 为 QEMU/KVM 和 DroidVM 目标提供 CI 构建。
+[BigfootACA/unixnu-droidvm-ci](https://github.com/BigfootACA/unixnu-droidvm-ci) 为 QEMU/KVM 和 DroidVM 目标提供 CI 构建。
 
 ## 维护
 
