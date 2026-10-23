@@ -1,21 +1,16 @@
 # Redmi K30 5G (picasso)
 
-picasso is the Redmi K30 5G with the Qualcomm SM7250 SoC. The port is an independent community project initiated by YinCQL.
+picasso is the Redmi K30 5G with the SM7250 SoC. The port below is an independent community project. The UniXNU organization does not maintain it.
 
-| Repository | Maintainer / Contributor | State & Focus |
+| Repository | Maintainer | State |
 | --- | --- | --- |
-| [UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso) | [YinCQL](https://github.com/YinCQL) | Initial device port & UEFI firmware bring-up |
-| [UniXNU-picasso](https://github.com/silenzio111/UniXNU-picasso) | [silenzio111](https://github.com/silenzio111) | Stage 2 bring-up: prelinked kernel, UFS rootfs, Metal bundle, and USB panic dump |
+| [UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso) | [YinCQL](https://github.com/YinCQL) | Early skeleton; firmware not built |
+| [UniXNU-picasso](https://github.com/silenzio111/UniXNU-picasso) | [silenzio111](https://github.com/silenzio111) | Stage 2 bring-up: prelinked kernel, UFS rootfs, Metal bundle |
 
 ## State
 
-The picasso port combines UEFI firmware bring-up with the Stage 2 driver stack and system images ready for on-device verification:
-- Board description, kernel defconfig (`picasso_platform_defconfig`), and full Apple Device Tree (ADT) generation.
-- Qualcomm QUPv3 GENI UART early serial console with dual-output LCD framebuffer mirroring.
-- Physical UFS 2.1 root partition mapping (Route B, 8.74 GiB APFS system and Cryptex1 volumes).
-- Adreno 620 Metal acceleration userland stack with static AMFI trust cache integration.
-- Host-side non-invasive crash and dmesg buffer extraction over USB (`dump-picasso-panic.py`).
+The repository holds the board description, kernel defconfig, ADT generator and package hooks. The firmware build has not completed. The kernel, IPSW and userdata sections are placeholders to be filled during bring-up. The repository asks readers to expect breakage.
 
 ## Maintenance
 
-The maintainers own their respective repositories and release decisions. UniXNU documentation records the community port and its state; it does not take over maintenance.
+The maintainer owns the repository and its release decisions. UniXNU documentation lists the port and its state; it does not take over maintenance.
