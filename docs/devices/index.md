@@ -47,6 +47,7 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Galaxy Z Fold3 (q2q)](/devices/q2q) | SM8350 | Source kernel build harness only | agcarbajo |
 | [Redmi K30 5G (picasso)](/devices/picasso) | SM7250 | Early skeleton; firmware not built | YinCQL |
 | [Redmi Note 9 (merlinx)](/devices/merlinx) | MT6768 | UEFI boots and custom menu works; storage init blocks UniXNU and XNU | Dracen-W |
+| [Benesse TAB-A04-BR3 (a04br3)](/devices/a04br3) | MT8167 | Board, firmware, eMMC and GPT prepared; no hardware run | mouseos |
 | [Redmi 9A (dandelion)](/devices/dandelion) | MT6765 | Early bring-up; UEFI port in progress | licg89 |
 | [Xiaomi Mi 6 (sagit)](/devices/sagit) | MSM8998 | Device repository; status not documented | dmnakzkahziamnk-a11y |
 
