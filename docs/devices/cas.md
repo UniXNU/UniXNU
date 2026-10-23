@@ -6,6 +6,7 @@ cas is the Xiaomi 10 Ultra (M2007J1SC) with the SM8250 SoC and about 12 GB of RA
 | --- | --- | --- |
 | [UniXNU-cas](https://github.com/ht94911/UniXNU-cas) | [ht94911](https://github.com/ht94911) | UEFI and UniXNU menu on hardware; DarwinBoot and XNU not tested |
 | [uefi-cas](https://github.com/ht94911/uefi-cas) | [ht94911](https://github.com/ht94911) | Mu-Silicium firmware port |
+| [UniXNU-cas](https://github.com/pxl777806/UniXNU-cas) | [pxl777806](https://github.com/pxl777806) | Alternate cas repository; status not documented |
 
 ## State
 

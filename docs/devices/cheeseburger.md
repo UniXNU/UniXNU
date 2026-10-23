@@ -5,6 +5,7 @@ cheeseburger is the OnePlus 5 with the MSM8998 SoC. The port below is an indepen
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-cheeseburger](https://github.com/DinnerABC/UniXNU-cheeseburger) | [DinnerABC](https://github.com/DinnerABC) | UEFI and menu work; XNU entry bar observed; MMU and root unverified |
+| [UniXNU-cheeseburger](https://github.com/lss717/UniXNU-cheeseburger) | [lss717](https://github.com/lss717) | Alternate cheeseburger repository; status not documented |
 
 ## State
 

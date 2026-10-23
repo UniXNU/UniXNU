@@ -8,7 +8,7 @@
 
 ## 社区移植
 
-这里列出的移植独立维护。仓库归各自维护者所有，UniXNU 组织不维护它们。每个条目有自己的页面。表格按完成度排序，已到用户态或完整构建链的移植在前。没有单独页面的仓库见[社区仓库索引](/zh/devices/repositories)。
+这里列出的移植独立维护。仓库归各自维护者所有，UniXNU 组织不维护它们。每个条目有自己的页面。表格按完成度排序，已到用户态或完整构建链的移植在前。
 
 | 设备 | SoC | 状态 | 维护者 |
 | --- | --- | --- | --- |
@@ -22,12 +22,16 @@
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
 | [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | 已到 Hello/Setup，显示完整、触控可用；安装、GPU 和 Wi-Fi 待完成 | jasper2863、tycykp |
 | [小米 10（umi）](/zh/devices/umi) | SM8250 | iPadOS 17.7.11 Hello／设置，触摸可用；CPU 显示、UFS 和持久化 Data | reAAAq |
+| [小米 MIX 2（chiron）](/zh/devices/chiron) | SDM835 | 真机运行最小 4 KiB XNU 和 PID 1 心跳 | to-mid |
 | [小米平板 7 / POCO Pad X1（uke）](/zh/devices/uke) | SM7675 | 根已挂载，launchd 启动；显示 surface 待完成 | Allenwdk |
+| [Brave Ark 平板（braveark）](/zh/devices/braveark) | SM8635 | 8 核 XNU BSD init；iPadOS 根卷进行中 | tattwamashi |
 | [小米平板 8 Pro（piano）](/zh/devices/piano) | SM8750 | 内核在 CI 编译并预链接，未在平板上运行 | code002-2 |
 | [小米 13 Pro（nuwa）](/zh/devices/nuwa) | SM8550 | 源内核可编译，平台静态库和预链接待完成 | wh1stl3 |
 | [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | 已到 XNU S1 到 S6，根设备查找 panic | IssacL04 |
 | [一加平板 2 Pro（erhai）](/zh/devices/erhai) | SM8750 | XNU 入口 bring-up，根和用户态未配置 | wally001012-cyber |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/phy120) | SM8650 | 启动管理器菜单工作，内核在 CI 构建 | peiyuesheng666 |
+| [Sony Xperia 1 II（pdx203）](/zh/devices/pdx203) | SM8250 | 内核在 CI 编译并预链接；未启动 | chardidathing |
+| [Moto Z2 Force（nash）](/zh/devices/nash) | MSM8998 | UEFI、UniXNU 和负载已在真机通过；XNU 阶段需要 macOS | fcxuhaq3 |
 | [Redmi K40 Pro（haydn）](/zh/devices/haydn) | SM8350 | 固件、负载和启动镜像已构建，haydn4 从 guacamole 导入 | xiaomi-haydn-dev |
 | [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | XNU 已到 vfs_mountroot，下一步根设备 | Lux12138 |
 | [一加 6T（fajita）](/zh/devices/fajita) | SDM845 | XNU 已到根挂载，无存储驱动 | johnpanos |
@@ -50,6 +54,28 @@
 | [Benesse TAB-A04-BR3（a04br3）](/zh/devices/a04br3) | MT8167 | 板级、固件、eMMC 和 GPT 已准备；无真机运行 | mouseos |
 | [Redmi 9A（dandelion）](/zh/devices/dandelion) | MT6765 | 早期 bring-up，UEFI 移植进行中 | licg89 |
 | [小米 6（sagit）](/zh/devices/sagit) | MSM8998 | 设备仓库，状态未记录 | dmnakzkahziamnk-a11y |
+| [Google Pixel 9 Pro XL（komodo）](/zh/devices/komodo) | Tensor G4 | 板级、defconfig 和 ADT；UEFI 独立；无真机运行 | Trijal08 |
+| [小米 9（cepheus）](/zh/devices/cepheus) | SDM855 | 设备仓库和启动链已准备；无真机结果 | sxl47 |
+| [小米 MIX Flip（ruyi）](/zh/devices/ruyi) | SM8650 | 板级和 defconfig；无 README 或真机结果 | ArnoDorian123 |
+| [小米 Civi 5 Pro（luming）](/zh/devices/luming) | SM8735 | 预构建骨架；未构建或启动 | infinityEX-RSXQ |
+| [小米平板 6 Pro（liuqin）](/zh/devices/liuqin) | SM8475 | 板级、defconfig 和内核 USB 调试口；下一步 UEFI | 1696108518 |
+| [小米平板 5 Pro 5G（enuma）](/zh/devices/enuma) | SM8250-AC | 设备仓库；UEFI 和可烧写镜像缺失 | wh1stl3、Tlrenhb |
+| [Redmi Turbo 3 / Poco F6（peridot）](/zh/devices/peridot) | SM8635 | WIP 设备仓库；无真机结果 | kvfsrl、hoshikv |
+| [一加 8 Pro（instantnoodlep）](/zh/devices/instantnoodlep) | SM8250 | UEFI 平台和内核基线；状态未记录 | zhangp996 |
+| [一加 8T（kebab）](/zh/devices/kebab) | SM8250 | 第一个里程碑：仅 kernel.macho | GFander |
+| [一加 6（enchilada）](/zh/devices/enchilada) | SDM845 | 设备仓库；状态未记录 | keyfan |
+| [一加 15T（fairlady）](/zh/devices/fairlady) | SM8850 | 早期移植，带 S1 到 S6 诊断；无真机结果 | Osilvfe |
+| [一加平板 Pro（caihong）](/zh/devices/caihong) | SM8650 | 板级和 defconfig；UEFI 集成未完成 | Axiang-dev |
+| [Nothing Phone (3a)（asteroids）](/zh/devices/asteroids) | SM7635 | UEFI 到达 DXE 和 BDS；未到 UniXNU 和 XNU | rootstockos |
+| [Galaxy Tab S9 Ultra Wi-Fi（gts9uwifi）](/zh/devices/gts9uwifi) | SM-X910 | 设备仓库；状态未记录 | zc47796741-pixel |
+| [Moto G9 Play（guamp）](/zh/devices/guamp) | SM6115 | UEFI 菜单可启动；内核未构建 | itsChris122 |
+| [Moto G 5G（gauguin）](/zh/devices/gauguin) | SM7125 | 设备仓库；状态未记录 | lvyufeng |
+| [Microsoft Lumia 950](/zh/devices/lumia950) | MSM8992 | 设备仓库；使用手机自带 UEFI；未启动 | ManGuy-Legend |
+| [OPPO R11（r11）](/zh/devices/r11) | SDM660 | 板级、defconfig 和硬件笔记；状态未记录 | huhaitao1136-cpu |
+| [OPPO Find X9（x9）](/zh/devices/x9) | MT6993 | 未到 UEFI；约 25 到 30% | tosasitill |
+| [Unisoc 设备](/zh/devices/unisoc) | Unisoc | 核心分支；尚无具体设备移植 | hxzbaka |
+| [unixnu-build](/zh/devices/unixnu-build) | 构建树 | 仅构建树；设备未记录 | iskssksjjsjjzjs |
+| [sheng 上的 macOS](/zh/devices/sheng-macos) | SM8550 | macOS 27 bring-up；不是 iOS 设备移植 | Jelly10086 |
 
 ## 设备页面记录什么
 

@@ -5,6 +5,7 @@ The QEMU target runs UniXNU on the AArch64 `virt` machine. It substitutes for a 
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 home screen and Settings; Metal on the Mac GPU with `--metal` |
+| [UniXNU-qemu](https://github.com/yyx2025/UniXNU-qemu) | [yyx2025](https://github.com/yyx2025) | QEMU virt repository used for vermeer bring-up |
 
 ## State
 

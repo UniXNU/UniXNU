@@ -8,7 +8,7 @@ A device entry is a pair of repositories and the values that make the generic st
 
 ## Community ports
 
-The ports listed here are independent. Their maintainers own the repositories; the UniXNU organization does not maintain them. Each entry has its own page. The table is ordered by completion, with the ports that reach userland or a full build chain first. Repositories that do not have a separate page are in the [community repository index](/devices/repositories).
+The ports listed here are independent. Their maintainers own the repositories; the UniXNU organization does not maintain them. Each entry has its own page. The table is ordered by completion, with the ports that reach userland or a full build chain first.
 
 | Device | SoC | State | Maintainer |
 | --- | --- | --- | --- |
@@ -22,12 +22,16 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
 | [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | Hello/Setup with full display and touch; installation, GPU and Wi-Fi pending | jasper2863, tycykp |
 | [Xiaomi Mi 10 (umi)](/devices/umi) | SM8250 | iPadOS 17.7.11 Hello/Setup with touch; CPU display, UFS and persistent Data | reAAAq |
+| [Xiaomi MIX 2 (chiron)](/devices/chiron) | SDM835 | Minimal 4 KiB XNU and PID 1 heartbeat on hardware | to-mid |
 | [Xiaomi Pad 7 / POCO Pad X1 (uke)](/devices/uke) | SM7675 | Root mounted and launchd starts; display surface pending | Allenwdk |
+| [Brave Ark tablet (braveark)](/devices/braveark) | SM8635 | XNU BSD init on 8 CPUs; iPadOS root in progress | tattwamashi |
 | [Xiaomi Pad 8 Pro (piano)](/devices/piano) | SM8750 | Kernel builds and prelinks in CI; not run on the tablet | code002-2 |
 | [Xiaomi 13 Pro (nuwa)](/devices/nuwa) | SM8550 | Source kernel builds; platform archives and prelink pending | wh1stl3 |
 | [OnePlus 13T (oneplus13t)](/devices/oneplus13t) | SM8750 | XNU S1 to S6 reached; root device search panics | IssacL04 |
 | [OnePlus Pad 2 Pro (erhai)](/devices/erhai) | SM8750 | XNU entry bring-up; root and userland not configured | wally001012-cyber |
 | [OPPO Find X7 Ultra (PHY120)](/devices/phy120) | SM8650 | Boot manager menu works; kernel builds in CI | peiyuesheng666 |
+| [Sony Xperia 1 II (pdx203)](/devices/pdx203) | SM8250 | Kernel builds and prelinks in CI; not booted | chardidathing |
+| [Moto Z2 Force (nash)](/devices/nash) | MSM8998 | UEFI, UniXNU and payload passed on hardware; XNU stage needs macOS | fcxuhaq3 |
 | [Redmi K40 Pro (haydn)](/devices/haydn) | SM8350 | Firmware, payload and boot image built; haydn4 imported from guacamole | xiaomi-haydn-dev |
 | [Xiaomi Pad 5 (nabu)](/devices/nabu) | SM8150 | XNU reaches vfs_mountroot; root device next | Lux12138 |
 | [OnePlus 6T (fajita)](/devices/fajita) | SDM845 | XNU reaches root mount; no storage driver | johnpanos |
@@ -50,6 +54,28 @@ The ports listed here are independent. Their maintainers own the repositories; t
 | [Benesse TAB-A04-BR3 (a04br3)](/devices/a04br3) | MT8167 | Board, firmware, eMMC and GPT prepared; no hardware run | mouseos |
 | [Redmi 9A (dandelion)](/devices/dandelion) | MT6765 | Early bring-up; UEFI port in progress | licg89 |
 | [Xiaomi Mi 6 (sagit)](/devices/sagit) | MSM8998 | Device repository; status not documented | dmnakzkahziamnk-a11y |
+| [Google Pixel 9 Pro XL (komodo)](/devices/komodo) | Tensor G4 | Board, defconfig and ADT; UEFI separate; no hardware run | Trijal08 |
+| [Xiaomi Mi 9 (cepheus)](/devices/cepheus) | SDM855 | Device repository and boot chain prepared; no hardware result | sxl47 |
+| [Xiaomi MIX Flip (ruyi)](/devices/ruyi) | SM8650 | Board and defconfig; no README or hardware result | ArnoDorian123 |
+| [Xiaomi Civi 5 Pro (luming)](/devices/luming) | SM8735 | Pre-build skeleton; no build or boot | infinityEX-RSXQ |
+| [Xiaomi Pad 6 Pro (liuqin)](/devices/liuqin) | SM8475 | Board, defconfig and kernel USB debug port; UEFI next | 1696108518 |
+| [Xiaomi Pad 5 Pro 5G (enuma)](/devices/enuma) | SM8250-AC | Device repositories; UEFI and bootable image missing | wh1stl3, Tlrenhb |
+| [Redmi Turbo 3 / Poco F6 (peridot)](/devices/peridot) | SM8635 | WIP device repositories; no hardware result | kvfsrl, hoshikv |
+| [OnePlus 8 Pro (instantnoodlep)](/devices/instantnoodlep) | SM8250 | UEFI platform and kernel baseline; status not documented | zhangp996 |
+| [OnePlus 8T (kebab)](/devices/kebab) | SM8250 | First milestone: kernel.macho only | GFander |
+| [OnePlus 6 (enchilada)](/devices/enchilada) | SDM845 | Device repository; status not documented | keyfan |
+| [OnePlus 15T (fairlady)](/devices/fairlady) | SM8850 | Early port with S1 to S6 diagnostics; no hardware result | Osilvfe |
+| [OnePlus Pad Pro (caihong)](/devices/caihong) | SM8650 | Board and defconfig; UEFI integration not done | Axiang-dev |
+| [Nothing Phone (3a) (asteroids)](/devices/asteroids) | SM7635 | UEFI reaches DXE and BDS; UniXNU and XNU not reached | rootstockos |
+| [Galaxy Tab S9 Ultra Wi-Fi (gts9uwifi)](/devices/gts9uwifi) | SM-X910 | Device repository; status not documented | zc47796741-pixel |
+| [Moto G9 Play (guamp)](/devices/guamp) | SM6115 | UEFI menu boots; kernel not built | itsChris122 |
+| [Moto G 5G (gauguin)](/devices/gauguin) | SM7125 | Device repository; status not documented | lvyufeng |
+| [Microsoft Lumia 950](/devices/lumia950) | MSM8992 | Device repository; uses the phone's own UEFI; no boot | ManGuy-Legend |
+| [OPPO R11 (r11)](/devices/r11) | SDM660 | Board, defconfig and hardware notes; status not documented | huhaitao1136-cpu |
+| [OPPO Find X9 (x9)](/devices/x9) | MT6993 | UEFI not reached; about 25 to 30 percent | tosasitill |
+| [Unisoc devices](/devices/unisoc) | Unisoc | Core fork; no device-specific port yet | hxzbaka |
+| [unixnu-build](/devices/unixnu-build) | build tree | Build tree only; device not documented | iskssksjjsjjzjs |
+| [macOS on sheng](/devices/sheng-macos) | SM8550 | macOS 27 bring-up; not an iOS device port | Jelly10086 |
 
 ## What a device page records
 

@@ -6,6 +6,7 @@ cas 是搭载 SM8250、约 12 GB 内存的小米 10 Ultra（M2007J1SC）。下�
 | --- | --- | --- |
 | [UniXNU-cas](https://github.com/ht94911/UniXNU-cas) | [ht94911](https://github.com/ht94911) | UEFI 和 UniXNU 菜单已在真机运行；DarwinBoot 和 XNU 未测试 |
 | [uefi-cas](https://github.com/ht94911/uefi-cas) | [ht94911](https://github.com/ht94911) | Mu-Silicium 固件移植 |
+| [UniXNU-cas](https://github.com/pxl777806/UniXNU-cas) | [pxl777806](https://github.com/pxl777806) | cas 替代仓库，状态未记录 |
 
 ## 状态
 

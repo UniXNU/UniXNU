@@ -6,6 +6,7 @@ fuxi 是搭载 SM8550 的小米 13。下面的仓库是独立的社区移植，U
 | --- | --- | --- |
 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) | 设备仓库，进行中 |
 | [unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi)、[uefi-fuxi](https://github.com/hanzi123-bilp/uefi-fuxi) | [hanzi123-bilp](https://github.com/hanzi123-bilp) | 阶段 A 和 B 构建输入，未记录真机运行 |
+| [unixnu-fuxi](https://github.com/Xyvern08371/unixnu-fuxi) | [Xyvern08371](https://github.com/Xyvern08371) | fuxi 替代仓库，状态未记录 |
 
 ## UniXNU-fuxi
 

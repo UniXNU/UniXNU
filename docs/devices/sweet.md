@@ -5,6 +5,7 @@ sweet is the Redmi Note 10 Pro with the SM7150 SoC, Snapdragon 732G and Adreno 6
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-sweet](https://github.com/dipa-studio/UniXNU-sweet) | [dipa-studio](https://github.com/dipa-studio) | Platform and loader bring-up |
+| [UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet) | [CrackerCat](https://github.com/CrackerCat) | Alternate sweet repository; status not documented |
 
 ## State
 

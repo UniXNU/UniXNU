@@ -6,6 +6,8 @@ vermeer 是搭载 SM8550 的 Redmi K70。下面的仓库是独立的社区移植
 | --- | --- | --- |
 | [UniXNU-vermeer](https://github.com/mansar1337/UniXNU-vermeer) | [mansar1337](https://github.com/mansar1337) | 源码 XNU 构建基线 |
 | [UniXNU-vermeer](https://github.com/yyx2025/UniXNU-vermeer) | [yyx2025](https://github.com/yyx2025) | 从 sheng 移植的设备仓库，状态未记录 |
+| [k70-unixnu-build](https://github.com/wuan0039/k70-unixnu-build) | [wuan0039](https://github.com/wuan0039) | 仅内核 CI 工作流 |
+| [k70-unixnu-build-20261022](https://github.com/xyyyds0106/k70-unixnu-build-20261022) | [xyyyds0106](https://github.com/xyyyds0106) | 固定 XNU 源码和平台内核构建 |
 
 ## 状态
 

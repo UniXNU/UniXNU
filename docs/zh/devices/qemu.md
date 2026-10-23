@@ -5,6 +5,7 @@ QEMU 目标在 AArch64 `virt` 机器上运行 UniXNU，用于在没有平板时�
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
 | [UniXNU-qemu](https://github.com/xVanTuring/UniXNU-qemu) | [xVanTuring](https://github.com/xVanTuring) | iPadOS 17 主屏幕和 Settings；使用 `--metal` 时在 Mac GPU 上运行 Metal |
+| [UniXNU-qemu](https://github.com/yyx2025/UniXNU-qemu) | [yyx2025](https://github.com/yyx2025) | vermeer bring-up 使用的 QEMU virt 仓库 |
 
 ## 状态
 

@@ -5,6 +5,7 @@ sweet 是搭载 SM7150、Snapdragon 732G 和 Adreno 618 的 Redmi Note 10 Pro。
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
 | [UniXNU-sweet](https://github.com/dipa-studio/UniXNU-sweet) | [dipa-studio](https://github.com/dipa-studio) | 平台和加载器 bring-up |
+| [UniXNU-sweet](https://github.com/CrackerCat/UniXNU-sweet) | [CrackerCat](https://github.com/CrackerCat) | sweet 替代仓库，状态未记录 |
 
 ## 状态
 

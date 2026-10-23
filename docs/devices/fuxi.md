@@ -6,6 +6,7 @@ fuxi is the Xiaomi 13 with the SM8550 SoC. The repositories below are independen
 | --- | --- | --- |
 | [UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [matejkoo217](https://github.com/matejkoo217) | Device repository, work in progress |
 | [unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi), [uefi-fuxi](https://github.com/hanzi123-bilp/uefi-fuxi) | [hanzi123-bilp](https://github.com/hanzi123-bilp) | Stage A and stage B build inputs; no hardware run documented |
+| [unixnu-fuxi](https://github.com/Xyvern08371/unixnu-fuxi) | [Xyvern08371](https://github.com/Xyvern08371) | Alternate fuxi repository; status not documented |
 
 ## UniXNU-fuxi
 

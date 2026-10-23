@@ -5,6 +5,8 @@ nabu 是搭载 SM8150 的小米平板 5。下面的移植是独立的社区项�
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
 | [unixnu-nabu](https://github.com/Lux12138/unixnu-nabu) | [Lux12138](https://github.com/Lux12138) | XNU 已到 vfs_mountroot，下一步根设备 |
+| [unixnu-nabu](https://github.com/zzc775/unixnu-nabu) | [zzc775](https://github.com/zzc775) | 面向零售 6 GB 机器的 nabu 替代仓库 |
+| [unixnu-nabu-build](https://github.com/3214791900-del/unixnu-nabu-build)、[uefi-nabu-build](https://github.com/3214791900-del/uefi-nabu-build) | [3214791900-del](https://github.com/3214791900-del) | 内核和 UEFI 构建树 |
 
 ## 状态
 

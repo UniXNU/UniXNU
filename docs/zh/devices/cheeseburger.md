@@ -5,6 +5,7 @@ cheeseburger 是搭载 MSM8998 的一加 5。下面的移植是独立的社区�
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
 | [UniXNU-cheeseburger](https://github.com/DinnerABC/UniXNU-cheeseburger) | [DinnerABC](https://github.com/DinnerABC) | UEFI 和菜单工作，已观察到 XNU 入口色条，MMU 和根未验证 |
+| [UniXNU-cheeseburger](https://github.com/lss717/UniXNU-cheeseburger) | [lss717](https://github.com/lss717) | cheeseburger 替代仓库，状态未记录 |
 
 ## 状态
 
