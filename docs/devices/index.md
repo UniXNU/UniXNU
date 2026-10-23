@@ -8,7 +8,7 @@ A device entry is a pair of repositories and the values that make the generic st
 
 ## Community ports
 
-The ports listed here are independent. Their maintainers own the repositories; the UniXNU organization does not maintain them. Each entry has its own page. The table is ordered by completion, with the ports that reach userland or a full build chain first.
+The ports listed here are independent. Their maintainers own the repositories; the UniXNU organization does not maintain them. Each entry has its own page. The table is ordered by completion, with the ports that reach userland or a full build chain first. Repositories that do not have a separate page are in the [community repository index](/devices/repositories).
 
 | Device | SoC | State | Maintainer |
 | --- | --- | --- | --- |
