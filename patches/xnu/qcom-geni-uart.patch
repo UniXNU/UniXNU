@@ -1,8 +1,21 @@
 diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
-index 65144c7..57458c5 100644
+index 65144c7..bac082b 100644
 --- a/pexpert/arm/pe_kprintf.c
 +++ b/pexpert/arm/pe_kprintf.c
-@@ -153,6 +153,8 @@ kprintf(const char *fmt, ...)
+@@ -1,3 +1,4 @@
++#include <kern/boot_progress.h>
+ /*
+  * Copyright (c) 2000-2019 Apple Inc. All rights reserved.
+  */
+@@ -58,6 +59,7 @@ __startup_func
+ static void
+ PE_init_kprintf(void)
+ {
++	if (boot_progress_active()) { PE_kputc = boot_progress_putc; return; }
+ 	if (serial_init()) {
+ 		PE_kputc = serial_putc_crlf;
+ 	} else {
+@@ -153,6 +155,8 @@ kprintf(const char *fmt, ...)
  #pragma clang diagnostic pop
  }
  
@@ -11,7 +24,7 @@ index 65144c7..57458c5 100644
  static void
  serial_putc_crlf(char c)
  {
-@@ -160,6 +162,7 @@ serial_putc_crlf(char c)
+@@ -160,6 +164,7 @@ serial_putc_crlf(char c)
  		uart_putc('\r');
  	}
  	uart_putc(c);
@@ -20,7 +33,7 @@ index 65144c7..57458c5 100644
  
  void
 diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
-index f5bae27..22ba404 100644
+index f5bae27..3693671 100644
 --- a/pexpert/arm/pe_serial.c
 +++ b/pexpert/arm/pe_serial.c
 @@ -720,6 +720,124 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
@@ -153,8 +166,8 @@ index f5bae27..22ba404 100644
  	soc_base = pe_arm_get_soc_base_phys();
  
 +#ifdef QCOM_GENI_UART
-+	if (SecureDTFindEntry("name", "serial", &entryP) == kSuccess ||
-+	    SecureDTFindEntry("compatible", "qcom,geni-debug-uart", &entryP) == kSuccess) {
++	if (SecureDTFindEntry("compatible", "qcom,geni-debug-uart", &entryP) == kSuccess ||
++	    SecureDTFindEntry("compatible", "qcom,geni-uart", &entryP) == kSuccess) {
 +		SecureDTGetProperty(entryP, "reg", (void const **)&reg_prop, &prop_size);
 +		if (reg_prop && prop_size >= sizeof(uintptr_t) * 2) {
 +			qcom_geni_uart_base_vaddr = ml_io_map(soc_base + *reg_prop, *(reg_prop + 1));
@@ -193,18 +206,3 @@ index 404b50b..e26121a 100644
  } serial_device_t;
  
  kern_return_t serial_irq_enable(serial_device_t device);
-diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
-index 61afb61..b46ac4a 100644
---- a/pexpert/pexpert/arm64/BCM2837.h
-+++ b/pexpert/pexpert/arm64/BCM2837.h
-@@ -65,8 +65,8 @@
- #define BCM2837_PUT32(addr, value) do { *((volatile uint32_t *) addr) = value; } while(0)
- #define BCM2837_GET32(addr) *((volatile uint32_t *) addr)
- 
--#define PLATFORM_PANIC_LOG_PADDR        0x3c0fc000
--#define PLATFORM_PANIC_LOG_SIZE         16384        // 16kb
-+#define PLATFORM_PANIC_LOG_PADDR        0x8fe00000
-+#define PLATFORM_PANIC_LOG_SIZE         1048576        // 1 MiB
- #endif /* ! ASSEMBLER */
- 
- #endif /* ! _PEXPERT_ARM_BCM2837_H */
