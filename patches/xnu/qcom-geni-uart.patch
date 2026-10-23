@@ -1,0 +1,210 @@
+diff --git a/pexpert/arm/pe_kprintf.c b/pexpert/arm/pe_kprintf.c
+index 65144c7..57458c5 100644
+--- a/pexpert/arm/pe_kprintf.c
++++ b/pexpert/arm/pe_kprintf.c
+@@ -153,6 +153,8 @@ kprintf(const char *fmt, ...)
+ #pragma clang diagnostic pop
+ }
+ 
++extern void vcputc(char);
++
+ static void
+ serial_putc_crlf(char c)
+ {
+@@ -160,6 +162,7 @@ serial_putc_crlf(char c)
+ 		uart_putc('\r');
+ 	}
+ 	uart_putc(c);
++	vcputc(c);
+ }
+ 
+ void
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+index f5bae27..22ba404 100644
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -720,6 +720,124 @@ SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) vmapple_uart_serial_f
+ 
+ #endif /* VMAPPLE_UART */
+ 
++#ifndef QCOM_GENI_UART
++#define QCOM_GENI_UART 1
++#endif
++
++#if defined(QCOM_GENI_UART)
++#define SE_GENI_STATUS          0x040
++#define SE_UART_TX_TRANS_LEN    0x270
++#define SE_GENI_M_CMD0          0x600
++#define SE_GENI_M_CMD_CTRL_REG  0x604
++#define SE_GENI_M_IRQ_STATUS    0x610
++#define SE_GENI_M_IRQ_EN        0x614
++#define SE_GENI_M_IRQ_CLEAR     0x618
++#define SE_GENI_S_IRQ_CLEAR     0x648
++#define SE_GENI_TX_FIFOn        0x700
++#define SE_GENI_RX_FIFOn        0x780
++#define SE_GENI_TX_FIFO_STATUS  0x800
++#define SE_GENI_RX_FIFO_STATUS  0x804
++
++#define M_GENI_CMD_ACTIVE       (1u << 0)
++#define UART_START_TX           (1u << 27)
++
++MARK_AS_HIBERNATE_DATA static vm_offset_t qcom_geni_uart_base_vaddr = 0;
++
++static inline uint32_t
++qcom_geni_read32(uint32_t offset)
++{
++	return *(volatile uint32_t *)(qcom_geni_uart_base_vaddr + offset);
++}
++
++static inline void
++qcom_geni_write32(uint32_t offset, uint32_t val)
++{
++	*(volatile uint32_t *)(qcom_geni_uart_base_vaddr + offset) = val;
++}
++
++static unsigned int
++qcom_geni_uart_transmit_ready(void)
++{
++	if (qcom_geni_uart_base_vaddr == 0) {
++		return 0;
++	}
++	return (unsigned int)!(qcom_geni_read32(SE_GENI_STATUS) & M_GENI_CMD_ACTIVE);
++}
++
++static void
++qcom_geni_uart_transmit_data(uint8_t c)
++{
++	int timeout;
++
++	if (qcom_geni_uart_base_vaddr == 0) {
++		return;
++	}
++
++	timeout = 1000000;
++	while ((qcom_geni_read32(SE_GENI_STATUS) & M_GENI_CMD_ACTIVE) && --timeout > 0) {
++		__builtin_arm_isb(ISB_SY);
++	}
++
++	qcom_geni_write32(SE_GENI_M_IRQ_CLEAR, 0xffffffff);
++	qcom_geni_write32(SE_UART_TX_TRANS_LEN, 1);
++	qcom_geni_write32(SE_GENI_M_CMD0, UART_START_TX);
++	qcom_geni_write32(SE_GENI_TX_FIFOn, (uint32_t)c);
++
++	timeout = 1000000;
++	while ((qcom_geni_read32(SE_GENI_STATUS) & M_GENI_CMD_ACTIVE) && --timeout > 0) {
++		__builtin_arm_isb(ISB_SY);
++	}
++	qcom_geni_write32(SE_GENI_M_IRQ_CLEAR, 0xffffffff);
++}
++
++static unsigned int
++qcom_geni_uart_receive_ready(void)
++{
++	if (qcom_geni_uart_base_vaddr == 0) {
++		return 0;
++	}
++	return (unsigned int)((qcom_geni_read32(SE_GENI_RX_FIFO_STATUS) & 0x01ffffffu) > 0);
++}
++
++static uint8_t
++qcom_geni_uart_receive_data(void)
++{
++	if (qcom_geni_uart_base_vaddr == 0) {
++		return 0;
++	}
++	return (uint8_t)(qcom_geni_read32(SE_GENI_RX_FIFOn) & 0xff);
++}
++
++static void
++qcom_geni_uart_init(void)
++{
++	int timeout;
++
++	if (qcom_geni_uart_base_vaddr == 0) {
++		return;
++	}
++
++	qcom_geni_write32(SE_GENI_M_IRQ_CLEAR, 0xffffffff);
++	qcom_geni_write32(SE_GENI_S_IRQ_CLEAR, 0xffffffff);
++	qcom_geni_write32(SE_GENI_M_IRQ_EN, 0);
++
++	timeout = 100000;
++	while ((qcom_geni_read32(SE_GENI_STATUS) & M_GENI_CMD_ACTIVE) && --timeout > 0) {
++		__builtin_arm_isb(ISB_SY);
++	}
++}
++
++SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) qcom_geni_uart_serial_functions =
++{
++	.init = qcom_geni_uart_init,
++	.transmit_ready = qcom_geni_uart_transmit_ready,
++	.transmit_data = qcom_geni_uart_transmit_data,
++	.receive_ready = qcom_geni_uart_receive_ready,
++	.receive_data = qcom_geni_uart_receive_data,
++	.device = SERIAL_QCOM_GENI_UART
++};
++#endif /* QCOM_GENI_UART */
++
+ /*****************************************************************************/
+ 
+ /**
+@@ -821,9 +939,30 @@ serial_init(void)
+ 
+ 	soc_base = pe_arm_get_soc_base_phys();
+ 
++#ifdef QCOM_GENI_UART
++	if (SecureDTFindEntry("name", "serial", &entryP) == kSuccess ||
++	    SecureDTFindEntry("compatible", "qcom,geni-debug-uart", &entryP) == kSuccess) {
++		SecureDTGetProperty(entryP, "reg", (void const **)&reg_prop, &prop_size);
++		if (reg_prop && prop_size >= sizeof(uintptr_t) * 2) {
++			qcom_geni_uart_base_vaddr = ml_io_map(soc_base + *reg_prop, *(reg_prop + 1));
++		}
++	}
++
++	if (qcom_geni_uart_base_vaddr != 0) {
++		register_serial_functions(&qcom_geni_uart_serial_functions);
++	}
++#endif /* QCOM_GENI_UART */
++
+ 	if (soc_base == 0) {
++#if !defined(QCOM_GENI_UART)
+ 		uart_initted = true;
+ 		return 0;
++#else
++		if (gPESF == NULL) {
++			uart_initted = true;
++			return 0;
++		}
++#endif
+ 	}
+ 
+ 	PE_parse_boot_argn("disable-uart-irq", &disable_uart_irq, sizeof(disable_uart_irq));
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
+index 404b50b..e26121a 100644
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -47,7 +47,8 @@ typedef enum serial_device {
+ 	SERIAL_DOCKCHANNEL=0x2,
+ 	SERIAL_PI3_UART=0x4,
+ 	SERIAL_VMAPPLE_UART=0x8,
+-	SERIAL_DCC_UART=0x10
++	SERIAL_DCC_UART=0x10,
++	SERIAL_QCOM_GENI_UART=0x20
+ } serial_device_t;
+ 
+ kern_return_t serial_irq_enable(serial_device_t device);
+diff --git a/pexpert/pexpert/arm64/BCM2837.h b/pexpert/pexpert/arm64/BCM2837.h
+index 61afb61..b46ac4a 100644
+--- a/pexpert/pexpert/arm64/BCM2837.h
++++ b/pexpert/pexpert/arm64/BCM2837.h
+@@ -65,8 +65,8 @@
+ #define BCM2837_PUT32(addr, value) do { *((volatile uint32_t *) addr) = value; } while(0)
+ #define BCM2837_GET32(addr) *((volatile uint32_t *) addr)
+ 
+-#define PLATFORM_PANIC_LOG_PADDR        0x3c0fc000
+-#define PLATFORM_PANIC_LOG_SIZE         16384        // 16kb
++#define PLATFORM_PANIC_LOG_PADDR        0x8fe00000
++#define PLATFORM_PANIC_LOG_SIZE         1048576        // 1 MiB
+ #endif /* ! ASSEMBLER */
+ 
+ #endif /* ! _PEXPERT_ARM_BCM2837_H */

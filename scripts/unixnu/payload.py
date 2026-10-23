@@ -46,11 +46,12 @@ def check_native_root(kernel, arguments):
             values.setdefault(key, []).append(value)
     if '1' not in values.get('native-ufs-root', []):
         return
-    if values.get('sheng-pmgr') != ['2']:
-        raise Error('native UFS root boot needs exactly one sheng-pmgr=2; the unchanged target AMFI otherwise panics with No PMGR')
-    symbols = run([tool('llvm-nm', 'brew install llvm'), '--defined-only', kernel], capture=True)
-    if not any(line.split()[-1:] == ['_sheng_pmgr_run'] for line in symbols.splitlines()):
-        raise Error('the native UFS root kernel lacks the linked sheng PMGR integration')
+    if 'sheng-pmgr' in values and values.get('sheng-pmgr') != ['2']:
+        raise Error('sheng-pmgr must be 2 if supplied')
+    if values.get('sheng-pmgr') == ['2']:
+        symbols = run([tool('llvm-nm', 'brew install llvm'), '--defined-only', kernel], capture=True)
+        if not any(line.split()[-1:] == ['_sheng_pmgr_run'] for line in symbols.splitlines()):
+            raise Error('the native UFS root kernel lacks the linked sheng PMGR integration')
 
 
 def write_volume(stage, image, label, size_mib):
