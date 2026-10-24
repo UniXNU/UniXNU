@@ -89,7 +89,7 @@
 
 包含的 SoC 节点声明 `reg = <0 0x1d84000 0 0x3000>` 和 `unixnu,adt-name = "ufshc"`。
 父节点使用两个地址 cell、两个大小 cell 与恒等 `ranges`。
-转换器将物理范围导出到 `/arm-io/ufshc`，编码为小端 u64 地址及 u64 大小。
+转换器将范围导出到 `/arm-io/ufshc`，编码为相对 `arm-io` 基址的小端 u64 偏移及 u64 大小。
 按 [UFS 适配](/zh/porting/ufs)在消费端驱动配置时钟、电源和 DMA。
 
 ## 读取属性

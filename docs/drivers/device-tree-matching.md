@@ -90,8 +90,8 @@ enables its existing node:
 
 The included SoC node declares `reg = <0 0x1d84000 0 0x3000>` and
 `unixnu,adt-name = "ufshc"`. Its parent uses two address cells, two size cells and
-identity `ranges`. The converter exports the physical range to `/arm-io/ufshc`
-as a little-endian u64 address followed by a u64 size. Configure clocks, power
+identity `ranges`. The converter exports the range to `/arm-io/ufshc` as a
+little-endian u64 offset from the `arm-io` base followed by a u64 size. Configure clocks, power
 and DMA in the consuming driver as required by [UFS adaptation](/porting/ufs).
 
 ## Reading properties

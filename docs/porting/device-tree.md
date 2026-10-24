@@ -219,7 +219,7 @@ arm-io {
 }
 ```
 
-`ranges` maps the bus window. The common generator translates source registers to physical addresses and emits an identity-mapped `arm-io` bus.
+`ranges` maps the bus window. The common generator translates source registers to physical addresses, then emits `arm-io` with one window from the lowest exported register (rounded down to 16 MiB) to the highest. Child `reg` values are offsets from the window base. XNU reads that base as the SoC base and requires it to be non-zero, so an exported register below 16 MiB is an error.
 
 ### product and buttons
 
