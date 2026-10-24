@@ -161,14 +161,14 @@ enabled = true
 | `confirm` | 启动前显示的问题。该菜单项不会被倒计时启动 |
 | `confirm_titles` | 可选的选项标题。需要同时给出 `confirm` 和 `confirm_args` |
 | `confirm_args` | 每个选项一个参数字符串，选中项追加到 `args` |
-| `action` | `action` 类型的 `reset`、`shutdown` 或 `exit` |
+| `action` | `action` 类型的 `reset`、`shutdown`、`exit` 或 `tools` |
 | `enabled` | `false` 跳过 |
 
 带 `confirm` 的菜单项只在按 Enter 时启动。没有选项时，其他按键取消；没有输入设备的机器也取消。给出 `confirm_titles` 时，上下键切换选项，Cancel 默认选中。选中的 `confirm_args` 追加到菜单项 `args` 的副本。
 
 默认项需要确认时，倒计时改用第一个不需要确认的菜单项。
 
-内置配置包含 `exit`、`reset` 和 `shutdown`。找不到文件时，可移动加载器会加在它们之前。
+内置配置包含 `exit`、`reset`、`shutdown` 和 `tools`。`tools` 会打开二级菜单，列出已安装的菜单插件。找不到文件时，可移动加载器会加在它们之前。
 
 ### [entry.chosen]
 

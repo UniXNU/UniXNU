@@ -1,0 +1,52 @@
+## @file
+#  Publishes a UniXNU menu plugin that shows the Advanced Logger log as QR
+#  codes under the Tools menu.
+#
+#  The protocol reads the Advanced Logger in-memory log and pages it out as QR
+#  codes on the panel. Power exits, volume keys page, and pages rotate when
+#  idle.
+#
+#  Copyright (c) 2026, UniXNU contributors. All rights reserved.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+##
+
+[Defines]
+  INF_VERSION    = 0x00010019
+  BASE_NAME      = AdvancedLogDxe
+  FILE_GUID      = 8D4E7F50-3A2C-4C9A-9E1B-50C4C8472D41
+  MODULE_TYPE    = DXE_DRIVER
+  VERSION_STRING = 0.1
+  ENTRY_POINT    = AdvancedLogDxeEntry
+
+[Sources]
+  AdvancedLogDxe.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+  AdvLoggerPkg/AdvLoggerPkg.dec
+  MsGraphicsPkg/MsGraphicsPkg.dec
+  UniXNUPkg/UniXNUPkg.dec
+
+[LibraryClasses]
+  AdvancedLoggerAccessLib
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  MemoryAllocationLib
+  PcdLib
+  PrintLib
+  QrEncoderLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+  UefiLib
+  UefiRuntimeServicesTableLib
+
+[FixedPcd]
+  gUniXNUPkgTokenSpaceGuid.PcdUniXNUDeviceModel
+
+[Protocols]
+  gAdvancedLoggerProtocolGuid       ## CONSUMES
+  gUniXNUMenuPluginProtocolGuid     ## PRODUCES
+
+[Depex]
+  gAdvancedLoggerProtocolGuid

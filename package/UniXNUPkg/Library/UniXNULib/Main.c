@@ -105,6 +105,7 @@ UniXNURun (
   UniXNUInjectAcpi (&Config, &Stats);
 
   UniXNUUiInit (&Config, &Ui);
+
   UnicodeSPrint (
     Ui.Info,
     sizeof (Ui.Info),
@@ -143,6 +144,12 @@ UniXNURun (
           BootCopy.Args = Entry->Args;
         }
       }
+    }
+
+    if ((Entry->Type == UniXNUEntryAction) && (Entry->Action == UniXNUActionTools)) {
+      UniXNUMenuRunTools (&Ui, &Config);
+      Countdown = FALSE;
+      continue;
     }
 
     Status = UniXNUBootEntry (ImageHandle, &Config, &BootCopy);

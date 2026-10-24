@@ -21,6 +21,7 @@
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
 #include <Protocol/GraphicsOutput.h>
+#include <Protocol/UniXNUMenuPlugin.h>
 #include <Protocol/UniXNULoader.h>
 #include <Protocol/LoadedImage.h>
 #include <Protocol/SimpleFileSystem.h>
@@ -201,7 +202,8 @@ typedef enum {
   UniXNUActionNone,
   UniXNUActionReset,
   UniXNUActionShutdown,
-  UniXNUActionExit
+  UniXNUActionExit,
+  UniXNUActionTools
 } UNIXNU_ACTION;
 
 typedef struct {
@@ -511,6 +513,8 @@ typedef struct {
   UINTN                           MenuLeft;
   UINTN                           MenuWidth;
   UINTN                           FooterTop;
+  UINTN                           ContentTop;       ///< Top of the plugin content region.
+  UINTN                           ContentBottom;    ///< Bottom of the plugin content region.
   UINTN                           VisibleRows;
   UINTN                           TextColumns;      ///< Text mode only.
   UINTN                           TextRows;
@@ -579,6 +583,17 @@ UniXNUMenuRun (
   IN UNIXNU_UI      *Ui,
   IN UNIXNU_CONFIG  *Config,
   IN BOOLEAN    Countdown
+  );
+
+/**
+  Show the Tools menu, run the selected plugin, and return when the user
+  chooses Back. Tools are discovered through the menu plugin protocol, so no
+  tool is hardcoded here.
+**/
+VOID
+UniXNUMenuRunTools (
+  IN UNIXNU_UI      *Ui,
+  IN UNIXNU_CONFIG  *Config
   );
 
 /**

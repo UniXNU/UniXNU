@@ -524,6 +524,9 @@ DrawFramePortrait (
   Extra   = (Free > HeaderH) ? (Free - HeaderH) / 2 : 0;
   PortraitHeader (Ui, Config, TRUE, Top + Extra, Logo);
 
+  Ui->ContentTop    = Top + Extra + HeaderH + Ch / 2;
+  Ui->ContentBottom = (Ui->FooterTop > Fch) ? Ui->FooterTop - Fch : Ui->FooterTop;
+
   Line[0] = L'\0';
   Extra   = Ui->StatusLines * PORTRAIT_STATUS_ROWS;
   if (Config->Error[0] != '\0') {
@@ -776,6 +779,7 @@ UniXNUUiDrawFrame (
   UnicodeSPrint (Line, sizeof (Line), L"version %a  |  %s", UNIXNU_VERSION_STRING, Config->SourceLabel);
   DrawCentered (Ui, Y, Line, Ui->Scale, mDim);
   Y += Ch + Ch / 2;
+  Ui->ContentTop = Y;
 
   //
   // Menu box: wide enough for the longest title plus the type tag.
@@ -792,6 +796,7 @@ UniXNUUiDrawFrame (
   Y            += Ch;
   Ui->MenuTop   = Y;
   Ui->FooterTop = Ui->Height - (STATUS_LINES + 2) * (Ch + Ch / 3);
+  Ui->ContentBottom = Ui->FooterTop;
   MaxRows       = (Ui->FooterTop > Y + Ui->RowHeight) ? (Ui->FooterTop - Y) / Ui->RowHeight : 1;
   Ui->VisibleRows = MIN (Config->EntryCount, MaxRows);
 

@@ -161,14 +161,14 @@ enabled = true
 | `confirm` | Question shown before the entry boots. The entry never boots by countdown |
 | `confirm_titles` | Optional choice titles. Requires `confirm` and `confirm_args` |
 | `confirm_args` | One argument string per choice. The chosen string is appended to `args` |
-| `action` | `reset`, `shutdown` or `exit` for `action` entries |
+| `action` | `reset`, `shutdown`, `exit` or `tools` for `action` entries |
 | `enabled` | `false` skips the entry |
 
 An entry with `confirm` boots only when Enter is pressed. Without choices, any other key cancels, and a machine without an input device cancels. With `confirm_titles`, Up and Down step through the choices and Cancel is selected first. The chosen `confirm_args` entry is appended to a copy of the entry's `args`.
 
 When the default entry requires confirmation, the countdown falls back to the first entry that does not.
 
-The built-in configuration has `exit`, `reset` and `shutdown` entries. When no file is found, removable loaders are added in front of them.
+The built-in configuration has `exit`, `reset`, `shutdown` and `tools` entries. `tools` opens a second-level menu listing the installed menu plugins. When no file is found, removable loaders are added in front of them.
 
 ### [entry.chosen]
 

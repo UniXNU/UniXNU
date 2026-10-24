@@ -247,6 +247,160 @@ UniXNUMenuRun (
   return Selected;
 }
 
+//
+// The Tools submenu reuses the ordinary menu loop against a temporary config
+// whose entries are the installed menu plugins plus a leading Back entry. The
+// selected plugin draws between the header and footer; DrawStatus lets it
+// update the footer without owning it.
+//
+STATIC UNIXNU_UI  *mToolsUi;
+
+STATIC
+VOID
+EFIAPI
+ToolsDrawStatus (
+  IN CONST UNIXNU_MENU_PLUGIN_PROTOCOL  *This,
+  IN UINTN                              Line,
+  IN CONST CHAR16                       *Text
+  )
+{
+  (VOID)This;
+  if (mToolsUi != NULL) {
+    UniXNUUiDrawStatus (mToolsUi, Line, Text);
+  }
+}
+
+VOID
+UniXNUMenuRunTools (
+  IN UNIXNU_UI      *Ui,
+  IN UNIXNU_CONFIG  *Config
+  )
+{
+  EFI_STATUS                   Status;
+  EFI_HANDLE                   *Handles;
+  UINTN                        HandleCount;
+  UINTN                        Index;
+  UINTN                        PluginCount;
+  UNIXNU_MENU_PLUGIN_PROTOCOL  **Plugins;
+  UNIXNU_ENTRY                 *Entries;
+  UNIXNU_CONFIG                Tools;
+  UNIXNU_PLUGIN_RECT           Content;
+  UINTN                        Selected;
+  CHAR16                       SavedNotice[sizeof (Ui->Notice) / sizeof (Ui->Notice[0])];
+
+  if (Ui->Mode != UniXNUUiGraphics) {
+    return;
+  }
+
+  Handles     = NULL;
+  Plugins     = NULL;
+  Entries     = NULL;
+  PluginCount = 0;
+
+  Status = gBS->LocateHandleBuffer (
+                  ByProtocol,
+                  &gUniXNUMenuPluginProtocolGuid,
+                  NULL,
+                  &HandleCount,
+                  &Handles
+                  );
+  if (EFI_ERROR (Status) || (HandleCount == 0)) {
+    UniXNULog ("tools: no menu plugins installed");
+    goto Done;
+  }
+
+  Plugins = AllocateZeroPool (HandleCount * sizeof (*Plugins));
+  if (Plugins == NULL) {
+    goto Done;
+  }
+
+  for (Index = 0; Index < HandleCount; Index++) {
+    UNIXNU_MENU_PLUGIN_PROTOCOL  *Plugin;
+
+    if (EFI_ERROR (gBS->HandleProtocol (Handles[Index], &gUniXNUMenuPluginProtocolGuid, (VOID **)&Plugin)) ||
+        (Plugin == NULL) ||
+        (Plugin->Signature != UNIXNU_MENU_PLUGIN_PROTOCOL_SIGNATURE) ||
+        (Plugin->Version != UNIXNU_MENU_PLUGIN_PROTOCOL_VERSION) ||
+        (Plugin->Run == NULL))
+    {
+      continue;
+    }
+
+    Plugins[PluginCount++] = Plugin;
+  }
+
+  if (PluginCount == 0) {
+    UniXNULog ("tools: %u handle(s), none usable", (UINT32)HandleCount);
+    goto Done;
+  }
+
+  Entries = AllocateZeroPool ((PluginCount + 1) * sizeof (*Entries));
+  if (Entries == NULL) {
+    goto Done;
+  }
+
+  //
+  // Back is first so a first key press cannot launch a tool; the default
+  // highlight starts on Back and any Up/Down/Enter press takes over cleanly.
+  //
+  Entries[0].Id     = "back";
+  Entries[0].Title  = L"Back";
+  Entries[0].Type   = UniXNUEntryAction;
+  Entries[0].Action = UniXNUActionNone;
+  for (Index = 0; Index < PluginCount; Index++) {
+    Entries[Index + 1].Id     = "tool";
+    Entries[Index + 1].Title  = (CHAR16 *)Plugins[Index]->Title;
+    Entries[Index + 1].Type   = UniXNUEntryAction;
+    Entries[Index + 1].Action = UniXNUActionNone;
+  }
+
+  Tools              = *Config;
+  Tools.Entries      = Entries;
+  Tools.EntryCount   = PluginCount + 1;
+  Tools.DefaultIndex = 0;
+  Tools.Timeout      = -1;
+  Tools.Error[0]     = '\0';
+  Tools.Notice[0]    = '\0';
+
+  CopyMem (SavedNotice, Ui->Notice, sizeof (SavedNotice));
+  Ui->Notice[0] = L'\0';
+  for ( ; ;) {
+    Selected = UniXNUMenuRun (Ui, &Tools, FALSE);
+    if ((Selected == 0) || (Selected > PluginCount)) {
+      break;
+    }
+
+    Content.X      = 0;
+    Content.Y      = (UINT32)Ui->ContentTop;
+    Content.Width  = Ui->Width;
+    Content.Height = (UINT32)((Ui->ContentBottom > Ui->ContentTop) ? Ui->ContentBottom - Ui->ContentTop : 0);
+
+    mToolsUi = Ui;
+    Plugins[Selected - 1]->Run (
+                            Plugins[Selected - 1],
+                            Ui->Gop,
+                            &Content,
+                            ToolsDrawStatus
+                            );
+    mToolsUi = NULL;
+  }
+
+  CopyMem (Ui->Notice, SavedNotice, sizeof (SavedNotice));
+
+Done:
+  if (Entries != NULL) {
+    FreePool (Entries);
+  }
+
+  if (Plugins != NULL) {
+    FreePool (Plugins);
+  }
+
+  if (Handles != NULL) {
+    FreePool (Handles);
+  }
+}
+
 BOOLEAN
 UniXNUMenuConfirm (
   IN  UNIXNU_UI      *Ui,

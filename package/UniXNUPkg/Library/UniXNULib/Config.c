@@ -53,7 +53,12 @@ STATIC CONST CHAR8  mBuiltinConfig[] =
   "id = \"shutdown\"\n"
   "title = \"Power off\"\n"
   "type = \"action\"\n"
-  "action = \"shutdown\"\n";
+  "action = \"shutdown\"\n"
+  "[[entry]]\n"
+  "id = \"tools\"\n"
+  "title = \"Tools\"\n"
+  "type = \"action\"\n"
+  "action = \"tools\"\n";
 
 STATIC
 VOID
@@ -1143,6 +1148,8 @@ AddEntry (
       Entry->Action = UniXNUActionShutdown;
     } else if (AsciiStrCmp (Action, "exit") == 0) {
       Entry->Action = UniXNUActionExit;
+    } else if (AsciiStrCmp (Action, "tools") == 0) {
+      Entry->Action = UniXNUActionTools;
     } else {
       ConfigError (Config, "%a: unknown action '%a'", Origin, Action);
     }
