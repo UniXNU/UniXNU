@@ -28,7 +28,7 @@ PATCHES = [ROOT / 'drivers/NativeMetal/bridge/patches' / name for name in [
     '0003-cache-device-entry-point-priming.patch', '0004-fold-constant-global-field-loads.patch',
     '0005-keep-module-decodes-and-profile-fingerprints.patch', '0006-skip-draws-without-a-pipeline.patch',
     '0007-accept-two-plane-rgb-surfaces.patch', '0008-alias-padded-rows-of-written-textures.patch']]
-tree_diff = subprocess.check_output(['git', '-C', str(SOURCE), 'diff', 'HEAD', '--'], text=True)
+tree_diff = subprocess.check_output(['git', '-C', str(SOURCE), 'diff', '--abbrev=7', 'HEAD', '--'], text=True)
 def canonical_diff(diff):
     # Independent patches touch disjoint files; Git orders the combined diff by
     # filename, rather than by the order the patches were applied.
@@ -48,7 +48,7 @@ if tree_diff not in states:
     raise SystemExit('Translator source differs from the pinned revision plus its recorded patches')
 for patch in PATCHES[states.index(tree_diff):]:
     subprocess.run(['git', '-C', str(SOURCE), 'apply', str(patch)], check=True)
-if subprocess.check_output(['git', '-C', str(SOURCE), 'diff', 'HEAD', '--'], text=True) != canonical_diff(expected):
+if subprocess.check_output(['git', '-C', str(SOURCE), 'diff', '--abbrev=7', 'HEAD', '--'], text=True) != canonical_diff(expected):
     raise SystemExit('Translator patch result differs from its exact recorded source')
 out = ROOT / 'build/native-metal-bridge'
 out.mkdir(parents=True, exist_ok=True)
@@ -80,6 +80,9 @@ triple = 'aarch64-apple-ios' if args.target == 'ios' else 'aarch64-apple-darwin'
 # finished while this stays the same (PrimeShaders.h).
 runtime_id = hashlib.sha256((PIN + '\n' + canonical_diff(expected)).encode()).hexdigest()[:32]
 env = dict(os.environ, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), IPHONEOS_DEPLOYMENT_TARGET='17.0', MACOSX_DEPLOYMENT_TARGET='14.0')
+xcode_dev = Path('/Applications/Xcode.app/Contents/Developer')
+if 'DEVELOPER_DIR' not in env and xcode_dev.is_dir():
+    env['DEVELOPER_DIR'] = str(xcode_dev)
 target_dir = ROOT / 'build/m2v-target'
 log = out / ('build-%s.log' % args.target)
 with log.open('w') as stream:

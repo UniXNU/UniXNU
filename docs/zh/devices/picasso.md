@@ -5,6 +5,7 @@ picasso 是搭载 SM7250 的 Redmi K30 5G。下面的移植是独立的社区项
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
 | [UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso) | [YinCQL](https://github.com/YinCQL) | 早期骨架，固件未构建 |
+| [UniXNU-picasso](https://github.com/silenzio111/UniXNU-picasso) | [silenzio111](https://github.com/silenzio111) | 阶段 2 bring-up：预链接内核、UFS 根镜像、Metal 组件 |
 
 ## 状态
 

@@ -5,6 +5,7 @@ picasso is the Redmi K30 5G with the SM7250 SoC. The port below is an independen
 | Repository | Maintainer | State |
 | --- | --- | --- |
 | [UniXNU-picasso](https://github.com/YinCQL/UniXNU-picasso) | [YinCQL](https://github.com/YinCQL) | Early skeleton; firmware not built |
+| [UniXNU-picasso](https://github.com/silenzio111/UniXNU-picasso) | [silenzio111](https://github.com/silenzio111) | Stage 2 bring-up: prelinked kernel, UFS rootfs, Metal bundle |
 
 ## State
 
