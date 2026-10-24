@@ -117,7 +117,7 @@ configuration. After changing kernel code, also rebuild the kernel first.
 
 ## macOS runner
 
-The kernel, userdata and Data seed steps call Xcode, `hdiutil` and `diskutil`. A fork can run them on a GitHub macOS runner without a local Mac. The workflow is a build check: it publishes redacted text logs and no images.
+The kernel step calls Xcode on macOS, and the Data seed steps call `hdiutil` and `diskutil`. A fork can run them on a GitHub macOS runner without a local Mac. The workflow is a build check: it publishes redacted text logs and no images.
 
 1. Fork the repository and enable Actions.
 2. Add the repository secret `UNIXNU_UNIQUE_CHIP_ID` when the board requires a platform seed for its payload.
@@ -299,7 +299,7 @@ The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-a
 
 ### userdata
 
-The userdata step builds the raw image for the `userdata` partition. It holds the unchanged `OS` and `SystemOS` disk images of the IPSW behind the `SHNGROOT` manifest. The disk images are attached read-only with `hdiutil`. The output is `out/<device>/<os_profile>/<config>/userdata/userdata-root.img` with `userdata-root.json`.
+The userdata step builds the raw image for the `userdata` partition. It holds the unchanged `OS` and `SystemOS` disk images of the IPSW behind the `SHNGROOT` manifest. On macOS the disk images are attached read-only with `hdiutil`; on Linux `scripts/unixnu/udif.py` decodes them, with `lzfse` for LZFSE chunks. Both give the same bytes. The output is `out/<device>/<os_profile>/<config>/userdata/userdata-root.img` with `userdata-root.json`.
 
 The report prints the `fastboot flash userdata` command.
 

@@ -33,7 +33,7 @@ The header occupies 4096 bytes and is zero padded to 1 MiB. The first window sta
 | `OS` | `OS` | The system volume |
 | `SystemOS` | `Cryptex1,SystemOS` | The cryptex system volume |
 
-The images are copied byte for byte from the disk images in the IPSW. The userdata step attaches each disk image read-only with `hdiutil` and reads the raw device.
+The images are copied byte for byte from the disk images in the IPSW. The userdata step reads the raw disk of each disk image: on macOS it attaches the image read-only with `hdiutil` and reads the raw device, on Linux `scripts/unixnu/udif.py` decodes the UDIF chunks. The OS image is a UDIF image with LZFSE chunks; the SystemOS cryptex is a raw image and is copied as it is.
 
 ## Capacity
 

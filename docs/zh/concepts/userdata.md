@@ -33,7 +33,7 @@ struct shngroot_header {
 | `OS` | `OS` | 系统卷 |
 | `SystemOS` | `Cryptex1,SystemOS` | cryptex 系统卷 |
 
-镜像按字节从 IPSW 磁盘镜像复制。userdata 步骤用 `hdiutil` 只读挂载每个磁盘镜像并读取原始设备。
+镜像按字节从 IPSW 磁盘镜像复制。userdata 步骤读取每个磁盘镜像的原始磁盘：macOS 上用 `hdiutil` 只读挂载并读取原始设备，Linux 上由 `scripts/unixnu/udif.py` 解码 UDIF 块。OS 镜像是含 LZFSE 块的 UDIF 镜像；SystemOS cryptex 是原始镜像，按原样复制。
 
 ## 容量
 

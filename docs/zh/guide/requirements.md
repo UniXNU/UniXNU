@@ -9,7 +9,7 @@
 
 ## 主机
 
-构建驱动支持 macOS 和 Linux。macOS 内核步骤使用 Xcode 和 `iphoneos` SDK，Linux 使用 [Linux 工具链](#linux)。userdata 组装、`--skip-setup` 和 Data seed 调整使用 macOS 镜像工具。
+构建驱动支持 macOS 和 Linux。macOS 内核步骤使用 Xcode 和 `iphoneos` SDK，Linux 使用 [Linux 工具链](#linux)。`--skip-setup` 和 Data seed 调整使用 macOS 镜像工具。
 
 | 工具 | 用途 | 安装方式 |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ sudo scripts/linux/setup-toolchain.py --package-manager none --llvm-config /path
 
 `--llvm-config FILE` 或 `LLVM_CONFIG` 选择主机 LLVM 安装，其 `clang`、`clang++`、libclang 和资源头文件一起解析。XNU 专用 Clang 从固定的 LLVM 源码构建。`-j N` 设置构建并行度。位置参数指定安装前缀，默认值为 `/opt/unixnu-linux` 或 `UNIXNU_TOOLCHAIN`。
 
-脚本把 `xcrun`、`plutil` 和 `codesign` 包装脚本写入 `/usr/bin`，XNU makefile 从这里调用它们。Mach-O 静态库、libdispatch 和 BlocksRuntime 保存在工具链前缀下。编译 Clang 占用主要安装时间。userdata 步骤、`--skip-setup` 和 `seed-data-grow` 需要 macOS。
+脚本把 `xcrun`、`plutil` 和 `codesign` 包装脚本写入 `/usr/bin`，XNU makefile 从这里调用它们。Mach-O 静态库、libdispatch 和 BlocksRuntime 保存在工具链前缀下。编译 Clang 占用主要安装时间。userdata 步骤可在 Linux 上运行；`--skip-setup` 和 `seed-data-grow` 需要 macOS。
 
 ## 外部输入
 

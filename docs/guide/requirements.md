@@ -9,7 +9,7 @@
 
 ## Host
 
-The build driver supports macOS and Linux. On macOS, the kernel step uses Xcode and the `iphoneos` SDK. On Linux, use the [Linux toolchain](#linux). Userdata assembly, `--skip-setup` and Data seed resizing use macOS image tools.
+The build driver supports macOS and Linux. On macOS, the kernel step uses Xcode and the `iphoneos` SDK. On Linux, use the [Linux toolchain](#linux). `--skip-setup` and Data seed resizing use macOS image tools.
 
 | Tool | Used by | Install |
 | --- | --- | --- |
@@ -71,7 +71,7 @@ sudo scripts/linux/setup-toolchain.py --package-manager none --llvm-config /path
 
 `--llvm-config FILE` or `LLVM_CONFIG` selects the host LLVM installation. Its `clang`, `clang++`, libclang and resource headers are resolved together. XNU's patched Clang is built from the pinned LLVM source. `-j N` sets the build parallelism. The optional positional argument selects the install prefix, which defaults to `/opt/unixnu-linux` or `UNIXNU_TOOLCHAIN`.
 
-The script writes `xcrun`, `plutil` and `codesign` shims to `/usr/bin`, where XNU's makefiles call them. Mach-O archives, libdispatch and BlocksRuntime live under the toolchain prefix. Building Clang takes most of the setup time. The userdata step, `--skip-setup` and `seed-data-grow` require macOS.
+The script writes `xcrun`, `plutil` and `codesign` shims to `/usr/bin`, where XNU's makefiles call them. Mach-O archives, libdispatch and BlocksRuntime live under the toolchain prefix. Building Clang takes most of the setup time. The userdata step runs on Linux; `--skip-setup` and `seed-data-grow` require macOS.
 
 ## External inputs
 
