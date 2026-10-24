@@ -4,7 +4,7 @@
 
 | 仓库 | 维护者 | 状态 |
 | --- | --- | --- |
-| [UniXNU-kebab](https://github.com/GFander/UniXNU-kebab) | [GFander](https://github.com/GFander) |
+| [UniXNU-kebab](https://github.com/GFander/UniXNU-kebab) | [GFander](https://github.com/GFander) | 到达 DARWINBOOT，正在处理 KVA 问题 |
 | [UniXNU-kebab](https://github.com/stevedang67889/UniXNU-kebab) | [stevedang67889](https://github.com/stevedang67889) | kebab 替代仓库，含 UEFI bring-up 记录 |
 | [KebabRamDisk](https://github.com/stevedang67889/KebabRamDisk) | [stevedang67889](https://github.com/stevedang67889) | kebab 的 UEFI 负载 RAM 磁盘驱动 |
 
