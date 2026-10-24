@@ -186,6 +186,22 @@ def physical(bus, address, size):
     return address
 
 
+ARM_IO_ALIGN = 1 << 24
+
+
+def arm_io_window(hardware):
+    """The arm-io window: child registers are offsets from its base, which XNU reads as the SoC base and requires to be non-zero."""
+    spans = [(physical(entry.parent, address, size), size) for entry in hardware if 'reg' in entry.properties
+             for address, size in registers(entry)]
+    if not spans:
+        return ARM_IO_ALIGN, ARM_IO_ALIGN
+    base = min(address for address, _ in spans) & ~(ARM_IO_ALIGN - 1)
+    top = -(-max(address + size for address, size in spans) // ARM_IO_ALIGN) * ARM_IO_ALIGN
+    if not base:
+        raise Error('arm-io needs a non-zero base: an exported register lies below 16 MiB')
+    return base, top - base
+
+
 STRINGS = {'compatible', 'device_type', 'reg-names', 'interrupt-names', 'clock-names', 'method'}
 U32 = {'phandle', 'linux,phandle', '#interrupt-cells', '#iommu-cells', '#clock-cells', 'clock-frequency', 'timebase-frequency'}
 U64 = {'redistributor-stride'}
@@ -193,7 +209,7 @@ FLAGS = {'interrupt-controller', 'dma-coherent'}
 REFERENCES = {'interrupt-parent': None, 'iommus': '#iommu-cells', 'clocks': '#clock-cells'}
 
 
-def hardware_properties(entry, handles):
+def hardware_properties(entry, handles, base=0):
     properties = []
     for key, raw in entry.properties.items():
         if key in STRINGS:
@@ -235,7 +251,7 @@ def hardware_properties(entry, handles):
             if 'interrupt-parent' not in entry.properties:
                 properties.append(('interrupt-parent', struct.pack('<I', handle)))
         elif key == 'reg':
-            pairs = [(physical(entry.parent, address, size), size) for address, size in registers(entry)]
+            pairs = [(physical(entry.parent, address, size) - base, size) for address, size in registers(entry)]
             properties.append((key, b''.join(struct.pack('<QQ', *pair) for pair in pairs)))
     return properties
 
@@ -333,9 +349,10 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
     names = [entry.strings('unixnu,adt-name')[0] for entry in hardware]
     if len(set(names)) != len(names):
         raise Error('Exported ADT hardware names must be unique')
+    base, size = arm_io_window(hardware)
     children.append(node('arm-io', [('device_type', b'arm-io\0'), ('#address-cells', struct.pack('<I', 2)),
-                         ('#size-cells', struct.pack('<I', 2)), ('ranges', struct.pack('<QQQ', 0, 0, 0x100000000))],
-                         [node(name, hardware_properties(entry, handles)) for name, entry in zip(names, hardware)]))
+                         ('#size-cells', struct.pack('<I', 2)), ('ranges', struct.pack('<QQQ', 0, base, size))],
+                         [node(name, hardware_properties(entry, handles, base)) for name, entry in zip(names, hardware)]))
     for name in ('defaults', 'options', 'product', 'buttons'):
         if name in platform or name in ('defaults', 'options', 'product'):
             children.append(node(name, typed_properties(platform.get(name, {}))))
