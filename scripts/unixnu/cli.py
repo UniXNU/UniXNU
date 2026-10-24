@@ -270,7 +270,7 @@ def main(argv=None):
         sys.exit('unixnu needs Python 3.11 or newer')
     if platform.system() == 'Linux':
         print('unixnu: on Linux the kernel step uses the toolchain of scripts/linux/setup-toolchain.py; '
-              'userdata and --skip-setup need macOS hdiutil', file=sys.stderr)
+              '--skip-setup and seed-data-grow need macOS hdiutil', file=sys.stderr)
     elif platform.system() != 'Darwin':
         print('unixnu: developed and tested on macOS and Linux only; the kernel step needs Xcode or the Linux toolchain, '
               'and --skip-setup needs hdiutil', file=sys.stderr)

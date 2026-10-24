@@ -38,6 +38,12 @@ def tool(name, hint=''):
     return found
 
 
+def lzfse():
+    """Apple's reference LZFSE tool, which decodes LZFSE on Linux: in the scripts/linux/setup-toolchain.py prefix, else on PATH."""
+    path = Path(os.environ.get('UNIXNU_TOOLCHAIN', '/opt/unixnu-linux')) / 'bin/lzfse'
+    return str(path) if path.is_file() else tool('lzfse', 'run sudo scripts/linux/setup-toolchain.py')
+
+
 def run(command, *, cwd=None, env=None, log_file=None, capture=False):
     """Run a command, echoing it. With log_file the output goes there and the tail is shown on failure."""
     command = [str(part) for part in command]

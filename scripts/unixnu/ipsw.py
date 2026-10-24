@@ -10,7 +10,6 @@ chip_id, board_id, and the components the steps use.
 import hashlib
 import io
 import json
-import os
 import platform
 import plistlib
 import struct
@@ -21,7 +20,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from .util import Error, expand, log, sha256_file, tool
+from .util import Error, expand, log, lzfse, sha256_file, tool
 
 CHUNK = 8 << 20
 
@@ -205,9 +204,7 @@ def kernelcache(ctx, source):
     if out.is_file() and (pin is None or sha256_file(out) == pin):
         return out
     if platform.system() == 'Linux':
-        # Apple's reference LZFSE tool, which scripts/linux/setup-toolchain.py installs.
-        lzfse = Path(os.environ.get('UNIXNU_TOOLCHAIN', '/opt/unixnu-linux')) / 'bin/lzfse'
-        decode = [str(lzfse) if lzfse.is_file() else tool('lzfse', 'run sudo scripts/linux/setup-toolchain.py'), '-decode']
+        decode = [lzfse(), '-decode']
     else:
         tool('compression_tool', 'macOS /usr/bin/compression_tool decodes the LZFSE kernelcache')
         decode = ['/usr/bin/compression_tool', '-decode', '-a', 'lzfse']

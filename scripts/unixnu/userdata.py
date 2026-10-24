@@ -12,16 +12,19 @@ Manifest (little endian): "SHNGROOT", u32 version=1, u32 count, u64 image_bytes,
 and at byte 4064 the SHA-256 of bytes 0..4063.
 
 The images come from the IPSW (a local file or a remote URL, see ipsw.py) and are checked against the pins of
-board.toml. The disk images are attached read-only without mounting (macOS hdiutil). Nothing is flashed: the
-report prints the fastboot command, to be run by the user.
+board.toml. The raw disk of each disk image is read without mounting: attached read-only with hdiutil on macOS,
+decoded by udif.py on other hosts. Nothing is flashed: the report prints the fastboot command, to be run by the user.
 """
+import contextlib
 import hashlib
 import json
+import platform
 import plistlib
 import re
 import struct
 import subprocess
 
+from . import udif
 from .ipsw import Ipsw
 from .util import Error, log, run, sha256_file, tool
 
@@ -35,6 +38,8 @@ def paths(ctx):
 
 
 def image_size(dmg):
+    if platform.system() != 'Darwin':
+        return udif.Image(dmg).size
     info = subprocess.run(['hdiutil', 'imageinfo', '-plist', str(dmg)], capture_output=True, check=True).stdout
     return plistlib.loads(info)['Size Information']['Total Bytes']
 
@@ -50,12 +55,34 @@ def attach(dmg):
     raise Error('could not find the attached disk device')
 
 
+def disk_blocks(dmg, size):
+    """The raw disk of a disk image, in order: hdiutil's /dev/rdiskN on macOS, udif.py on other hosts."""
+    if platform.system() != 'Darwin':
+        yield from udif.Image(dmg).blocks()
+        return
+    device = attach(dmg)
+    try:
+        raw = device.replace('/dev/disk', '/dev/rdisk')
+        done = 0
+        with open(raw, 'rb', buffering=0) as handle:
+            while done < size:
+                want = min(CHUNK, size - done)
+                data = handle.read(want)
+                if len(data) != want:
+                    raise Error(f'short read from {raw} at {done}')
+                yield data
+                done += want
+    finally:
+        subprocess.run(['hdiutil', 'detach', device], capture_output=True)
+
+
 def build(ctx, dry_run=False):
     log('userdata payload')
     spec = ctx.board.get('userdata')
     if not spec:
         raise Error('board.toml has no [userdata]')
-    tool('hdiutil', 'the disk images are attached with macOS hdiutil')
+    if platform.system() == 'Darwin':
+        tool('hdiutil', 'the disk images are attached with macOS hdiutil')
     source = Ipsw(ctx)
     capacity = (spec['last_lba'] - spec['first_lba'] + 1) * spec.get('lba_bytes', 4096)
     if dry_run:
@@ -82,23 +109,16 @@ def build(ctx, dry_run=False):
     with image.open('wb') as target:
         target.truncate(total)
         for (name, offset, size), (_, dmg) in zip(layout, sources):
-            device = attach(dmg)
-            try:
-                raw = device.replace('/dev/disk', '/dev/rdisk')
-                digest = hashlib.sha256()
-                target.seek(offset)
-                done = 0
-                with open(raw, 'rb', buffering=0) as handle:
-                    while done < size:
-                        want = min(CHUNK, size - done)
-                        data = handle.read(want)
-                        if len(data) != want:
-                            raise Error(f'short read from {raw} at {done}')
-                        digest.update(data)
-                        target.write(data)
-                        done += want
-            finally:
-                subprocess.run(['hdiutil', 'detach', device], capture_output=True)
+            digest = hashlib.sha256()
+            target.seek(offset)
+            done = 0
+            with contextlib.closing(disk_blocks(dmg, size)) as blocks:
+                for data in blocks:
+                    digest.update(data)
+                    target.write(data)
+                    done += len(data)
+            if done != size:
+                raise Error(f'{dmg.name}: {done} bytes of raw disk, expected {size}')
             entries.append((name, offset, size, digest.digest()))
             log(f'userdata: {name} {size} bytes at {offset:#x} sha256 {digest.hexdigest()}')
         header = bytearray(4096)
