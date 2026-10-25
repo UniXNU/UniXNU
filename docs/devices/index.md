@@ -30,6 +30,7 @@ Community ports are maintained by the people listed below. Each page distinguish
 | [Xiaomi 17 Pro (pandora)](/devices/pandora) | SM8850 | Home screen and touch; first GPU frame, interaction hangs | ShueiTsuki |
 | [Xiaomi Mi 8 SE (sirius)](/devices/sirius) | SDM710 | XNU entry and platform expert via U-Boot UEFI; IOKit in progress | 57UU |
 | [Xiaomi 13 (fuxi)](/devices/fuxi) | SM8550 | Kernel links and prelinks; stage B archive chain near complete; no hardware run | matejkoo217, hanzi123-bilp |
+| [Xiaomi 13 Ultra (ishtar)](/devices/ishtar) | SM8550 | Kernel, payload and boot image all build on the host; stage diagnostics ready; no hardware run yet | peter8889 |
 | [OnePlus 7 Pro (guacamole)](/devices/guacamole) | SM8150 | iOS 16.7.16 userland reached; GPU pending | wochgn |
 | [OnePlus Ace 5 (giulia)](/devices/giulia) | SM8650 | Hello/Setup, display, touch and keys; GPU, Wi-Fi and audio pending | tycykp |
 | [Xiaomi Mi 10 (umi)](/devices/umi) | SM8250 | iPadOS 17.7.11 Hello/Setup with touch; CPU display, UFS and persistent Data | reAAAq |
