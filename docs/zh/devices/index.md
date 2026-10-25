@@ -30,6 +30,7 @@
 | [小米 17 Pro（pandora）](/zh/devices/pandora) | SM8850 | 主屏幕和触控可用，已呈现首个 GPU 帧，交互时会挂起 | ShueiTsuki |
 | [小米 8 SE（sirius）](/zh/devices/sirius) | SDM710 | 通过 U-Boot UEFI 到达 XNU 入口和平台专家；IOKit 进行中 | 57UU |
 | [小米 13（fuxi）](/zh/devices/fuxi) | SM8550 | 内核可链接和预链接，阶段 B archive 链接近完成，未在真机运行 | matejkoo217、hanzi123-bilp |
+| [小米 13 Ultra（ishtar）](/zh/devices/ishtar) | SM8550 | 内核、载荷与启动镜像在宿主机全链路构建通过，阶段诊断已就位，未在真机运行 | peter8889 |
 | [一加 7 Pro（guacamole）](/zh/devices/guacamole) | SM8150 | 已到达 iOS 16.7.16 用户态，GPU 待完成 | wochgn |
 | [一加 Ace 5（giulia）](/zh/devices/giulia) | SM8650 | Hello/设置、显示、触控和按键可用，GPU、Wi-Fi 和音频待完成 | tycykp |
 | [小米 10（umi）](/zh/devices/umi) | SM8250 | iPadOS 17.7.11 Hello／设置，触摸可用；CPU 显示、UFS 和持久化 Data | reAAAq |
