@@ -40,7 +40,8 @@ UniXNU-<device>/
 
 | 文件 | 完成结果 |
 | --- | --- |
-| `board.toml`、`porting.toml` | 格式 2 设备配置；设备名、SoC、OS profile 一致；硬件输入完整；`board.example` 省略或为 false |
+| `board.toml` | 格式 2 设备配置；设备名、SoC、OS profile 一致；硬件输入完整；`board.example` 省略或为 false |
+| `porting.toml` | 格式 1 设备记录，`schema_version` 保持 `1`；设备名、SoC、OS profile 与 `board.toml` 一致 |
 | `feeds.toml`、`unixnu.lock`、使用子模块时的 `.gitmodules` | SoC、组件与子模块的源码 URL 和提交经过核对；本地覆盖单独记录 |
 | `configs/`、`patches/xnu/series` | `kernel.defconfig` 指向实际文件；配置片段与补丁顺序完整；引用的文件均存在 |
 | `dts/` | `device_tree.source` 指向板级 DTS，包含所选 SoC、板级资源和保留区 |
