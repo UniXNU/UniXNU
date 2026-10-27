@@ -108,7 +108,12 @@ if component == 'NativeAdreno':
 result = subprocess.run(command, cwd=record['directory'], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 (out / 'compile.log').write_text(result.stdout)
 if result.returncode:
-    raise SystemExit(result.stdout[-3500:])
+    # The errors first (each with the four lines after it), then the tail: a build with many warnings pushed the errors out of
+    # the last 3500 characters, the only part CI logs kept.
+    lines = result.stdout.splitlines()
+    errors = [n for n, line in enumerate(lines) if ' error: ' in line or line.startswith('error:')]
+    excerpt = '\n'.join('\n'.join(lines[n:n + 5]) for n in errors[:10])
+    raise SystemExit((excerpt + '\n...\n' if excerpt else '') + result.stdout[-3500:])
 check_object(destination.read_bytes(), component)
 archive = out / ('lib' + identifier + '.a')
 archive.unlink(missing_ok=True)
