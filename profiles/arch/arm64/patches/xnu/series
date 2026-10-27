@@ -24,6 +24,7 @@
 ../../../../../patches/xnu/native-trust-cache-runtime.patch
 ../../../../../patches/xnu/native-union-getattrlistbulk.patch
 ../../../../../patches/xnu/native-union-lower-directory.patch
+../../../../../patches/xnu/native-union-root-checkdirs.patch
 ../../../../../patches/xnu/native-work-interval-soft-fail.patch
 ../../../../../patches/xnu/native-work-interval-trace.patch
 ../../../../../patches/xnu/native-work-interval-instance.patch
