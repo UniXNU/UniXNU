@@ -1,0 +1,40 @@
+name: Build UniXNU Toolchain
+
+on:
+  workflow_dispatch:
+
+env:
+  PREFIX: /opt/unixnu-linux
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      # LLVM 构建树有好几 GB，先清掉 runner 上不需要的大件
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune -af || true
+          df -h /
+
+      - name: Build toolchain
+        run: |
+          chmod +x scripts/linux/setup-toolchain.py
+          sudo -E python3 scripts/linux/setup-toolchain.py "$PREFIX" -j"$(nproc)"
+
+      - name: Package toolchain
+        run: |
+          sudo apt-get install -y zstd
+          sudo tar --zstd -C / -cpf "$RUNNER_TEMP/unixnu-linux.tar.zst" opt/unixnu-linux
+          ls -lh "$RUNNER_TEMP/unixnu-linux.tar.zst"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-linux-toolchain
+          path: ${{ runner.temp }}/unixnu-linux.tar.zst
+          retention-days: 14
+          if-no-files-found: error
