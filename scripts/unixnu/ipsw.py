@@ -8,6 +8,7 @@ The board describes the image in [ipsw]: url (the default remote source), produc
 chip_id, board_id, and the components the steps use.
 """
 import hashlib
+import http.client
 import io
 import json
 import platform
@@ -68,7 +69,7 @@ class RangeFile(io.RawIOBase):
                         raise OSError('short range response')
                     self.cache[index] = data
                     break
-                except (OSError, urllib.error.URLError):
+                except (OSError, urllib.error.URLError, http.client.IncompleteRead):
                     if attempt == self.retries - 1:
                         raise
                     time.sleep(2 ** attempt)
