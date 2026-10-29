@@ -21,8 +21,8 @@ Apple ARM64 内核在多数 SoC 上使用 16 KiB 页。非 Apple ARM64 SoC 常�
 
 ```c
 #elif !defined(APPLE_ARM64_ARCH_FAMILY) && !__ARM_16K_PG__
-/* 两个根，加上每 6 GiB 映射最多七个 L2 页。 */
-#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 16)
+/* 两个根，加上每个最多 9 GiB 的映射最多十个 L2 页。 */
+#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 22)
 ```
 
 同一补丁在分配新 L2 表前检查容量：

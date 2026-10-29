@@ -21,8 +21,8 @@ The patch `native-4k-bootstrap-capacity` adds a non-Apple 4 KiB budget:
 
 ```c
 #elif !defined(APPLE_ARM64_ARCH_FAMILY) && !__ARM_16K_PG__
-/* Two roots plus up to seven L2 pages per 6 GiB mapping. */
-#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 16)
+/* Two roots plus up to ten L2 pages per mapping of up to 9 GiB. */
+#define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 22)
 ```
 
 The same patch adds a capacity check before a new L2 table is allocated:
