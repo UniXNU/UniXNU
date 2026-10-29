@@ -121,6 +121,11 @@ def build_archives(ctx, env):
     if not ctx.need_config().get('XNU_BUILD_ARCHIVES'):
         return
     env = dict(env, PATH=toolchain_path(env.get('PATH')))
+    # The storage bindings rebase kext-owned slots by the prelink slide the firmware will apply;
+    # the profile pins it, so hand it to the builders the same way the prelink step reads it.
+    slide = (ctx.board.get('kernel', {}).get('prelink', {}) or {}).get('slide')
+    if slide:
+        env.setdefault('UNIXNU_PRELINK_SLIDE', str(slide))
     for index, (kind, entry) in enumerate(archive_plan(ctx), 1):
         if kind == 'component':
             spec = entry
