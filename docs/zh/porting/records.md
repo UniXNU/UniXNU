@@ -37,7 +37,8 @@
 ## 记录格式
 
 复制 `examples/device/porting.toml`。设备名称、SoC 和 OS 配置必须与 `board.toml`
-一致。每个 `[[area]]` 包含以下字段：
+一致。记录本身使用格式 1，`schema_version` 保持 `1`，与 `board.toml` 的
+`schema_version = 2` 不同。每个 `[[area]]` 包含以下字段：
 
 | 字段 | 内容 |
 | --- | --- |
