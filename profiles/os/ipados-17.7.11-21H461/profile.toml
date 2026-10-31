@@ -106,3 +106,7 @@
 [userdata]
 # Disk images of this OS, in window order; the device sets the partition geometry.
 windows = [{ name = "OS", component = "OS" }, { name = "SystemOS", component = "Cryptex1,SystemOS", optional = true }]
+
+[root]
+# The OS disk image: the APFS volume UUID the root policy signs.
+os_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
