@@ -69,7 +69,7 @@ The optional C-sender interoperability test needs `GIULIA_SCREEN_FIXTURE` pointi
 | Source | Transport | Use |
 | --- | --- | --- |
 | [Firmware log export](/porting/log-capture#qr-logs) | OneSend QR frames | Current UEFI Advanced Logger buffer |
-| [Persistent logs](/porting/log-capture#persistent-logs) | Reserved storage and Linux reader | Kernel messages and diagnostic snapshots |
+| [Persistent logs](/porting/log-capture#persistent-logs) | Reserved storage, Linux reader or recovery reader | Kernel messages and diagnostic snapshots |
 | UEFI serial | UART | Firmware, UniXNU and DarwinBoot |
 | Kernel serial | UART selected by `serial=` | XNU console and panic output |
 | Diagnostic page | Framebuffer | Live state after the console stops |

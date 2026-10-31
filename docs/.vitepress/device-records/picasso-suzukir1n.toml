@@ -1,0 +1,189 @@
+schema_version = 1
+
+[device]
+name = "picasso"
+soc = "SM7250"
+os_profile = "ios-16.7.16-20H392"
+summary = "独立的 Redmi K30 5G / SM7250 早期移植：宿主机构建与设备运行结果分别记录。"
+
+[[area]]
+id = "configuration"
+status = "host-verified"
+components = ["XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "profiles/**", "configs/**", "sources.lock.toml", "upstream.rev", ".github/**", ".gitignore", ".gitattributes", "local.toml.example", "LICENSE"]
+inputs = ["官方 UniXNU 格式 2、ARM64 构建工具和本仓库独立 iPhone X iOS 16.7.16 profile，SM7250 资源单独保存在本仓库。"]
+configuration = ["提供固定源码版本、13 项移植记录、Actions 校验/UEFI 应用/iPhone X iOS 16 Apple 输入审计。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["提供固定源码版本、13 项移植记录、Actions 校验/UEFI 应用/iPhone X iOS 16 Apple 输入审计。", "首轮 CI 验证与 EFI 应用成功；内核发现官方可选 boot-progress 补丁冲突，当前禁用该插桩并保留 OS 预链接补丁。", "默认目标改为 iPhone X iOS 16.7.16 / 20H392；Apple manifest 与 IM4P 摘要已独立核对。Darwin 22 补丁/驱动/预链接未移植，Darwin 23 内核成功只作为历史构建证据。"]
+completion = ["运行 Actions 并记录各任务的结果和提交版本。"]
+limits = ["配置可解析不代表硬件已支持；iOS 16 / Darwin 22 ABI 尚未移植，内核与预链接入口明确拒绝使用 Darwin 23 配方。"]
+next_action = ["运行 Actions 并记录各任务的结果和提交版本。"]
+evidence = [{ kind = "source", reference = "docs/source-audit.md", result = "提供固定源码版本、13 项移植记录、Actions 校验/UEFI 应用/iPhone X iOS 16 Apple 输入审计。" }, { kind = "host", reference = "https://github.com/SuzukiR1n/UniXNU-Picasso/actions/runs/40262916511", result = "配置/DTS/C++、EFI 应用、iPhone X Apple 内核摘要与 Darwin 22 arm64 审计成功；目标 ABI 与设备启动仍待完成。", command = "GitHub Actions: Picasso build and validation", revision = "e0941c2eaffdbe4868b939fc0c472881595676e9" }]
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = []
+paths = ["proprietary-files.txt", "hardware.toml", "firmware/**"]
+inputs = ["Project-Silicium/Mu-Silicium 审计版本没有 Picasso 平台。候选原厂输入基线为 MIUI V12.5.9.0.RGICNXM / Android 11。"]
+configuration = ["没有从其他设备或社区移植复制 FD、DSC、FDF、内存映射或启动镜像。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["没有从其他设备或社区移植复制 FD、DSC、FDF、内存映射或启动镜像。"]
+completion = ["提取原厂输入，编写平台内存图并按官方指南集成 UniXNU、DarwinBoot、RamDisk、DiskIo、FAT。"]
+limits = ["缺少独立 SM7250/Picasso UEFI 平台及原厂 boot/dtbo/UEFI 二进制。"]
+next_action = ["提取原厂输入，编写平台内存图并按官方指南集成 UniXNU、DarwinBoot、RamDisk、DiskIo、FAT。"]
+evidence = []
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = []
+paths = ["drivers/ArmCpu/**", "socs/sm7250/configs/**", "tests/timer_ppi.cpp"]
+inputs = ["MiCode picasso-r-oss qcom/lito.dtsi：CPU affinities 0..0x700，19.2 MHz，GICD 0x17a00000，GICR 0x17a60000，stride 0x20000；虚拟 PPI 3。"]
+configuration = ["直接基于官方 ArmCpu 增加定时器描述解析，GIC 使能和 IRQ 分派统一使用 PPI+16；DTS 仅启用 CPU0。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["直接基于官方 ArmCpu 增加定时器描述解析，GIC 使能和 IRQ 分派统一使用 PPI+16；DTS 仅启用 CPU0。", "默认目标改为 iPhone X iOS 16.7.16 / 20H392；Apple manifest 与 IM4P 摘要已独立核对。Darwin 22 补丁/驱动/预链接未移植，Darwin 23 内核成功只作为历史构建证据。"]
+completion = ["完整编译驱动后，在真机核对定时器中断计数与 GIC 状态，再逐个启用其他 CPU。"]
+limits = ["源文件中的定时器号还未通过目标设备的 CNTV/中断计数读回验证；SMP 未验证。"]
+next_action = ["完整编译驱动后，在真机核对定时器中断计数与 GIC 状态，再逐个启用其他 CPU。"]
+evidence = [{ kind = "source", reference = "docs/source-audit.md", result = "直接基于官方 ArmCpu 增加定时器描述解析，GIC 使能和 IRQ 分派统一使用 PPI+16；DTS 仅启用 CPU0。" }]
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["dts/**", "socs/sm7250/dts/**"]
+inputs = ["MiCode Lito 源码 memory.reg 为零；原厂 bootloader 会修正 RAM。用户只确认了 128 GB 存储。"]
+configuration = ["没有生成猜测的 RAM、DarwinBoot 分配窗口或保留内存；缺少内存时 ADT 生成必须失败。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["没有生成猜测的 RAM、DarwinBoot 分配窗口或保留内存；缺少内存时 ADT 生成必须失败。"]
+completion = ["采集 bootloader FDT、UEFI memory map 和目标固件保留区，求出不重叠的连续窗口。"]
+limits = ["RAM 容量、bootloader 修正的 FDT、UEFI EfiConventionalMemory 与保留区均未实测。"]
+next_action = ["采集 bootloader FDT、UEFI memory map 和目标固件保留区，求出不重叠的连续窗口。"]
+evidence = []
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["storage/**"]
+inputs = ["官方 lito.dtsi UFS HCI 0x01d84000/0x3000、ICE 0x01d90000/0x8000、SPI 265（INTID 297）。"]
+configuration = ["仅保留禁用的 UFS 资源描述；没有选择 SM8550 存储实现，也没有填写 userdata LBA。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["仅保留禁用的 UFS 资源描述；没有选择 SM8550 存储实现，也没有填写 userdata LBA。"]
+completion = ["读取目标 GPT 和 UFS 版本，先实现容量与只读已知块校验，再讨论根卷。"]
+limits = ["128 GB 标称容量不能确定 GPT、扇区大小或 UFS 控制器供电/时钟/SMMU 设置。"]
+next_action = ["读取目标 GPT 和 UFS 版本，先实现容量与只读已知块校验，再讨论根卷。"]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["display/**"]
+inputs = ["官方 Picasso DTS 选择多个 G7A 面板变体；实际面板 ID 和 GOP 布局需要原厂/设备证据。"]
+configuration = ["没有选择 SM8550 面板或背光代码，也没有把静态 splash 区直接当成 framebuffer。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["没有选择 SM8550 面板或背光代码，也没有把静态 splash 区直接当成 framebuffer。"]
+completion = ["先验证 UEFI GOP 已知色块及 framebuffer handoff，再适配亮度。"]
+limits = ["无目标设备 GOP、stride、像素格式、背光和供电结果。"]
+next_action = ["先验证 UEFI GOP 已知色块及 framebuffer handoff，再适配亮度。"]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["input/**"]
+inputs = ["官方 Picasso DTS：GENI SPI SE7 0x984000，Novatek SPI touch，reset GPIO4、IRQ GPIO5，多个 NT36672C 固件变体。"]
+configuration = ["触控仅登记源事实；没有启用未经确认的控制器和固件。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["触控仅登记源事实；没有启用未经确认的控制器和固件。"]
+completion = ["提取目标固件并读取供应商 ID，先验证单触点按下/抬起，再进行多点 HID。"]
+limits = ["实际面板/触控供应商 ID、触控固件哈希和 HID 桥未验证。"]
+next_action = ["提取目标固件并读取供应商 ID，先验证单触点按下/抬起，再进行多点 HID。"]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["gpu/**"]
+inputs = ["SM7250 使用 Adreno 620；官方组件中的 Adreno740 没有覆盖本芯片的证据。"]
+configuration = ["明确禁用原生 Adreno 加速。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["明确禁用原生 Adreno 加速。"]
+completion = ["在 CPU/显示/内存稳定后核对 A620 硬件与固件接口。"]
+limits = ["GMU、SMMU、GPU 固件和 Metal 路径均未适配。"]
+next_action = ["在 CPU/显示/内存稳定后核对 A620 硬件与固件接口。"]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["network/**"]
+inputs = ["官方 Lito/板级 DTS 的 WLAN 路径需要匹配目标设备固件和共享内存。"]
+configuration = ["未选择 ath12k PCI/MHI 组件。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["未选择 ath12k PCI/MHI 组件。"]
+completion = ["确认 WLAN 型号、CNSS/固件协议和 DMA 所有权。"]
+limits = ["扫描、连接、DHCP 和流量均没有运行结果。"]
+next_action = ["确认 WLAN 型号、CNSS/固件协议和 DMA 所有权。"]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["audio/**"]
+inputs = ["官方 Picasso 音频 DTS 与原厂 DSP 固件尚需独立移植。"]
+configuration = ["未声明音频支持。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["未声明音频支持。"]
+completion = ["取得目标 ADSP 固件版本与播放/录音路由。"]
+limits = ["DSP、时钟、路由和 codec 运行结果缺失。"]
+next_action = ["取得目标 ADSP 固件版本与播放/录音路由。"]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["power/**"]
+inputs = ["官方 PMIC/调压器/电池节点可作输入，不能等同于 XNU 电源管理实现。"]
+configuration = ["未声明充电、电量或休眠恢复支持。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["未声明充电、电量或休眠恢复支持。"]
+completion = ["先核对安全的启动电压/时钟继承，再实现电池和温控读数。"]
+limits = ["无目标设备电源和温控测量。"]
+next_action = ["先核对安全的启动电压/时钟继承，再实现电池和温控读数。"]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = []
+paths = ["scripts/unixnu.py", "unixnu", "patches/**"]
+inputs = ["UniXNU 官方构建接口要求目标固件、boot header、完整 payload 与内存 handoff。"]
+configuration = ["入口阻止 payload/firmware/userdata/bootimg/all，直到 hardware.toml 的输入资格项通过；允许 package 构建与 Apple IPSW 审计；kernel/prelink 需要先完成 Darwin 22 ABI 移植。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["入口阻止 payload/firmware/userdata/bootimg/all，直到 hardware.toml 的输入资格项通过；允许 package 构建与 Apple IPSW 审计；kernel/prelink 需要先完成 Darwin 22 ABI 移植。", "首轮 CI 验证与 EFI 应用成功；内核发现官方可选 boot-progress 补丁冲突，当前禁用该插桩并保留 OS 预链接补丁。", "默认目标改为 iPhone X iOS 16.7.16 / 20H392；Apple manifest 与 IM4P 摘要已独立核对。Darwin 22 补丁/驱动/预链接未移植，Darwin 23 内核成功只作为历史构建证据。"]
+completion = ["补齐真实输入后建立包内容、地址、大小和哈希验证，再解除镜像门槛。"]
+limits = ["本仓库当前没有可启动的 boot.img；UniXNU.efi 是应用而非固件。"]
+next_action = ["补齐真实输入后建立包内容、地址、大小和哈希验证，再解除镜像门槛。"]
+evidence = [{ kind = "source", reference = "docs/source-audit.md", result = "入口阻止 payload/firmware/userdata/bootimg/all，直到 hardware.toml 的输入资格项通过；允许 package 构建与 Apple IPSW 审计；kernel/prelink 需要先完成 Darwin 22 ABI 移植。" }]
+
+[[area]]
+id = "diagnostics"
+status = "host-verified"
+components = []
+paths = ["scripts/check-device.py", "scripts/audit-ios16.py", "scripts/inspect-stock.py", "tools/**", "unixnu.lock"]
+inputs = ["官方 DTS、格式 2 resolver 与 FDT/ADT 编码器可做独立宿主机交叉检查。"]
+configuration = ["校验 GIC 地址/stride、CPU0 选择、定时器字节序与中断号、未测量内存的拒绝行为；提供只读输入采集和 boot header 检查。"]
+procedure = ["按 README 的校验和构建步骤执行；真机阶段见 docs/bring-up.md。"]
+findings = ["校验 GIC 地址/stride、CPU0 选择、定时器字节序与中断号、未测量内存的拒绝行为；提供只读输入采集和 boot header 检查。", "默认目标改为 iPhone X iOS 16.7.16 / 20H392；Apple manifest 与 IM4P 摘要已独立核对。Darwin 22 补丁/驱动/预链接未移植，Darwin 23 内核成功只作为历史构建证据。"]
+completion = ["保存 Actions 产物和原厂镜像检查报告，再采集第一阶段 UEFI 日志。"]
+limits = ["没有连接手机；没有本仓库的真机启动证据。"]
+next_action = ["保存 Actions 产物和原厂镜像检查报告，再采集第一阶段 UEFI 日志。"]
+evidence = [{ kind = "source", reference = "docs/source-audit.md", result = "校验 GIC 地址/stride、CPU0 选择、定时器字节序与中断号、未测量内存的拒绝行为；提供只读输入采集和 boot header 检查。" }, { kind = "host", reference = "https://github.com/SuzukiR1n/UniXNU-Picasso/actions/runs/40262916511", result = "配置/DTS/C++、EFI 应用、iPhone X Apple 内核摘要与 Darwin 22 arm64 审计成功；目标 ABI 与设备启动仍待完成。", command = "GitHub Actions: Picasso build and validation", revision = "e0941c2eaffdbe4868b939fc0c472881595676e9" }]

@@ -1,0 +1,419 @@
+schema_version = 1
+
+[device]
+name = "marble"
+soc = "SM7475"
+os_profile = "ios-16.7.16-20H392"
+summary = "Community legacy XNU 8796 source port for Marble. A historical temporary boot reached iOS Hello, but touch/setup remain incomplete; no matching upstream Format-2 profile/feed or Format-2 device build is claimed."
+
+[[area]]
+id = "configuration"
+status = "planned"
+components = []
+paths = ["board.toml", "feeds.toml", "configs/**", "patches/xnu/series", "mac-build/**", "AGENTS.md", ".github/**", ".gitattributes", ".gitignore", "local.toml.example", "unixnu.lock", "sources.lock.json", "patches/xnu/**"]
+inputs = ["iOS 16.7.16 inputs, reviewed SM7475 feed and board-specific ADT/configuration."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Resolve board pins, OS profile, SoC feed, source selection, array replacements and patch order. No matching iOS 16.7.16 profile or reviewed SM7475 feed was present at upstream 0fc0fc1f9ddd0fbd4787738afef38667df5e0a95.", "Added the schema-2 identity, a real reference-only Git lock, matching iPhone restore identity/member hashes, input inventories and the official record workflow. The matching OS/SoC implementations are still absent, so example=true remains a build guard; a 13-area record pass is not a resolved build."]
+completion = ["Reviewed profile/feed exists; all source pins and config resolve; selected components and overrides are recorded."]
+limits = ["The published v4 tree is based on XNU 1b191cb58250d0705d8a51287127505aa4bc0789 and is an older dirty snapshot, not the exact tested kernel source. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Obtain reviewed matching upstream profile/feed, then resolve board pins and a clean source migration."]
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/upstream-format2-review.md"
+result = "Upstream profile/feed review at pinned revision."
+
+[[area.evidence]]
+kind = "source"
+reference = "legacy-xnu/README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/ios16-inputs.json"
+result = "Matching restore identity and recomputed member hashes; no Apple binary content."
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = []
+paths = ["device/early/**", "mac-build/**", "proprietary-files.txt", "package/**"]
+inputs = ["Matching user-supplied firmware, boot payload and qualified device tree."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Matching restore-derived firmware, boot payload, device-qualified FDT and handoff inputs. Private firmware/system images are not included.", "Measured legacy layout is Platforms/Xiaomi/marblePkg/marble.dsc and Build/marblePkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd, Android header v4. Board package integration is explicitly unfinished; no fabricated Kit.toml or vendor hash is used."]
+completion = ["Clean payload boots and documents firmware, framebuffer and memory handoff."]
+limits = ["Historical experimental kernel reached Hello through temporary fastboot boot; the published v4 source does not exactly reproduce that image. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Build the boot payload from public sources plus user-supplied firmware, then validate handoff on target."]
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "BUILDING.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**", "dts/**"]
+inputs = ["Device CPU topology, GIC, timer and interrupt map."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["SM7475-family CPU topology, GIC ranges, timer rate, interrupts and IPIs.", "Observed boot affinity0, PSCI smc, GIC distributor0x17100000/0x10000 and redistributor0x17180000/0x200000, stride0x40000, virtual timer19200000Hz/PPI11. Only one boot CPU is described; no format-2 SMP or IPI result is claimed."]
+completion = ["Every enabled CPU reaches checkpoint and timer/IPI works on each."]
+limits = ["Hello establishes a historical kernel-to-userspace path, not full per-core or interrupt coverage. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Record per-core entry, timer and interrupt checkpoints from a clean build."]
+
+[[area.evidence]]
+kind = "source"
+reference = "legacy-xnu/README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["device/early/**", "legacy-xnu/patches/**", "touch/marble_smmu_stream.*", "dts/**"]
+inputs = ["Validated ADT, physical map, reservations, DMA widths/cache policy and stream ownership."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Memory handoff/reservations, DMA widths/cache policy and SMMU ownership. Touch GPI and QUP wrapper have distinct DMA contexts.", "The sanitized DTS omits guessed RAM/reservation ranges. Legacy firmware allocated a real512MiB window; a DRAM envelope is not RAM capacity. GPI ring SID0x5b6 and QUP payload SID0x5a3 are separate mapping roles, not a DMA-safety proof."]
+completion = ["Memory reservations reconcile and each enabled DMA engine stays within a verified mapped range."]
+limits = ["SMMU decoder handles already-read words only; it does not program MMIO, DMA or SMMU. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Audit reservations and implement/verify each needed DMA context before enabling peripheral DMA."]
+
+[[area.evidence]]
+kind = "source"
+reference = "touch/MARBLE-GPI-DMA-PATH.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area.evidence]]
+kind = "host"
+reference = "https://github.com/sing0626/UniXNU-marble/actions/runs/40470393424"
+command = "GitHub Actions Source checks: synthetic C fixtures, source integrity and fake-fastboot installer tests"
+revision = "28105e5831e680cfe50fa573b5b6ea85cb0f7b56"
+result = "Host checks passed on the published source revision; no format-2 device, touch or DMA result."
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/bsd/marble_hfs/**", "mac-build/**", "dts/**"]
+inputs = ["Device-qualified UFS path, root layout and user-provided restore input."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["UFS controller/PHY/clocks/power, SMMU stream, GPT/root layout and restore inputs.", "The described UFS register regions are 0x1d84000/0x3000,0x1d88000/0x8000,0x1d90000/0x9000. Legacy native UFS/HFSX work reached launchd/Hello on the maintainer root; a fresh format-2 root and driver/PHY/power integration remain unverified."]
+completion = ["UFS reads and root mount work; Data behavior is explicitly validated."]
+limits = ["Project status reports legacy UFS/HFS root progressed to launchd/Hello; persistence and broad storage qualification are not established. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Reproduce UFS reads, HFS root mount and controlled Data persistence from a clean public build."]
+
+[[area.evidence]]
+kind = "source"
+reference = "README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "BUILDING.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**", "dts/**"]
+inputs = ["Panel, framebuffer and backlight metadata for this SKU."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Framebuffer/GOP handoff, panel timing, format, stride and backlight.", "Legacy GOP-backed display showed Apple Logo and multilingual Hello with a clean background. No fixed framebuffer address is put in DTS. The GUI quiet latch hides normal logs after first swap, so a persistent Logo alone does not identify the blocked service."]
+completion = ["Known geometry/colors are correct through userland transition and backlight control."]
+limits = ["Historical legacy kernel showed a clean multilingual Hello screen and home indicator; broader rendering/backlight validation is absent. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Capture geometry/format/timing from a reproducible build and validate UI transition/backlight."]
+
+[[area.evidence]]
+kind = "source"
+reference = "README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["touch/**", "legacy-xnu/overlay/**", "dts/**"]
+inputs = ["Goodix protocol, pin/power state, GPI ownership and verified mappings."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Goodix SPI SE4/static GPII0, TLMM, power/interrupt state and separate GPI/wrapper SMMU contexts.", "Goodix9916R uses SPI0x990000,CS0,15MHz child limit, GPIO20reset/GPIO21IRQ. GCC IDs94/134/135 and GPI TX0/RX1/SEID4/protocol1/64TREs are inventoried. Clock enable/read/restore and snapshot return are observed; no Goodix SPI transaction or physical iOS touch exists."]
+completion = ["Goodix transaction completes with bounded DMA/events and iOS HID contacts operate through setup."]
+limits = ["Physical iOS touch is not implemented. Clock/prerequisite probes and host decoders do not implement a GPI DMA provider or HID event path. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Establish DMA ownership/mappings, implement GPI completion and Goodix protocol, then verify HID delivery."]
+
+[[area.evidence]]
+kind = "source"
+reference = "touch/MARBLE-GPI-DMA-PATH.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area.evidence]]
+kind = "host"
+reference = "https://github.com/sing0626/UniXNU-marble/actions/runs/40470393424"
+command = "GitHub Actions Source checks: synthetic C fixtures, source integrity and fake-fastboot installer tests"
+revision = "28105e5831e680cfe50fa573b5b6ea85cb0f7b56"
+result = "Host checks passed on the published source revision; no format-2 device, touch or DMA result."
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**"]
+inputs = ["GPU firmware, SMMU context and OS submission ABI."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["GPU/GMU generation, firmware, clocks/votes, SMMU and submission ABI.", "No GPU/Metal support is claimed. The current Adreno740 catalog entry is SM8550-specific and is not selected for this SM7475 board."]
+completion = ["Verified GPU/GMU init and submission/fence path; acceleration scope documented."]
+limits = ["No GPU acceleration result is claimed; Hello display does not prove GPU operation. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Inventory the stack and define a bounded submit/fence checkpoint before component selection."]
+
+[[area.evidence]]
+kind = "source"
+reference = "README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**"]
+inputs = ["Device network firmware, transport and DMA mapping."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Wi-Fi/cellular hardware, firmware, interrupts, DMA and OS interfaces.", "No iOS Wi-Fi/cellular association or packet transfer is verified; firmware, DMA and OS-interface wiring remain pending rather than filled with assumed values."]
+completion = ["Device associates and transfers packets through the OS interface."]
+limits = ["No network association or packet transfer is claimed. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Inventory one network transport and firmware dependency before implementation."]
+
+[[area.evidence]]
+kind = "source"
+reference = "README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**"]
+inputs = ["DSP/codec firmware, clocking and routes."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["DSP, codec, clocks, firmware services and routes.", "No DSP/codec route or iOS playback/capture is verified. The record does not infer working audio from kernel or Hello progress."]
+completion = ["At least one documented playback/capture route works."]
+limits = ["No audio playback or capture is claimed. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Trace the DSP/codec dependencies and define a playback or loopback checkpoint."]
+
+[[area.evidence]]
+kind = "source"
+reference = "README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["legacy-xnu/patches/**", "legacy-xnu/overlay/**", "touch/MarbleTouchProbeClock.*"]
+inputs = ["Rail/clock ownership, battery units and transition policy."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Regulators, clocks, battery units, firmware ownership and supported transitions.", "The bounded legacy S4 probe temporarily set its owned GCC vote and restored it; this is not complete touch rail/reset sequencing or battery/power-management support."]
+completion = ["Rails/clocks are owned and a supported power transition recovers correctly."]
+limits = ["Touch clock probe has narrow read/restore scope; it is not system power management. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Document ownership and validate a controlled suspend/resume transition."]
+
+[[area.evidence]]
+kind = "source"
+reference = "touch/MARBLE-GPI-DMA-PATH.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/HARDWARE.md"
+result = "Sanitized source-backed resource inventory with explicit omissions and disabled integration."
+
+[[area.evidence]]
+kind = "host"
+reference = "https://github.com/sing0626/UniXNU-marble/actions/runs/40470393424"
+command = "GitHub Actions Source checks: synthetic C fixtures, source integrity and fake-fastboot installer tests"
+revision = "28105e5831e680cfe50fa573b5b6ea85cb0f7b56"
+result = "Host checks passed on the published source revision; no format-2 device, touch or DMA result."
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["mac-build/**", "tools/**", "device/early/**", "legacy-xnu/**", "*.py", "patches/xnu/**", "package/**", "docs/evidence/ios16-inputs.json"]
+inputs = ["Pinned public source inputs and user-provided proprietary restore data."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Matching iOS restore input, XNU, ADT, generated trust-cache data, payload and boot-image format.", "The restore input is iPhone10,6/d221ap iOS16.7.16/20H392, chip0x8015 board0x0e; six exact member SHA256 pins were recomputed without publishing binaries. The 64MiB payload/header-v4 legacy recipe and monolithic patch are inventoried, not validated as a modern format-2 stack."]
+completion = ["Clean build/package from pinned source plus user inputs reproduces checksummed output."]
+limits = ["No IPSW/root filesystem/firmware/boot image is published; current snapshot is not a full reproduction package. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Reconstruct from pinned public inputs and user-provided data; produce clean auditable package before migration claims."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BUILDING.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "legacy-xnu/README.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/ios16-inputs.json"
+result = "Matching restore identity and recomputed member hashes; no Apple binary content."
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["mac-build/**", "tools/**", "device/classmates/**", "SOURCE-INDEX.json", "docs/evidence/**", "LICENSE", "LICENSES/**"]
+inputs = ["Recoverable boot/log path and identified source/image artifacts."]
+configuration = ["Record actual board keys, device-tree properties, build flags and source revisions as resolved; no placeholder profile or feed value is treated as established."]
+procedure = ["Use the documented offline workflow with explicit user-supplied inputs; preserve the command, source revision and observable result for each milestone."]
+findings = ["Log transport, checkpoints, recovery and source/image identities.", "Official pinned checker reports13 structured areas, and the sanitized DTS compiles without diagnostics. Actual defconfig/status/tree attempts stop at the absent reviewed sm7475 SoC source; even an implemented local SoC would still need the missing iOS16 OS profile. Reference lock verification ran on Linux/WSL, not a whole-target build."]
+completion = ["Recovery and logs correlate checkpoints with exact source and artifact revisions."]
+limits = ["Private recordings/logs are excluded; only sanitized observation summary is public. Logo-only probes do not establish a specific failure cause. This area is not claimed Format-2 implemented or verified."]
+next_action = ["Publish reproducible source/image identifiers and bounded log checkpoints."]
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/legacy-hello.md"
+result = "Sanitized historical device observation; legacy only."
+
+[[area.evidence]]
+kind = "source"
+reference = "STATUS.md"
+result = "Public source snapshot facts and scope."
+
+[[area.evidence]]
+kind = "source"
+reference = "docs/evidence/format2-validation.json"
+result = "Recorded migration checks and unresolved resolver gates, not hardware/build completion."
+
+[[area.evidence]]
+kind = "host"
+reference = "https://github.com/sing0626/UniXNU-marble/actions/runs/40470393424"
+command = "GitHub Actions Source checks: synthetic C fixtures, source integrity and fake-fastboot installer tests"
+revision = "28105e5831e680cfe50fa573b5b6ea85cb0f7b56"
+result = "Host checks passed on the published source revision; no format-2 device, touch or DMA result."

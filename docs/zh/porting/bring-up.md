@@ -99,8 +99,7 @@ fastboot boot out/<device>/<os_profile>/<config>/boot/boot.img
 
 根卷匹配失败时内核没有根设备。检查 UUID、窗口偏移和分区容量。
 
-存储可用后，按[持久化日志步骤](/zh/porting/log-capture#persistent-logs)接入写入器和 Linux 读取器，
-先手动取回一次日志，再启用定时重启和自动循环。
+存储可用后，按[持久化日志步骤](/zh/porting/log-capture#persistent-logs)接入写入器和 Linux 或 recovery 读取器，先手动取回一次日志，再启用定时重启和自动循环。
 
 ## 阶段 7：用户态
 

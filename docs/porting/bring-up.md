@@ -103,7 +103,7 @@ Checks:
 A root match failure leaves the kernel without a root device. Check the UUID, the window offsets and the partition capacity.
 
 Once storage works, [adapt persistent capture](/porting/log-capture#persistent-logs)
-with a kernel writer and Linux reader. Complete one manual retrieval before
+with a kernel writer and a Linux or recovery reader. Complete one manual retrieval before
 enabling timed reset and the automated cycle.
 
 ## Stage 7: Userland

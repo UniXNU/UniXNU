@@ -1,0 +1,189 @@
+schema_version = 1
+
+[device]
+name = "cas"
+soc = "SM8250"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Xiaomi 10 Ultra: UEFI menu and CPU0 platform start verified; moving to the standard UniXNU build with a UFS root, eight CPUs and touch."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "unixnu.lock", "configs/**", ".github/**", ".gitignore", "ci/**", "local.toml.example", "AGENTS.md", "README*.md", "CONTRIBUTING.md", "LICENSE"]
+inputs = ["UniXNU format 2 layers: arm64, sm8250 SoC source, ipados-17.7.11-21H461 OS profile and the cas board."]
+configuration = ["board.toml schema 2 with soc_source sm8250 and defconfig cas_defconfig."]
+procedure = ["Run ./unixnu defconfig cas_defconfig, fetch, status and tree from the UniXNU checkout."]
+findings = ["The layered configuration resolves with the pinned SoC source and component revisions."]
+completion = ["The configuration builds a kernel, firmware, payload and boot image with the standard commands."]
+limits = ["Only CPU0 and the minimal component set are selected; storage, display and input are pending."]
+next_action = ["Add boot-progress, a 4.75 GiB owned window and the standard payload settings."]
+evidence = [{ kind = "source", reference = "board.toml", result = "Format 2 board configuration with the SM8250 and iPadOS 17.7.11 layers." }]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot"]
+paths = ["proprietary-files.txt", "scripts/build_shim.py", "scripts/prepare_boot_dtb.py"]
+inputs = ["uefi-cas Mu-Silicium firmware with the bounded CasBootShim, inherited framebuffer and SPMI buttons."]
+configuration = ["FD 0x9f000000 / 8 MiB; Android boot image header v2, page 4096; stock SoC DTB index 2."]
+procedure = ["Boot the image with fastboot boot; ABL applies the existing DTBO."]
+findings = ["The UniXNU menu, buttons, RAM FAT, EFI run and return and the return to Android passed three complete runs."]
+completion = ["The firmware enters UniXNU, exposes the framebuffer and the payload volume, and starts DarwinBoot."]
+limits = ["The standard firmware profile cas-upstream.dsc has not been booted on the phone yet."]
+next_action = ["Add the static high-RAM descriptor and boot the standard firmware profile."]
+evidence = [{ kind = "device", reference = "https://github.com/ht94911/UniXNU-cas/blob/15bc58bb060a1e3c3cd15d4220997e4e54953d0a/docs/validation.md", command = "fastboot boot boot.img (cas-complete-001)", revision = "346a404f6cee464e3e95f6ded464caf804a1f89e", result = "Three complete runs of the UniXNU menu, buttons, RAM FAT, EFI return and Android return." }]
+
+[[area]]
+id = "cpu"
+status = "device-verified"
+components = ["ArmCpu"]
+paths = ["package/armcpu/**", "patches/xnu/**", "scripts/cas-armcpu-asm-fix.py"]
+inputs = ["Eight CPUs with MPIDR 0x000 to 0x700, PSCI smc, GICv3 0x17a00000/0x17a60000 and a 19.2 MHz timer."]
+configuration = ["CPU0 enabled; ArmCpu with the Darwin assembler separator fix."]
+procedure = ["Boot the kernel and read the CPU0 platform checkpoints."]
+findings = ["CPU0 returned from arm_vm_init, early platform expert setup, cpu_timebase_init and PE_init_cpu with CNTFRQ 19.2 MHz."]
+completion = ["All eight CPUs run with working timer and IPI handling."]
+limits = ["Timer interrupts after machine_startup and the secondary CPUs are not verified yet."]
+next_action = ["Enable the remaining seven CPUs after the kernel reaches the root mount."]
+evidence = [{ kind = "device", reference = "https://github.com/ht94911/UniXNU-cas/blob/15bc58bb060a1e3c3cd15d4220997e4e54953d0a/docs/cpu0-platform-clock.md", command = "fastboot boot boot.img (candidate 005)", revision = "bae4311fe0a8c9b8d4258fe66a19b2615c3d4adb", result = "CPU0 completed VM setup and early platform and timebase initialization." }]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["dts/**"]
+inputs = ["DRAM banks 0x80000000+0x39900000, 0xc0000000+5 GiB and 0x200000000+6 GiB with 31 reserved regions."]
+configuration = ["dts/cas.dts describes the banks and reservations; DarwinBoot owns the kernel window."]
+procedure = ["Compile the board DTS through the format 2 payload step."]
+findings = ["A 512 MiB window at 0x100000000 maps on the phone and 256 MiB of it allocates with full read-back."]
+completion = ["A 4.75 GiB owned window at 0x100000000 is published by UEFI and used by XNU."]
+limits = ["The large owned window for userland has not been run yet."]
+next_action = ["Publish 0x100000000 to 0x240000000 as conventional memory in UEFI."]
+evidence = [{ kind = "source", reference = "dts/cas.dts", result = "Board DRAM banks and reserved regions." }]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["package/*Ufs*", "scripts/*ufs*", "scripts/*userdata*"]
+inputs = ["UFS host 0x1d84000; userdata is LUN0 LBA 0x2c0000 to 0x3b4b7fa with 4 KiB blocks."]
+configuration = ["The OS and SystemOS images go to userdata; the root is read-only and Data stays in RAM."]
+procedure = ["Port the UniXNU-umi SM8250 UFS adaptation onto the ShengUfs component."]
+findings = ["UniXNU-umi mounts OS and SystemOS from UFS on the same SoC."]
+completion = ["The root volume mounts from userdata and launchd starts."]
+limits = ["No UFS driver is selected yet."]
+next_action = ["Build the userdata root image and port the read-only UFS driver."]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["package/*Display*", "package/legacy-display/**", "scripts/*display*"]
+inputs = ["DSC command-mode panel, 1080x2340, inherited framebuffer at 0x9c000000."]
+configuration = ["CPU presentation into the inherited framebuffer; no display controller programming."]
+procedure = ["Port the UniXNU-umi legacy display path with GopFramebuffer."]
+findings = ["The UEFI menu draws through the inherited framebuffer on the phone."]
+completion = ["The Apple logo and the Hello screen appear under XNU."]
+limits = ["No XNU display service is selected yet."]
+next_action = ["Add GopFramebuffer and the legacy display package."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["package/touch/**", "package/*Hid*"]
+inputs = ["ST FTS at 0x49 on the QUP I2C at 0xa94000, GPIO38 reset, GPIO39 interrupt; same wiring as the Xiaomi Mi 10."]
+configuration = ["Native GPI DMA I2C with the PM8150B GPIO5 supply, as in UniXNU-umi."]
+procedure = ["Port the UniXNU-umi ST FTS and HID implementation."]
+findings = ["Volume and power buttons work in the UEFI menu."]
+completion = ["Physical touches operate the Hello screen."]
+limits = ["No touch driver is selected yet."]
+next_action = ["Port the UniXNU-umi touch package after the Hello screen appears."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Adreno*"]
+inputs = ["Adreno 650 on SM8250."]
+configuration = ["No GPU component is selected."]
+procedure = ["Evaluate the HackiOS A650 driver and the UniXNU Adreno components."]
+findings = ["The first userland uses CPU presentation."]
+completion = ["GPU submissions render the system interface."]
+limits = ["GPU work starts after touch works."]
+next_action = ["Inventory A650 firmware and registers after the Hello screen."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["package/*Wifi*"]
+inputs = ["QCA6390 on PCIe0."]
+configuration = ["No network component is selected."]
+procedure = ["Use the HackiOS QCA6390 driver as the reference."]
+findings = ["The cas cmd-db has no smpf2 rail, unlike the Xiaomi Mi 10."]
+completion = ["The device scans, joins and passes traffic."]
+limits = ["Network work starts after touch works."]
+next_action = ["Map the cas power rails for QCA6390."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Audio*"]
+inputs = ["ADSP audio and the AW8697 haptics."]
+configuration = ["No audio component is selected."]
+procedure = ["Use the HackiOS audio references."]
+findings = ["Audio is outside the first interactive milestone."]
+completion = ["Playback and capture work on the selected routes."]
+limits = ["Audio work starts after touch works."]
+next_action = ["Inventory the cas audio graph after the Hello screen."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["package/*Power*"]
+inputs = ["PM8150 PMICs and the ApplePMGR service contract."]
+configuration = ["The UniXNU-umi platform power service provides the ApplePMGR interface."]
+procedure = ["Port UmiPlatformPower for the root and userland stage."]
+findings = ["Battery and sleep are outside the first interactive milestone."]
+completion = ["The PMGR service matches and userland starts."]
+limits = ["No power service is selected yet."]
+next_action = ["Port the platform power service with the UFS root."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["XnuPrelink"]
+paths = ["package/Kit.toml", "scripts/cas_bootimg.py"]
+inputs = ["Prelinked kernel, ADT, payload FAT, UEFI FD and the stock SoC DTB."]
+configuration = ["The payload FAT holds unixnu.toml, the kernel and its ADT."]
+procedure = ["Run ./unixnu payload and ./unixnu bootimg."]
+findings = ["The prelinked iPadOS 17.7.11 kernel links with the selected components."]
+completion = ["The standard bootimg step produces the image booted on the phone."]
+limits = ["The framework bootimg step does not support the cas header v2 DTB area and CasBootShim, so scripts/cas_bootimg.py packs the image."]
+next_action = ["Add the Data seed and trust cache to the payload for the root and userland stage."]
+evidence = [{ kind = "source", reference = "board.toml", result = "Payload and kernel settings for the standard payload step." }]
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["package/boot-progress/**", "scripts/build-boot-progress.py"]
+inputs = ["Framebuffer at 0x9c000000 and the XNU console mapping."]
+configuration = ["boot-progress=2 and the panic screen."]
+procedure = ["Port the UniXNU-umi boot-progress package."]
+findings = ["Earlier retained-RAM trace readers are replaced by the on-screen diagnostic page."]
+completion = ["Each boot shows its last stage, interrupt count or panic on the screen."]
+limits = ["The boot-progress package is not ported yet."]
+next_action = ["Port boot-progress and enable panic_screen."]
+evidence = []

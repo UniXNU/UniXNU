@@ -122,7 +122,7 @@ def bootstrap_registry():
             rows[name] = {'title': title, 'soc': soc, 'summary': summary}
     entries = []
     for path in sorted((ROOT / 'docs/devices').glob('*.md')):
-        if path.stem in ('index', 'sheng-unattended-test'):
+        if path.stem == 'index':
             continue
         content = path.read_text()
         table = re.search(r'^\| \[.*?\]\(https://github.com/([^/)]+/[^/)]+)\)', content, re.M)
@@ -353,9 +353,7 @@ def render_site(registry, local=None):
                          f'{entry.get("format", 1)} | {state} | [{repo}](https://github.com/{repo}) |')
         lines += ['', '## ' + ('维护设备记录' if zh else 'Maintain device records') + ' {#adding-a-device}', '',
                   ('按[记录指南](/zh/porting/records#publishing-and-reuse)发布设备配置与适配记录。'
-                   if zh else 'Publish device configuration and records using the [record guide](/porting/records#publishing-and-reuse).'), '',
-                  ('[sheng 日志抓取示例](/zh/devices/sheng-unattended-test)' if zh else
-                   '[sheng log-capture example](/devices/sheng-unattended-test)'), '']
+                   if zh else 'Publish device configuration and records using the [record guide](/porting/records#publishing-and-reuse).'), '']
         (ROOT / ('docs/zh/devices/index.md' if zh else 'docs/devices/index.md')).write_text('\n'.join(lines))
 
 

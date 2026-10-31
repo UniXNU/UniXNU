@@ -172,13 +172,20 @@ configuration = ["Select Ath12kWifi. build-gop-legacy-display.py compiles its ob
 procedure = ["Verify PCIe enumeration and MSI delivery before MHI startup.", "Record firmware startup, scan, association, address configuration and bidirectional packet delivery separately."]
 findings = ["The reusable Wi-Fi stack consumes board callbacks; PCIe and the OS network interface are owned by the device integration.", "MHI startup and network traffic are separate completion points."]
 completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
-limits = ["The source implements the station path through WifiNet.cpp and board PCIe integration. Device evidence must identify the firmware and access point."]
-next_action = ["Attach association and receive/transmit observations for the current firmware and image."]
+limits = ["Throughput is low for an 80 MHz link. The system cannot store the network password, so the network is not remembered."]
+next_action = ["Raise throughput on the 80 MHz link and let the system store the network password."]
 
 [[area.evidence]]
 kind = "source"
 reference = "package/WifiNet.cpp"
 result = "Implementation and configuration described in this section"
+
+[[area.evidence]]
+kind = "device"
+reference = "scripts/read-sheng-log.py"
+command = "fastboot boot boot-i480.img (sheng-wifi=5); python3 scripts/read-sheng-log.py"
+revision = "a57341b4028514aedb961fe8ce636bb05f5e5925"
+result = "Firmware c7-00108, WPA2-Personal access point on 5 GHz, 80 MHz, -73 dBm: DHCP address within 31 s of boot, speed test about 12 Mbit/s down and 24 Mbit/s up, under 1 percent transmit loss."
 
 [[area]]
 id = "audio"

@@ -1,0 +1,210 @@
+schema_version = 1
+
+[device]
+name = "camellia"
+soc = "MT6833"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Redmi Note 10 5G UEFI bring-up is device-verified through a Linux preboot handoff. UEFI, GOP and the UniXNU payload menu work; native UFS, XNU root, input, GPU, network, audio and XNU power remain incomplete."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", "package/unixnu.toml", ".gitattributes", ".github/**"]
+inputs = ["MT6833 platform identity, iPad7,1 / iPadOS 17.7.11 build 21H461 target identity and the Camellia bootstrap defconfig."]
+configuration = ["board.soc = MT6833; board.os_profile = ipados-17.7.11-21H461; schema_version = 2.", "camellia_bootstrap_defconfig enables the shared ARM DT platform, FDT CPU, software AES, mockfs, panic region and prelinked crypto paths."]
+procedure = ["Run ./unixnu defconfig camellia_bootstrap_defconfig --device ../UniXNU-camellia from a UniXNU checkout.", "Run ./unixnu status --device ../UniXNU-camellia --json and inspect the effective component and source pins."]
+findings = ["The internal kit name remains sheng because Camellia reuses shared prelink and diagnostic helper sources. This does not select Sheng hardware or an SM8550 device tree.", "The hardware SoC identity and the shared Apple image identity are independent configuration inputs."]
+completion = ["Source pins resolve, the effective configuration contains the intended Camellia overrides and every selected component has an owning area."]
+limits = ["The Camellia bootstrap profile is intentionally minimal and does not yet select native MT6833 storage, display, input, GPU, network or power components."]
+next_action = ["Keep the bootstrap profile reproducible while adding one MT6833 hardware component at a time."]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Camellia board identity, iPadOS target and prelink roots." },
+  { kind = "source", reference = "configs/camellia_bootstrap_defconfig", result = "Current minimal XNU bring-up configuration." },
+]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot"]
+paths = ["board.toml", "README.md"]
+inputs = ["Camellia UEFI source, a Linux kernel with the jump2 entry, a minimal initramfs, the 64 MiB UniXNU payload and the matching Camellia DTB."]
+configuration = ["Linux hot-jump FD base is 0xA0000000 and the UEFI stack is 0xA0200000.", "The pre-Android boot image uses Android boot header v2 with kernel 0x40080000, ramdisk 0x51100000 and DTB 0x47C80000.", "The payload is written raw to vendor_boot_a and read through /dev/block/sdc31."]
+procedure = ["Build the hot-jump FD with build-camellia-hotjump.sh and verify C entry and SEC stack.", "Build the boot image with build-boot-image.sh, then flash boot_a and vendor_boot_a.", "Boot from LK through the minimal Linux initramfs, drm_linear and uefi_jump into UEFI."]
+findings = ["LK does not execute a directly embedded BootShim/UEFI FD; that route reset at about 30 seconds.", "The verified route is LK to Linux, minimal initramfs, drm_linear, uefi_jump, UEFI and the UniXNU payload menu.", "fastboot boot is unavailable on this device, including with a stock boot image; validation must use fastboot flash boot_a."]
+completion = ["UEFI starts from the fixed pre-Android handoff, publishes GOP, reaches BDS and the matching payload reaches the UniXNU menu."]
+limits = ["The Linux kernel and private Magisk-patched boot input are firmware-specific and are not distributed as the public UEFI source baseline.", "A correct payload is required for UniXNU; without it UEFI reaches only the firmware boot-manager options."]
+next_action = ["Optional only: preserve the current verified image, then implement one MT6833 runtime component at a time.", "Do not rebuild the paid BootShim or cold-boot route before reaching the next hardware milestone."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/BOOT-IMAGE.zh-CN.md", result = "Documented verified pre-Android UEFI path and rejected routes." },
+  { kind = "device", reference = "https://github.com/stanveyjiang/uefi-camellia/releases/tag/v2026.10.26", command = "fastboot flash boot_a camellia-preboot-uefi-v2026.10.26.img; fastboot flash vendor_boot_a payload.img; fastboot reboot", revision = "31f482a209bd04fd2b264d1fa180fa862966a1a6", result = "Device reached UEFI and the Camellia UniXNU payload menu through the pre-Android Linux handoff." },
+]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu", "ArmDTPlatform"]
+paths = ["configs/**", "patches/**"]
+inputs = ["Eight-core MT6833 CPU topology, GIC distributor at 0x0C000000, GIC redistributors at 0x0C040000 and a 13 MHz architectural timer."]
+configuration = ["CONFIG_XNU_ARMCPU=y and CONFIG_XNU_ARM_DT_PLATFORM=y.", "The hot-jump UEFI patch wakes and resets the interrupted Linux GICv3 redistributor and registers only the physical timer PPI."]
+procedure = ["Record CPU affinities, GIC ranges and timer frequency from the stock DTB.", "Verify that the hot-jump UEFI path resets GIC PPIs/SGIs and does not claim the interrupted Linux virtual timer."]
+findings = ["Linux leaves GICv3 redistributor and private interrupt state behind; leaving that state unchanged can stop early DXE.", "The interrupted Linux virtual timer source must not be registered by the UEFI timer driver."]
+completion = ["UEFI runs with stable timer and interrupt state on the boot CPU, and later XNU observes every enabled CPU with working timer/IPI delivery."]
+limits = ["UEFI boot-CPU interrupt stabilization is implemented; full XNU SMP affinity and IPI behavior has not been device-verified."]
+next_action = ["Add per-CPU entry and IPI evidence when an XNU image reaches multiprocessor startup."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/Resources/MuPatches/Camellia-Essential.patch", result = "GICv3 redistributor reset and physical-timer registration fixes." },
+]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["board.toml", "configs/**"]
+inputs = ["DRAM, payload storage, DTB, ATF/TEE reservations, high-DDR windows and the MTK DRM framebuffer physical page runs."]
+configuration = ["UEFI FD base 0xA0000000, UEFI stack 0xA0200000, framebuffer handoff page 0xA4000000 and payload RAM at 0x98000000.", "The hot-jump path opens a conventional high-DDR window at 0x200000000 with size 0x03FFF0000 while retaining the high-DDR tail reservation."]
+procedure = ["Read the framebuffer run map before UEFI MMU setup and add uncached or write-through descriptors for runs outside the static map.", "Validate the FD destination, framebuffer page map and payload handoff before stopping secondary CPUs."]
+findings = ["The DRM framebuffer is contiguous in IOVA, not necessarily in CPU physical memory. A single translated base address is insufficient.", "Some scanout pages lie outside the original static UEFI memory map, so the hot-jump path must publish their physical runs."]
+completion = ["Every framebuffer and payload page maps to the intended physical range, and UEFI reaches BDS without an address translation fault."]
+limits = ["DMA ownership and SMMU mappings for MT6833 storage, display and GPU are not yet implemented."]
+next_action = ["Convert the verified handoff map into explicit DMA and IOMMU ownership records for each future hardware driver."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/Platforms/Xiaomi/camelliaPkg/Library/MemoryMapLib/MemoryMapLib.c", result = "Camellia memory reservations, high-DDR window and framebuffer run-map handling." },
+]
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["RamBlock"]
+paths = ["configs/**", "package/**", "scripts/**"]
+inputs = ["UFS is the device boot storage. The current verified path additionally uses vendor_boot_a as a raw 64 MiB payload store."]
+configuration = ["The pre-Android initramfs creates /dev/block/sdc31 and uefi_jump copies exactly 0x4000000 payload bytes to RAM.", "A RAM block device and FAT volume make the UniXNU payload visible without native UFS support."]
+procedure = ["Write the 64 MiB payload to vendor_boot_a and verify its hash.", "Load uefi_jump with payload_path=/dev/block/sdc31 and payload_bytes=67108864.", "Confirm the RAM block device and UniXNU menu enumerate the payload."]
+findings = ["Native UFS reads are not available in the current Camellia UEFI path.", "RAM payload publication is sufficient for the verified UniXNU menu and avoids depending on UFS during bring-up."]
+completion = ["RAM payload publication works for the selected image, and a later native UFS implementation reads the GPT, root windows and persistent Data correctly."]
+limits = ["The UFS controller, PHY, clocks, reset, power, SMMU stream and LUN path are not implemented.", "XNU root-device lookup and persistent user data are not verified on Camellia."]
+next_action = ["Measure the MT6833 UFS host/PHY registers, clock and power ownership, link state and SMMU stream before implementing native UFS."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/module/uefi_jump/uefi_jump.c", result = "Fixed-length payload block read and RAM payload handoff." },
+]
+
+[[area]]
+id = "display"
+status = "device-verified"
+components = ["GopFramebuffer"]
+paths = ["board.toml", "configs/**", "package/**", "scripts/**"]
+inputs = ["Tianma NT36672C panel, 1080x2400 mode, MTK DRM scanout, 32 bpp BGRX pixels and GOP."]
+configuration = ["SimpleFbDxe presents a logical 1088x2400 BGRX GOP using the framebuffer run map.", "UEFI writes through the scattered physical page map instead of assuming one contiguous physical framebuffer."]
+procedure = ["Start drm_linear from the initramfs, let uefi_jump publish the run map and enter UEFI.", "Verify UEFI text, GOP geometry, colors and BDS presentation on the phone."]
+findings = ["The verified display transport is the Linux-built linear framebuffer carried into UEFI GOP.", "The full MTK DSI/DRM driver stack is not initialized by UEFI and is not required for the current UEFI and UniXNU menu."]
+completion = ["UEFI and the UniXNU menu render with correct geometry and colors, and a later XNU display path presents userland frames."]
+limits = ["XNU native display, backlight control and GPU composition are not implemented.", "Display output depends on the matching Linux DRM framebuffer handoff."]
+next_action = ["Preserve GOP presentation while implementing the first MT6833 XNU display provider."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/GUIDE.zh-CN.md", result = "Framebuffer and GOP handoff design." },
+  { kind = "device", reference = "https://github.com/stanveyjiang/uefi-camellia/releases/tag/v2026.10.26", command = "fastboot flash boot_a camellia-preboot-uefi-v2026.10.26.img; fastboot flash vendor_boot_a payload.img; fastboot reboot", revision = "31f482a209bd04fd2b264d1fa180fa862966a1a6", result = "Device displayed the verified framebuffer stages, UEFI and the Camellia UniXNU menu." },
+]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["package/**", "scripts/**"]
+inputs = ["FocalTech touch controller over SPI4, volume/power keys and display coordinate geometry."]
+configuration = ["The current UEFI boot options use a timer because no input device is published."]
+procedure = ["Identify the touch bus, reset and interrupt GPIOs, panel coordinates and keypad GPIOs from the stock DTB."]
+findings = ["No UEFI input device is available in the current verified image; the boot menu relies on its default timed selection."]
+completion = ["Keys navigate UEFI, touch reports map to display coordinates, contacts keep stable IDs and release events arrive."]
+limits = ["Touch and keypad integration are absent from the current boot path."]
+next_action = ["Map FocalTech SPI4 and the keypad GPIOs from the stock DTB before implementing a UEFI input driver."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/**", "scripts/**", "configs/**"]
+inputs = ["MT6833 Mali GPU, power domains, clocks, IOMMU and the selected Apple graphics ABI."]
+configuration = ["CONFIG_XNU_NATIVE_MOBILE_DISPLAY=n; no XNU GPU component is selected in camellia_bootstrap_defconfig."]
+procedure = ["Inventory MT6833 GPU power, clock and IOMMU inputs before selecting a frontend ABI."]
+findings = ["Shared Adreno components are not applicable to the MediaTek GPU."]
+completion = ["GPU commands complete, synchronization and memory mapping work, and a known image is presented."]
+limits = ["No MT6833 GPU driver or Apple graphics frontend is implemented."]
+next_action = ["Collect the MT6833 GPU/GMU and IOMMU hardware inventory after XNU reaches IOKit initialization."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["package/**", "scripts/**", "configs/**"]
+inputs = ["MT6833 Wi-Fi controller, firmware, bus, interrupts, DMA and the selected XNU network interface."]
+configuration = ["No XNU network component is selected in the Camellia bootstrap profile."]
+procedure = ["Identify the Wi-Fi bus and firmware loading path from the stock DTB and vendor services."]
+findings = ["The shared Ath12k path is Qualcomm-specific and does not describe the Camellia controller."]
+completion = ["The controller initializes, associates, obtains an address and carries sustained receive/transmit traffic."]
+limits = ["Network support is not implemented."]
+next_action = ["Inventory the MT6833 Wi-Fi device and firmware interface."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/**", "scripts/**", "configs/**"]
+inputs = ["MT6833 audio DSP, codec, clocks, routing, firmware services and XNU audio ABI."]
+configuration = ["No Camellia audio component is selected in the bootstrap defconfig."]
+procedure = ["Identify the audio DSP, codec and routing resources from the stock DTB."]
+findings = ["Shared Qualcomm ADSP and audio components are not applicable to Camellia."]
+completion = ["A declared route carries playback or capture through start, stop and format changes."]
+limits = ["Audio is not implemented."]
+next_action = ["Inventory the MediaTek audio hardware after XNU reaches the relevant IOKit phase."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["board.toml", "package/**", "scripts/**", "configs/**"]
+inputs = ["MT6359 PMIC, MT6833 clocks and power domains, charger, battery and XNU power management."]
+configuration = ["Camellia uses inherited MT6789 PMIC-wrapper code as a bring-up placeholder.", "No XNU battery or board power component is selected."]
+procedure = ["Map PMIC rails, clocks and power domains before enabling XNU power transitions."]
+findings = ["The current boot path does not initialize a complete MT6359 power stack.", "Earlier forced display and power paths could stop early boot; the verified path keeps vendor hardware untouched where possible."]
+completion = ["Power rails, clocks, battery units and suspend/resume transitions match device observations."]
+limits = ["Native MT6359 power management and XNU battery/charging support are incomplete."]
+next_action = ["Inventory MT6359 rails and ownership, then implement one power domain at a time."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "device-verified"
+components = ["DarwinBoot", "XnuPrelink", "SoftwareAES"]
+paths = ["board.toml", "configs/**", "patches/**", "README.md"]
+inputs = ["iPad7,1 iPadOS 17.7.11 build 21H461 kernelcache, prelink roots, ADT, trust cache, Data seed, firmware FD and 64 MiB payload."]
+configuration = ["The public firmware release pairs FD sha256 68184f8a1451d08a90fafc61b1163e6e2056469bac174ebc5c71b38f23bfc406 with uefi_jump sha256 bec844cf909a8032efe33b58c879ba6ff499036263c824672a47afdc9f3a71c6.", "Release boot image sha256 is 1fc459383672b0e1c6df7687bba8342e9ec12bf230a7df98b461407190d1b939."]
+procedure = ["Build the 4 KiB XNU/prelink inputs, ADT and payload and keep their hashes with the image record.", "Assemble the Android boot v2 image and verify kernel, ramdisk and DTB offsets.", "Flash boot_a and the raw payload to vendor_boot_a, then confirm the UniXNU menu."]
+findings = ["The boot image contains UEFI handoff, KO and drm_linear but not the XNU payload.", "Without a payload UEFI shows only firmware boot-manager entries; with the matching payload the Camellia UniXNU menu appears.", "XNU 4 KiB page-table work is separate from the verified UEFI handoff."]
+completion = ["The generated boot image and payload have stable hashes, match the target boot format and reach the expected XNU entry or UI milestone."]
+limits = ["A usable Camellia XNU kernel/root path is not yet verified to userland.", "The private Magisk/jump2 boot build input is intentionally not published."]
+next_action = ["Record the kernel, ADT, trust cache and payload hashes with the next 4 KiB XNU image used on the phone."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/BOOT-IMAGE.zh-CN.md", result = "Boot v2 geometry, payload layout and flash procedure." },
+  { kind = "device", reference = "https://github.com/stanveyjiang/uefi-camellia/releases/tag/v2026.10.26", command = "fastboot flash boot_a camellia-preboot-uefi-v2026.10.26.img; fastboot flash vendor_boot_a payload.img; fastboot reboot", revision = "31f482a209bd04fd2b264d1fa180fa862966a1a6", result = "Device reached UEFI and the Camellia UniXNU payload menu." },
+]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = ["README.md", "configs/**", "package/**", "scripts/**", "patches/**"]
+inputs = ["Framebuffer debug console, UEFI stage colors, podman/pstore notes where available, Linux hot-jump dmesg and fastboot recovery."]
+configuration = ["CONFIG_XNU_DT_PANIC_REGION=y and CONFIG_XNU_NATIVE_PAN=y.", "The pre-Android stage uses red, green, cyan and magenta framebuffer states; UEFI uses the framebuffer-backed console."]
+procedure = ["Record FD, KO, payload and boot-image hashes before every device test.", "Record the last visible stage, UEFI driver name, exception PC/ESR/FAR or the first failing operation.", "Keep original boot_a and vendor_boot_a images available before flashing."]
+findings = ["A fixed approximately 25-30 second reset can identify a loader or early UEFI failure and should not be assumed to be a DXE watchdog.", "The direct BootShim route and a base-only hot-jump FD both fail; checking FD entry and stack prevents misdiagnosis.", "The final boot image can show a short pause before continuing, so a brief delay is not by itself a failure."]
+completion = ["Each claimed milestone has an image hash, source revision, command and observed device result, with a tested recovery route."]
+limits = ["Phone UART is not available for all early paths; some diagnostics rely on framebuffer stages and Android dmesg."]
+next_action = ["Add a pstore or USB serial transport when the next XNU milestone needs logs beyond the framebuffer."]
+evidence = [
+  { kind = "source", reference = "https://github.com/stanveyjiang/uefi-camellia/blob/31f482a209bd04fd2b264d1fa180fa862966a1a6/GUIDE.zh-CN.md", result = "Boot-stage diagnostics, recovery and hash requirements." },
+  { kind = "device", reference = "https://github.com/stanveyjiang/uefi-camellia/releases/tag/v2026.10.26", command = "fastboot flash boot_a camellia-preboot-uefi-v2026.10.26.img; fastboot flash vendor_boot_a payload.img; fastboot reboot", revision = "31f482a209bd04fd2b264d1fa180fa862966a1a6", result = "Final boot image reached UEFI after a short initial pause and was recoverable with the stock partitions." },
+]

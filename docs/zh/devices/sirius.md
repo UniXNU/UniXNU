@@ -6,7 +6,7 @@
 
 Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: entry, MMU, timer, PSCI, platform expert and the boot-progress console work on hardware; IOKit is blocked on AppleARMCPU claiming /cpus.
 
-源记录: [porting.toml](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/porting.toml), `e51069a970f81a3c48588041a0caa3087a1ebbbc`.
+源记录: [porting.toml](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/porting.toml), `f269452c36eceb7f91446fccc4c3bed175aaa98e`.
 
 本页按设备记录自动生成。
 
@@ -16,7 +16,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 | [固件与启动](#firmware) | `implemented` |
 | [CPU 与中断](#cpu) | `implemented` |
 | [内存与 DMA](#memory) | `implemented` |
-| [存储与根卷](#storage) | `planned` |
+| [存储与根卷](#storage) | `device-verified` |
 | [显示](#display) | `implemented` |
 | [输入](#input) | `planned` |
 | [GPU](#gpu) | `planned` |
@@ -25,6 +25,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 | [电源](#power) | `planned` |
 | [镜像组装](#packaging) | `implemented` |
 | [诊断](#diagnostics) | `implemented` |
+| [boot-chain](#boot-chain) | `implemented` |
 
 ## 配置 {#configuration}
 
@@ -54,6 +55,8 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- board.toml gained build-sirius-emmc.py in the archive list next to the USB console entry.
+- board.toml lists build-sirius-emmc.py alongside the other archives, because the SDCC1 probe is compiled the same way as the USB console and joins the same force-loaded archive.
 - Format 2 replaced the hand-written ADT generator of the legacy port \(scripts/make-sirius-adt.py\) with a board DTS: the payload step compiles the tree and derives kernel.macho.adt from it.
 - The arm-io base is derived from the exported nodes, not written by hand: the GIC at 0x17a00000 makes the window start at 0x17000000, which XNU reads as the SoC base.
 - The legacy port set ipad\_identity = true; in format 2 the same identity is the OS profile's \[adt\] tables, so the board only states its deviations.
@@ -75,7 +78,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 固件与启动 {#firmware}
 
@@ -102,6 +105,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The eMMC work adds no firmware component: the payload still boots through U-Boot with the same marker file.
 - U-Boot's UEFI services are enough for UniXNU, DarwinBoot and XNU: no Mu-Silicium platform port is needed for this board.
 - DarwinBoot's GIC-500 pre-configuration \(the iBoot role\) is what lets the kernel pass lockdown and start kexts on this SoC.
 - The pre-configuration must not enable the EL1 virtual timer PPI early: on SDM710 that is INTID 19 and it fires before ArmCpu installs its handler.
@@ -120,7 +124,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## CPU 与中断 {#cpu}
 
@@ -146,6 +150,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The eMMC bring-up does not touch the CPU selection or the ArmCpu driver; board.toml only gained an archive entry.
 - The boot-progress TOPO row confirms the kernel topology on hardware: boot=0 max=7 nums=01234567.
 - With sheng-smp=1 the native ArmCpu claims every /cpus nub; without it the kernelcache AppleARMCPU takes the nubs and panics with "CPU configuration in device tree is invalid" because it requires /cpus/max\_cpus.
 - AppleARMCPU still wins the nubs at the current stage, which is the open IOKit blocker.
@@ -164,7 +169,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 内存与 DMA {#memory}
 
@@ -186,6 +191,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The eMMC probe maps two register windows \(GCC and SDCC1\) and reads only; the payload memory map is unchanged.
 - The single contiguous range is what DarwinBoot's window allocation and the ADT handoff require; the two physical banks are described as one range on purpose.
 
 ### 完成条件
@@ -202,44 +208,75 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 存储与根卷 {#storage}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
 - The reference unit is eMMC, not UFS: the UFS transport and its sheng integration points do not apply to this board.
-- No native storage driver exists yet; the expected first stop of the kernel is the root device wait.
+- The original kernelcache is the only source of IOStorageFamily's addresses; its kext images carry no symbol table, so they are derived from the dispatch table itself.
 
 ### 配置
 
-- No storage component is selected in board.toml; CONFIG\_XNU\_NATIVE\_UFS is off in the defconfig.
+- board.toml lists build-sirius-emmc.py \(the SDCC1 probe\) and build-native-emmc.py \(the IOKit block driver\) in \[kernel\] archives; CONFIG\_XNU\_NATIVE\_UFS stays off.
+- \[userdata\] carries the 512-byte geometry and the OS/SystemOS windows read from the device's own GPT.
 
 ### 操作步骤
 
-- Follow the storage guide to choose an eMMC driver path, then select it and record the checkpoint.
+- Build the kernel with that archive list: the driver's storage imports are bound at the prelink slide and archived with it.
+- Read the evidence off the boot-progress console: the probe prints the GPT rows, the driver logs the block count it publishes.
 
 ### 开发经验
 
-- The legacy port deliberately kept every UFS and owner-root flag off; the boot-progress interlock of UniXNU had to be relaxed for that reason.
+- The data path works: ADMA2 reads return EFI PART from LBA 1, the GPT header parses \(entries\_lba=2, count=84, size=128\) and 81 partitions with geometry are listed; boot 1179648..1310719, vendor 11010048..17301503, userdata 17301504..122142686.
+- Five conditions had to hold at once: the RCG2 encoding \(CFG=0x2017, M=1, N=0xfc, D=0xfb\), 1.8 V I/O \(the board's vqmmc\), the 32-bit interrupt/error map at 0x30/0x32/0x36, the ADMA descriptor address at 0x58/0x5c rather than 0x00, and cache maintenance \(flush\_dcache64\) because the engine reads memory and not the CPU cache.
+- SMMU is not the blocker: the boot chain leaves it disabled \(scr0=0x00230406, bit0=0\) and writing S2CR hung the SoC twice, so the driver only reads SMMU state.
+- IOStorageFamily is a kext of the original kernelcache, so the archive form of the driver left IOBlockStorageDevice undefined at the kernel link \(ld: 'a missing vtable usually means the first non-inline virtual member function has no definition'\).
+- The prelink slides every component by a constant: extents\[\].va = original + slide for each segment and bindings\[\] carries new\_site = site + slide, so the addresses the driver needs are the kernelcache's plus the slide.
+- The dispatch table is identifiable without a live snapshot: of the 190 pinned slot names 176 are kernel exports, exactly one \_\_DATA\_CONST table matches all of them, the other 14 slots point at the kext's own BRK traps, the single constructor that stores table+16 forwards to the actual IOService constructor and the base destructor resolves to IOService's.
+- Eleven imports are bound \(dispatch table, metaclass, protected constructor, base destructor and seven methods\); when the prelinked kernel exists the derivation also checks it holds the same constructor at the slid address, so a wrong slide cannot pass.
+- The SHNGROOT manifest at userdata LBA 17301504 describes two windows \(OS 17303552+11870275, SystemOS 29175808+6451200\); publishing them as their own IOBlockStorageDevice makes APFS mount disk0, disk1s1 and disk2s1 \(the OS volume DawnUpdate21H461.J120J121J207J208OS\) and bsd\_init completes.
+- A thread\_call has a single pending slot: thread\_call\_enter1 neither queues a second call nor preserves the first parameter, so passing requests there silently dropped completions and any caller waiting on such a request hung with the kernel otherwise idle. Requests now sit on a software queue that one drain services.
+- Completing a block request from another thread deadlocks this stack the same way the drop did \(reads and blocks frozen at the same point, no error, the drain asleep\), so doAsyncReadWrite completes inline by default.
+- The recurring 'Taking non-sleepable RW lock with preemption enabled' panic is the trust cache runtime lock, not a pmap lock: lock 0xfffffff007b3b548 resolves to \_trust\_cache\_rt\_lock and the first caller to \_query\_trust\_cache+0x70. trust\_cache\_runtime\_init\(\) is not compiled into this build, so the lock word reads all zeros \(lck\_rw\_can\_sleep == false\) and lck\_rw\_lock\_shared panics at lock\_rw.c:1400; the driver's heartbeat now mirrors the panic text into the USB ring, which is how the addresses were read.
+- With the runtime guarded to answer KERN\_NOT\_FOUND, AMFI refuses every image and the kernel kills launchd with namespace 9 \(OS\_REASON\_EXEC\) code 8 \(EXEC\_EXIT\_REASON\_SECURITY\_POLICY\); recording and clearing that answer with sirius-skip-cs=1 makes exec\_activate\_image return 0, so execve of /sbin/launchd completes.
+- The card clock can be raised from the identification rate with the same table U-Boot programs: the RCG divider field holds \(div \* 2 - 1\) and DUAL\_EDGE is set when n \!= m, so the 400 kHz entry \(CXO, div 12, m 1, n 4\) is CFG 0x2017 and 25 MHz \(GPLL0\_EVEN, div 6, m 1, n 2\) is CFG 0x260B; 25 MHz stays inside default speed, 50 MHz would need the CMD6 high-speed switch.
+- With the original trust-cache bundle in the payload and the runtime initialised at startup, AMFI answers the exec policy itself: the boot prints execve activate 0 without the sirius-skip-cs bypass line, so the Apple-signed launchd is trusted rather than skipped into.
+- The 25 MHz switch reads the GPT signature back at the new rate on device \(the probe prints EMMC clock25=ok\), so the RCG encoding above is confirmed rather than assumed.
+- Throughput at the identification clock is about 550 blocks/s \(0x3FC to 0x84A in two seconds\), the expected ceiling for 400 kHz on a four-bit bus, so the 400 kHz setting is a speed problem and not the cause of the stalls.
+- The init exec returns 0 and then nothing asks the driver for another block: reads stop at 0x10D \(269 requests, 0x98F blocks\) while the heartbeat keeps counting, so the wait is past the storage stack. The caller side is now instrumented \(sirius-post-exec-trace.patch\): the exec thread-switch state, every new user thread start at thread\_bootstrap\_return, the first pid 1 syscalls with their returns, each bsd\_ast for pid 1 and the first user faults after the exec, all written to the same USB ring and summarised by the heartbeat.
+- The caller-side probe closes that question: the pid 1 thread stays in load\_init\_program\_at\_path, inside copyout\(\) of the launchd path, and takes 62.6 million faults in about a minute. The stall is a fault loop in the exec path, not a storage wait.
 
 ### 完成条件
 
-- The eMMC registers, GPT and the OS/SystemOS windows are correct, the root volume mounts and launchd starts.
+- The eMMC registers, GPT and the SHNGROOT windows are correct; APFS mounts the OS volume, bsd\_init completes, init execs /sbin/launchd and execve returns 0.
 
 ### 当前范围
 
-- No storage driver and no root filesystem: the port currently stops before the root device.
+- Read-only: the transfer path has no write command and reportWriteProtection\(\) says so.
+- After the successful execve of launchd the driver receives no further requests: the remaining wait is past the storage stack, not in it.
+- The card clock is still the identification rate \(400 kHz, about 550 blocks/s measured\); nothing raises it to high speed yet.
+- The exec policy no longer needs a boot argument: the payload carries the original trust-cache bundle and the kernel initialises its runtime at startup. The sirius-skip-cs bypass is kept in the patch series, unused, in case a future image falls outside the bundle.
 
 ### 下一步
 
-- Inventory the eMMC controller \(SDCC/MSDC\) registers and interrupt lines from the vendor tree before selecting an implementation.
+- Verify the 25 MHz switch \(sirius\_emmc\_hs=1\) reads the GPT signature back and measure the new block rate; then decide whether the CMD6 high-speed switch to 50 MHz is worth it.
+- Keep the trust-cache bundle in step with the OS build when the IPSW changes \(its sha256 is pinned in board.toml \[payload\] trust\_cache\_sha256\).
+- Boot the post-exec-probe kernel and read the counters: two SIRIUS user thread start lines mean the exec'd thread was scheduled, and the last init syscall enter without a matching return names the call it never comes back from.
+- Raise the SDCC1 clock out of identification speed \(GCC root clock plus the card's high-speed mode\).
 
 ### 证据
 
-按下一步操作收集证据。
+- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
+  Command: <code>fastboot flash vendor sirius-obs.img; fastboot reboot; capture-usb-console.py --duration 240</code>. Revision: `d867b1d6498dc4d0f4ae4e18060762dcae6c5847`.
+- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
+  Command: <code>./scripts/xnu-container.sh run bash -lc './unixnu build kernel --skip-setup -D ../sirius'</code>. Revision: `a47f0d6b4615c3cdebf92102400a1bc302eb6d73`.
+- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
+  Command: <code>fastboot flash vendor sirius-if.img; fastboot reboot; capture-usb-console.py --duration 220</code>. Revision: `bb812428dccd1f676455813ad198ed2bee4a8e3e`.
+- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/package/sirius_emmc.c)
 
 ## 显示 {#display}
 
@@ -261,6 +298,8 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The panel gained an EMMC row \(step, version, capabilities, state, clock, power, clock-branch halts\) next to the USB row, so the storage bring-up is visible without a serial link.
+- The USB row \(drawn by this panel\) labels its six values after what they now carry - step, txev, rxev, chars, echo, poll - because they were first wired to register names and had drifted.
 - The panel is the readable kernel log of this port: it renders the console, the TOPO/PROBE rows and panic\(\) output.
 - Since the panic snapshot patch the panel re-renders at panic time, so the rows are not a stale frame.
 
@@ -278,7 +317,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 输入 {#input}
 
@@ -299,6 +338,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.
 - No input component is selected; the button node exists so that BSPlatform and MobileGestalt read a coherent product.
 
 ### 完成条件
@@ -444,6 +484,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The eMMC probe does not vote any RPMH resource; it re-enables the GCC SDCC1 branches that the boot chain had already set.
 - Reset works through PSCI \(the stage-3 reset loop proved it\).
 
 ### 完成条件
@@ -460,7 +501,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 镜像组装 {#packaging}
 
@@ -484,6 +525,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- The eMMC probe ships in the same force-loaded archive as the USB console, so the package list and payload layout are unchanged.
 - Format 2 generates kernel.macho.adt from the DTS, so the legacy ADT script is retired; make-uboot-payload.py still finishes the volume because U-Boot needs the EFI binaries inside it.
 - scripts/build-xnu-4k-baseline.sh is a copy of the UniXNU script with one board deviation: the boot-progress interlock only requires the source crypto provider.
 - The legacy build applied patches/xnu/\*.patch by glob \(56 files\); format 2 applies only what the series list names, and the ARM64 and OS series assume the two files they omit are present. native-smp-secondary.patch sets MAX\_CPUS 8 and Affinity1 core numbering; sheng-platform-power.patch supplies the bsd\_init.c block that zzz-boot-progress.patch quotes as context \(CONFIG\_XNU\_SHENG\_PMGR is off, so its code compiles to nothing\). Both now live in the sdm710 SoC series, which applies before the OS series.
@@ -515,7 +557,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 证据
 
-- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
 
 ## 诊断 {#diagnostics}
 
@@ -523,7 +565,7 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 硬件与依赖
 
-- The panel and the serial console are the two evidence channels; there is no storage for logs yet.
+- The panel and the serial console are the two evidence channels; since the DWC3 CDC console works, the host captures the kernel log directly and photographs are only a fallback.
 
 ### 配置
 
@@ -536,8 +578,21 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 开发经验
 
+- A register write-and-read-back test is the next diagnostic for the eMMC data phase, because SDHCI\_TRANSFER\_MODE reads back 0x33 after writing 0x13, which separates a write the vendor layer ignores from a command that is never sent.
+- The eMMC probe reports every step \(controller registers, the clock tree, the response registers around CMD0/CMD1 and each failure\) into the USB console ring, which is how the card clock and CMD2 findings above were obtained without a photograph.
+- The eMMC probe reports through sirius\_usb\_log\_char\(\) straight into the USB console ring, because kernel console output stops reaching the ring long before bsd\_init runs.
 - Stage bands \(entry, pre-MMU, panic\) and the TOPO/PROBE/MEM rows replaced the LED and UART guessing of earlier bring-up.
 - A panic snapshot forces a panel re-render at panic time; before it, rows could show a stale frame.
+- The USB panel row names its fields after what they hold \(step, txev, rxev, chars, echo, poll\) instead of the register names they were first wired to, so a photograph can be read without the source.
+- The CDC console hands the console ring to the host once per attach: the pump timing that works \(a short inline poll loop that breaks after the ring is drained\) delivered the 3813-byte boot log on every attempt, while longer loops and a DTR-gated pump delivered nothing, so that timing is treated as load-bearing until the periodic path runs during bsd\_init.
+- The post-exec wait is instrumented on the kernel side rather than through the driver: sirius-post-exec-trace.patch prints the exec thread-switch flags, every user thread start \(from thread\_bootstrap\_return, so one line means the exec'd thread never ran and two mean it did\), the first pid 1 syscalls with their returns, every bsd\_ast for pid 1 and the first user faults after the exec, and the eMMC heartbeat prints the counters so one capture answers the question.
+- The exec does not stall after activate: load\_init\_program prints the scratch page \(0x1000, the first free page of the init map\), then the init thread is inside copyout\(\) and takes 62,673,044 faults in about a minute while it stays TH\_RUN, so the wait is a tight fault-retry loop, not a sleep.
+- PAN is not the cause: the kernel reports PAN implemented with PSTATE.PAN already 0, and CONFIG\_XNU\_NATIVE\_PAN=n compiles copyio's user\_access\_enable\(\)/disable\(\) away anyway, so nothing in this kernel ever sets it.
+- The mapping is not missing either: the first fault is a level-1 translation fault, but afterwards pmap\_find\_phys finds the page, AT S1E1W resolves the same address and vm\_fault returns KERN\_SUCCESS, while the retried store faults again as a level-3 permission fault; the raw leaf PTE the pmap holds is now dumped next to ESR/FAR/PC to see which AP bits it carries.
+- The pid 1 kernel stack, dumped out of band by the heartbeat and symbolized against mach.development.bcm2837.unstripped, shows \_bcopyout+0x38 under \_load\_init\_program\_at\_path+0x6c under \_bsdinit\_task+0x74, which is the copyout of the launchd path.
+- The loop is not limited to the copyout: with the trust-cache bundle back in the payload the exec completes \(execve activate 0, AMFI answers nothing\) and the exec'd thread enters userland at pc 0x100924e50, where it takes 92 million instruction aborts in about a minute on three addresses \(ESR 0x82000007, level-3 translation faults\) without ever issuing a syscall or a single block read; the entry point is right, the code pages are simply not visible to the CPU.
+- Both loops have the same shape: vm\_fault opens the page in thread-&gt;map's pmap and returns KERN\_SUCCESS, while the CPU keeps taking the fault. AT S1E1W and pmap\_find\_phys disagree about the physical page behind 0x1000, which points at the CPU running with a pmap that is not the thread's after the exec task switch.
+- A payload built without --trust-cache leaves the ring reporting no external trust caches found and AMFI kills launchd with namespace 9 \(OS\_REASON\_EXEC\) code 8; the same kernel with the bundle present reaches execve activate 0 without an exec-policy line, so that panic is a build-argument slip, not a regression.
 
 ### 完成条件
 
@@ -545,14 +600,68 @@ Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: ent
 
 ### 当前范围
 
-- No persistent log capture: the evidence lives in photographs of the panel and in the run's hashes.
+- The CDC console delivers the console ring as it stood when the host attached; making the whole boot stream live is the remaining work.
 
 ### 下一步
 
-- Add the boot row and hash triple to every hardware result recorded here.
+- Add the boot row and hash triple to every hardware result recorded here, and attach the captured console log rather than a photograph whenever one exists.
 
 ### 证据
 
-- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/57UU/UniXNU-sirius/blob/e51069a970f81a3c48588041a0caa3087a1ebbbc/docs/HANDOFF.zh-CN.md)
+- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/HANDOFF.zh-CN.md)
+- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/docs/evidence/sirius-usb-console-20261026-1605.log)
+  Command: <code>sudo python3 scripts/capture-usb-console.py --wait 60 --duration 190 --output /tmp/boot.log</code>. Revision: `366abe2948fdb0c1554f7e0b89b731160f4527a4`.
+
+## boot-chain {#boot-chain}
+
+`implemented`
+
+### 硬件与依赖
+
+- Boot chain: ABL -&gt; U-Boot \(boot partition\) -&gt; UEFI -&gt; UniXNU.efi on the vendor partition -&gt; DarwinBoot.efi -&gt; XNU.
+- The U-Boot fork github.com/57UU/u-boot branch sirius/v2.0 carries the board support for sdm710-xiaomi-sirius and sirius-build.sh's ENV\_FILE option; the UniXNU boot chain itself is environment text, not source.
+- The EDK II package that builds UniXNU.efi, the DXE drivers and DarwinBoot comes from the UniXNU framework's package/ directory.
+
+### 配置
+
+- uboot/src is a submodule of that fork at branch sirius/v2.0 \(shallow\), pinned to a2a847b1a84.
+- uboot/unixnu-sirius.env is the board's stock default environment plus unixnu\_boot/unixnu\_check, the bootmenu entry they need and the bootcmd chain; uboot/build.sh builds boot-unixnu.img from the submodule and that file.
+- efi/ is a vendored copy of the framework's package/ \(UniXNUPkg, Scripts, build.sh\) taken at f85b5a6, so the repository can build the whole chain on its own.
+
+### 操作步骤
+
+- U-Boot: git submodule update --init --depth 1 uboot/src, then uboot/build.sh \(needs CROSS\_COMPILE and mkbootimg\); fastboot flash boot uboot/boot-unixnu.img.
+- Payload: assemble the kernel, efi/ and the EDK II build output with scripts/make-uboot-payload.py --marker, then fastboot flash vendor.
+- Recovery: flash sirius-distro's build/boot.img, which ignores the marker and boots Linux.
+
+### 开发经验
+
+- U-Boot needs no source change for this port: with the environment file above, bootcmd runs unixnu\_check first and falls back to the Linux path when /EFI/UniXNU/BOOTUNIXNU is absent on p80.
+- mmc 0:50 is a hexadecimal partition number \(0x50 = 80 = the vendor partition\); 0:80 is read as 0x80 = 128 and fails with 'Invalid partition 128'.
+- bootflow scan cannot find p80: it stops after the first 30 partitions of each device, so the boot chain uses load/bootefi with the partition spelled out.
+- The UniXNU boot chain used to live only in an unversioned scratch directory \(the environment file and boot-unixnu.img\), so the boot image could not be rebuilt from any repository; both the file and the recipe are in uboot/ now.
+- U-Boot's fastboot gadget answers the whole getvar dialogue but flashing the vendor partition hangs; the repeated 'request ... was not queued to ep1in-bulk' line is fastboot\_tx\_write\(\) cancelling the IN request before every queue, a dequeue miss rather than a rejected transfer, and stock 2026.07 never received the modern dwc3 ENDTRANSFER/dequeue rework, so that cancel can strand a TRB the controller still owns. Removing the dequeue is the candidate fix.
+- Writing the BCB command 'uboot-fastboot' before booting UniXNU does bring the next start into U-Boot's own fastboot on the phone, so entering it is solved while flashing from it is not; the PMIC spare ABL actually reads \(PON\_SOFT\_RB\_SPARE, 0x88f = 0x04 in U-Boot's PID/offset encoding\) still needs CONFIG\_CMD\_PMIC and a verified pmic device name.
+- U-Boot's fastboot reports slot a, so the host appends \_a to every partition name it flashes; fastboot\_partition\_alias\_&lt;name&gt;\_a=&lt;name&gt; in the environment maps both spellings onto the real GPT names.
+
+### 完成条件
+
+- uboot/build.sh reproduces boot-unixnu.img from a fresh clone; with the marker in the payload U-Boot starts UniXNU.efi, and without it the phone boots Linux.
+- The payload volume holds UniXNU.efi, DarwinBoot.efi, kernel.macho, kernel.macho.trustcache and the marker.
+
+### 当前范围
+
+- The EDK II package is a copy, not a submodule: keeping it in step with the framework is a manual diff of package/.
+- The U-Boot submodule is shallow and pinned by commit; rebasing onto a newer sirius/v2.0 is a deliberate update.
+
+### 下一步
+
+- Test the f\_fastboot dequeue removal end to end: after a power cycle, flash boot from U-Boot's own fastboot and, if that works, arm the BCB before booting UniXNU so a hung run comes back to a usable fastboot without the chord.
+- Build UniXNU.efi from efi/ once and compare it with the framework's output, so the vendored copy is known good rather than assumed.
+
+### 证据
+
+- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/uboot/README.md)
+- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/57UU/UniXNU-sirius/blob/f269452c36eceb7f91446fccc4c3bed175aaa98e/efi/README.md)
 
 </div>

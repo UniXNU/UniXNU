@@ -68,7 +68,7 @@ python -m unittest discover -s tests/terminal -v
 | 来源 | 通道 | 用途 |
 | --- | --- | --- |
 | [固件日志导出](/zh/porting/log-capture#qr-logs) | OneSend 二维码 | 当前 UEFI Advanced Logger 缓冲 |
-| [持久化日志](/zh/porting/log-capture#persistent-logs) | 预留存储区域和 Linux 读取器 | 内核消息与诊断快照 |
+| [持久化日志](/zh/porting/log-capture#persistent-logs) | 预留存储区域、Linux 读取器或 recovery 读取器 | 内核消息与诊断快照 |
 | UEFI 串口 | UART | 固件、UniXNU、DarwinBoot |
 | 内核串口 | 由 `serial=` 选择的 UART | XNU 控制台和 panic 输出 |
 | 诊断页 | framebuffer | 控制台停止后的实时状态 |

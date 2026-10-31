@@ -1,0 +1,708 @@
+# Xiaomi Mi 8 SE \(dddqmmx\)
+
+[dddqmmx/UniXNU-sirius](https://github.com/dddqmmx/UniXNU-sirius)
+
+<div v-pre>
+
+Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: 8 GiB persistent APFS Data container resized in-kernel with zero ENOSPC, launchd early boot, SpringBoard, backboardd and Setup.app running with sustained \~19 fps CPU-copied GOP presentation, AppleKeyStoreState and FTS521/ShengHidInput touch active, and unattended USB FASTBOOT return to ABL verified.
+
+Source record: [porting.toml](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/porting.toml), `94b7f39286aff8de0b84f2243307a7d54a6b6b08`.
+
+This page is generated from the device record.
+
+| Area | Status |
+| --- | --- |
+| [Configuration](#configuration) | `implemented` |
+| [Firmware and boot](#firmware) | `implemented` |
+| [CPU and interrupts](#cpu) | `implemented` |
+| [Memory and DMA](#memory) | `implemented` |
+| [Storage and root](#storage) | `device-verified` |
+| [Display](#display) | `implemented` |
+| [Input](#input) | `planned` |
+| [GPU](#gpu) | `planned` |
+| [Network](#network) | `planned` |
+| [Audio](#audio) | `planned` |
+| [Power](#power) | `planned` |
+| [Image assembly](#packaging) | `implemented` |
+| [Diagnostics](#diagnostics) | `implemented` |
+| [boot-chain](#boot-chain) | `implemented` |
+
+## Configuration {#configuration}
+
+`implemented`
+
+Components: `ArmDTPlatform`, `DarwinBoot`.
+
+### Hardware and dependencies
+
+- SoC: SDM710 \(Kryo 360, 2x Cortex-A75 + 6x Cortex-A55\), GIC-500 GICv3, 19.2 MHz Qualcomm XO counter, PSCI over SMC.
+- DRAM: 6 GiB model, 2 GiB at 0x80000000 plus 0xfd6c0000 at 0x100000000, 0x17d6c0000 usable.
+- Target OS: the unchanged iPad7,1 iPadOS 17.7.11 \(21H461\) restore image, the same kernelcache as fajita and sheng.
+- Hardware sources: mainline sdm670.dtsi, the vendor kernel tree and measurements on the phone.
+
+### Configuration
+
+- board.toml is format 2 \(schema\_version = 2\) and selects soc\_source = sdm710 and os\_profile = ipados-17.7.11-21H461.
+- dts/sirius.dts describes memory, the eight cores and their affinities, and includes the SoC DTSI for the GIC, PSCI and counter.
+- configs/sirius\_defconfig keeps the first-console kernel configuration and turns off the profile settings the image does not use yet.
+- The prelink roots, slide, early security initializer and Apple device-tree identity come from the OS profile; the board adds sleep-disabled, the product model and the button set.
+
+### Procedure
+
+- From a UniXNU checkout: ./unixnu defconfig sirius\_defconfig -D ../UniXNU-sirius.
+- Then ./unixnu fetch, ./unixnu status --json and ./unixnu tree; the output is out/sirius/ipados-17.7.11-21H461/sirius/.
+- Compile the hardware tree through the payload step \(prototype: dtc -I dts -O dtb -i &lt;soc&gt;/dts dts/sirius.dts\).
+
+### Development findings
+
+- Local 2026-10-31 verification \(kernel ad6a9709..., payload afa7def2...\): removing sirius-skip-setup=1 while no Metal GPU driver exists avoids the PosterBoard SIGABRT loop and lets SpringBoard launch CPU-rendered Setup.app, while NativeEmmc + BootWatchdogPolicy seed and online-resize the persistent eMMC APFS Data container from 32 MiB to 8 GiB \(2097152 blocks\) with zero ENOSPC.
+- Local 2026-10-30 integration selects GopFramebuffer, AppleKeyStoreState and ShengHidInput, links the late display archive, enables CPU frequency, FTS521 touch and GMU phase 2, and carries a 256 MiB Data seed fallback. Persistent Data mounted on this unit, but 256 MiB still reaches ENOSPC. Default panic autoreset has been removed because the panic buffer may contain recovered assertions.
+- board.toml gained build-sirius-emmc.py in the archive list next to the USB console entry.
+- board.toml lists build-sirius-emmc.py alongside the other archives, because the SDCC1 probe is compiled the same way as the USB console and joins the same force-loaded archive.
+- Format 2 replaced the hand-written ADT generator of the legacy port \(scripts/make-sirius-adt.py\) with a board DTS: the payload step compiles the tree and derives kernel.macho.adt from it.
+- The arm-io base is derived from the exported nodes, not written by hand: the GIC at 0x17a00000 makes the window start at 0x17000000, which XNU reads as the SoC base.
+- The legacy port set ipad\_identity = true; in format 2 the same identity is the OS profile's \[adt\] tables, so the board only states its deviations.
+- configs/sirius\_defconfig keeps the ARM64 profile's CONFIG\_XNU\_NATIVE\_PAN=y: Kryo 360 implements PSTATE.PAN, the kernel leaves SCTLR\_EL1.SPAN clear, so every exception entry from EL0 sets PAN and only the PAN build's copyio clears it; with the flag off the pid 1 exec loops in copyout\(\) of the launchd path \(tens of millions of faults, each resolved by vm\_fault and taken again\).
+- The Data volume needs an APFS seed built with macOS hdiutil/diskutil \(UniXNU's prepare-owner-data-fixture.py\), so .github/workflows/data-seed.yml builds it on a hosted macOS runner: 256 MiB for a RAM seed, 8192 MiB for the persistent container. The seed also goes to an encrypted release asset \(data-seed-&lt;size&gt;mib\) because an artifact download needs a GitHub token the build host does not keep, while a release asset is readable without one.
+- configs/sirius\_defconfig mounts the payload's APFS Data seed at /private/var before launchd \(CONFIG\_XNU\_OWNER\_DATA\_MOUNT, UUID 9399864F-... of the 256 MiB seed the data-seed workflow built\); launchd's own mount -P 1 task exits 66 without it and the exit panics the boot. \[payload\] size\_mib is 512 so the seed and the kernel fit in one vendor volume.
+- The data-seed workflow builds the seed at the size given as its size\_mib input: 32 MiB is the ungrown fixture the reference port mounts, and the 256/8192 MiB values are the grown containers; the seed carries a new volume UUID per build, which NativeEmmc reports when it differs from CONFIG\_XNU\_OWNER\_DATA\_VOLUME\_UUID.
+- A 32 MiB seed is the ungrown fixture itself and skips the container grow: the grown 256 MiB container attaches but APFS publishes no volume from it \(checkpoint desc/data 0/0, no disk1s1\), while the reference port mounts the ungrown 32 MiB seed as disk3s1/OwnerData.
+- The seed in use is the ungrown 32 MiB fixture \(release asset data-seed-32mib, owner-data.cdr cd3bbd46..., volume 7F00D031-C00B-4368-A3FF-D4788A1323D6\); CONFIG\_XNU\_OWNER\_DATA\_VOLUME\_UUID records it.
+
+### Completion criteria
+
+- status --json resolves the ARM64, sdm710, iPadOS and device layers, prints a non-empty patch order and shows the device package as kits/sirius.
+- The compiled hardware tree carries one contiguous memory range equal to payload.dram\_size, eight enabled CPUs and a PSCI method.
+
+### Current limits
+
+- The SoC profile is new: only the GIC, PSCI, counter and the timer INTID are shared, everything else is still board-local.
+- No device-verified configuration has been recorded against a commit of this repository yet; the evidence is the legacy port's handoff document.
+
+### Next action
+
+- Run status --json and tree against this repository and commit the resulting unixnu.lock.
+- Rebuild the payload from dts/sirius.dts and compare the generated ADT with the legacy one before the next hardware boot.
+
+### Evidence
+
+- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Firmware and boot {#firmware}
+
+`implemented`
+
+Components: `DarwinBoot`.
+
+### Hardware and dependencies
+
+- The device runs sirius-distro \(mainline Linux\) and its boot partition carries U-Boot 2026.07 with EFI\_LOADER, the UEFI boot manager, GOP through vidconsole and EFI block volumes over FAT.
+- UniXNU.efi is built on the host by ./unixnu build package; DarwinBoot.efi is built from drivers/DarwinBoot.
+- The payload volume goes to the unused vendor partition mmcblk0p80 \(3 GiB\) and is selected by a marker file.
+
+### Configuration
+
+- board.toml has no \[firmware\] table: there is no Mu-Silicium firmware and no boot image on this port.
+- \[payload\] loader = "payload" makes the generated unixnu.toml load Payloads/DarwinBoot.efi as a \[\[driver\]\] instead of expecting it in the firmware volume.
+- scripts/make-uboot-payload.py adds \\EFI\\BOOT\\BOOTAA64.EFI \(UniXNU.efi\) and the DarwinBoot.efi driver to the payload FAT volume.
+
+### Procedure
+
+- fastboot flash boot the U-Boot image, fastboot flash vendor the finished payload volume, then select the UniXNU menu entry in U-Boot.
+- U-Boot boots UniXNU when /EFI/UniXNU/BOOTUNIXNU exists on the vendor partition and boots Linux otherwise.
+
+### Development findings
+
+- DarwinBoot now records free memory runs and the final EFI map; the integrated payload booted on the local unit. USB control corrections are built in a separate unflashed candidate.
+- The eMMC work adds no firmware component: the payload still boots through U-Boot with the same marker file.
+- U-Boot's UEFI services are enough for UniXNU, DarwinBoot and XNU: no Mu-Silicium platform port is needed for this board.
+- DarwinBoot's GIC-500 pre-configuration \(the iBoot role\) is what lets the kernel pass lockdown and start kexts on this SoC.
+- The pre-configuration must not enable the EL1 virtual timer PPI early: on SDM710 that is INTID 19 and it fires before ArmCpu installs its handler.
+
+### Completion criteria
+
+- U-Boot starts UniXNU from the FAT volume, the menu lists the xnu entry, and DarwinBoot hands control to the kernel with the device tree, framebuffer and command line.
+
+### Current limits
+
+- The boot chain is U-Boot specific: it is not reproducible with the Mu-Silicium flow of the other ports and is not covered by ./unixnu firmware or ./unixnu bootimg.
+
+### Next action
+
+- Keep the U-Boot side \(sirius-distro\) pinned by revision in the handoff document; it is the firmware for this port.
+
+### Evidence
+
+- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## CPU and interrupts {#cpu}
+
+`implemented`
+
+Components: `ArmCpu`.
+
+### Hardware and dependencies
+
+- Eight Kryo 360 cores at Affinity1 0x000..0x700, boot CPU cpu0; cpu0-5 Cortex-A55, cpu6-7 Cortex-A75.
+- GIC-500 distributor 0x17a00000/0x10000, redistributor 0x17a60000/0x100000, stride 0x20000.
+- The EL1 virtual timer is GIC PPI 3 / INTID 19 \(Apple uses PPI 11 / INTID 27\); the SoC counter runs at 19.2 MHz.
+
+### Configuration
+
+- dts/sirius.dts lists all eight cores in boot order with their compatible strings; the ADT carries the same order.
+- The kernel command line selects the board behaviour: sheng-smp=1, cpus=8, armcpu-self-ipi=1, armcpu-timer-intid=19.
+- drivers/ArmCpu/ArmCpu.cpp is the board copy of the component: it adds the non-Apple timer INTID, the /cpus probe counters and the sheng-smp claim path.
+
+### Procedure
+
+- Build the kernel, then read the boot-progress TOPO line to confirm the topology and the probe decision.
+
+### Development findings
+
+- The eMMC bring-up does not touch the CPU selection or the ArmCpu driver; board.toml only gained an archive entry.
+- The boot-progress TOPO row confirms the kernel topology on hardware: boot=0 max=7 nums=01234567.
+- With sheng-smp=1 the native ArmCpu claims every /cpus nub; without it the kernelcache AppleARMCPU takes the nubs and panics with "CPU configuration in device tree is invalid" because it requires /cpus/max\_cpus.
+- AppleARMCPU still wins the nubs at the current stage, which is the open IOKit blocker.
+
+### Completion criteria
+
+- Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU with the board INTID.
+
+### Current limits
+
+- IOKit attach of the native ArmCpu is not yet proven; the last trusted snapshot shows AppleARMCPU holding /cpus.
+
+### Next action
+
+- Stop pre-enabling the timer PPI in DarwinBoot, re-read the probe row, and confirm ArmCpu installs its IRQ handler before the timer fires.
+
+### Evidence
+
+- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Memory and DMA {#memory}
+
+`implemented`
+
+### Hardware and dependencies
+
+- Usable DRAM 0x17d6c0000 from 0x80000000 \(6 GiB model: 2 GiB then 0xfd6c0000 at 0x100000000\).
+- The framebuffer handed over by U-Boot sits at 0x9c000000 \(1080x2240 splash\).
+
+### Configuration
+
+- The DTS memory node is a single contiguous range and board.toml repeats the size as \[payload\] dram\_size; the driver refuses a mismatch.
+- The ADT receives dram-base, dram-size and the CHRP NVRAM proxy from the payload step.
+
+### Procedure
+
+- Read the MEM row of the boot-progress panel and compare it with the DTS range.
+
+### Development findings
+
+- The local boot used the 0xaa000000 contiguous window. SPMI PON register windows are mapped per channel instead of mapping the entire 32 MiB channel region.
+- The eMMC probe maps two register windows \(GCC and SDCC1\) and reads only; the payload memory map is unchanged.
+- The single contiguous range is what DarwinBoot's window allocation and the ADT handoff require; the two physical banks are described as one range on purpose.
+
+### Completion criteria
+
+- The kernel memory map accounts for every handoff region, and no DMA engine or framebuffer range overlaps the kernel window.
+
+### Current limits
+
+- DMA and SMMU behaviour is untested: there is no storage or GPU driver yet.
+
+### Next action
+
+- Capture the kernel's memory map row after the next IOKit break-through and reconcile it with the DTS.
+
+### Evidence
+
+- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Storage and root {#storage}
+
+`device-verified`
+
+### Hardware and dependencies
+
+- The reference unit is eMMC, not UFS: the UFS transport and its sheng integration points do not apply to this board.
+- The original kernelcache is the only source of IOStorageFamily's addresses; its kext images carry no symbol table, so they are derived from the dispatch table itself.
+
+### Configuration
+
+- board.toml lists build-sirius-emmc.py \(the SDCC1 probe\) and build-native-emmc.py \(the IOKit block driver\) in \[kernel\] archives; CONFIG\_XNU\_NATIVE\_UFS stays off.
+- \[userdata\] carries the 512-byte geometry and the OS/SystemOS windows read from the device's own GPT.
+
+### Procedure
+
+- Build the kernel with that archive list: the driver's storage imports are bound at the prelink slide and archived with it.
+- Read the evidence off the boot-progress console: the probe prints the GPT rows, the driver logs the block count it publishes.
+
+### Development findings
+
+- In-kernel 8 GiB APFS Data container resize verified on hardware \(kernel ad6a9709..., payload afa7def2...\): when the eMMC Data container at LBA 35627008 has fewer than 2097152 4 KiB blocks, NativeEmmc::prepareDataWindow writes the clean 32 MiB fixture from /chosen/memory-map/RAMDisk to LBA 35627008 and publishes an 8 GiB \(16777216-sector\) NativeEmmcBlock store; after /dev/disk3s1 mounts, BootWatchdogPolicy calls sirius\_apfs\_try\_resize\_data\("post-mount"\), which invokes prelinked AppleAPFSUserClient::containerResize \(0xfffffff005673e7c, prologue-checked\) with new\_size=0, growing disk3 from 8192 to 2097152 blocks \(8 GiB\) with rc/status 0 and 0 ENOSPC across the entire boot.
+- scripts/grow-data-container-macos.sh prepares an 8 GiB copy of an existing Data seed using hdiutil and diskutil resizeContainer, checks the volume and geometry, and refuses Linux or overwriting an output. Shell syntax and Linux refusal tested; the macOS resize itself has not run here.
+- Local evidence: the 256 MiB persistent Data window at LBA 35627008 mounts disk3s1 OwnerData. Early boot completes, but containermanagerd reports ENOSPC at capture time 185.8s. The APFS Whole-media filter is present; successful Data lookup is confirmed. Increasing APFS capacity remains blocked on macOS diskutil/hdiutil or a larger prepared seed.
+- The data path works: ADMA2 reads return EFI PART from LBA 1, the GPT header parses \(entries\_lba=2, count=84, size=128\) and 81 partitions with geometry are listed; boot 1179648..1310719, vendor 11010048..17301503, userdata 17301504..122142686.
+- Five conditions had to hold at once: the RCG2 encoding \(CFG=0x2017, M=1, N=0xfc, D=0xfb\), 1.8 V I/O \(the board's vqmmc\), the 32-bit interrupt/error map at 0x30/0x32/0x36, the ADMA descriptor address at 0x58/0x5c rather than 0x00, and cache maintenance \(flush\_dcache64\) because the engine reads memory and not the CPU cache.
+- SMMU is not the blocker: the boot chain leaves it disabled \(scr0=0x00230406, bit0=0\) and writing S2CR hung the SoC twice, so the driver only reads SMMU state.
+- IOStorageFamily is a kext of the original kernelcache, so the archive form of the driver left IOBlockStorageDevice undefined at the kernel link \(ld: 'a missing vtable usually means the first non-inline virtual member function has no definition'\).
+- The prelink slides every component by a constant: extents\[\].va = original + slide for each segment and bindings\[\] carries new\_site = site + slide, so the addresses the driver needs are the kernelcache's plus the slide.
+- The dispatch table is identifiable without a live snapshot: of the 190 pinned slot names 176 are kernel exports, exactly one \_\_DATA\_CONST table matches all of them, the other 14 slots point at the kext's own BRK traps, the single constructor that stores table+16 forwards to the actual IOService constructor and the base destructor resolves to IOService's.
+- Eleven imports are bound \(dispatch table, metaclass, protected constructor, base destructor and seven methods\); when the prelinked kernel exists the derivation also checks it holds the same constructor at the slid address, so a wrong slide cannot pass.
+- The SHNGROOT manifest at userdata LBA 17301504 describes two windows \(OS 17303552+11870275, SystemOS 29175808+6451200\); publishing them as their own IOBlockStorageDevice makes APFS mount disk0, disk1s1 and disk2s1 \(the OS volume DawnUpdate21H461.J120J121J207J208OS\) and bsd\_init completes.
+- A thread\_call has a single pending slot: thread\_call\_enter1 neither queues a second call nor preserves the first parameter, so passing requests there silently dropped completions and any caller waiting on such a request hung with the kernel otherwise idle. Requests now sit on a software queue that one drain services.
+- Completing a block request from another thread deadlocks this stack the same way the drop did \(reads and blocks frozen at the same point, no error, the drain asleep\), so doAsyncReadWrite completes inline by default.
+- The recurring 'Taking non-sleepable RW lock with preemption enabled' panic is the trust cache runtime lock, not a pmap lock: lock 0xfffffff007b3b548 resolves to \_trust\_cache\_rt\_lock and the first caller to \_query\_trust\_cache+0x70. trust\_cache\_runtime\_init\(\) is not compiled into this build, so the lock word reads all zeros \(lck\_rw\_can\_sleep == false\) and lck\_rw\_lock\_shared panics at lock\_rw.c:1400; the driver's heartbeat now mirrors the panic text into the USB ring, which is how the addresses were read.
+- With the runtime guarded to answer KERN\_NOT\_FOUND, AMFI refuses every image and the kernel kills launchd with namespace 9 \(OS\_REASON\_EXEC\) code 8 \(EXEC\_EXIT\_REASON\_SECURITY\_POLICY\); recording and clearing that answer with sirius-skip-cs=1 makes exec\_activate\_image return 0, so execve of /sbin/launchd completes.
+- The card clock can be raised from the identification rate with the same table U-Boot programs: the RCG divider field holds \(div \* 2 - 1\) and DUAL\_EDGE is set when n \!= m, so the 400 kHz entry \(CXO, div 12, m 1, n 4\) is CFG 0x2017 and 25 MHz \(GPLL0\_EVEN, div 6, m 1, n 2\) is CFG 0x260B; 25 MHz stays inside default speed, 50 MHz would need the CMD6 high-speed switch.
+- With the original trust-cache bundle in the payload and the runtime initialised at startup, AMFI answers the exec policy itself: the boot prints execve activate 0 without the sirius-skip-cs bypass line, so the Apple-signed launchd is trusted rather than skipped into.
+- The 25 MHz switch reads the GPT signature back at the new rate on device \(the probe prints EMMC clock25=ok\), so the RCG encoding above is confirmed rather than assumed.
+- Throughput at the identification clock is about 550 blocks/s \(0x3FC to 0x84A in two seconds\), the expected ceiling for 400 kHz on a four-bit bus, so the 400 kHz setting is a speed problem and not the cause of the stalls.
+- The init exec returns 0 and then nothing asks the driver for another block: reads stop at 0x10D \(269 requests, 0x98F blocks\) while the heartbeat keeps counting, so the wait is past the storage stack. The caller side is now instrumented \(sirius-post-exec-trace.patch\): the exec thread-switch state, every new user thread start at thread\_bootstrap\_return, the first pid 1 syscalls with their returns, each bsd\_ast for pid 1 and the first user faults after the exec, all written to the same USB ring and summarised by the heartbeat.
+- The caller-side probe closes that question: the pid 1 thread stays in load\_init\_program\_at\_path, inside copyout\(\) of the launchd path, and takes 62.6 million faults in about a minute. The stall is a fault loop in the exec path, not a storage wait.
+- The eMMC driver reads in runs and climbs the card clock \(see diagnostics\); the eMMC windows are authorized for the SystemOS union mount by package/NativeEmmc.cpp's native\_verified\_block\_\* hooks, only under sirius-allow-unverified=1.
+- The Data seed reaches the kernel as the payload initrd: DarwinBoot copies it into the window named by /chosen/memory-map/RAMDisk and IOKitBSDInit turns that into md0. APFS refused to mount /dev/md0 \(invalid fsindex\) with the kernel-side md path, so NativeEmmc publishes the seed itself as a read-write RAM window \(prepareDataSeed\) and answers native\_ram\_block\_volume\_seed over it, the way RamBlock does on sheng; the owner Data mount then finds the volume by its provider chain instead of the block layer'd whole-disk naming.
+- The Data seed is published by package/NativeEmmc.cpp itself \(prepareDataSeed\): the seed DarwinBoot put in /chosen/memory-map/RAMDisk becomes a read-write RAM block device named Data, APFS publishes its volume there, and the owner Data mount opens it through native\_ram\_block\_volume\_seed. Nothing is written back to the payload; the volume starts from the seed at every boot.
+
+### Completion criteria
+
+- The eMMC registers, GPT and the SHNGROOT windows are correct; APFS mounts the OS volume, bsd\_init completes, init execs /sbin/launchd and execve returns 0.
+
+### Current limits
+
+- Read-only: the transfer path has no write command and reportWriteProtection\(\) says so.
+- After the successful execve of launchd the driver receives no further requests: the remaining wait is past the storage stack, not in it.
+- The card clock is still the identification rate \(400 kHz, about 550 blocks/s measured\); nothing raises it to high speed yet.
+- The exec policy no longer needs a boot argument: the payload carries the original trust-cache bundle and the kernel initialises its runtime at startup. The sirius-skip-cs bypass is kept in the patch series, unused, in case a future image falls outside the bundle.
+
+### Next action
+
+- Verify the 25 MHz switch \(sirius\_emmc\_hs=1\) reads the GPT signature back and measure the new block rate; then decide whether the CMD6 high-speed switch to 50 MHz is worth it.
+- Keep the trust-cache bundle in step with the OS build when the IPSW changes \(its sha256 is pinned in board.toml \[payload\] trust\_cache\_sha256\).
+- Boot the post-exec-probe kernel and read the counters: two SIRIUS user thread start lines mean the exec'd thread was scheduled, and the last init syscall enter without a matching return names the call it never comes back from.
+- Raise the SDCC1 clock out of identification speed \(GCC root clock plus the card's high-speed mode\).
+
+### Evidence
+
+- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+  Command: <code>fastboot flash vendor sirius-obs.img; fastboot reboot; capture-usb-console.py --duration 240</code>. Revision: `d867b1d6498dc4d0f4ae4e18060762dcae6c5847`.
+- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+  Command: <code>./scripts/xnu-container.sh run bash -lc './unixnu build kernel --skip-setup -D ../sirius'</code>. Revision: `a47f0d6b4615c3cdebf92102400a1bc302eb6d73`.
+- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+  Command: <code>fastboot flash vendor sirius-if.img; fastboot reboot; capture-usb-console.py --duration 220</code>. Revision: `bb812428dccd1f676455813ad198ed2bee4a8e3e`.
+- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/package/sirius_emmc.c)
+
+## Display {#display}
+
+`implemented`
+
+Components: `GopFramebuffer`.
+
+### Hardware and dependencies
+
+- U-Boot hands over a 1080x2240 splash framebuffer at 0x9c000000 through GOP \(vidconsole\).
+- The panel is 1080x2244 DSI; there is no backlight or display driver in the kernel yet.
+
+### Configuration
+
+- CONFIG\_XNU\_BOOT\_PROGRESS=y links the boot-progress layer; boot-progress=2 on the command line draws the kernel console lines.
+- package/Font.h is vendored from Mu-Silicium, so the archive builds without a UEFI checkout.
+
+### Procedure
+
+- Build kernel, payload and volume, boot, and read the panel: stage lines, TOPO, PROBE, MEM and panic text.
+
+### Development findings
+
+- Post-interaction UI freeze root-caused and fixed on hardware \(kernel ff57d694..., payload fad069ea...\): after touch interaction in Setup.app, backboardd switches to the iPad7,1 1536x2048 canvas \(r0 = 0,0,1536,2048 -&gt; r1 = 0,0,1080,2240\), which NativeLegacyDisplay::validateSwap previously rejected with reason=3 \('verify\_swap failed for swap id: ...'\), freezing the display. NativeLegacyDisplay now validates and scales full-frame surfW x surfH -&gt; 1080x2240 BGRA surfaces with a 64-bit unrolled nearest-neighbor blit \(1332/1332 swaps accepted, 0 rejected\), BootWatchdogPolicy always writes SpringBoard's no-watchdog/no-auto-dim/no-idle-sleep preferences, and sirius\_touch flushes same-batch EVT\_ENTER/EVT\_LEAVE transitions so fast taps are not coalesced away.
+- With the 8 GiB persistent Data container and sirius-skip-setup=1 removed \(kernel ad6a9709..., payload afa7def2...\), SpringBoard \(135.2 s\), backboardd \(165.7 s\), iconservicesagent \(171.9 s\) and Setup.app \(294.6 s\) run without storage errors, and GopFramebuffer copies 5514 accepted frames \(0 rejected\) at \~10.3 ms mean \(\~19 fps\) with verified non-black pixel counts \(41011 on the Apple logo, 28199 on Setup\).
+- The local boot registers the GOP display and copies six frames; SpringBoard and backboardd exec events do not establish a visible or usable UI. HuajiFruit logs copied into docs/evidence are reference observations, not results for this unit.
+- The panel gained an EMMC row \(step, version, capabilities, state, clock, power, clock-branch halts\) next to the USB row, so the storage bring-up is visible without a serial link.
+- The USB row \(drawn by this panel\) labels its six values after what they now carry - step, txev, rxev, chars, echo, poll - because they were first wired to register names and had drifted.
+- The panel is the readable kernel log of this port: it renders the console, the TOPO/PROBE rows and panic\(\) output.
+- Since the panic snapshot patch the panel re-renders at panic time, so the rows are not a stale frame.
+
+### Completion criteria
+
+- A known frame appears with correct geometry, and the kernel console and panic output stay readable on the panel.
+
+### Current limits
+
+- This is a firmware framebuffer text surface, not a Darwin display driver: no IOMobileFramebuffer, no backlight, no modesetting.
+
+### Next action
+
+- Keep the panel as the diagnostic surface until a display provider exists, and record each new row it prints.
+
+### Evidence
+
+- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Input {#input}
+
+`planned`
+
+Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
+
+### Hardware and dependencies
+
+- The board has no Home button; volume keys are reported by the button node of the ADT.
+- The touch controller is not identified for this unit yet.
+
+### Configuration
+
+- board.toml writes \[adt.buttons\] with hold, voldown, volup and home-button-type = 2.
+
+### Procedure
+
+- Follow the input guide once a touch controller is known, then select an implementation.
+
+### Development findings
+
+- Fast-tap coalescing fixed in package/sirius\_touch.c \(kernel ff57d694..., payload fad069ea...\): when EVT\_ENTER and EVT\_LEAVE for the same touch ID arrive within a single 32-event FIFO poll batch, publish\_contacts\(\) is now flushed with a 10 ms separation before clearing contact\_down so rapid taps are delivered as distinct down/up HID reports.
+- The local boot identifies the FTS521 and publishes IOHIDEventDriver, with TOUCH down/move/up coordinates in the capture. Visible UI response has not been verified on this unit.
+- The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.
+- No input component is selected; the button node exists so that BSPlatform and MobileGestalt read a coherent product.
+
+### Completion criteria
+
+- Touches map to the display with stable contacts and the volume keys produce the expected HID reports.
+
+### Current limits
+
+- No touch support and no IOHIDDevice provider.
+
+### Next action
+
+- Identify the touch controller from the vendor DTS and the panel firmware.
+
+### Evidence
+
+Collect evidence using the next action.
+
+## GPU {#gpu}
+
+`planned`
+
+### Hardware and dependencies
+
+- Adreno 616 with the SDM710 GPU firmware; no GPU component is selected yet.
+
+### Configuration
+
+- Nothing is configured: the CPU renders the boot-progress panel through the firmware framebuffer.
+
+### Procedure
+
+- Follow the GPU guide to evaluate Adreno740/AdrenoMetal for this revision; the A616 is not the A740 the component targets.
+
+### Development findings
+
+- The imported Adreno 616 phase-2 probe logs GMU up and HFI v1 answers on the local unit. This is not a Metal device or a completed graphics driver.
+- The Adreno family components in the catalog target the A740 of SM8550; a different implementation would be needed here.
+
+### Completion criteria
+
+- GPU submissions complete, fences work and a known image renders.
+
+### Current limits
+
+- No GPU bring-up has been attempted on this port.
+
+### Next action
+
+- Decide whether an A616 implementation is in scope after IOKit and storage; do not assume the A740 path applies.
+
+### Evidence
+
+Collect evidence using the next action.
+
+## Network {#network}
+
+`planned`
+
+### Hardware and dependencies
+
+- The Wi-Fi chip of this unit is not identified in the port record yet.
+
+### Configuration
+
+- No network component is selected.
+
+### Procedure
+
+- Follow the network guide once the chip and its firmware are known.
+
+### Development findings
+
+- No network work has started; the first console image does not need it.
+
+### Completion criteria
+
+- Scanning, association and sustained traffic pass with the selected firmware.
+
+### Current limits
+
+- No network support at any layer.
+
+### Next action
+
+- Identify the WCN chip from the vendor DTS and the firmware partition before selecting a driver.
+
+### Evidence
+
+Collect evidence using the next action.
+
+## Audio {#audio}
+
+`planned`
+
+### Hardware and dependencies
+
+- No audio path is documented for this unit yet.
+
+### Configuration
+
+- No audio component is selected.
+
+### Procedure
+
+- Follow the audio guide once the codec and DSP path are known.
+
+### Development findings
+
+- No audio work has started.
+
+### Completion criteria
+
+- Each declared route carries the selected format through playback or capture.
+
+### Current limits
+
+- No audio support at any layer.
+
+### Next action
+
+- Inventory the codec and the DSP layout from the vendor tree.
+
+### Evidence
+
+Collect evidence using the next action.
+
+## Power {#power}
+
+`planned`
+
+Components: `AppleKeyStoreState`.
+
+### Hardware and dependencies
+
+- No suspend/resume path exists; the boot-progress panel is the only power-facing behaviour so far.
+
+### Configuration
+
+- board.toml writes \[adt.defaults\] sleep-disabled = 1 so the CPU does not park forever.
+- PSCI is declared in the SoC DTSI and used for reset and secondary-core start.
+
+### Procedure
+
+- Follow the power guide to add the PMIC and battery controls once the platform expert is stable.
+
+### Development findings
+
+- Device-verified 2026-10-30 \(kernel b94137f5, payload a5620f29\): writing FASTBOOT to the CDC console makes the unit reappear in ABL fastboot after 4.2 s without a key press; SPMI v5 PM660 PON channel 7 write/readback/PSCI reset works. See docs/evidence/sirius-20261030-local-boot.md.
+- SPMI v5 PON reads identify channel 7, owner 0, subtype 04, spare 00 on this unit. Write/readback and automatic return to ABL fastboot remain unverified. Corrected candidate uses length-minus-one byte count and refuses bootloader reset after failed readback.
+- The eMMC probe does not vote any RPMH resource; it re-enables the GCC SDCC1 branches that the boot chain had already set.
+- Reset works through PSCI \(the stage-3 reset loop proved it\).
+
+### Completion criteria
+
+- Declared power controls and battery readings match observations and sleep/resume restores the dependent peripherals.
+
+### Current limits
+
+- No battery reporting, no CPU frequency policy and no PMIC driver.
+
+### Next action
+
+- Defer until IOKit and storage are stable; keep sleep-disabled until a resume path exists.
+
+### Evidence
+
+- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Image assembly {#packaging}
+
+`implemented`
+
+Components: `XnuPrelink`.
+
+### Hardware and dependencies
+
+- The payload FAT volume is the flashed artifact of this port; there is no boot.img.
+- The prelink inputs \(kernel path, roots, slide, early security initializer\) come from the OS profile; the board does not override them.
+
+### Configuration
+
+- \[payload\] sets volume SIRIUSESP, 256 MiB, loader = payload, dram\_size and the kernel command line.
+- \[payload.adt\] keeps only chip\_id: the platform seed is supplied per build with --unique-chip-id when the userland stages need it.
+
+### Procedure
+
+- ./unixnu build kernel, ./unixnu build package, then bash scripts/build-darwinboot.sh \(or the CI workflow\), ./unixnu build payload, and finally make-uboot-payload.py --output the volume to flash.
+
+### Development findings
+
+- The Linux namespace build successfully prelinks candidate kernel b94137f50c1558336e7df296ffd1157a1d4b0a850b8b9458b5b52d223c1ad971 and assembles payload a5620f295a09ca8ca6d179d12669777cf2d8356b42307505a7c4bd39a61709bb. This candidate has not been flashed. Board archive recipes bind display/HID ABI and add the real keystore, cpufreq, touch and GMU sources.
+- The eMMC probe ships in the same force-loaded archive as the USB console, so the package list and payload layout are unchanged.
+- Format 2 generates kernel.macho.adt from the DTS, so the legacy ADT script is retired; make-uboot-payload.py still finishes the volume because U-Boot needs the EFI binaries inside it.
+- scripts/build-xnu-4k-baseline.sh is a copy of the UniXNU script with one board deviation: the boot-progress interlock only requires the source crypto provider.
+- The legacy build applied patches/xnu/\*.patch by glob \(56 files\); format 2 applies only what the series list names, and the ARM64 and OS series assume the two files they omit are present. native-smp-secondary.patch sets MAX\_CPUS 8 and Affinity1 core numbering; sheng-platform-power.patch supplies the bsd\_init.c block that zzz-boot-progress.patch quotes as context \(CONFIG\_XNU\_SHENG\_PMGR is off, so its code compiles to nothing\). Both now live in the sdm710 SoC series, which applies before the OS series.
+- The first format 2 kernel build on Linux failed at the last patch, zzz-boot-progress.patch, with a bsd\_init.c context mismatch: the missing piece was sheng-platform-power.patch, not the moved native-smp-secondary. With both in the SoC series the whole series applies and the kernel prelinks: kernel.macho 50 MB, \_\_TEXT 0xfffffff007004000, 30 kernelcache components, 69294 bindings.
+- The kernel step also runs on Linux through UniXNU's toolchain installer, which builds a patched LLVM, cctools-port ld64, MIG, iig and lzfse. That installer writes /opt/unixnu-linux, /usr/bin shims and distribution packages, so this port runs it inside a Podman image \(containers/xnu-linux/\) and leaves the host untouched. The alternative, Allenwdk/xnu-linux-toolchain, uses the system clang with portable-kalloc-type-builtins.patch and cctools-port, but needs a path-layout adapter for the driver's checks.
+- The first flashed build hung on hardware with the entry probe's blue bar and no magenta bar. The cause was a defconfig override, not the kernel sources: CONFIG\_XNU\_NATIVE\_ARCH\_TIMER=n. build-xnu-4k-baseline.sh sets NATIVE\_ARCH\_TIMER=$&\#123;XNU\_NATIVE\_ARCH\_TIMER:-$&\#123;XNU\_ARMCPU:-0&\#125;&\#125;, so the legacy build ran with 1; at 0, architectural-timer-entry.patch compiles the BCM2837 local interrupt router write \(0x40000040 + cpu\*4, Raspberry Pi local peripherals\) into start.s. SDM710 has nothing at that address, and the store aborts before the MMU is on. The defconfig now leaves the ARM64 profile value \(y\) alone and documents why.
+- Diagnosis method worth repeating: the legacy kernel from payload-full.img boots with this repository's new UniXNU.efi, DarwinBoot.efi and DTS-generated ADT \(it reaches \_sleh\_irq and panics on the known early timer PPI\), so the EFI side and the ADT are sound and the regression is in the kernel build. Comparing the two kernels' start\_first\_cpu bodies then showed the extra router write as the only semantic difference.
+- With the timer override removed the Linux-built kernel boots past the MMU on hardware: the boot-progress panel reports TOPO boot=0 max=7 nums=01234567, the console reaches IOKit \(PE\_init\_iokit, IONVRAM initImageFormat\) and then the CPU takes an IRQ it cannot dispatch. lr 0xfffffff00741754c is \_sleh\_irq+0x70, the same NULL per-CPU handler the legacy kernel hit.
+- That IRQ is DarwinBoot's early timer PPI. GIC\_SGI\_PPI\_ENABLE included bit 19, so the EL1 virtual timer fired before ArmCpu::start installed the handler. DarwinBoot now enables SGIs 0..15 only and leaves INTID 19 to ArmCpu \(armcpu-timer-intid=19\), which is what the handoff's next step asked for.
+- With the timer PPI left to ArmCpu the next stop was AppleARMPlatform's CPU class: it matches cpu0..cpu7 because IODTPlatformExpert compares IONameMatch by prefix \('cpu' matches 'cpu0'\), starts first, and panics with 'CPU configuration in device tree is invalid' \(its AppleARMCPU.cpp validates max\_cpus, cpu-id, interrupts and function-\* properties that an Apple device tree carries\). The native ArmCpu personality \(IOPlatformDevice, probe score 2000\) did not win that match even after probe\(\) added 40000, so make-uboot-payload.py rewrites the AppleARMCPU IONameMatch from cpu to xpu in the personality plist inside kernel.macho \(equal length, nothing moves\).
+- A frozen panel is not proof of a hang: the panel repaints from the timer interrupt, so before ArmCpu enables the timer PPI the last painted second stays on screen while the kernel may still be running. Checkpoints \(armcpu-panic=N, panics at entry/prepareGic/registration/controller/initCPU/registerService\) are what distinguish the two.
+- ArmCpu::start then failed inside initDistributor: it re-ran the quiesce sequence \(GICD\_CTLR &amp;= \~3, wait, restore with ARE\) over the state DarwinBoot had already programmed, which clears the group enables and leaves the core with no interrupts at all; the boot then sits in IOKit matching with a frozen panel. The fix keeps the firmware state when GICD\_CTLR already reports affinity routing plus group 1 and only quiesces the SPIs. After it the panel advances \(time=31s, IRQ=1076\) and the kernel reaches bsd\_init with TOPO boot=0 max=7, PROBE calls=17 acc=8 num=7 reg=700 - eight CPUs online.
+- The next blocker is AMFI: 'AMFI: No PMGR?' @ConfigurationSettings.cpp:235. The unchanged target AMFI finds the PMGR through IOService::serviceMatching\("ApplePMGRNub"\) + waitForMatchingService, then reads the provider at nub+0x88 and calls its readAon/writeAon slots \(OR bit 2\). The original classes are ApplePMGR \(storage 0x4b8a8\) and ApplePMGRNub \(0x740\); UniXNU/scripts/audit-amfi-pmgr-contract.py pins the exact instructions. amfi\_get\_out\_of\_my\_way=1 does not skip the check. Two routes remain: instantiate the original classes the way UniXNU-sheng does \(OSKextLoadKextWithIdentifier + a generated OriginalPMGRABI.h + a published nub\), or patch the AMFI block in the prelinked kernel.
+- AMFI is cleared without touching the target kernel: the nub helpers behind AMFI's readAon/writeAon return 0 when the provider stored at nub+0x88 is NULL, so publishing a real but provider-less ApplePMGRNub satisfies the latch \(read 0, OR 4, write no-op\). package/SiriusPmgr.cpp allocates the class through OSMetaClass::getMetaClassWithName + alloc + init, attaches it to the platform and registers it from the sheng\_pmgr\_run hook in bsd\_init \(CONFIG\_XNU\_SHENG\_PMGR=1, sheng-pmgr=2\), and its build script writes the archive to build/sheng-platform-power/libShengPlatformPower.a because build-xnu-4k-baseline.sh force-loads exactly that path.
+- With AMFI satisfied the boot passes bsd\_init and stops at 'Failed to mount root device' @IOKitBSDInit.cpp:984 with 8 CPUs, IRQ=2145, 61 s of live uptime: the kernel now runs to the point where it needs a storage driver and a root filesystem, which this board does not have yet \(no UFS or VirtIO block component, no APFS container on the payload volume\).
+- scripts/build-xnu-4k-baseline.sh also builds the owner SystemOS union mount in its bring-up mode \(XNU\_BRINGUP\_OWNER\_CACHE\): the board has no owner root chain yet, and the eMMC windows authorize the mount only under sirius-allow-unverified=1. The same script's Data mount switch accepts the bring-up mode, so the Data seed the macOS runner builds can be mounted at /private/var.
+- The same build script compiles the Data seed path for this board \(XNU\_SIRIUS\_DATA\_SEED\): kern\_exec.c gets XNU\_NATIVE\_RAM\_BLOCK=1 for the typed seed API without linking RamBlock, whose archive needs the native AES storage closure this board does not build; NativeEmmc provides the implementation.
+
+### Completion criteria
+
+- The kernel prelinks against the pinned 21H461 kernelcache, the payload contains the kernel, the ADT and the DarwinBoot driver, and the flashed volume boots from U-Boot.
+
+### Current limits
+
+- The kernel step needs macOS and Xcode, or the container image with UniXNU's Linux toolchain; the board script must be re-based on the upstream script when UniXNU changes it.
+
+### Next action
+
+- Run the new payload once and diff the generated ADT against the legacy one before flashing.
+- Boot the prelinked kernel on the phone and record the stage rows; the build side is now reproducible on Linux \(container image, see downloads\).
+
+### Evidence
+
+- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+
+## Diagnostics {#diagnostics}
+
+`implemented`
+
+### Hardware and dependencies
+
+- The panel and the serial console are the two evidence channels; since the DWC3 CDC console works, the host captures the kernel log directly and photographs are only a fallback.
+
+### Configuration
+
+- panic\_screen = true patches the entry probe and the panic screen into the payload kernel.
+- boot-progress=2 draws the kernel console lines; debug=0x14e keeps the debug output on.
+
+### Procedure
+
+- Record the last checkpoint printed on the panel and in the U-Boot/XNU log for every boot, with the kernel and payload hashes of that run.
+
+### Development findings
+
+- End-to-end unattended debug loop and Setup boot verified on local hardware \(kernel ad6a9709..., payload afa7def2...\): agent-flash.sh sends FASTBOOT over /dev/ttyACM0 to return XNU to ABL fastboot in 4-7 s without button presses, flashes vendor, reboots into XNU, and capture-usb-console.py records the in-kernel 8 GiB APFS containerResize, zero ENOSPC, Setup launch at 294.6 s, AppleKeyStoreState activity \(100 opens, 1430 calls\), IOHIDEventDriver attachment \(stage 4\), and 5514 accepted frame copies \(\~19 fps\). See docs/evidence/sirius-20261030-local-boot.md.
+- The previous ios-ui-up verdict was a false success based only on process launches: the same capture reports ENOSPC and only six confirmed frame copies. A later 12-second capture received zero bytes, and a nine-byte FASTBOOT request did not produce a fastboot device. USB corrections derive received length from completed TRB residual bytes, parse exact newline commands across packets, and serialize pollers. USB and mock flash failure regressions pass; hardware verification of the new image is pending. See docs/evidence/sirius-20261030-local-boot.md.
+- A register write-and-read-back test is the next diagnostic for the eMMC data phase, because SDHCI\_TRANSFER\_MODE reads back 0x33 after writing 0x13, which separates a write the vendor layer ignores from a command that is never sent.
+- The eMMC probe reports every step \(controller registers, the clock tree, the response registers around CMD0/CMD1 and each failure\) into the USB console ring, which is how the card clock and CMD2 findings above were obtained without a photograph.
+- The eMMC probe reports through sirius\_usb\_log\_char\(\) straight into the USB console ring, because kernel console output stops reaching the ring long before bsd\_init runs.
+- Stage bands \(entry, pre-MMU, panic\) and the TOPO/PROBE/MEM rows replaced the LED and UART guessing of earlier bring-up.
+- A panic snapshot forces a panel re-render at panic time; before it, rows could show a stale frame.
+- The USB panel row names its fields after what they hold \(step, txev, rxev, chars, echo, poll\) instead of the register names they were first wired to, so a photograph can be read without the source.
+- The CDC console hands the console ring to the host once per attach: the pump timing that works \(a short inline poll loop that breaks after the ring is drained\) delivered the 3813-byte boot log on every attempt, while longer loops and a DTR-gated pump delivered nothing, so that timing is treated as load-bearing until the periodic path runs during bsd\_init.
+- The post-exec wait is instrumented on the kernel side rather than through the driver: sirius-post-exec-trace.patch prints the exec thread-switch flags, every user thread start \(from thread\_bootstrap\_return, so one line means the exec'd thread never ran and two mean it did\), the first pid 1 syscalls with their returns, every bsd\_ast for pid 1 and the first user faults after the exec, and the eMMC heartbeat prints the counters so one capture answers the question.
+- The exec does not stall after activate: load\_init\_program prints the scratch page \(0x1000, the first free page of the init map\), then the init thread is inside copyout\(\) and takes 62,673,044 faults in about a minute while it stays TH\_RUN, so the wait is a tight fault-retry loop, not a sleep.
+- PAN is not the cause: the kernel reports PAN implemented with PSTATE.PAN already 0, and CONFIG\_XNU\_NATIVE\_PAN=n compiles copyio's user\_access\_enable\(\)/disable\(\) away anyway, so nothing in this kernel ever sets it.
+- The mapping is not missing either: the first fault is a level-1 translation fault, but afterwards pmap\_find\_phys finds the page, AT S1E1W resolves the same address and vm\_fault returns KERN\_SUCCESS, while the retried store faults again as a level-3 permission fault; the raw leaf PTE the pmap holds is now dumped next to ESR/FAR/PC to see which AP bits it carries.
+- The pid 1 kernel stack, dumped out of band by the heartbeat and symbolized against mach.development.bcm2837.unstripped, shows \_bcopyout+0x38 under \_load\_init\_program\_at\_path+0x6c under \_bsdinit\_task+0x74, which is the copyout of the launchd path.
+- The loop is not limited to the copyout: with the trust-cache bundle back in the payload the exec completes \(execve activate 0, AMFI answers nothing\) and the exec'd thread enters userland at pc 0x100924e50, where it takes 92 million instruction aborts in about a minute on three addresses \(ESR 0x82000007, level-3 translation faults\) without ever issuing a syscall or a single block read; the entry point is right, the code pages are simply not visible to the CPU.
+- Both loops have the same shape: vm\_fault opens the page in thread-&gt;map's pmap and returns KERN\_SUCCESS, while the CPU keeps taking the fault. AT S1E1W and pmap\_find\_phys disagree about the physical page behind 0x1000, which points at the CPU running with a pmap that is not the thread's after the exec task switch.
+- A payload built without --trust-cache leaves the ring reporting no external trust caches found and AMFI kills launchd with namespace 9 \(OS\_REASON\_EXEC\) code 8; the same kernel with the bundle present reaches execve activate 0 without an exec-policy line, so that panic is a build-argument slip, not a regression.
+- The eMMC driver reads in runs \(one CMD18 with Auto-CMD12 for up to 256 blocks, the buffer described piece by piece in an ADMA2 table\) and climbs the card clock one proven step at a time \(sirius\_emmc\_hs=3: 25, 50, 100 MHz\), each step verified against blocks read at the 400 kHz identification rate; the single-block path stays as the fallback the runs were proven against.
+- kern\_exec.c's GPU-addon installer \(zzy-native-gpu-addon-mount.patch\) references native\_ram\_block\_gpu\_addon, which only RamBlock provided; this board ships no addon, so package/NativeEmmc.cpp answers its absence and the kernel links again.
+- The kernel-side md path \(IOKitBSDInit -&gt; mdevadd -&gt; IOKit guidance\) attached the seed container but published no volume from it: nx\_is\_mount\_valid reported 'invalid fsindex: -1' in an earlier run, and with the RAM window published by the same kernel APFS still enumerated no volume on it, so the Data mount failed with ENOENT. package/NativeEmmc.cpp now publishes the seed as its own RAM block device instead, and the volume APFS puts on it is the one the owner Data mount opens.
+- package/NativeEmmc.cpp is the reference port's driver: it publishes the payload's Data seed as a read-write RAM block device \(prepareDataSeed, ramReadWrite\) and answers native\_ram\_block\_volume\_seed over the volume APFS puts on it. The log-only instruments that driver reads through weak\_import \(sirius\_cpufreq\_\*, sirius\_fb\_\*\) needed definitions of this board's own, because the static kernel link does not resolve a weak import.
+- docs/HANDOFF-AGENT.md hands the port to the next agent: this host has no root and no container runtime, so the XNU build runs through \~/.unixnu/run.sh \(a user namespace that binds the toolchain into /opt and a Darwin-shim overlay over /usr/bin\); U-Boot must be built with the GCC cross toolchain because the clang build is rejected by ABL; the Data seed is built by the data-seed workflow on a macOS runner and published as an encrypted release asset. The same document specifies the unattended debug loop this port still lacks: a conclusion must be able to return the phone to ABL fastboot \(PON\_SOFT\_RB\_SPARE = 0x04 through SPMI, then PSCI SYSTEM\_RESET\) without the volume-down chord, and a script must flash, reboot, capture the CDC console and decide the next round on its own.
+
+### Completion criteria
+
+- Each claimed milestone has a reproducible command, a matching source and image revision and an accessible result.
+
+### Current limits
+
+- The CDC console delivers the console ring as it stood when the host attached; making the whole boot stream live is the remaining work.
+
+### Next action
+
+- Add the boot row and hash triple to every hardware result recorded here, and attach the captured console log rather than a photograph whenever one exists.
+
+### Evidence
+
+- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/evidence/sirius-usb-console-20261026-1605.log)
+  Command: <code>sudo python3 scripts/capture-usb-console.py --wait 60 --duration 190 --output /tmp/boot.log</code>. Revision: `366abe2948fdb0c1554f7e0b89b731160f4527a4`.
+
+## boot-chain {#boot-chain}
+
+`implemented`
+
+### Hardware and dependencies
+
+- Boot chain: ABL -&gt; U-Boot \(boot partition\) -&gt; UEFI -&gt; UniXNU.efi on the vendor partition -&gt; DarwinBoot.efi -&gt; XNU.
+- The U-Boot fork github.com/57UU/u-boot branch sirius/v2.0 carries the board support for sdm710-xiaomi-sirius and sirius-build.sh's ENV\_FILE option; the UniXNU boot chain itself is environment text, not source.
+- The EDK II package that builds UniXNU.efi, the DXE drivers and DarwinBoot comes from the UniXNU framework's package/ directory.
+
+### Configuration
+
+- uboot/src is a submodule of that fork at branch sirius/v2.0 \(shallow\), pinned to a2a847b1a84.
+- uboot/unixnu-sirius.env is the board's stock default environment plus unixnu\_boot/unixnu\_check, the bootmenu entry they need and the bootcmd chain; uboot/build.sh builds boot-unixnu.img from the submodule and that file.
+- efi/ is a vendored copy of the framework's package/ \(UniXNUPkg, Scripts, build.sh\) taken at f85b5a6, so the repository can build the whole chain on its own.
+
+### Procedure
+
+- U-Boot: git submodule update --init --depth 1 uboot/src, then uboot/build.sh \(needs CROSS\_COMPILE and mkbootimg\); fastboot flash boot uboot/boot-unixnu.img.
+- Payload: assemble the kernel, efi/ and the EDK II build output with scripts/make-uboot-payload.py --marker, then fastboot flash vendor.
+- Recovery: flash sirius-distro's build/boot.img, which ignores the marker and boots Linux.
+
+### Development findings
+
+- Local flashing of boot, the 256 MiB Data sparse window and vendor succeeded, including one intermediate U-Boot fastboot bounce. PMIC commands compiled into U-Boot, but the automatic ABL return has not been verified. agent-flash stops after prerequisite write failures, refuses unknown products, bounds serial commands to SIRIUS01 and requires explicit --allow-userdata before replacing a Data window.
+- U-Boot needs no source change for this port: with the environment file above, bootcmd runs unixnu\_check first and falls back to the Linux path when /EFI/UniXNU/BOOTUNIXNU is absent on p80.
+- mmc 0:50 is a hexadecimal partition number \(0x50 = 80 = the vendor partition\); 0:80 is read as 0x80 = 128 and fails with 'Invalid partition 128'.
+- bootflow scan cannot find p80: it stops after the first 30 partitions of each device, so the boot chain uses load/bootefi with the partition spelled out.
+- The UniXNU boot chain used to live only in an unversioned scratch directory \(the environment file and boot-unixnu.img\), so the boot image could not be rebuilt from any repository; both the file and the recipe are in uboot/ now.
+- U-Boot's fastboot gadget answers the whole getvar dialogue but flashing the vendor partition hangs; the repeated 'request ... was not queued to ep1in-bulk' line is fastboot\_tx\_write\(\) cancelling the IN request before every queue, a dequeue miss rather than a rejected transfer, and stock 2026.07 never received the modern dwc3 ENDTRANSFER/dequeue rework, so that cancel can strand a TRB the controller still owns. Removing the dequeue is the candidate fix.
+- Writing the BCB command 'uboot-fastboot' before booting UniXNU does bring the next start into U-Boot's own fastboot on the phone, so entering it is solved while flashing from it is not; the PMIC spare ABL actually reads \(PON\_SOFT\_RB\_SPARE, 0x88f = 0x04 in U-Boot's PID/offset encoding\) still needs CONFIG\_CMD\_PMIC and a verified pmic device name.
+- U-Boot's fastboot reports slot a, so the host appends \_a to every partition name it flashes; fastboot\_partition\_alias\_&lt;name&gt;\_a=&lt;name&gt; in the environment maps both spellings onto the real GPT names.
+
+### Completion criteria
+
+- uboot/build.sh reproduces boot-unixnu.img from a fresh clone; with the marker in the payload U-Boot starts UniXNU.efi, and without it the phone boots Linux.
+- The payload volume holds UniXNU.efi, DarwinBoot.efi, kernel.macho, kernel.macho.trustcache and the marker.
+
+### Current limits
+
+- The EDK II package is a copy, not a submodule: keeping it in step with the framework is a manual diff of package/.
+- The U-Boot submodule is shallow and pinned by commit; rebasing onto a newer sirius/v2.0 is a deliberate update.
+
+### Next action
+
+- Test the f\_fastboot dequeue removal end to end: after a power cycle, flash boot from U-Boot's own fastboot and, if that works, arm the BCB before booting UniXNU so a hung run comes back to a usable fastboot without the chord.
+- Build UniXNU.efi from efi/ once and compare it with the framework's output, so the vendored copy is known good rather than assumed.
+
+### Evidence
+
+- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/uboot/README.md)
+- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/efi/README.md)
+
+</div>

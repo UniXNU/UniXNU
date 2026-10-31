@@ -8,7 +8,7 @@ Use the [bring-up checkpoints](/porting/bring-up) to identify the stage being te
 | --- | --- | --- |
 | UEFI menu | GOP display, menu input, Advanced Logger and QR plugin | Firmware `.log` file scanned from the screen |
 | XNU entry | UART or framebuffer diagnostics | Serial log or photograph of the last checkpoint/panic |
-| Storage | Reserved log region, kernel writer and Linux reader | Kernel message buffer and diagnostic snapshots |
+| Storage | Reserved log region, kernel writer and a Linux or recovery reader | Kernel message buffer and diagnostic snapshots |
 | Repeated tests | Working log retrieval and return to bootloader | One evidence directory per boot |
 
 ## 1. Include the firmware log exporter {#firmware-setup}
@@ -113,34 +113,59 @@ XNU execution after `ExitBootServices` uses the capture methods in step 3.
 **Result:** evidence for the kernel stage even while storage is being adapted.
 Continue with persistent capture after [storage verification](/porting/ufs).
 
-## 4. Adapt persistent capture to the board {#persistent-logs}
+## 4. Select a persistent log reader {#persistent-logs}
 
-The [sheng implementation](/devices/sheng-unattended-test) provides a working
-source layout to study. Complete these board interfaces before enabling writes:
+A persistent reader consumes the reserved log region after the test kernel
+returns control. Define the region, file header, boot ID, completion marker and
+snapshot layout before implementing the reader. The writer, reader and decoder
+must use the same block units and byte ranges.
 
-1. Reserve a log region in the target's storage layout. Record its partition,
-   offset, size and block units alongside the root and Data regions. Check that
-   the image builder, partition provider, writer and reader use the same bounds.
-2. Connect the kernel writer to the storage driver's bounded read/write and sync
-   operations. Include the kernel message buffer, diagnostic snapshots, boot ID
-   and write status. Start it after the storage region can be opened.
-3. Build a Linux reader for the target board with its kernel, DTB, storage driver,
-   USB device controller and CDC ACM support. Copy the reserved region into RAM,
-   then expose a serial shell for retrieval. Keep the source partitions read-only.
-4. Adapt the host decoder to the writer's header and snapshot format. Select the
-   serial device explicitly on hosts whose device names differ from the reader's
-   discovery pattern.
-5. Implement return to the board's bootloader in both XNU and the Linux reader.
-   Use the target's reboot-reason mechanism and reset interface. Verify watchdog
-   handling separately if automatic recovery from a stalled kernel is required.
+1. Reserve a log region in the target storage layout. Record its partition,
+   offset, size and block units beside the root and Data regions. Check that the
+   image builder, partition provider, writer and reader use the same bounds.
+2. Connect the kernel writer to the storage driver's bounded read, write and
+   sync operations. Store the kernel message buffer, diagnostic snapshots, boot
+   ID and write status. Start the writer after the region opens.
+3. Choose a reader environment that the device can boot:
 
-Review `package/BootLog.c`, `BootReset.c`, `BootResetCore.h`, `package/linux-log/`
-and `scripts/read-sheng-log.py` in `UniXNU-sheng`. Its PMIC addresses, watchdog
-calls, userdata reservation and Linux image inputs are board configuration that
-the new port must supply from its own hardware sources.
+   **Linux reader.** Build a small Linux image with the target kernel, DTB,
+   storage driver, USB device controller and CDC ACM support. Copy the region
+   into RAM, expose a serial shell and keep source partitions read-only.
 
-**Result:** a documented log region, matching writer/reader/decoder, and a tested
-route back to the bootloader. Record these in the device repository.
+   **Recovery reader.** Boot a compatible rooted recovery image with block
+   access and ADB, then read the region from recovery. A TWRP-like recovery
+   provides the reader runtime; the host only transfers the result.
+
+   ```sh
+   adb reboot recovery
+   adb wait-for-device
+   adb shell id
+   adb shell ls -l /dev/block/by-name
+   adb shell mkdir -p /tmp/unixnu-log
+   adb shell dd if=/dev/block/by-name/<log-partition> \\
+     of=/tmp/unixnu-log/log.bin bs=4M
+   adb pull /tmp/unixnu-log/log.bin out/logs/log.bin
+   ```
+
+   For a region inside `userdata`, use the offset and length from the device
+   record with `dd skip=<block-offset> count=<block-count>`. Keep the recovery
+   mount read-only. Record the recovery build, block path and command.
+4. Adapt the host decoder to the writer header and snapshot format. Select the
+   serial device or ADB target explicitly when automatic discovery does not
+   identify one device.
+5. Implement the return path for the selected reader. Use the board's reboot
+   reason and reset interface. Record the bootloader and recovery commands used
+   by the manual cycle.
+
+The [sheng implementation](https://github.com/UniXNU/UniXNU-sheng) supplies a
+Linux reader, a reserved `userdata` region and a fastboot return path. Its source
+layout is a reference for `package/BootLog.c`, `BootReset.c`,
+`BootResetCore.h`, `package/linux-log/` and `scripts/read-sheng-log.py`. Its PMIC
+addresses, watchdog calls, storage reservation and Linux image inputs belong to
+that board record.
+
+**Result:** one reader environment, one matching decoder, an identified storage
+range and a tested route back to bootloader or recovery.
 
 For the sheng iPadOS 27 native source path, enable sheng-log=1 boot-ui-trace=1
 when diagnosing a user-space stall. The source storage archive includes
@@ -152,38 +177,49 @@ frames. An empty stack section alone is not evidence that the processes stopped.
 
 ## 5. Complete one manual capture cycle {#manual-cycle}
 
-Use the selected device's documented logging arguments and reader image.
-The [sheng example](/devices/sheng-unattended-test#manual-cycle) supplies concrete
-commands for that implementation.
+1. Build a test payload with logging enabled and rebuild the boot image.
+2. Boot the test image and wait for the checkpoint under test.
+3. Return to the selected reader environment:
 
-1. Build a test payload with logging enabled, then rebuild its boot image.
-2. Run `fastboot -s <serial> boot <test.img>`. Wait for the log writer to run.
-3. Return to fastboot using the board's verified reset method. Run
-   `fastboot -s <serial> boot <reader.img>`.
-4. Run the board's host reader. Save the raw window and decoded text under a
-   directory identified by the boot ID. Confirm the header belongs to this boot,
-   snapshots are present and write status is successful.
-5. Return to fastboot from the reader and confirm the same serial with
-   `fastboot devices`.
+   ```sh
+   fastboot -s <serial> boot <reader.img>
+   ```
 
-**Result:** one complete test, saved logs and a device ready for the next image.
-If the header is missing or stale, check writer startup and region geometry.
-If the reader's serial port is absent, check its Linux USB gadget and host access.
+   Or boot the recovery image:
+
+   ```sh
+   adb reboot recovery
+   adb wait-for-device
+   ```
+4. Run the reader, save the raw region and decoded text under a directory named
+   with the boot ID, and confirm the header, snapshots and write status.
+5. Return to the board's bootloader and confirm its identity before the next run.
+
+The selected device repository supplies the Linux reader commands. The recovery
+commands above apply to any board with a compatible recovery image.
+
+**Result:** one complete test, an identifiable evidence directory and a verified
+reader return path. A missing or stale header points to writer startup, region
+geometry or the selected reader command.
 
 ## 6. Automate the verified cycle {#automated-cycle}
 
-1. Enable the board's timed return to bootloader. Keep the timeout longer than
-   the checkpoint being measured and allow time for log synchronization.
-2. Configure a host runner with the exact fastboot serial, absolute test-image
-   path, absolute reader-image path and a timeout covering the boot and reset.
-3. Have it boot the test image, observe USB departure and return, boot the reader,
-   retrieve logs, and confirm the final return to fastboot. Use the
-   [sheng runner example](/devices/sheng-unattended-test#automated-cycle) when those
-   board interfaces match.
-4. On timeout, record the failed stage and recover through the board's documented
-   bootloader procedure. Keep this run's images and partial evidence.
-5. Repeat after one change. Record revisions, arguments, checkpoint, reset result,
-   output directory and unresolved errors in the [porting record](/porting/records).
+1. Enable the board's timed return to bootloader or recovery. Set the timeout
+   after the measured checkpoint and log synchronization time.
+2. Configure a host runner with the exact device identity, test image, reader
+   image or recovery image, output directory and timeout.
+3. Have it boot the test image, observe the return, start the selected reader,
+   retrieve and decode the log, and confirm the final bootloader state.
+   A recovery reader uses `adb reboot recovery`, `adb wait-for-device` and
+   `adb pull` in the same sequence as the manual cycle.
+4. On timeout, record the failed stage and use the board's documented bootloader
+   or recovery entry procedure. Keep the images and partial evidence.
+5. Repeat after one change. Record revisions, arguments, checkpoint, reset
+   result, reader environment, output directory and unresolved errors in the
+   [porting record](/porting/records).
+
+The runner follows the same sequence as the manual cycle. A board with recovery
+access can use the same runner structure with ADB commands.
 
 **Result:** each test produces an identifiable evidence directory and a recorded
-bootloader return. Continue the remaining [bring-up stages](/porting/bring-up).
+return path. Continue the remaining [bring-up stages](/porting/bring-up).

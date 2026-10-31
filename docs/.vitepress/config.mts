@@ -8,7 +8,6 @@ function deviceSidebar(zh: boolean) {
     text: zh ? '设备' : 'Devices',
     items: [
       { text: zh ? '设备列表' : 'Device list', link: `${prefix}/devices/` },
-      { text: zh ? 'sheng 日志抓取示例' : 'sheng log capture example', link: `${prefix}/devices/sheng-unattended-test` },
       ...deviceCatalog.map(device => ({
         text: zh ? device.title_zh : device.title,
         link: `${prefix}/devices/${device.name}`,

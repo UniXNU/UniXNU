@@ -1,0 +1,448 @@
+schema_version = 1
+
+# Machine-checked record of the rmx1971 port. `python3 scripts/porting-record.py check
+# --device <this repository>` from a UniXNU checkout validates it.
+#
+# Status vocabulary: planned, implemented, host-verified, device-verified, not-applicable.
+# Device evidence below points at docs/bring-up.md, which transcribes the panel dumps of
+# this handset; there is no UART on a retail RMX1971, so those photographs are the logs.
+
+[device]
+name = "rmx1971"
+soc = "SDM710"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Realme 5 Pro running the UniXNU source kernel through its own U-Boot UEFI: boot chain, entry, MMU, timer, PSCI, platform expert and the boot-progress console work on hardware; XNU idles in bsd_init waiting for a root device until the internal UFS is usable."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["board.toml", "feeds.toml", "dts/**", "configs/**", ".github/**", "docs/**"]
+inputs = [
+  "SoC: SDM710/712 (Kryo 360, 2x Cortex-A75 + 6x Cortex-A55), GIC-500 GICv3, 19.2 MHz Qualcomm XO counter, PSCI over SMC.",
+  "DRAM: 4 GiB model, one contiguous window at 0x1_0000_0000 + 0x7e2c_0000 above the ABL reservations.",
+  "Target OS: the unchanged iPad7,1 iPadOS 17.7.11 (21H461) restore image, the same kernelcache the UniXNU iPadOS profile ships.",
+  "Shared SoC layer: UniXNU-sdm710-common, pinned in feeds.toml because SDM712 is the same die with a 100 MHz higher big-core clock.",
+]
+configuration = [
+  "board.toml is format 2 (schema_version = 2), selects soc_source = sdm710 and os_profile = ipados-17.7.11-21H461, and includes ArmDTPlatform, ArmCpu, XnuPrelink and DarwinBoot.",
+  "dts/rmx1971.dts declares memory@100000000 (0x1_0000_0000 + 0x7e2c_0000) and the eight cores with their affinities, and includes sdm710.dtsi for the GIC, PSCI and counter.",
+  "configs/rmx1971_defconfig starts from the shared sdm710 first-console configuration unchanged: the SoC half is identical, and diverging before the first hardware run would make a porting error indistinguishable from a tuning change.",
+  "kernel.patch_series appends device:patches/xnu/series after the arch, SoC and OS series, so the board's own XNU change applies last.",
+]
+procedure = [
+  "./unixnu fetch sdm710; ./unixnu defconfig rmx1971_defconfig -D .; ./unixnu status --json",
+  "python3 scripts/porting-record.py check --device . (from a UniXNU checkout) validates this record against board.toml.",
+]
+findings = [
+  "Every number here comes from the handset: the partition geometry, the DRAM window and the timer rate were read off the device (part list, scsi read, and the kernel's own panel) before being written down.",
+  "SDM712 differs from SDM710 only in the top CPU OPP (2.3 against 2.2 GHz) and the GPU clock; nothing in the boot path needs a 712-specific description, so the shared SoC layer is used unchanged rather than copied.",
+  "The device tree is the one place where U-Boot and XNU disagree and both are right: U-Boot's board tree must describe the LOW half (0x8000_0000 + 0x7e2c_0000) because that is the memory it owns and relocates in, while XNU's tree describes the HIGH half, which is the only contiguous window left.",
+]
+completion = [
+  "The record validates against board.toml, the device tree compiles, and the configuration resolves through all four profiles (arm64, sdm710, iPadOS 17.7.11, this board).",
+]
+limits = [
+  "Only the first-console configuration is exercised; nothing that needs a storage driver, GPU or input device is configured yet.",
+]
+next_action = [
+  "Add the storage area's device evidence once the UFS driver completes a read on hardware, and extend the record with each peripheral as it is brought up.",
+]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Format 2 descriptor: soc_source sdm710, os_profile ipados-17.7.11-21H461, four components." },
+  { kind = "source", reference = "dts/rmx1971.dts", result = "Memory window and eight CPU nodes over sdm710.dtsi; dtc output carries model, compatible and timebase-frequency 0x124f800." },
+  { kind = "host", reference = "https://github.com/AppleCampus/UniXNU-rmx1971/actions/runs/41022700761", result = "Kernel, prelink and all kit archives build; the job also compiles the board device tree.", command = "./unixnu build kernel --defconfig rmx1971_defconfig --device AppleCampus/UniXNU-rmx1971", revision = "14a9ae187e345111e85a24674cbad57d0020ccfd" },
+]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot"]
+paths = [".github/workflows/unixnu-efi.yml", "scripts/make-uboot-payload.py", "payload/**", "drivers/DarwinBoot/**"]
+inputs = [
+  "Firmware: OPPO/realme ABL (no boot command over fastboot), U-Boot 2026.07 built by this repository, UEFI from its EFI loader.",
+  "Payload volume: 128 MiB FAT32 on LUN0 partition 8 (vm-system, LBA 0x2d00), because that partition is unused by this project and writable by the ABL.",
+  "UniXNU.efi and DarwinBoot.efi built from source in CI; the kernel arrives from the macOS kernel workflow.",
+]
+configuration = [
+  "U-Boot bootcmd: `bootefi bootmgr`, then a fallback that reads a bare PE image from logfs (LUN4 LBA 0x19391) and starts it with `bootefi 0xa0000000:400000`.",
+  "unixnu.toml entries: default = \"xnu\", timeout = 3, [[driver]] Payloads/DarwinBoot.efi, [[entry]] xnu -> Payloads/kernel.macho.",
+  "Kernel arguments include boot-progress=2 sheng-smp=1 cpus=8 armcpu-timer-intid=19 sheng-pmgr=2 amfi_get_out_of_my_way=1 rd=ufsroot0 ufsroot=userdata.",
+]
+procedure = [
+  "fastboot flash vm-system rmx1971-payload.img; fastboot flash boot uboot-rmx1971-boot.img; fastboot reboot",
+  "fastboot boot is not usable on this ABL: it transfers the image and then fails with FAILED (remote: 'unknown command').",
+]
+findings = [
+  "The ABL matches the appended DTB table by qcom,msm-id and ignores androidboot.dtb_idx, so the image cannot choose its entry; every entry in the vendor table is patched with the framebuffer and memory nodes instead.",
+  "U-Boot's EFI boot manager enumerates block devices, sees the UFS partitions as SCSI block devices with partition children, and starts \\EFI\\BOOT\\BOOTAA64.EFI from the FAT volume; no vendor-specific plumbing was needed.",
+  "bootefi accepts an explicit :size for images that were read into memory directly; without it the loader answers 'No UEFI binary known at ...' because it only trusts addresses it recorded itself.",
+]
+completion = [
+  "ABL starts U-Boot, U-Boot starts UniXNU.efi from the payload volume, UniXNU starts DarwinBoot, DarwinBoot enters the kernel, and the kernel reaches its own console.",
+]
+limits = [
+  "USB gadget fastboot is not usable: `fastboot usb 0` waits for a host that never enumerates, most likely because VBUS is absent at the moment the gadget is initialised. Development therefore goes through the ABL on every iteration.",
+  "The payload volume lives on vm-system, so a factory reset that reformats that partition removes it; the fix is one `fastboot flash vm-system`.",
+]
+next_action = [
+  "Retry the USB gadget with the cable attached before power-on, to see whether enumeration depends on VBUS at init time.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "Boot chain observed end to end: 'U-Boot 2026.07', 'Model: Realme 5 Pro (RMX1971)', UniXNU menu, DarwinBoot entry bars, kernel panel.", command = "fastboot flash vm-system rmx1971-payload.img && fastboot flash boot uboot-rmx1971-boot.img && fastboot reboot", revision = "ba18c53feab7b92b316addaecc7497b8586e64cd" },
+  { kind = "source", reference = "scripts/make-uboot-payload.py", result = "Assembles the ESP: UniXNU.efi, unixnu.toml, DarwinBoot.efi, kernel.macho and .adt, plus the entry-probe patch." },
+]
+
+[[area]]
+id = "cpu"
+status = "device-verified"
+components = ["ArmCpu"]
+paths = ["drivers/ArmCpu/**", "dts/rmx1971.dts", "package/**"]
+inputs = [
+  "CPUs: 2x Cortex-A75 + 6x Cortex-A55, PSCI over SMC, GIC-500 (GICD 0x17a00000, GICR 0x17a60000), 19.2 MHz counter, virtual timer INTID 19.",
+  "Boot CPU numbering comes from the ADT; the Apple ARM CPU platform expert looks up /cpus by matching name.",
+]
+configuration = [
+  "dts/rmx1971.dts lists cpu@0..cpu@700 with their reg, enable-method = \"psci\" and the A55/A75 compatible strings.",
+  "Kernel arguments: sheng-smp=1 cpus=8 armcpu-self-ipi=1 armcpu-timer-intid=19.",
+  "The AppleARMCPU personality's IONameMatch is rewritten cpu -> xpu at payload assembly time so the native ArmCpu owns /cpus.",
+]
+procedure = [
+  "Build the payload, boot it, and read TOPO/CLK/SMP off the boot-progress panel.",
+]
+findings = [
+  "Without the IONameMatch rewrite Apple's CPU class claims cpu0..cpu7 by prefix and the kernel panics with 'CPU configuration in device tree is invalid'; the rewrite is a same-length string substitution, so the kernel image is not relaid out.",
+  "All eight cores reach step7 with the non-Apple timer INTID; the counter rate reported by the kernel (19200000) equals the device tree's timebase-frequency, and the derived milliseconds match the wall clock of the boot.",
+]
+completion = [
+  "Every secondary CPU reports its entry checkpoint and takes timer interrupts, and the delay calibration agrees with the device tree.",
+]
+limits = [
+  "CPU frequency scaling is not implemented: the kernel runs at whatever the bootloader left. The 2.3 GHz SDM712 OPP does not exist in the shared sdm710 clock table.",
+]
+next_action = [
+  "Add the 2.3 GHz big-core OPP to a board clock table once the root device works; it is a table entry, not a boot-path change.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "TOPO max=7 nums=01234567 | DT cfg=1 cpu=8; SMP run=7 with c1..c7=step7; CLK cntfrq=19200000 dt-timebase=19200000, converted values equal.", command = "fastboot flash vm-system rmx1971-payload.img && fastboot reboot", revision = "784c151b1c0b5d99bab522a7d4f8d3f497a747ce" },
+]
+
+[[area]]
+id = "memory"
+status = "device-verified"
+components = []
+paths = ["dts/rmx1971.dts", "board.toml"]
+inputs = [
+  "DRAM: 4 GiB total; below 4 GiB the ABL and its reserved-memory carve-outs fragment everything, and the only contiguous window is 0x1_0000_0000 + 0x7e2c_0000.",
+  "DarwinBoot allocates the kernel's owned window from the EFI memory map it was given, not from the device tree.",
+]
+configuration = [
+  "board.toml: dram_size = 0x7e2c0000, [payload.adt] owned_memory_size = 0x20000000 (512 MiB).",
+  "dts/rmx1971.dts: memory@100000000 { reg = <0x1 0x0 0x0 0x7e2c0000> }.",
+]
+procedure = [
+  "Boot and read MEM totalMiB / free4K / wired from the panel; the three must add up.",
+]
+findings = [
+  "Unset owned_memory_size gives the 256 MiB default, which is what the first boot reported (free4k 173 MiB + wired 83 MB).",
+  "Asking for the whole 0x7e000000 fails before the kernel starts with 'rmx1971 first boot returned: out of resources': the EFI map is U-Boot's low half, where the ABL reservations end at 0xB8300000, the frame buffer holds 10 MiB at 0x9c000000 and U-Boot relocates to the top, leaving a little over 1 GiB contiguous that also has to hold the 52 MiB kernel image.",
+  "512 MiB boots with wired=22411 and free4K=108298, and is the value the port ships.",
+]
+completion = [
+  "The kernel owns a contiguous window large enough for the kernel image plus userland, and every reserved region is accounted for.",
+]
+limits = [
+  "The full 1.97 GiB requires U-Boot's memory node to describe the high half as well; until then the kernel is limited to 512 MiB of the window the device tree declares.",
+]
+next_action = [
+  "Extend U-Boot's /memory node to cover 0x1_0000_0000 + 0x7e2c_0000 and re-measure the largest contiguous EFI allocation before raising owned_memory_size.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "MEM totalMiB=512 free4K=108298 wired=22411 after owned_memory_size = 0x20000000; the 0x7e000000 attempt reported 'out of resources' instead.", command = "fastboot flash vm-system rmx1971-payload.img && fastboot reboot", revision = "784c151b1c0b5d99bab522a7d4f8d3f497a747ce" },
+]
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = []
+paths = ["patches/xnu/**", "board.toml", "docs/bring-up.md"]
+inputs = [
+  "Storage: UFS (ufshc@1d84000, UFSHCI 2.1) with six LUNs and 4096-byte blocks; no eMMC, so the shared layer's SDCC1 eMMC kit does not apply.",
+  "The host is left enabled with the link up by U-Boot, exactly as the ABL leaves it, so the XNU driver does not initialise the PHY or the link.",
+]
+configuration = [
+  "patches/xnu/sweet-ufs-root.patch adds bsd/dev/sweet_ufs.c, bsd/conf/files, an IOKitBSDInit probe and a vfs_mountroot probe that assigns rootdev.",
+  "Kernel arguments: rd=ufsroot0 ufsroot=userdata (default partition name is userdata, GPT entry 14 at LUN0 LBA 0x198900).",
+  "U-Boot side: patches/uboot/0001-clk-sdm670-add-ufs-phy-rx-symbol-1.patch adds GCC_UFS_PHY_RX_SYMBOL_1_CLK at 0x770a8, without which ufshcd fails to enable the controller with -ENOENT.",
+]
+procedure = [
+  "fastboot flash vm-system rmx1971-payload.img, boot, and read the driver's verdict on the panel's stage line.",
+  "From U-Boot: part list scsi <lun> and scsi read to verify the GPT and read a partition by LBA.",
+]
+findings = [
+  "Six LUNs totalling 63.99 GB: LUN0 58.6 GiB Android, LUN1 xbl/xbl_config, LUN2 an empty GPT, LUN3 ALIGN_TO_128K_1/cdt/ddr, LUN4 and LUN5 the firmware half including boot at LBA 0xc505.",
+  "LUN0's GPT has 32 slots and 14 entries, while the ABL knows 64 partitions whose reversed order starts with those same 14: the table on LUN0 is a truncated copy, and the firmware partitions are on LUN4/LUN5 with tables of their own.",
+  "scsi read of LUN4 LBA 0xc505 returns 'ANDROID!', so the running boot image is readable from U-Boot by fixed LBA.",
+  "The first XNU driver attempt added a branch inside IOFindBSDRoot and produced no output at all: the panel showed vfs_mountroot entered every five seconds, which means rootdev stayed NODEV and bdevvp() failed before any filesystem was asked. The probe therefore belongs at the top of vfs_mountroot(), and it must assign rootdev rather than only report.",
+  "The driver keeps its verdict on the boot-progress stage line because everything it printf()s scrolls off a console that retains only the latest seven lines; the hook is a weak reference so the bootstrap pass, which links without the kit archives, still links.",
+]
+completion = [
+  "The driver reports the partition geometry on the stage line, the kernel mounts a filesystem from it, and userdata is reachable without touching any other partition.",
+]
+limits = [
+  "Read-only and not yet observed on hardware. userdata currently holds Android's encrypted filesystem, so the first successful probe is still expected to fail the mount with errno 19.",
+  "Writes, 4 GiB-plus DMA and the speed work from the same source project are not ported.",
+]
+next_action = [
+  "Boot the payload carrying the vfs_mountroot probe and read its stage line: 'UFS ok: ...' moves the problem to the filesystem, 'UFS: init failed N' names the stage (5 host handover, 6 no GPT, 2 no such partition, 12 DMA).",
+]
+evidence = [
+  { kind = "source", reference = "patches/xnu/sweet-ufs-root.patch", result = "Read-only UFS block driver, conf/files entry, IOKitBSDInit probe and the vfs_mountroot probe that assigns rootdev." },
+  { kind = "host", reference = "https://github.com/AppleCampus/UniXNU-rmx1971/actions/runs/41022700761", result = "Kernel builds with the driver; the assembled payload's kernel.macho carries the driver strings and both probes.", command = "./unixnu build kernel --defconfig rmx1971_defconfig --device AppleCampus/UniXNU-rmx1971", revision = "14a9ae187e345111e85a24674cbad57d0020ccfd" },
+]
+
+[[area]]
+id = "display"
+status = "device-verified"
+components = []
+paths = ["dts/sdm710-realme-rmx1971.dts", "package/BootProgress.c", "package/Font.h"]
+inputs = [
+  "Panel: 1080x2340, stride 1080*4, a8r8g8b8, handed over lit by the ABL at 0x9c000000; no GPU driver and no backlight control.",
+  "There is no UART on a retail unit, so the framebuffer is the only log transport.",
+]
+configuration = [
+  "U-Boot's board tree carries a root-level framebuffer@9c000000 (simple-framebuffer) so vidconsole exists; /chosen would never be bound.",
+  "XNU draws through package/BootProgress.c onto the same address, with boot-progress=2.",
+]
+procedure = [
+  "Boot and read the panel: the header, the sampled PCs and the console pane are the log.",
+]
+findings = [
+  "A simple-framebuffer node nested under /chosen is never bound: dm_scan_fdt() walks the root's children and recurses only into simple-bus, and /chosen has no driver, so vidconsole never appears.",
+  "The console pane keeps the latest seven lines, which is what makes a verbose boot readable and what identified the vfs_mountroot retry loop.",
+  "The panic screen is disabled: it is assembled into the padding at the end of the kernel text, and this kernel's padding is 0xa30 bytes against 0xa37 needed.",
+]
+completion = [
+  "Kernel output is readable on the panel from early boot onward, and a hang is distinguishable from a crash.",
+]
+limits = [
+  "Brightness control, panel backlight and any GPU-accelerated presentation are absent; everything is CPU copies into the splash buffer.",
+]
+next_action = [
+  "Shrink the panic-screen glyph table (or find 7 more bytes of padding) so panics can be reported even before the console is up.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "Boot-progress panel rendered by the kernel: header, TOPO/CLK/SMP lines, stage history and console pane all legible on the panel.", command = "fastboot flash vm-system rmx1971-payload.img && fastboot reboot", revision = "784c151b1c0b5d99bab522a7d4f8d3f497a747ce" },
+]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["dts/rmx1971.dts"]
+inputs = [
+  "Touch: the panel's controller is not identified in open sources for this variant; the vendor kernel tree and the stock DTB are the references to check.",
+  "Buttons: power and both volume keys reach the PM660/PM660L PMIC; the volume keys are on PM660L GPIO 7 in the vendor tree.",
+]
+configuration = [
+  "Nothing configured yet; neither the touch node nor the key nodes exist in dts/rmx1971.dts.",
+]
+procedure = [
+  "Read the touch controller's compatible and interrupt from the stock DTB before adding a node.",
+]
+findings = [
+  "UniXNU's own menu cannot be driven on this handset: with no input device the timeout selects the default entry, which is why unixnu.toml sets timeout = 3 and makes the kernel the default.",
+]
+completion = [
+  "Touch reports contacts with correct coordinates and the three physical keys deliver events.",
+]
+limits = [
+  "No input device is described, so the boot menu is unusable and nothing can be typed at a shell.",
+]
+next_action = [
+  "Extract the stock DTB and identify the touch controller and the key GPIOs.",
+]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["board.toml"]
+inputs = [
+  "GPU: Adreno 616 (SDM712 runs it at 610 MHz), firmware and PM4 submission are not implemented for this SoC in UniXNU.",
+]
+configuration = [
+  "No GPU component is selected; the display path is CPU copies into the framebuffer.",
+]
+procedure = [
+  "Defer until the storage and input areas are device-verified.",
+]
+findings = [
+  "Nothing measured yet; the Adreno firmware for SDM670/710 has not been extracted from this handset.",
+]
+completion = [
+  "A GPU provider matches, submits command buffers and presents a frame.",
+]
+limits = [
+  "Entirely unimplemented; there is no accelerated presentation path of any kind.",
+]
+next_action = [
+  "Decide whether the Adreno 6xx components can be reused from another Qualcomm port before writing anything board-specific.",
+]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["dts/rmx1971.dts"]
+inputs = [
+  "Wi-Fi: the module and its bus are not identified for this variant; the vendor kernel tree lists it, the stock DTB carries the node.",
+]
+configuration = [
+  "Nothing configured: no Wi-Fi or Bluetooth node exists in the board tree.",
+]
+procedure = [
+  "Identify the module and its firmware from the vendor tree before adding anything.",
+]
+findings = [
+  "U-Boot reports 'Net: No ethernet found', which is expected and unrelated: there is no wired interface on this handset.",
+]
+completion = [
+  "The interface associates and passes packets through the OS network stack.",
+]
+limits = [
+  "No network device of any kind.",
+]
+next_action = [
+  "Confirm the Wi-Fi module from the stock DTB and the vendor defconfig.",
+]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["dts/rmx1971.dts"]
+inputs = [
+  "Audio: the codec is inside PM660L; the DSP path and its firmware services are not implemented.",
+]
+configuration = [
+  "Nothing configured.",
+]
+procedure = [
+  "Defer until storage, input and power are device-verified.",
+]
+findings = [
+  "Nothing measured yet.",
+]
+completion = [
+  "Playback and capture through the speaker and the headset jack.",
+]
+limits = [
+  "Unimplemented.",
+]
+next_action = [
+  "Inventory the codec and DSP resources in the vendor tree.",
+]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["dts/rmx1971.dts"]
+inputs = [
+  "PMIC: PM660 + PM660L over SPMI; the ABL leaves the regulators configured for Android's boot path. Reset and power-off work through PSCI.",
+]
+configuration = [
+  "Nothing configured: no regulator or charger driver is selected.",
+]
+procedure = [
+  "Read the PMIC state through the SPMI bus once a driver exists.",
+]
+findings = [
+  "The kernel runs on the rails the bootloader left enabled, which is sufficient to reach the console but not to control brightness or charging.",
+]
+completion = [
+  "Regulators and battery state are readable, and at least one voltage rail is demonstrably controlled by the OS.",
+]
+limits = [
+  "No regulator, charger or fuel-gauge driver.",
+]
+next_action = [
+  "Identify the SPMI bus and the PM660 register window that the vendor tree uses.",
+]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "device-verified"
+components = ["XnuPrelink"]
+paths = ["scripts/make-uboot-payload.py", ".github/workflows/unixnu-efi.yml", ".github/workflows/unixnu-kernel.yml", "payload/**"]
+inputs = [
+  "Kernel: kernel.macho plus the ADT from the prelink step, 52,486,144 bytes at this revision.",
+  "Loader: DarwinBoot.efi from drivers/DarwinBoot, UniXNU.efi from the UniXNU package, both built in CI.",
+]
+configuration = [
+  "Payload volume: 128 MiB FAT32, label RMX1971ESP, files \\EFI\\BOOT\\BOOTAA64.EFI, \\EFI\\UniXNU\\unixnu.toml, \\EFI\\UniXNU\\Payloads\\{DarwinBoot.efi,kernel.macho,kernel.macho.adt}.",
+  "Kernel patches applied at assembly: the entry probe (stage bars, --no-reset) and the IONameMatch cpu->xpu rewrite.",
+  "Kernel build runs on a macOS runner because unixnu build kernel needs Xcode; the payload step runs on Linux.",
+]
+procedure = [
+  "./unixnu build payload --kernel kernel.macho --edk2 <edk2> --uefi <font tree>",
+  "python3 scripts/make-uboot-payload.py --payload <image> --unixnu-efi <efi> --darwinboot-efi <efi> --entry-probe <script> --output rmx1971-payload.img",
+  "fastboot flash vm-system rmx1971-payload.img",
+]
+findings = [
+  "The payload volume is FAT32, not FAT16, because mformat chooses by size; parsing it as FAT16 silently shows an empty root directory.",
+  "The panic screen does not fit this kernel's text padding (0xa30 bytes against 0xa37), so board.toml disables it and the entry probe is applied separately.",
+  "Upstream's macOS workflow publishes text logs only, so this repository's copy adds an artifact upload; a kernel nobody can download is a kernel nobody can flash.",
+]
+completion = [
+  "The volume boots end to end and every file in it matches the hash recorded in the payload report.",
+]
+limits = [
+  "No userland image is produced yet; the kernel stops at bsd_init because there is no root filesystem.",
+]
+next_action = [
+  "Produce a mountable root image once the storage area reports a working block device.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "Volume assembled and flashed, then booted to the kernel console; the same volume carries the UFS driver probes.", command = "fastboot flash vm-system rmx1971-payload.img && fastboot reboot", revision = "ba18c53feab7b92b316addaecc7497b8586e64cd" },
+]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = ["package/BootProgress.c", "package/BootFaultProbe.c", "package/BootDiagExport.c", "board/realme/rmx1971/**"]
+inputs = [
+  "Log transport: the framebuffer only. No UART on retail units, and the USB gadget never enumerates.",
+  "U-Boot side: environments compiled into the image, since nothing can be typed at its prompt.",
+]
+configuration = [
+  "Kernel: boot-progress=2 selects the full panel; the console pane keeps the latest seven lines.",
+  "U-Boot: four environments (main, probe, diag, usb) are separate builds because CONFIG_ENV_DEFAULT_ENV_TEXT_FILE is compiled in.",
+]
+procedure = [
+  "Read the stage line and the eight PC samples, then resolve a PC against the kernel's LC_SYMTAB.",
+]
+findings = [
+  "Every PC sample landing on _machine_idle is what distinguished 'waiting for a root device' from a crash; the same method identified the vfs_mountroot retry loop from the stage history.",
+  "The panel's stage line is the only place a driver message survives, so the UFS driver writes its verdict there instead of relying on printf.",
+  "A three-image set made the ABL behaviour observable: boot.img (the real thing), boot-probe.img (sleep 15; reset, proves bootcmd was reached) and boot-stub.img (300 bytes of assembly that paints the screen and resets, proves the ABL jumped).",
+]
+completion = [
+  "Any boot failure can be attributed to a phase from the panel alone, without a serial port.",
+]
+limits = [
+  "The console pane holds seven lines; anything that prints more scrolls away, which is why drivers must pin their conclusions on the stage line.",
+]
+next_action = [
+  "Add the first UFS read to the panel's UFS TIME line by filling the native_ufs_* counters the kit already renders.",
+]
+evidence = [
+  { kind = "device", reference = "docs/bring-up.md", result = "Panel dumps at four stages of bring-up, including the sampled PCs and the vfs_mountroot retry history.", command = "fastboot flash boot uboot-rmx1971-boot.img && fastboot reboot", revision = "06d0e0e31133c9e226e3b507a3fced7b7dbb6512" },
+]
