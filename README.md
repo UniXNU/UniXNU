@@ -4,7 +4,7 @@
 
 This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Xiaomi Mi 10 (`umi`, Qualcomm SM8250 / Snapdragon 865). On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd, SpringBoard and the stock apps.
 
-As of **2026-10-31** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks) and the brightness slider work, the battery shows its real charge, and the Adreno 650 GPU is being brought up.
+As of **2026-10-31** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks), the brightness slider and auto-brightness work, the battery shows its real charge, and the Adreno 650 GPU is being brought up.
 
 > Experimental bring-up, not a usable phone OS. Many things are missing or stubbed (see below), and Apple's security model is mostly switched off. It installs into the `userdata` partition and so **erases Android's user data**.
 
@@ -19,7 +19,7 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | Storage | Own UFS host driver; the iOS root is a journaled HFS+ volume in `userdata`, read/write |
 | iOS userland | Real iPhone X 16.7.16 root filesystem and shared cache; launchd, the system daemons and the 31 removable stock apps |
 | Display | Kernel IOSurface + IOMobileFramebuffer (`AppleCLCD`) services; CoreAnimation frames go to the 1080×2340 AMOLED panel. Presented to iOS as an iPhone X panel (1125×2436) |
-| Brightness | `AppleARMBacklight` for CoreBrightness; the Control Center and Settings slider set the panel level with DCS 0x51 over DSI; the panel goes dark on lock and comes back with the power button |
+| Brightness | `AppleARMBacklight` for CoreBrightness; the Control Center and Settings slider set the panel level with DCS 0x51 over DSI; the panel goes dark on lock and comes back with the power button; auto-brightness from the ambient light sensor (SLPI firmware booted by the kernel, read through QRTR/SEE) |
 | Night Shift | iOS's display color matrix goes to the display controller's color correction (DSPP PCC) |
 | GUI | backboardd, SpringBoard, lock screen, home screen, Control Center, notification center, Settings, wallpapers |
 | Touch | ST FTM5 over I²C (GENI with GPI DMA), delivered as HID digitizer events |
@@ -34,7 +34,7 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 ## What does not work (yet)
 
 - **No Bluetooth, cellular, audio, camera, sensors, GPS or SEP / Face ID.** Daemons for them start and fail or keep relaunching.
-- **No auto-brightness** (no light sensor driver, so no True Tone sensing either).
+- **No True Tone**: the light sensor reports brightness only, not color.
 - **Location services hang** behind fairplayd, which also keeps some features (the iOS 16 wallpaper's Featured row, location-based suggestions) away.
 - **Wi-Fi** is 2.4 GHz only, legacy rates, no WPA3.
 - **GPU** rendering is not reliable yet (fence timeouts); CoreAnimation mostly renders on the CPU.
@@ -169,6 +169,7 @@ Not in git: partition backups, live device trees, recovery images, Apple firmwar
 | 0160–0200 | Adreno 650 bring-up: GMU, RPMh, SMMU, zap shader via TrustZone, command processor, buffer objects and fences, user client for Mesa |
 | 0201–0203 | Apple80211 for wifid (from ios-flame / HackiOS), the QCA6390 as wifid's station, WPA2-PSK |
 | 0204–0207 | File server LIST; backlight (CoreBrightness → DCS 0x51 over DSI); panel dark while the display is off; Night Shift through the MDP's PCC |
+| 0208–0214 | SLPI sensor DSP: firmware boot via TrustZone, SMEM/SMP2P/GLINK, QRTR and service locator, FastRPC config server, SEE ambient light client, Apple ALS HID service for auto-brightness |
 
 ## Key hardware facts (Mi 10)
 

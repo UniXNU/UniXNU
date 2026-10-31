@@ -2,6 +2,22 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-10-31 0213-0214: AUTO-BRIGHTNESS WORKS (user confirmed: dims when covered, brightens under a lamp)**
+  (patches `xnu/patches/0213-umi-als-hid.patch`, `0214-umi-qrtr-resume-tx.patch`; boot
+  `shim/out/umi-0213c-resume20.img` = 0204's line + `sweetslpi=1 sweetslpidelay=150`).
+  - 0213 `SweetHIDALS` (SweetHID.cpp, matched on IOResources): the SEE lux as Apple's vendor-page ALS, PrimaryUsagePage
+    0xff00 / PrimaryUsage 4, Built-In, DeviceUsagePairs; ambient light event (level + Illuminance) on change and at
+    least every 2 s. backboardd opens it (CBABModuleiOS addHIDServiceClient -> AABC::open, AABC::registerService
+    needs Built-In == true and DeviceUsagePairs; HandleALSEvent reads the level field as float).
+  - Settings > Accessibility > Display & Text Size > Auto-Brightness only shows when MobileGestalt
+    `ambient-light-sensor` (lo3szoQ4sLy7o3+ZD0GcAQ) is true = IOServiceGetMatchingService(IOPropertyMatch
+    {PrimaryUsagePage 0xff00, PrimaryUsage 4}) (libMobileGestalt 0x19c575320). The answer is cached on disk, so the
+    first boot with 0213 needs `sweetmgreset=1` once (done on the phone 2026-10-31, old cache kept as .sweet-old).
+  - 0214: the SLPI's IPC router stops after 10 packets without RESUME_TX (confirm_rx on the 5th). RESUME_TX must be
+    sent from the receiving port to the sender's port as a full 20-byte qrtr_ctrl_pkt; from the control port (0213b)
+    or with 12 bytes it is ignored and the ALS went quiet after 6 readings.
+  - Typical readings: room 40-90 lux, covered 0-15, desk lamp ~5000; AAB ramped 100 -> ~2 nits in the dark and
+    ~9 -> 160+ nits under the lamp. No True Tone (the sensor reports lux only, no color).
 - **🎉 2026-10-31 0212: THE AMBIENT LIGHT SENSOR READS** (patch `xnu/patches/0212-umi-als-see.patch`, boot
   `shim/out/umi-0212-see.img` = 0204's line + `sweetslpi=1 sweetslpidelay=150`; sensor files already on the phone).
   - SEE client in the kernel (QMI 400 at node 9 port 0xc, our QRTR port 0x4000): request 0x20 TLV 0x01 = u16 len +

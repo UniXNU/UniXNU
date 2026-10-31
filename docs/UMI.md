@@ -7,7 +7,7 @@ log is the umi section at the top of `NOTES.md`.
 
 Status (2026-10-31): iOS 16.7.16 (iPhone X userland) boots to the home screen with the stock
 apps. Touch, buttons, USB Ethernet + live log, Wi-Fi in Settings (open + WPA2-PSK, 0201-0203) and
-the brightness slider (0205) work; the Adreno 650 is being brought up. Scripts that talk to the
+the brightness slider (0205) and auto-brightness (0213-0214) work; the Adreno 650 is being brought up. Scripts that talk to the
 phone need `UMI_SERIAL` set to its serial (`fastboot devices`).
 
 ## What is not in git
