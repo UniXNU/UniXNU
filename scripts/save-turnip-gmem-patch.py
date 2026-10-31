@@ -13,7 +13,8 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 MESA = ROOT / '.cache/mesa-work'
 MINE = ['src/freedreno/fdl/fd6_view.cc', 'src/freedreno/vulkan/tu_clear_blit.cc', 'src/freedreno/vulkan/tu_cmd_buffer.cc',
-        'src/freedreno/vulkan/tu_clear_blit.h', 'src/freedreno/vulkan/tu_knl_darwin.cc']
+        'src/freedreno/vulkan/tu_clear_blit.h', 'src/freedreno/vulkan/tu_knl_darwin.cc', 'src/freedreno/vulkan/tu_cmd_buffer.h',
+        'src/freedreno/vulkan/tu_pipeline.cc', 'src/freedreno/vulkan/tu_pipeline.h']
 OUT = ROOT / 'patches/mesa/turnip-gmem-mutable-swap.patch'
 listed = json.loads((ROOT / 'scripts/data/adreno-compiler-inputs.json').read_text())['patches']
 others = listed[:listed.index(str(OUT.relative_to(ROOT)))]

@@ -284,7 +284,7 @@ index 62d1e43..7d59dc3 100644
  tu_cmd_fill_buffer_addr(VkCommandBuffer commandBuffer,
                          VkDeviceAddress dstAddr,
 diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
-index 33a22aa..b900555 100644
+index 33a22aa..bc779a7 100644
 --- a/src/freedreno/vulkan/tu_cmd_buffer.cc
 +++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
 @@ -27,6 +27,8 @@
@@ -305,7 +305,7 @@ index 33a22aa..b900555 100644
  
        /* If FDM offset is used, the last row and column extend beyond the
         * framebuffer but are shifted over when storing. Expand the width and
-@@ -4056,7 +4060,163 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
+@@ -4056,7 +4060,187 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
   */
  static uint64_t tu_render_mode_counts[8];
  
@@ -333,8 +333,15 @@ index 33a22aa..b900555 100644
 +   uint16_t format;       /* VkFormat of the first colour attachment */
 +   uint32_t kpx;
 +   uint64_t gpu_begin, gpu_end;
++   uint16_t fs_instrs, fs_tex, fs_systall, fs_sstall;   /* the heaviest fragment shader of the pass: ir3 instructions, texture fetches (cat 5), estimated stall cycles on (sy) and (ss) */
++   int8_t fs_waves, fs_regs;                            /* its max waves per core and highest GPR */
++   uint8_t samples;                                     /* sample count of the first colour attachment */
++   uint8_t ds;                                          /* 1 depth/stencil attachment, 2 the pass has a resolve */
++   uint32_t bandwidth;                                  /* the draws' estimated bandwidth per sample (bytes), the autotuner's figure */
++   uint32_t verts;                                      /* vertices of the pass's non-indirect draws */
++   uint32_t fs_hash;                                    /* tu_hash32 of that fragment shader (the tail padding of the 72 bytes) */
 +};
-+static_assert(sizeof(struct tu_pass_rec) == 48, "pass record");
++static_assert(sizeof(struct tu_pass_rec) == 72, "pass record");
 +static struct tu_pass_rec tu_pass_ring[512];
 +
 +/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from sheng-diag=1): without it no pass is stamped or kept in the ring. */
@@ -425,6 +432,23 @@ index 33a22aa..b900555 100644
 +                   (tu_attachment_unpadded(cmd, iview) ? 4 : 0) | (att->load ? 8 : 0) | (att->store ? 16 : 0);
 +      break;
 +   }
++   rec.fs_instrs = cmd->state.rp.fs_instrs;
++   rec.fs_tex = cmd->state.rp.fs_tex;
++   rec.fs_systall = cmd->state.rp.fs_systall;
++   rec.fs_sstall = cmd->state.rp.fs_sstall;
++   rec.fs_waves = cmd->state.rp.fs_waves;
++   rec.fs_regs = cmd->state.rp.fs_regs;
++   rec.verts = cmd->state.rp.verts;
++   rec.fs_hash = cmd->state.rp.fs_hash;
++   rec.bandwidth = cmd->state.rp.drawcall_bandwidth_per_sample_sum / MAX2(cmd->state.rp.drawcall_count, 1);
++   rec.ds = subpass->depth_stencil_attachment.attachment != VK_ATTACHMENT_UNUSED ? 1 : 0;
++   for (uint32_t i = 0; i < subpass->color_count; i++) {
++      const uint32_t a = subpass->color_attachments[i].attachment;
++      if (a != VK_ATTACHMENT_UNUSED) {
++         rec.samples = (uint8_t) cmd->state.pass->attachments[a].samples;
++         break;
++      }
++   }
 +   const uint32_t seq = p_atomic_inc_return(&tu_pass_seq);
 +   rec.seq = seq;
 +   tu_pass_ring[seq % 512] = rec;
@@ -469,7 +493,7 @@ index 33a22aa..b900555 100644
  tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
  {
     const VkExtent2D extent = cmd->state.render_areas[0].extent;
-@@ -4066,8 +4226,9 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+@@ -4066,8 +4250,9 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
        !sysmem ? 0 : reason && !strcmp(reason, "Autotune selected sysmem") ? 2 : 4;
     p_atomic_inc(&tu_render_mode_counts[slot]);
     p_atomic_add(&tu_render_mode_counts[slot + 1], kpx);
@@ -480,7 +504,7 @@ index 33a22aa..b900555 100644
     for (unsigned i = 0; i < cmd->state.pass->attachment_count; i++) {
        const struct tu_image_view *iview = cmd->state.attachments[i];
        if (iview && tu_attachment_unpadded(cmd, iview)) {
-@@ -4075,6 +4236,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+@@ -4075,6 +4260,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
           break;
        }
     }
@@ -488,7 +512,7 @@ index 33a22aa..b900555 100644
  }
  
  extern "C" __attribute__((visibility("default"))) void tu_render_mode_stats(uint64_t out[8]);
-@@ -4097,11 +4259,16 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
+@@ -4097,11 +4283,16 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
  
     tu_autotune::rp_ctx_t rp_ctx = NULL;
     const bool sysmem = use_sysmem_rendering(cmd_buffer, &rp_ctx, rp_key);
@@ -506,11 +530,79 @@ index 33a22aa..b900555 100644
  }
  
  static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
+@@ -6219,6 +6410,16 @@ tu_render_pass_state_merge(struct tu_render_pass_state *dst,
+    }
+ 
+    dst->drawcall_count += src->drawcall_count;
++   if (src->fs_instrs >= dst->fs_instrs) {
++      dst->fs_instrs = src->fs_instrs;
++      dst->fs_tex = src->fs_tex;
++      dst->fs_systall = src->fs_systall;
++      dst->fs_sstall = src->fs_sstall;
++      dst->fs_waves = src->fs_waves;
++      dst->fs_regs = src->fs_regs;
++      dst->fs_hash = src->fs_hash;
++   }
++   dst->verts += src->verts;
+ }
+ 
+ void
+@@ -8387,6 +8588,21 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
+    /* Fill draw stats for autotuner */
+    rp->drawcall_count++;
+ 
++   if (tu_pass_trace_on()) {
++      const struct tu_shader *fs = cmd->state.shaders[MESA_SHADER_FRAGMENT];
++      if (fs && fs->variant && fs->variant->info.instrs_count >= rp->fs_instrs) {
++         const struct ir3_info *info = &fs->variant->info;
++         rp->fs_instrs = info->instrs_count;
++         rp->fs_tex = info->instrs_per_cat[5];
++         rp->fs_systall = info->systall;
++         rp->fs_sstall = info->sstall;
++         rp->fs_waves = info->max_waves;
++         rp->fs_regs = info->max_reg;
++         rp->fs_hash = tu_hash32(fs->variant->blake3_str);
++      }
++      rp->verts += draw_count;
++   }
++
+    rp->drawcall_bandwidth_per_sample_sum +=
+       cmd->state.bandwidth.color_bandwidth_per_sample;
+ 
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.h b/src/freedreno/vulkan/tu_cmd_buffer.h
+index 17bebeb..71d4745 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.h
++++ b/src/freedreno/vulkan/tu_cmd_buffer.h
+@@ -328,6 +328,13 @@ struct tu_render_pass_state
+ 
+    uint32_t drawcall_count;
+ 
++   /* The pass's heaviest fragment shader (by ir3 instruction count) and the vertices of its non-indirect draws: what the host's pass record
++    * (tu_pass_rec) says about why a pass took long. Counted only with SHENG_DIAG set. */
++   uint16_t fs_instrs, fs_tex, fs_systall, fs_sstall;
++   int8_t fs_waves, fs_regs;
++   uint32_t fs_hash;   /* its tu_hash32 */
++   uint32_t verts;
++
+    /* A calculated "draw cost" value for renderpass, which tries to
+     * estimate the bandwidth-per-sample of all the draws according
+     * to:
 diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
-index 0209408..a8589a0 100644
+index 0209408..c12bd00 100644
 --- a/src/freedreno/vulkan/tu_knl_darwin.cc
 +++ b/src/freedreno/vulkan/tu_knl_darwin.cc
-@@ -213,6 +213,22 @@ dw_open_connection(struct tu_instance *instance)
+@@ -135,6 +135,10 @@ tu_darwin_bo_cache_stats(uint64_t out[8])
+    pthread_mutex_unlock(&retire->lock);
+ }
+ 
++/* The priority the driver was last given for this process (NativeAdrenoMethodSetPriority). */
++static NativeAdrenoAbiPriority dw_priority;
++static bool dw_priority_known;
++
+ static kern_return_t
+ dw_call(uint32_t method, const void *in, size_t in_size, void *out,
+         size_t out_size)
+@@ -213,9 +217,70 @@ dw_open_connection(struct tu_instance *instance)
     dw.open = true;
     dw.inflight_count = 0;
     dw.last_fence = 0;
@@ -528,12 +620,60 @@ index 0209408..a8589a0 100644
 +         priority.foreground = 2;
 +         priority.background = 2;
 +      }
++      dw_priority = priority;
++      dw_priority_known = true;
 +      (void)dw_call(NativeAdrenoMethodSetPriority, &priority, sizeof(priority), NULL, 0);
 +   }
     return VK_SUCCESS;
  }
  
-@@ -1283,11 +1299,67 @@ darwin_note_fence(uint32_t fence)
++/* What the process's own Metal queues ask for (the frontend's setGPUPriority: and setBackgroundGPUPriority:), given to the driver as they
++ * come: the runtime sent the board's default at device open, before the process could ask. 0xffffffff keeps that value. False before the
++ * device is open or when the driver refuses it (a foreground priority of 3, the disabled level, is not a queue's foreground).
++ */
++extern "C" __attribute__((visibility("default"))) bool tu_darwin_set_priority(uint32_t foreground, uint32_t background);
++extern "C" __attribute__((visibility("default"))) bool
++tu_darwin_set_priority(uint32_t foreground, uint32_t background)
++{
++   if (!dw_priority_known)
++      return false;
++   /* A process's queues share one hardware queue here, so the most urgent request of any of its queues stands: a queue asking for less
++    * than another queue of the same process (the render server's raised queue, the runtime's default) must not lower it. Urgency, least
++    * to most: 3 disabled, 2 low, 1 normal, 0 high, 4 normal-high, 5 real-time. */
++   static const uint8_t urgency[6] = {3, 2, 1, 0, 4, 5};
++   NativeAdrenoAbiPriority priority = dw_priority;
++   if (foreground != 0xffffffffu && foreground <= 5 && urgency[foreground] >= urgency[priority.foreground])
++      priority.foreground = foreground;
++   if (background != 0xffffffffu && background <= 5 && urgency[background] >= urgency[priority.background])
++      priority.background = background;
++   if (priority.foreground == dw_priority.foreground && priority.background == dw_priority.background)
++      return true;   /* nothing more urgent than what the driver already has */
++   if (dw_call(NativeAdrenoMethodSetPriority, &priority, sizeof(priority), NULL, 0) != KERN_SUCCESS)
++      return false;
++   dw_priority = priority;
++   return true;
++}
++
++/* A note for the kernel's log (NativeAdrenoMethodNote), from the host frontend: kind 1 a render pass, 2 a pipeline made or refused. The
++ * kernel adds the caller's pid. False before the device is open or when the driver refuses it.
++ */
++extern "C" __attribute__((visibility("default"))) bool tu_darwin_note(uint32_t kind, const uint32_t *words, uint32_t count);
++extern "C" __attribute__((visibility("default"))) bool
++tu_darwin_note(uint32_t kind, const uint32_t *words, uint32_t count)
++{
++   if (!dw.open || count > NativeAdrenoNoteWords)
++      return false;
++   NativeAdrenoAbiNote note = {};
++   note.kind = kind;
++   note.count = count;
++   memcpy(note.words, words, count * sizeof(uint32_t));
++   return dw_call(NativeAdrenoMethodNote, &note, sizeof(note), NULL, 0) == KERN_SUCCESS;
++}
++
+ static void
+ dw_close_connection(void)
+ {
+@@ -1283,11 +1348,67 @@ darwin_note_fence(uint32_t fence)
     dw.last_fence = fence;
  }
  
@@ -602,7 +742,7 @@ index 0209408..a8589a0 100644
  {
     struct tu_device *dev = queue->device;
     NativeAdrenoAbiSubmit req = {};
-@@ -1298,21 +1370,26 @@ darwin_submit_chunk(struct tu_queue *queue, const NativeAdrenoAbiSubmitBuffer *e
+@@ -1298,21 +1419,26 @@ darwin_submit_chunk(struct tu_queue *queue, const NativeAdrenoAbiSubmitBuffer *e
  
     for (;;) {
        NativeAdrenoAbiSubmitReply reply = {};
@@ -629,7 +769,7 @@ index 0209408..a8589a0 100644
     }
  }
  
-@@ -1330,12 +1407,15 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+@@ -1330,12 +1456,15 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
      * fence is therefore met by the ring itself, as msm_gem_submit() skips fences of the submitting ring's own context: the CPU does
      * not wait for that work to complete. A sync not yet resolved (wait-before-signal) is waited for until it is submitted, never for
      * its completion. */
@@ -645,7 +785,7 @@ index 0209408..a8589a0 100644
  
     uint32_t fence = 0;
     const unsigned total = util_dynarray_num_elements(&submit->commands, NativeAdrenoAbiSubmitBuffer);
-@@ -1345,20 +1425,29 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+@@ -1345,20 +1474,29 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
        for (unsigned at = 0; at < total; at += NativeAdrenoAbiMaxBuffers) {
           unsigned count = MIN2(total - at, (unsigned)NativeAdrenoAbiMaxBuffers);
           uint32_t chunk_fence = 0;
@@ -676,7 +816,7 @@ index 0209408..a8589a0 100644
     for (uint32_t i = 0; i < signal_count; i++) {
        struct vk_darwin_sync *s = container_of(signals[i].sync, struct vk_darwin_sync, vk);
        s->fence = fence;
-@@ -1569,7 +1658,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
+@@ -1569,7 +1707,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
     device->has_set_iova = !!(info->flags & NativeAdrenoDeviceClientIova);
     device->va_start = info->va_start;
     device->va_size = info->va_size;
@@ -689,3 +829,61 @@ index 0209408..a8589a0 100644
     device->has_sparse = false;
     device->has_sparse_prr = false;
     device->has_raytracing = false;
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+index 8b010ed..057e9fe 100644
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -32,6 +32,18 @@
+ #include "tu_pass.h"
+ #include "tu_rmv.h"
+ 
++/* The vertex and fragment shader hashes (tu_hash32) of the last program a pipeline creation built on this thread, read and cleared by the
++ * host frontend right after it asks for a pipeline (tu_darwin_last_program): the pipeline log names a pass's shader by them. */
++static __thread uint32_t tu_last_program_hash[2];
++extern "C" __attribute__((visibility("default"))) void tu_darwin_last_program(uint32_t *vs, uint32_t *fs);
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_last_program(uint32_t *vs, uint32_t *fs)
++{
++   *vs = tu_last_program_hash[0];
++   *fs = tu_last_program_hash[1];
++   tu_last_program_hash[0] = tu_last_program_hash[1] = 0;
++}
++
+ /* Emit IB that preloads the descriptors that the shader uses */
+ 
+ static void
+@@ -2347,6 +2359,10 @@ tu_emit_program_state(struct tu_cs *sub_cs,
+          if (variants[stage]) {
+             memcpy(prog->stage_blake3[stage], variants[stage]->blake3_str,
+                    sizeof(variants[stage]->blake3_str));
++            if (stage == MESA_SHADER_VERTEX)
++               tu_last_program_hash[0] = tu_hash32(variants[stage]->blake3_str);
++            else if (stage == MESA_SHADER_FRAGMENT)
++               tu_last_program_hash[1] = tu_hash32(variants[stage]->blake3_str);
+          }
+       }
+    }
+diff --git a/src/freedreno/vulkan/tu_pipeline.h b/src/freedreno/vulkan/tu_pipeline.h
+index 791a4fc..59b358d 100644
+--- a/src/freedreno/vulkan/tu_pipeline.h
++++ b/src/freedreno/vulkan/tu_pipeline.h
+@@ -17,6 +17,19 @@
+ #include "tu_shader.h"
+ #include "tu_suballoc.h"
+ 
++/* The first 32 bits of a shader's hex blake3 (ir3_shader_variant::blake3_str; 0 when it has none): the name a shader goes by in the host's
++ * logs (pass records and the pipeline log), so a slow pass is joined to the pipeline that made its fragment shader. */
++static inline uint32_t
++tu_hash32(const char *hex)
++{
++   uint32_t value = 0;
++   for (unsigned i = 0; i < 8 && hex[i]; i++) {
++      const char c = hex[i];
++      value = value << 4 | (uint32_t) (c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0');
++   }
++   return value;
++}
++
+ enum tu_dynamic_state
+ {
+    TU_DYNAMIC_STATE_VIEWPORT,
