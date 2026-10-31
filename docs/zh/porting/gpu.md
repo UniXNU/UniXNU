@@ -139,7 +139,7 @@ AirNir 是离线编译器 kit；运行时前端使用组件页说明的 AIR → 
 
 pipeline 在第一次被请求时才从 Apple 的 AIR 编译，会让画面卡顿。预先预热缓存，桌面就能直接命中。有两项输入，所有 OS 配置都用同一机制（iOS/iPadOS 17 用 `--target ios`，27 用 `--target ios27`）；只有库列表不同，因为它列出的是该 OS 镜像的库。
 
-1. **预编译列表。** 把 OS 镜像（OS 和 SystemOS 卷）中每个 `.metallib` 的绝对路径按 render server 看到的形式（`/System/Library/...`）逐行写出。放在 `build/prime-list.txt`，`build-adreno-metal-plugin.py` 会把它嵌入插件的 `__DATA,__primelist` 段，`make-gpu-addon.py --prime-list FILE` 把它作为 `addons/NativeAdrenoMetal.primelist` 带上。有列表时 render server 不扫描目录，因为沙盒让它看不到大部分目录。
+1. **预编译列表。** 把 OS 镜像中每个 `.metallib` 的绝对路径按 render server 看到的形式（`/System/Library/...`）逐行写出。放在 `build/prime-list.txt`，`build-adreno-metal-plugin.py` 会把它嵌入插件的 `__DATA,__primelist` 段，`make-gpu-addon.py --prime-list FILE` 把它作为 `addons/NativeAdrenoMetal.primelist` 带上。有列表时 render server 不扫描目录，因为沙盒让它看不到大部分目录。
 2. **Pipeline 包。** 启动用 `make-gpu-addon.py --cache-export` 构建的镜像，插件会把缓存目录写进板级日志。用 `scripts/read-sheng-log.py` 读取这次运行，用 `scripts/make-m2vpack.py OUT EXPORT_DIR...` 合并一个或多个导出（靠后的目录优先），再用 `make-gpu-addon.py --pipeline-pack OUT` 带上。插件在运行时打开缓存目录之前先把包导入其中。
 
 预编译的运行方式：
