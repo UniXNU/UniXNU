@@ -37,6 +37,7 @@ scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 | `--check` | 运行 `deps`、`preflight` 和 `patches`，打印补丁列表后在任何构建之前停止 |
 
 其他 `unixnu` 选项（`--uefi`、`--kernelcache`、`--dtb`、`--out`、`-j`）原样传递。不在仓库中的本地输入来自 `unixnu.local.toml`。
+平台种子（`--unique-chip-id HEX` 或 `UNIXNU_UNIQUE_CHIP_ID`）和固件检出（`--uefi DIR` 或 `UNIXNU_UEFI`）不保存在任何仓库中；固件步骤把 `UNIXNU_UEFI` 传给板级的 preflight 脚本。
 
 ## board.toml 键
 
@@ -57,6 +58,7 @@ remove = [ ... ]
 | `[package] unixnu` | UniXNU 检出相对设备仓库的路径 |
 | `[package.defconfig]` | 各 OS 配置的 defconfig，`release` 使用 |
 | `[package] boot_partition_bytes` | 可选。`verify` 拒绝更大的 `boot.img` |
+| `[bootimg] dtb` | 启动镜像的设备树，相对构建树。由固件 preflight 脚本生成 |
 | `[os_overrides."<profile>"]` | 仅对该配置合并到板级之上的表 |
 | 覆盖中的 `remove` | 板级为其他配置设置、而本配置没有的点分键 |
 
