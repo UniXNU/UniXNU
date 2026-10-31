@@ -284,7 +284,7 @@ index 62d1e43..7d59dc3 100644
  tu_cmd_fill_buffer_addr(VkCommandBuffer commandBuffer,
                          VkDeviceAddress dstAddr,
 diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
-index 33a22aa..bf21f25 100644
+index 33a22aa..b900555 100644
 --- a/src/freedreno/vulkan/tu_cmd_buffer.cc
 +++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
 @@ -27,6 +27,8 @@
@@ -305,7 +305,7 @@ index 33a22aa..bf21f25 100644
  
        /* If FDM offset is used, the last row and column extend beyond the
         * framebuffer but are shifted over when storing. Expand the width and
-@@ -4056,7 +4060,153 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
+@@ -4056,7 +4060,163 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
   */
  static uint64_t tu_render_mode_counts[8];
  
@@ -336,6 +336,16 @@ index 33a22aa..bf21f25 100644
 +};
 +static_assert(sizeof(struct tu_pass_rec) == 48, "pass record");
 +static struct tu_pass_rec tu_pass_ring[512];
++
++/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from sheng-diag=1): without it no pass is stamped or kept in the ring. */
++static bool
++tu_pass_trace_on(void)
++{
++   static int on = -1;
++   if (on < 0)
++      on = getenv("SHENG_DIAG") != NULL;
++   return on;
++}
 +static uint32_t tu_pass_seq;
 +static struct tu_device *tu_pass_ts_dev;
 +static struct tu_bo *tu_pass_ts_bo;
@@ -459,7 +469,7 @@ index 33a22aa..bf21f25 100644
  tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
  {
     const VkExtent2D extent = cmd->state.render_areas[0].extent;
-@@ -4066,8 +4216,9 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+@@ -4066,8 +4226,9 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
        !sysmem ? 0 : reason && !strcmp(reason, "Autotune selected sysmem") ? 2 : 4;
     p_atomic_inc(&tu_render_mode_counts[slot]);
     p_atomic_add(&tu_render_mode_counts[slot + 1], kpx);
@@ -470,7 +480,7 @@ index 33a22aa..bf21f25 100644
     for (unsigned i = 0; i < cmd->state.pass->attachment_count; i++) {
        const struct tu_image_view *iview = cmd->state.attachments[i];
        if (iview && tu_attachment_unpadded(cmd, iview)) {
-@@ -4075,6 +4226,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+@@ -4075,6 +4236,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
           break;
        }
     }
@@ -478,13 +488,13 @@ index 33a22aa..bf21f25 100644
  }
  
  extern "C" __attribute__((visibility("default"))) void tu_render_mode_stats(uint64_t out[8]);
-@@ -4097,11 +4249,16 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
+@@ -4097,11 +4259,16 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
  
     tu_autotune::rp_ctx_t rp_ctx = NULL;
     const bool sysmem = use_sysmem_rendering(cmd_buffer, &rp_ctx, rp_key);
 -   tu_note_render_mode(cmd_buffer, sysmem);
-+   const uint32_t seq = tu_note_render_mode(cmd_buffer, sysmem);
-+   const uint64_t stamps = tu_pass_ts_slot(cmd_buffer, seq);
++   const uint32_t seq = tu_pass_trace_on() ? tu_note_render_mode(cmd_buffer, sysmem) : 0;
++   const uint64_t stamps = seq ? tu_pass_ts_slot(cmd_buffer, seq) : 0;
 +   if (stamps)
 +      tu_pass_stamp<CHIP>(&cmd_buffer->cs, stamps);
     if (sysmem)
@@ -497,10 +507,33 @@ index 33a22aa..bf21f25 100644
  
  static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
 diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
-index 0209408..67b7e2c 100644
+index 0209408..a8589a0 100644
 --- a/src/freedreno/vulkan/tu_knl_darwin.cc
 +++ b/src/freedreno/vulkan/tu_knl_darwin.cc
-@@ -1283,11 +1283,57 @@ darwin_note_fence(uint32_t fence)
+@@ -213,6 +213,22 @@ dw_open_connection(struct tu_instance *instance)
+    dw.open = true;
+    dw.inflight_count = 0;
+    dw.last_fence = 0;
++
++   /* The GPU priority this process's Metal queues asked for, to the driver (NativeAdrenoMethodSetPriority): the plugin sets
++    * METAL2VULKAN_QUEUE_PRIORITY=high when the render server opens its device (Metal's MTLGPUPriorityHigh, its foreground queue),
++    * and the driver serves that process's work on the high ring. A process that sets nothing keeps the middle of the range. */
++   {
++      const char *want = getenv("METAL2VULKAN_QUEUE_PRIORITY");
++      NativeAdrenoAbiPriority priority = {.foreground = 1, .background = 3};
++      if (want && !strcmp(want, "high")) {
++         priority.foreground = 0;
++         priority.background = 2;
++      } else if (want && !strcmp(want, "low")) {
++         priority.foreground = 2;
++         priority.background = 2;
++      }
++      (void)dw_call(NativeAdrenoMethodSetPriority, &priority, sizeof(priority), NULL, 0);
++   }
+    return VK_SUCCESS;
+ }
+ 
+@@ -1283,11 +1299,67 @@ darwin_note_fence(uint32_t fence)
     dw.last_fence = fence;
  }
  
@@ -528,6 +561,16 @@ index 0209408..67b7e2c 100644
 +static_assert(sizeof(struct tu_darwin_submit_rec) == 32, "submit record");
 +static struct tu_darwin_submit_rec darwin_submit_ring[512];
 +static uint32_t darwin_submit_seq;
++
++/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from sheng-diag=1): without it no submission is kept in the ring. */
++static bool
++darwin_submit_trace_on(void)
++{
++   static int on = -1;
++   if (on < 0)
++      on = getenv("SHENG_DIAG") != NULL;
++   return on;
++}
 +
 +extern "C" __attribute__((visibility("default"))) uint32_t tu_darwin_submit_ring_read(uint32_t from, struct tu_darwin_submit_rec *out,
 +                                                                                    uint32_t max, uint32_t *newest);
@@ -559,7 +602,7 @@ index 0209408..67b7e2c 100644
  {
     struct tu_device *dev = queue->device;
     NativeAdrenoAbiSubmit req = {};
-@@ -1298,21 +1344,26 @@ darwin_submit_chunk(struct tu_queue *queue, const NativeAdrenoAbiSubmitBuffer *e
+@@ -1298,21 +1370,26 @@ darwin_submit_chunk(struct tu_queue *queue, const NativeAdrenoAbiSubmitBuffer *e
  
     for (;;) {
        NativeAdrenoAbiSubmitReply reply = {};
@@ -586,7 +629,7 @@ index 0209408..67b7e2c 100644
     }
  }
  
-@@ -1330,12 +1381,15 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+@@ -1330,12 +1407,15 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
      * fence is therefore met by the ring itself, as msm_gem_submit() skips fences of the submitting ring's own context: the CPU does
      * not wait for that work to complete. A sync not yet resolved (wait-before-signal) is waited for until it is submitted, never for
      * its completion. */
@@ -602,7 +645,7 @@ index 0209408..67b7e2c 100644
  
     uint32_t fence = 0;
     const unsigned total = util_dynarray_num_elements(&submit->commands, NativeAdrenoAbiSubmitBuffer);
-@@ -1345,20 +1399,29 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+@@ -1345,20 +1425,29 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
        for (unsigned at = 0; at < total; at += NativeAdrenoAbiMaxBuffers) {
           unsigned count = MIN2(total - at, (unsigned)NativeAdrenoAbiMaxBuffers);
           uint32_t chunk_fence = 0;
@@ -624,7 +667,7 @@ index 0209408..67b7e2c 100644
     }
  
 +   rec.fence = fence;
-+   {
++   if (darwin_submit_trace_on()) {
 +      const uint32_t seq = p_atomic_inc_return(&darwin_submit_seq);
 +      rec.seq = seq;
 +      darwin_submit_ring[seq % 512] = rec;
@@ -633,3 +676,16 @@ index 0209408..67b7e2c 100644
     for (uint32_t i = 0; i < signal_count; i++) {
        struct vk_darwin_sync *s = container_of(signals[i].sync, struct vk_darwin_sync, vk);
        s->fence = fence;
+@@ -1569,7 +1658,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
+    device->has_set_iova = !!(info->flags & NativeAdrenoDeviceClientIova);
+    device->va_start = info->va_start;
+    device->va_size = info->va_size;
+-   device->has_lazy_bos = true;   /* darwin_sparse_vma_init */
++   /* Lazily allocated memory only where passes may keep attachments in tile memory (darwin_sparse_vma_init). With every pass in system
++    * memory (TU_DEBUG=sysmem) a lazy BO is backed in full at the first pass, on the render thread: 40-112 MiB wired inside
++    * vkCmdEndRenderPass, up to 340 ms each (untagged-3f2bd680), and freed again with the memory. Without the type a memoryless
++    * attachment is ordinary device memory, which the runtime places and keeps spare for the next one. */
++   device->has_lazy_bos = !TU_DEBUG(SYSMEM);
+    device->has_sparse = false;
+    device->has_sparse_prr = false;
+    device->has_raytracing = false;

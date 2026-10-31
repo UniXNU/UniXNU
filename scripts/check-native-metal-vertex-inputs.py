@@ -17,7 +17,7 @@ d=load(fixture/'gdb-stop.json');host=load(folder/'host-enabled-report.json');pro
 build=load(folder/'build-report.json');data=load(folder/'data-report.json');manifest=load(folder/'test-inputs.json')
 base=a.candidate_base.resolve();plan=load(base.with_suffix('.json'));raw=base.with_suffix('.macho').read_bytes();segments=macho(raw)['segments']
 require(sha(base.with_suffix('.macho'))==plan['candidate_sha256']==d['kernel_sha256'],'Actual immutable candidate identity')
-require(sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf')==plan['native_sha256'],'Exact current native kernel')
+require(sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped')==plan['native_sha256'],'Exact current native kernel')
 broker_build=load(ROOT/'build/native-offline-gpu/build-report.json')
 for rel,digest in broker_build['source_sha256'].items():require(sha(ROOT/rel)==digest,'Exact compiled native broker source: '+rel)
 require(sha(ROOT/'build/native-offline-gpu/libNativeOfflineGPU.late.a')==broker_build['archive_sha256'],'Exact compiled private broker archive')

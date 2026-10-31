@@ -21,7 +21,7 @@ require(sha(OUT/'libNativeLegacyDisplay.late.a')==build['archive_sha256'] and
         'Actual archive and qualified original queue-kick override')
 kernel=ROOT/'build/xnu-prelink/native-owner-legacy-display-completion-candidate.macho';plan=load(kernel.with_suffix('.json'))
 raw=kernel.read_bytes();image=macho(raw)
-require(sha(kernel)==plan['candidate_sha256'] and sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf')==plan['native_sha256'],'Exact current native candidate')
+require(sha(kernel)==plan['candidate_sha256'] and sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped')==plan['native_sha256'],'Exact current native candidate')
 for module,digest in plan['original_executable_sha256'].items():
     e=next(e for e in plan['extents'] if e['module']==module and e['segment']=='__TEXT_EXEC')
     o=backed_offset(image['segments'],e['va'],e['size'],len(raw))

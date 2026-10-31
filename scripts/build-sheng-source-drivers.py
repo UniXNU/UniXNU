@@ -102,7 +102,7 @@ def main():
     kernel_object = Path(record['directory']) / 'IOPlatformExpert.cpo'
     target.check_object(kernel_object.read_bytes(), 'Kernel compilation recipe')
     target.check_object((Path(c_record['directory']) / 'startup.o').read_bytes(), 'Kernel C compilation recipe')
-    kernel = tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
+    kernel = tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
     out = tree / 'build/sheng-source-drivers'
     out.mkdir(parents=True, exist_ok=True)
     manifest = out / 'report.json'

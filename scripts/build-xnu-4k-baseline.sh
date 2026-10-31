@@ -100,7 +100,7 @@ if not stamp.exists() or stamp.read_text() != identity:
                              ('bsd', ['bsd_init','kern_exec','kern_exit']), ('pexpert', ['pe_kprintf'])]:
         for name in names:
             (out / directory / 'DEVELOPMENT' / (name + '.o')).unlink(missing_ok=True)
-    (out / 'mach.development.bcm2837.unstripped.noctf').unlink(missing_ok=True)
+    (out / 'mach.development.bcm2837.unstripped').unlink(missing_ok=True)
     out.mkdir(parents=True, exist_ok=True)
     stamp.write_text(identity)
 PY
@@ -810,7 +810,7 @@ identity = '|'.join(mode + ':' + state(mode, archive) for mode, archive in zip(s
 if not stamp.exists() or stamp.read_text() != identity:
     # Make does not track selection of an older alternative external archive.
     # Rebuild the conditional personality and relink when this input changes.
-    for relative in ('mach.development.bcm2837.unstripped.noctf',
+    for relative in ('mach.development.bcm2837.unstripped',
                      'iokit/DEVELOPMENT/KernelConfigTables.cpo'):
         (directory / relative).unlink(missing_ok=True)
     directory.mkdir(parents=True, exist_ok=True)
@@ -829,5 +829,5 @@ make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iph
   OBJROOT="$ROOT/build/xnu/ios-obj" SYMROOT="$ROOT/build/xnu/ios-sym" DSTROOT="$ROOT/build/xnu/ios-dst"
 if [ "${XNU_SOURCE_CORECRYPTO14:-0}" = 1 ] && [ "$CRYPTO_BOOTSTRAP_MODE" = source ]; then
   python3 scripts/seal-source-crypto-kernel.py \
-    build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf
+    build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped
 fi

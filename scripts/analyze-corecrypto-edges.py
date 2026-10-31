@@ -12,7 +12,7 @@ import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
 stock = ROOT / '.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed'
-baseline = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
+baseline = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--bundle', default='com.apple.kec.corecrypto')
 args = parser.parse_args()

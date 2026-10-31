@@ -22,7 +22,7 @@ args = parser.parse_args()
 
 configure = ROOT / 'build/darwinboot-armdt-platform'
 bsd = ROOT / 'build/darwinboot-armdt-bsd'
-kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
+kernel = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
 
 if not args.check_existing:
     subprocess.run(['python3', ROOT / 'scripts/probe-darwinboot-xnu.py',

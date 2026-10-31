@@ -37,7 +37,7 @@ plan = json.loads(candidate.with_suffix('.json').read_text())
 raw = candidate.read_bytes()
 image = macho(raw)
 require(sha(candidate) == plan['candidate_sha256'], 'Exact observed candidate')
-native = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
+native = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
 require(sha(native) == plan['native_sha256'], 'Current native source kernel')
 for family, digest in plan['original_executable_sha256'].items():
     extents = [e for e in plan['extents'] if e['module'] == family and e['segment'] == '__TEXT_EXEC']

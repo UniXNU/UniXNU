@@ -232,7 +232,7 @@ plan['thread_snapshot_layout'] = dict(
     attr_shift=member(objects / 'osfmk/DEVELOPMENT/pmap.o', 'page_table_attr', 'pta_page_shift'))
 plan['process_layout']['pmap_object_sha256'] = hashlib.sha256(
     (objects / 'osfmk/DEVELOPMENT/pmap.o').read_bytes()).hexdigest()
-native_path = objects / 'mach.development.bcm2837.unstripped.noctf'
+native_path = objects / 'mach.development.bcm2837.unstripped'
 native_symbols = subprocess.check_output(['xcrun', 'nm', '-U', native_path], text=True)
 if '"pmap_pt_attr"' in subprocess.check_output(['xcrun', 'dwarfdump', '--name=pmap', '--show-children',
         objects / 'osfmk/DEVELOPMENT/pmap.o'], text=True):

@@ -31,7 +31,7 @@ require(int(build['bindings']['__ZTV25IOMobileFramebufferLegacy'],16)==int(audit
         'Apple-kext qualified super calls bind the real original vtable header')
 candidate=ROOT/('build/xnu-prelink/native-owner-legacy-display-'+args.profile+'-candidate.macho');plan=json.loads(candidate.with_suffix('.json').read_text())
 raw=candidate.read_bytes();image=macho(raw)
-require(sha(candidate)==plan['candidate_sha256'] and sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf')==plan['native_sha256'],
+require(sha(candidate)==plan['candidate_sha256'] and sha(ROOT/'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped')==plan['native_sha256'],
         'Exact current source kernel and original-family candidate')
 for module,digest in plan['original_executable_sha256'].items():
     extent=next(e for e in plan['extents'] if e['module']==module and e['segment']=='__TEXT_EXEC')

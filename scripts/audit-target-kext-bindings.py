@@ -20,7 +20,7 @@ args = parser.parse_args()
 folder = ROOT / 'build/target-kexts' / args.bundle
 metadata = json.loads((folder / 'segments.json').read_text())
 stock = ROOT / '.cache/firmware/kernelcache.macho/kernelcache.release.ipad7.decompressed'
-baseline = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf'
+baseline = ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped'
 data = stock.read_bytes()
 if hashlib.sha256(data).hexdigest() != 'f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7':
     raise SystemExit('Wrong target kernelcache')

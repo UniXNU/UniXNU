@@ -14,7 +14,7 @@ from unixnu.package import output_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--kernel', type=Path, default=ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf')
+parser.add_argument('--kernel', type=Path, default=ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped')
 parser.add_argument('--output', type=Path, default=ROOT / 'build/darwinboot-xnu')
 parser.add_argument('--timeout', type=int, choices=range(1, 1801), default=25, help='Bounded guest deadline: up to 300 seconds, or 1800 for explicit live HID control')
 parser.add_argument('--mutate-target-main-page', action='store_true', help='Negative input control: corrupt only the actual launchd LC_MAIN vnode page before genuine validation, preserving original files/signatures')
