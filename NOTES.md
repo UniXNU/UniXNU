@@ -2,6 +2,35 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-10-31: LOCATION SERVICES WORK (user: Weather shows the city for My Location)** - no kernel change, no
+  FairPlay work: fairplayd.H2 is simply not in launchd's job list any more. Boot `shim/out/umi-nofp-sample.img` =
+  0213c's kernel and line (without `sweetmgreset=1`) + `sweetsample=locationd,wifid`; the plain 0213c image works the
+  same (only launchd.plist and a prefs file changed).
+  - Phone files changed (user OK'd each; originals next to them as `*.sweet-orig` and in
+    `~/ios-umi-backup/root-edits-2026-10-31/`, not in git):
+    1. `/System/Library/xpc/launchd.plist`: job `com.apple.fairplayd.H2` removed (531 jobs), made with
+       `tools/patch-launchd-plist.py IN OUT --remove com.apple.fairplayd.H2` (new option). launchd no longer registers
+       com.apple.fairplayd / .versioned / unfreed, so locationd's MIG call (msgh_id 1203, 2026-10-25) fails at once
+       instead of queueing forever. No `exec fairplayd.H2` in the boot (was ~60-1000 per boot).
+    2. `/private/var/mobile/Library/Preferences/com.apple.locationd.plist`: `LocationServicesEnabledIn8.0` = 1 added
+       (the master switch Setup's Location page sets; Setup was skipped on this image, so it was off).
+  - Result, first boot (launchd only): samples show locationd and wifid idle in their run loops, nothing in the
+    FairPlay stub (locationd+0xc74f4) or in a CoreLocation call. **The wallpaper gallery's Featured row is back**
+    (duetexpertd's ATXLocationManager init returns). Maps said Location Services is off.
+  - Second boot (+ master switch): Maps shows the "Allow Maps to use your location?" prompt; after allowing, **Weather
+    shows the user's city** (Wi-Fi positioning through Apple's server over en0; no GPS driver). Maps' map itself does
+    not draw (blank; likely its Metal map renderer - ADRENO fence timeouts in the log - not location).
+  - **Settings > Privacy & Security has no Location Services row**, and not because of locationd:
+    `-[PUIPrivacyController refreshLocationServicesAvailable]` (PrivacySettingsUI) asks CoreTelephony
+    `getSubscriptionInfoWithError:`; with no error and no carrier saying otherwise the value defaults to true, but
+    the call fails because CommCenter is not in launchd.plist (removed in image v13: Setup hung on it), so the cached
+    value stays nil and `-specifiers` removes the "LOCATION" specifier. Turning location on/off or per-app settings
+    therefore needs CommCenter back (or the prefs key above). Not done.
+  - **File server gotcha:** `umi-files.py put` over an existing, longer file leaves the old tail (vnode_open with
+    O_TRUNC does not truncate here): the first launchd.plist write was 311 bytes too long (a broken binary plist,
+    caught by reading it back). `rm` first, then `put`, and always read back and compare.
+  - Not done: CoreLocationMigrator (removed 2026-10-30) can go back now that locationd answers (untested);
+    `com.apple.fairplaydeviceidentityd` is still in launchd.plist (on demand, never seen to block anything).
 - **🎉 2026-10-31 0213-0214: AUTO-BRIGHTNESS WORKS (user confirmed: dims when covered, brightens under a lamp)**
   (patches `xnu/patches/0213-umi-als-hid.patch`, `0214-umi-qrtr-resume-tx.patch`; boot
   `shim/out/umi-0213c-resume20.img` = 0204's line + `sweetslpi=1 sweetslpidelay=150`).
