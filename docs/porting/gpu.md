@@ -106,6 +106,27 @@ the lock screen matched the RGhA picture to 99.5 % in tile memory, but the GPU t
 system memory (17.8 ms mean, 56.1 ms at p95, against 17.1 and 52.1) and one home screen frame still came out with red and blue
 exchanged, so system memory stays the default. `sheng-tu-debug=` overrides it for experiments.
 
+### Find where a slow frame goes {#frame-path}
+
+Split a slow frame into the time each layer holds it before changing anything. Every segment below is
+measured on the host uptime clock; the GPU's always-on counter is mapped to it by a fitted line.
+
+| Segment | Where it is measured |
+| --- | --- |
+| Commit to scheduler | Runtime stage records (commit, prepared, handed, taken). |
+| Scheduler to submit | Runtime stage records, with the reason a batch was held. |
+| Submit to GPU start | Driver job timeline: the jobs ahead in the ring, by process. |
+| GPU start to end | CP start and end stamps per job; Turnip stamps per render pass. |
+| GPU end to handler | Driver retire time, the completion waiter, the completed handler. |
+
+Measured on sheng with iPadOS 27 (widget page, Settings, Safari):
+
+- Driver lock waits stay under 7 ms. A render pass takes 0.5 ms of GPU time at the median, a full-screen pass 1.1 ms.
+- Most slow frames wait in the ring behind other processes' jobs: a poster extension submitted jobs of about 77 ms each,
+  and the ring runs jobs in order with no priority.
+- The runtime threads that bring a command buffer to its handlers ran at the default QoS: the class was set on macOS only.
+- Blocks of 94 to 112 MiB took 281 to 340 ms to wire when Settings and Safari opened.
+
 ## 4. Build and stage Metal
 
 Run these commands from the resolved target tree after preparing the matching
