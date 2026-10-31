@@ -12,7 +12,7 @@ schema_version = 1
 name = "sirius"
 soc = "SDM710"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: entry, MMU, timer, PSCI, platform expert and the boot-progress console work on hardware; early boot and UI process launches work, but the local 256 MiB Data window runs out of space and visible UI remains unverified."
+summary = "Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: 8 GiB persistent APFS Data container resized in-kernel with zero ENOSPC, launchd early boot, SpringBoard, backboardd and Setup.app running with sustained ~19 fps CPU-copied GOP presentation, AppleKeyStoreState and FTS521/ShengHidInput touch active, and unattended USB FASTBOOT return to ABL verified."
 
 [[area]]
 id = "configuration"
@@ -37,6 +37,7 @@ procedure = [
   "Compile the hardware tree through the payload step (prototype: dtc -I dts -O dtb -i <soc>/dts dts/sirius.dts).",
 ]
 findings = [
+  "Local 2026-10-31 verification (kernel ad6a9709..., payload afa7def2...): removing sirius-skip-setup=1 while no Metal GPU driver exists avoids the PosterBoard SIGABRT loop and lets SpringBoard launch CPU-rendered Setup.app, while NativeEmmc + BootWatchdogPolicy seed and online-resize the persistent eMMC APFS Data container from 32 MiB to 8 GiB (2097152 blocks) with zero ENOSPC.",
   "Local 2026-10-30 integration selects GopFramebuffer, AppleKeyStoreState and ShengHidInput, links the late display archive, enables CPU frequency, FTS521 touch and GMU phase 2, and carries a 256 MiB Data seed fallback. Persistent Data mounted on this unit, but 256 MiB still reaches ENOSPC. Default panic autoreset has been removed because the panic buffer may contain recovered assertions.",
   "board.toml gained build-sirius-emmc.py in the archive list next to the USB console entry.",
   "board.toml lists build-sirius-emmc.py alongside the other archives, because the SDCC1 probe is compiled the same way as the USB console and joins the same force-loaded archive.",
@@ -194,6 +195,7 @@ procedure = [
   "Read the evidence off the boot-progress console: the probe prints the GPT rows, the driver logs the block count it publishes.",
 ]
 findings = [
+  "In-kernel 8 GiB APFS Data container resize verified on hardware (kernel ad6a9709..., payload afa7def2...): when the eMMC Data container at LBA 35627008 has fewer than 2097152 4 KiB blocks, NativeEmmc::prepareDataWindow writes the clean 32 MiB fixture from /chosen/memory-map/RAMDisk to LBA 35627008 and publishes an 8 GiB (16777216-sector) NativeEmmcBlock store; after /dev/disk3s1 mounts, BootWatchdogPolicy calls sirius_apfs_try_resize_data(\"post-mount\"), which invokes prelinked AppleAPFSUserClient::containerResize (0xfffffff005673e7c, prologue-checked) with new_size=0, growing disk3 from 8192 to 2097152 blocks (8 GiB) with rc/status 0 and 0 ENOSPC across the entire boot.",
   "scripts/grow-data-container-macos.sh prepares an 8 GiB copy of an existing Data seed using hdiutil and diskutil resizeContainer, checks the volume and geometry, and refuses Linux or overwriting an output. Shell syntax and Linux refusal tested; the macOS resize itself has not run here.",
   "Local evidence: the 256 MiB persistent Data window at LBA 35627008 mounts disk3s1 OwnerData. Early boot completes, but containermanagerd reports ENOSPC at capture time 185.8s. The APFS Whole-media filter is present; successful Data lookup is confirmed. Increasing APFS capacity remains blocked on macOS diskutil/hdiutil or a larger prepared seed.",
   "The data path works: ADMA2 reads return EFI PART from LBA 1, the GPT header parses (entries_lba=2, count=84, size=128) and 81 partitions with geometry are listed; boot 1179648..1310719, vendor 11010048..17301503, userdata 17301504..122142686.",
@@ -244,7 +246,7 @@ evidence = [
 id = "display"
 status = "implemented"
 components = ["GopFramebuffer"]
-paths = ["package/BootProgress.c", "package/BootLog.c", "package/Font.h", "scripts/build-boot-progress.py"]
+paths = ["package/BootProgress.c", "package/BootLog.c", "package/Font.h", "scripts/build-boot-progress.py", "drivers/GopFramebuffer/**"]
 inputs = [
   "U-Boot hands over a 1080x2240 splash framebuffer at 0x9c000000 through GOP (vidconsole).",
   "The panel is 1080x2244 DSI; there is no backlight or display driver in the kernel yet.",
@@ -257,6 +259,8 @@ procedure = [
   "Build kernel, payload and volume, boot, and read the panel: stage lines, TOPO, PROBE, MEM and panic text.",
 ]
 findings = [
+  "Post-interaction UI freeze root-caused and fixed on hardware (kernel ff57d694..., payload fad069ea...): after touch interaction in Setup.app, backboardd switches to the iPad7,1 1536x2048 canvas (r0 = 0,0,1536,2048 -> r1 = 0,0,1080,2240), which NativeLegacyDisplay::validateSwap previously rejected with reason=3 ('verify_swap failed for swap id: ...'), freezing the display. NativeLegacyDisplay now validates and scales full-frame surfW x surfH -> 1080x2240 BGRA surfaces with a 64-bit unrolled nearest-neighbor blit (1332/1332 swaps accepted, 0 rejected), BootWatchdogPolicy always writes SpringBoard's no-watchdog/no-auto-dim/no-idle-sleep preferences, and sirius_touch flushes same-batch EVT_ENTER/EVT_LEAVE transitions so fast taps are not coalesced away.",
+  "With the 8 GiB persistent Data container and sirius-skip-setup=1 removed (kernel ad6a9709..., payload afa7def2...), SpringBoard (135.2 s), backboardd (165.7 s), iconservicesagent (171.9 s) and Setup.app (294.6 s) run without storage errors, and GopFramebuffer copies 5514 accepted frames (0 rejected) at ~10.3 ms mean (~19 fps) with verified non-black pixel counts (41011 on the Apple logo, 28199 on Setup).",
   "The local boot registers the GOP display and copies six frames; SpringBoard and backboardd exec events do not establish a visible or usable UI. HuajiFruit logs copied into docs/evidence are reference observations, not results for this unit.",
   "The panel gained an EMMC row (step, version, capabilities, state, clock, power, clock-branch halts) next to the USB row, so the storage bring-up is visible without a serial link.",
   "The USB row (drawn by this panel) labels its six values after what they now carry - step, txev, rxev, chars, echo, poll - because they were first wired to register names and had drifted.",
@@ -280,7 +284,7 @@ evidence = [
 id = "input"
 status = "planned"
 components = ["ShengHidInput", "ShengNovatekTouch", "QcomGeniSpi"]
-paths = ["docs/HANDOFF.zh-CN.md"]
+paths = ["docs/HANDOFF.zh-CN.md", "package/sirius_touch.c", "package/SiriusHidProbe.cpp"]
 inputs = [
   "The board has no Home button; volume keys are reported by the button node of the ADT.",
   "The touch controller is not identified for this unit yet.",
@@ -292,6 +296,7 @@ procedure = [
   "Follow the input guide once a touch controller is known, then select an implementation.",
 ]
 findings = [
+  "Fast-tap coalescing fixed in package/sirius_touch.c (kernel ff57d694..., payload fad069ea...): when EVT_ENTER and EVT_LEAVE for the same touch ID arrive within a single 32-event FIFO poll batch, publish_contacts() is now flushed with a 10 ms separation before clearing contact_down so rapid taps are delivered as distinct down/up HID reports.",
   "The local boot identifies the FTS521 and publishes IOHIDEventDriver, with TOUCH down/move/up coordinates in the capture. Visible UI response has not been verified on this unit.",
   "The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.",
   "No input component is selected; the button node exists so that BSPlatform and MobileGestalt read a coherent product.",
@@ -408,6 +413,7 @@ procedure = [
   "Follow the power guide to add the PMIC and battery controls once the platform expert is stable.",
 ]
 findings = [
+  "Device-verified 2026-10-30 (kernel b94137f5, payload a5620f29): writing FASTBOOT to the CDC console makes the unit reappear in ABL fastboot after 4.2 s without a key press; SPMI v5 PM660 PON channel 7 write/readback/PSCI reset works. See docs/evidence/sirius-20261030-local-boot.md.",
   "SPMI v5 PON reads identify channel 7, owner 0, subtype 04, spare 00 on this unit. Write/readback and automatic return to ABL fastboot remain unverified. Corrected candidate uses length-minus-one byte count and refuses bootloader reset after failed readback.",
   "The eMMC probe does not vote any RPMH resource; it re-enables the GCC SDCC1 branches that the boot chain had already set.",
   "Reset works through PSCI (the stage-3 reset loop proved it).",
@@ -492,6 +498,7 @@ procedure = [
   "Record the last checkpoint printed on the panel and in the U-Boot/XNU log for every boot, with the kernel and payload hashes of that run.",
 ]
 findings = [
+  "End-to-end unattended debug loop and Setup boot verified on local hardware (kernel ad6a9709..., payload afa7def2...): agent-flash.sh sends FASTBOOT over /dev/ttyACM0 to return XNU to ABL fastboot in 4-7 s without button presses, flashes vendor, reboots into XNU, and capture-usb-console.py records the in-kernel 8 GiB APFS containerResize, zero ENOSPC, Setup launch at 294.6 s, AppleKeyStoreState activity (100 opens, 1430 calls), IOHIDEventDriver attachment (stage 4), and 5514 accepted frame copies (~19 fps). See docs/evidence/sirius-20261030-local-boot.md.",
   "The previous ios-ui-up verdict was a false success based only on process launches: the same capture reports ENOSPC and only six confirmed frame copies. A later 12-second capture received zero bytes, and a nine-byte FASTBOOT request did not produce a fastboot device. USB corrections derive received length from completed TRB residual bytes, parse exact newline commands across packets, and serialize pollers. USB and mock flash failure regressions pass; hardware verification of the new image is pending. See docs/evidence/sirius-20261030-local-boot.md.",
   "A register write-and-read-back test is the next diagnostic for the eMMC data phase, because SDHCI_TRANSFER_MODE reads back 0x33 after writing 0x13, which separates a write the vendor layer ignores from a command that is never sent.",
   "The eMMC probe reports every step (controller registers, the clock tree, the response registers around CMD0/CMD1 and each failure) into the USB console ring, which is how the card clock and CMD2 findings above were obtained without a photograph.",

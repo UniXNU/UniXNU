@@ -6,7 +6,7 @@
 
 Redmi K60 \(mondrian/SM8475\). Format 2 device: the kernel builds and prelinks, the payload and the boot image still need the board ADT and the hardware bring-up.
 
-Source record: [porting.toml](https://github.com/Emilelu/UniXNU-mondrian/blob/7ba5e3a5ed97f16a13a021315de6fa6527006c2b/porting.toml), `7ba5e3a5ed97f16a13a021315de6fa6527006c2b`.
+Source record: [porting.toml](https://github.com/Emilelu/UniXNU-mondrian/blob/8598c9797d455dfe275d889c3a873ca0b0d38796/porting.toml), `8598c9797d455dfe275d889c3a873ca0b0d38796`.
 
 This page is generated from the device record.
 
@@ -47,6 +47,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`.
 ### Development findings
 
 - Migrated from format 1 on 2026-10-28: board.toml is schema\_version = 2 with soc\_source sm8475 and os\_profile ipados-16.6.1-20G81, the SM8475 resources live in UniXNU-sm8475-common, and the board wiring in dts/mondrian.dts.
+- Fork audit 2026-10-31: mzyxsl daed6b5d44e3c62978cc0fce4e876ded2a57afc9 imported with provenance. board.toml uses an exact trust-cache list; unixnu.lock matches the explicit SM8475 feed pin. The current payload reader also accepted an exactly equal scalar hash, so the list is schema hardening rather than a proven former build blocker.
 
 ### Completion criteria
 
@@ -62,7 +63,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [schema\_version = 2 resolves through the arch, SM8475, 20G81 and device layers; status reports three components and 83 ordered patches](https://github.com/Emilelu/UniXNU-mondrian/blob/7ba5e3a5ed97f16a13a021315de6fa6527006c2b/board.toml)
+- `source`: [schema\_version = 2 resolves through the arch, SM8475, 20G81 and device layers; status reports three components and 83 ordered patches](https://github.com/Emilelu/UniXNU-mondrian/blob/8598c9797d455dfe275d889c3a873ca0b0d38796/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -193,6 +194,7 @@ Components: `PongUfs`.
 ### Development findings
 
 - Collect the first storage and root observation, its cause when established, and the resulting implementation decision.
+- 2026-10-31 user console reports APFS Data ENOSPC: free\_blocks around 1208 below threshold\_blocks 1310, affecting launchd/usermanagerd/logd\_helper. Latest saved installation is a 256 MiB APFS container in a 258 MiB Data GPT window at unixnu offset 7420 MiB, leaving about 24.502 GiB outside windows. Historical images are checksum/CRC verified but do not establish current live occupancy; capture in root recovery is pending. Read-only inspector validates saved 256/512 MiB images and can back up current Data with second-read hash comparison and optional local directory-allocation summary. No device storage writes or resize performed.
 
 ### Completion criteria
 
@@ -231,6 +233,7 @@ Collect evidence using the next action.
 ### Development findings
 
 - Collect the first display observation, its cause when established, and the resulting implementation decision.
+- Board-level chosen display-scale=3 adapted from XTOM0706 9d1a14f83d1050a042313f30dc9d5b7e80d31f7a. Parsing generated ADTs before/after gives identical properties except random-seed with the current 20G81 profile. Its additional sweet display node is not copied because MiniIOMobileFramebuffer already publishes a disp0 display-subsystem child at runtime.
 
 ### Completion criteria
 
@@ -448,6 +451,7 @@ Collect evidence using the next action.
 
 - The kernel links and prelinks on macOS CI. Format 1 run 40631225483 produced 54349824 bytes; format 2 run 40650877574 produced 54419456 bytes at the same slide -0xb9c000 and the same lowest component extent 0xfffffff004426600.
 - The 69632-byte difference is a real fix, not noise: the format-1 glob applied zzzzzz-pong-init-scratch-allocation.patch through fuzz and the panic string it adds is absent from that kernel, while the strict format-2 series applies it at its intended place and the string is present. The checked scratch allocation had never reached a qualified kernel before.
+- mzyxsl daed6b5 fixes the local prelink helper to merge the OS-profile prelink table and board overrides. A real prelink of the 0238 native kernel succeeded with 32 roots and automatic slide -0xb9c000, 53788672 bytes, SHA-256 bb33682837f1807ef28d385cf09acf94f2749f49b3f7337d22348dcbf6c4b9df. Use --profile/--kit for non-sibling checkouts.
 
 ### Completion criteria
 
@@ -485,6 +489,7 @@ Collect evidence using the next action.
 ### Development findings
 
 - Collect the first diagnostics observation, its cause when established, and the resulting implementation decision.
+- Imported the source-only offline path/evidence checker from mzyxsl 76552b88441757defce4080a241c2f0ea7464538, preserving current milestone statuses instead of copying its outdated runtime records. scripts/audit-forks.py enumerates public forks and all branches, pins comparison SHAs, and reports candidates without executing or merging fork code. KX SIGKILL records alone do not prove a sender or pressure; 0238 adds committed reason scalars and bounded fallback logging. See docs/FORK-REVIEW.md and docs/BOOT-STALL-2026-10-31.md.
 
 ### Completion criteria
 

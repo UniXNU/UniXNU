@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UFS userdata partition, with shared SM7635 support and board-owned storage, GPU, input and power integration. Bring-up runs as numbered staged tests; their results are in docs/asteroids-gpu-gen8.md and docs/asteroids-touch.md of rootstockos/iosonandng.
 
-源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/porting.toml), `c774b7030145b431a8bfbe0d68e16ffa08cebc75`.
+源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/porting.toml), `541674cc36bca3d8caa91f616cbccebba9f3aba7`.
 
 本页按设备记录自动生成。
 
@@ -75,7 +75,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -115,7 +115,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
 
 ## CPU 与中断 {#cpu}
 
@@ -159,7 +159,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/CpuFreqProbe.cpp)
 
 ## 内存与 DMA {#memory}
 
@@ -198,7 +198,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/dts/asteroids.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -240,7 +240,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 显示 {#display}
@@ -305,7 +305,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## 输入 {#input}
@@ -352,7 +352,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -442,6 +442,12 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T77i \(2026-10-30, T77 with the board default sheng-gpu-irq=0\): completion detection is not the open/close bottleneck. With the GPU line detached, a caller's fence wait \(NativeAdrenoPublish.cpp runCore\) polls with 20 us IODelay pauses \(314600 pauses for 10898 waits\), so completions are seen within tens of microseconds; the mean wait barely changed \(1.86 ms in T77, 1.94 ms\). backboardd's heavy command buffers \(2073, about 7x T77's 294: 42 open/close bursts against 6\) still took 24.15 ms median from commit to completion \(T77 24.73\) and 10.88 ms to scheduled \(13.38\); light ones 5.32 ms \(3.73\). Per burst, heavy command buffers ran at a median 66.5/s \(T77 56.2, from 6 bursts only\), with 15 % of their commit intervals over 33 ms \(21 %\). \[gpu time\] does not get more accurate with the line off: gpuTimeFences runs only from the interrupt, flip wait, governor tick and native\_gpu\_fences, not from the ring's polls \(191 batched detections against 1\). The 24 ms is not a late wake.
 - Review of T77/T77i \(2026-10-31, local/tools/gpubusy.py and passes.py on trace.bin\): T77's 'about 6 ms of traced GPU work' per heavy command buffer and its reading of T76's busy GPU as overstated were wrong. Merging the trace's GPU start and end stamps of every pass, copy, blit and clear, backboardd's own work kept the GPU busy 65 % of the animation bursts' wall time in T77 \(3757 of 5814 ms\) and 75 % in T77i \(24544 of 32761 ms\), about 12 ms per heavy command buffer: render passes in system memory 62 %, copies into shadows 32 % \(T77i: 52261 copies, SR pitch 263 and placement 419, 22697 Mi texels in\). The commit-to-scheduled wait is metal2vulkan's CompletionPolicy::Grouped \(the bridge keeps the UNTRUSTED default\) holding a group while two submissions of its VkQueue are outstanding, so it is queueing on the GPU too; nothing between the commit and the ring makes the CPU wait for the GPU \(Turnip's Darwin backend emulates timelines in DEFERRED submit mode and resolves waits to ring fences\), and the completion waiter reaches the kernel's fence wait. The GPU's work per frame stays the limit, as T52 and T65-early found: the levers are the copies \(T76's dirty-page log\) and the occluded samples \(T65-samples\). Untested: turnip-a810-sysmem-ccu.patch halves the system-memory colour cache for every pass, those without depth included. The trace's binning flag is set only in staged mode \(TU\_DW\_TIME=tiles\), so pdba runs read 0 for every pass.
 - T78 \(2026-10-31, add-on only, measurements behind letters of asteroids-tu-trace since the command line is at 976 of 1000 bytes\): q \(UniXNU patches/mesa/turnip-asteroids-submit-trace.patch\) records each kernel submission in trace.bin, CLOCK\_UPTIME\_RAW ns before and after it \(the frames trace's clock\) and its command buffers' serials, so local/tools/gaps.py can fit the always-on counter to the CPU clock and file every GPU idle gap of 1 ms or more in the bursts as kernel \(submitted before the gap\), held \(a commit before the gap not yet scheduled\) or late \(nothing committed\); h \(AdrenoMetal NativeMetalObjects.rs DirtyMeasure\) gives every no-copy memory a dirty-page source that never answers, so the runtime still copies every byte but counts the copies a log would decide, while a utility thread hashes the watched pages at most four times a second and counts the unchanged ones weighted by stamps, and each watch notes whether its pages are private or shared \(boot log rows DP, DW, DH\); c \(patches/mesa/turnip-a810-sysmem-ccu-color.patch\) gives system-memory passes the whole 128 KiB colour cache and half the depth cache in place of half colour and whole depth \(480 of 576 KiB with the VPC buffers\), an A/B against the halved colour cache. Planned boots: pdbaq \(the gaps, and the cache A/B's base\), pdbaqc \(its other side, compared per pass of each kind\), pdbaqh \(the copies; h moves the gated copies' recording to submission and adds a hashing thread, so its timing is not compared\), pdbsa \(occluded samples on today's stack\).
+- T78q \(2026-10-31, asteroids-tu-trace=pdbaq, 104 s\): the GPU waits for work, not only the reverse. local/tools/gaps.py fits the always-on counter to the CPU clock by the GPU's idle periods \(offset 1.40 ms, drift -2.1 ppm; 424 of 446 idle periods of 5 ms or more ended 0-1 ms after a submission returned; the traced serials can't be used, since each submission starts with untraced shadow copies, serial 0\). In 18 bursts \(24380 ms\) backboardd's work kept the GPU busy 76 % \(system-memory passes 12220 ms, copies 5713, GMEM 523\); gaps of 1 ms or more took 5704 ms \(23 %\): the GPU idle with work already in the kernel 173 ms \(29\), held 3126 ms \(723, median 3.0 ms: a command buffer committed before the gap not yet scheduled\), late 2405 ms \(352, median 6.1 ms: nothing committed\). Completion is seen on time \(completion callbacks a median 0.3 ms from the GPU end of their traced work\), and the Grouped hold is not what holds: only 81 of 1223 command buffers queued behind another were scheduled within 0.5 ms of a completion, and at their scheduling 0 \(423\) or 1 \(687\) of the queue's submissions were outstanding. Commit to scheduled grows with the command buffers committed earlier and not yet scheduled, whether the GPU is busy or idle: none 2.8 ms median with the GPU idle, one 12.7 ms, two 21.9 ms; a queued command buffer is scheduled a median 9 ms after the one before it, in two modes \(under 0.5 ms or about 10-13 ms\), with no relation to its copies or draws. So a serial stage on the CPU between commit and the kernel submission holds the work: the encode thread \(it runs every encoder call's runtime half and then the commit, NativeBridgeMetalFrontend.mm submit\) or metal2vulkan's scheduler thread; the trace has no stamp between them. The review's 'the GPU's work per frame stays the limit' holds for 76 % of the bursts, not for the idle 23 %. CoreAnimation waited for scheduling 933 times \(2631 ms\) and for completion 41 times \(508 ms\), counted only after encodeDrain, so its time waiting for the encode thread to catch up is not in either.
+- T78c \(2026-10-31, asteroids-tu-trace=pdbaqc, 86 s\): the whole colour cache for system-memory passes \(turnip-a810-sysmem-ccu-color.patch: colour full, depth half\) does not help. Matched against T78q by mode, the colour attachment's load and store, area and draws \(local/tools/t78/ab.py\), the cells with the same work ran 1-5 % slower \(full-screen SCut with 64 or more draws 4354 to 4528 us, LSut 5021 to 5189, LS 9998 to 10253\); the cells that moved more \(+352 %, -54 %\) differ in their work between the runs, since draws are capped at 64 in the match and the apps opened were not the same. The bursts were the same as T78q: GPU busy 76 % of 19847 ms, gaps of 1 ms or more 23 % \(kernel 181 ms, held 2492, late 1814\). The patch only acts behind letter c and goes with the next build.
+- T78h \(2026-10-31, asteroids-tu-trace=pdbaqh, booted twice\): the measurement crashes the render server. The first boot was left untouched \(its static stacks and idle CPU were an idle phone, not a freeze\); in the second \(112 s, used from the start\) backboardd died with SIGSEGV four times \(pids 56, 262, 270, 279, each after 10-20 s of use\), every time at the same instruction with ESR 0x92000007 \(a read, translation fault at level 3\) at a page-aligned address, on a Rust-spawned thread: the bridge's hashing thread read the first word of a watched page that was no longer mapped. A watch lives until metal2vulkan drops its shadow log, and the watched memory \(all of it shared with other tasks: 74 sources, 37 watches, 52 MB, no private pages\) can be unmapped before that, so the thread's alive flag does not keep the pages. What the counters had in one render server's life: 72 shadow copies in \(L row cp 73\) of which 72 gated and copied whole as designed \(94 MB\), so the gate does cover the shadow copies in; the hashing gave no share of unchanged pages \(2 rounds, nearly every page first seen\). The fix is in the measurement: read the pages with mach\_vm\_read\_overwrite, which fails on an unmapped page, instead of loading them.
+- T78s \(2026-10-31, asteroids-tu-trace=pdbsa, 90 s, no render server crash\): the occlusion T65-samples measured is unchanged on today's stack \(local/triage/occlusion-from-trace.py, the same script\): 2751 large passes with per-draw samples \(46 without\), 18.05 G samples, 70 % from opaque draws; at least 7.87 G \(43.6 %\) were shaded under a later opaque draw covering 95 % or more of the pass \(1290 passes have one; T65-samples 43.8 %\), and about 56.1 % counting partly covering opaque draws as independently placed \(T65 about 56 %\). Opaque draws are nearly all either tiny \(43711 under a tenth of the pass\) or full-screen \(4332 at nine tenths or more\), so the lower bound is the part a whole-draw rule could take: drawing nothing before a later full-screen opaque draw in the same pass.
+- T78s, what the hidden pixels cost \(local/tools/t78/pxcost\_s.py, hidcost\_strict.py\): large system-memory passes that load and store the screen \(LS, 2412\) follow their pixels, time = 342 us + 340 us per million opaque samples + 473 per million blended \(R2 0.90; the s letter's wait after each draw goes into the per-draw term\), opaque pixels about 61 % of their time: 0.34 ns a pixel is about 11.7 GB/s of 4-byte writes, T61's DRAM rate, so in system memory every shaded pixel is a DRAM write. That is why T69's depth prepass lost \(it added a full-screen depth buffer's traffic to every pass\). But what a draw-skipping rule could drop safely is small: of the opaque draws over 95 % of a pass, 1694 cover all of it and 2572 cover 97-98 % \(the rest of the screen still shows earlier draws\), and before a cover of the whole pass with all four channels written there are 2.62 G opaque samples in LS passes \(30 % of theirs, about 0.9 s at that rate\) and almost none in SC passes. On T78q's bursts that is about 1.1 of 18.5 s of GPU work, near 5 %, and the translator cannot know a draw covers the pass when it records it \(its positions come from the vertex shader\). The 43.6 % share counted the 97-98 % covers as hiding everything before them; hidden pixels are not a large lever by any rule known to be safe.
+- T79 \(2026-10-31, add-on 27, UniXNU 03a1d0c, AdrenoMetal 4ea92e4\): the shadows' cause, not their cost. metal2vulkan answers Metal's 16 bytes for a linear texture's offset and rows in a buffer \(deviceLinearTextureAlignmentBytes, minimumLinearTextureAlignmentForPixelFormat:\), while Turnip's linear images on the A810 start and step their rows at 64; QuartzCore lays out its textures over buffers by the device's answer, so the runtime bound none in place and shadowed each, copying every byte in before every use \(every shadow in T76-T78 was for pitch or placement\). The bridge now answers 64 for those queries and the linear private counts \(NativeMetalObjects.rs LINEAR\_IN\_PLACE\); the runtime still takes 16, so a texture placed by the old rule is shadowed as before; the IOSurface answers stay 16 \(no IOSurface texture was shadowed\) and the frontend's iosurfaceReadOnlyTextureAlignmentBytes asks for that answer instead of the linear one. Whether QuartzCore asks the device for each of these textures is what the boot shows: the SR row's pitch and placement counts and the trace's copy time against T78q. The same add-on carries the dirty-page measurement's fix \(pages read with mach\_vm\_read\_overwrite, DH gone counts the unmapped ones\), frame trace types 6 \(a commit's runtime half on the encoding thread, with the thread's CPU time\) and 7 \(encodeDrain waits\), to split T78q's commit-to-scheduled delay, and drops the colour-cache A/B. Planned boots: pdbaq, then pdbaqh if shadows remain.
 
 ### 完成条件
 
@@ -457,7 +463,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -498,7 +504,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## 网络 {#network}
@@ -592,7 +598,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -637,7 +643,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 镜像组装 {#packaging}
@@ -677,7 +683,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -730,6 +736,6 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/c774b7030145b431a8bfbe0d68e16ffa08cebc75/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/BootProgress.c)
 
 </div>

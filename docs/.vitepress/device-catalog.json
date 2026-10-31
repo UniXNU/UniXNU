@@ -85,6 +85,11 @@
     "title_zh": "小米 9（cepheus）"
   },
   {
+    "name": "cepheus-yangqi0408",
+    "title": "Xiaomi Mi 9 (cepheus) (YangQi0408)",
+    "title_zh": "Xiaomi Mi 9 (cepheus) (YangQi0408)"
+  },
+  {
     "name": "cheeseburger",
     "title": "OnePlus 5 (cheeseburger)",
     "title_zh": "一加 5（cheeseburger）"
@@ -275,6 +280,11 @@
     "title_zh": "Xiaomi 13 (Sohytrs)"
   },
   {
+    "name": "fuxi-star-mailaz",
+    "title": "Xiaomi 13 (Star-mailaz)",
+    "title_zh": "Xiaomi 13 (Star-mailaz)"
+  },
+  {
     "name": "fuxi-xyvern08371",
     "title": "Xiaomi 13 (SM8550) (Xyvern08371)",
     "title_zh": "Xiaomi 13 (SM8550) (Xyvern08371)"
@@ -433,6 +443,11 @@
     "name": "lumia950",
     "title": "Microsoft Lumia 950",
     "title_zh": "Microsoft Lumia 950"
+  },
+  {
+    "name": "lumia950-shrimpapplepro",
+    "title": "Microsoft Lumia 950 — P1 build research (shrimpapplepro)",
+    "title_zh": "Microsoft Lumia 950 — P1 build research (shrimpapplepro)"
   },
   {
     "name": "lumia950-twisstedtoast",
@@ -710,6 +725,11 @@
     "title_zh": "Nothing Phone (2): UniXNU UEFI bring-up (Y3d4)"
   },
   {
+    "name": "pudding",
+    "title": "Xiaomi 17 (pudding, qcom,canoe, SM8850)",
+    "title_zh": "Xiaomi 17 (pudding, qcom,canoe, SM8850)"
+  },
+  {
     "name": "q2q",
     "title": "Galaxy Z Fold3 (q2q)",
     "title_zh": "Galaxy Z Fold3（q2q）"
@@ -728,6 +748,11 @@
     "name": "raphael",
     "title": "Redmi K20 Pro / Mi 9T Pro (raphael)",
     "title_zh": "Redmi K20 Pro / Mi 9T Pro（raphael）"
+  },
+  {
+    "name": "raphael-johnleeeeeee678",
+    "title": "Redmi K20 Pro / Mi 9T Pro (raphael) (JohnLeeeeeee678)",
+    "title_zh": "Redmi K20 Pro / Mi 9T Pro (raphael) (JohnLeeeeeee678)"
   },
   {
     "name": "rmx1971",
@@ -868,6 +893,11 @@
     "name": "tb128fu",
     "title": "Lenovo Xiaoxin Pad 2022 (tb128fu)",
     "title_zh": "联想小新 Pad 2022（tb128fu）"
+  },
+  {
+    "name": "tb128fu-riceneeder",
+    "title": "Lenovo Xiaoxin Pad 2022 (TB128FU) (Riceneeder)",
+    "title_zh": "Lenovo Xiaoxin Pad 2022 (TB128FU) (Riceneeder)"
   },
   {
     "name": "tb365fc",

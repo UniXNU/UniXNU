@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-OnePlus 8T \(KB2000\). Firmware, menu and payload volume work, and the kernel passes the whole IOKit initialisation: IODeviceTreeAlloc, IOPlatformExpertDevice::init, IOService::init, attach, InitIOKit and ConfigureIOKit all return. The IOKit stall was the gic node's interrupts property: the ADT has no AAPL,phandle, IODTFindInterruptParent returned NULL and IODTGetICellCounts dereferenced it. The next stall is vm\_commpage\_init, inside pmap\_create\_commpages. With the commpage calls replaced by ret \(eight-patch bring-up kernel\) the kernel still stops between mac\_policy\_initmach and OSKextRemoveKextBootstrap, before PE\_lockdown\_iokit and bsd\_init.
+OnePlus 8T \(KB2000\). Firmware, menu and payload volume work, and the kernel walks the whole kernel\_bootstrap\_thread into bsd\_init: IOKit initialisation, startup step 16, the commpage, mac\_policy, vnguard, dtrace, sdt, mbuf\_tag\_init and the rest all pass. What still holds it is the interrupt controller: ArmCpu::mapGic\(\), prepareGic\(\) and enableGic\(\) live in the prelinked AppleARMCPU kext, so a bring-up kernel that skips kext loading and IOKit matching has no interrupts at all - with IRQs masked every allocation that wants to sleep hangs, and with them unmasked the first IRQ stops the boot. The ADT also handed the GIC and timer window offsets that were made absolute by mistake, which double-mapped both; that is fixed.
 
-Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/porting.toml), `fd655c9589bad1d68c5e5c8111dcafb9d376dbb4`.
+Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/porting.toml), `8b5295d81c61cef68a5dc521cf08695aa36f5d01`.
 
 This page is generated from the device record.
 
@@ -76,8 +76,8 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/board.toml)
-- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/porting.toml)
+- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/board.toml)
+- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/porting.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -128,7 +128,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/darwin-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## CPU and interrupts {#cpu}
@@ -184,9 +184,9 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>flash the reset-probe image and observe the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/scripts/patch-xnu-log-probe.py)
+- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/scripts/patch-xnu-log-probe.py)
 
 ## Memory and DMA {#memory}
 
@@ -233,7 +233,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>flash the entry-probe image and read the DarwinBoot physical base line</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Storage and root {#storage}
@@ -316,7 +316,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>boot the firmware and read the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Input {#input}
@@ -354,7 +354,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>boot the firmware and press volume and power</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## GPU {#gpu}
@@ -536,6 +536,8 @@ Components: `XnuPrelink`, `DarwinBoot`.
 - The working boot image DTB is desktop-kebab.dtb \(sha256 8ba6ed34b8396102eac4d95769c56317aece50cf95b69cd3d98aa8353b27f293\); the 11 MiB raw live dump carries trailing data past the FDT totalsize and fails the bootimg check.
 - The bring-up kernel grew to six ret patches on 2026-10-30: PE\_create\_console, vcattach, vc\_progress\_initialize, PE\_get\_default, initialize\_screen and kperf\_init\_early \(sha256 9531eef048f30eba31d159194260e19044fec25b9cd605cbbb2c82ca997d1461\).
 - The 2026-10-30 evening bring-up kernel grew to eight ret patches: the six above plus vm\_commpage\_init and vm\_commpage\_text\_init \(sha256 63ac20f91988a04f96396408f1d0b1248784d805a5c2e0eee3632082cbef49f4\), used to bisect past the commpage stall.
+- The 2026-10-31 bring-up kernel is kernel-bsd9: sixteen patches on top of the source build - ret for PE\_create\_console, vcattach, vc\_progress\_initialize, PE\_get\_default, initialize\_screen, kperf\_init\_early, vm\_commpage\_init, vm\_commpage\_text\_init, OSKextLog, OSKextRemoveKextBootstrap, machine\_lockdown, kernel\_list\_tests, kernel\_do\_post and PE\_lockdown\_iokit, mov x0,\#0 over the OSKext::copyKexts call in loadSecurityExtensions, and a nop over the ml\_set\_interrupts\_enabled\(1\) call in kernel\_bootstrap\_thread.
+- The 2026-10-31 evening bring-up kernel is kernel-bsd11: kernel-bsd9 plus a ret for vm\_set\_restrictions and a mov x0,\#0; ret for kernel\_do\_post, whose return value kernel\_bootstrap\_thread checks with cbnz before the Assert path at 0xfffffff007984414.
 
 ### Completion criteria
 
@@ -551,9 +553,9 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/probe-final-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/scripts/pack-payload-mbr.py)
+- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/scripts/pack-payload-mbr.py)
 
 ## Diagnostics {#diagnostics}
 
@@ -601,6 +603,22 @@ Components: `DarwinBoot`.
 - OSKext::copyKexts takes sKextLock with IORecursiveLockLock and then copies sKextsByID with copyCollection. Nothing else in this path runs, so either the lock is held by another thread \(deadlock\) or the kext registry is not usable at this point.
 - The sKextLock acquisition inside OSKext::copyKexts returns, so the lock is fine and the stall is sKextsByID-&gt;copyCollection\(\).
 - OSKext::initialize creates both sKextLock and sKextsByID and asserts them, and \_\_PRELINK\_INFO lists 38 bundle identifiers, so a valid registry of that size should copy instantly; the copy is most likely faulting on a corrupt entry recorded by readStartupExtensions rather than looping.
+- Correction, 2026-10-31: OSKext::copyKexts has three callers - KLDBootstrap::loadSecurityExtensions, KLDBootstrap::loadKernelExternalComponents \(which runs inside InitIOKit\) and IOCatalogue::resetAndAddDrivers. The 2026-10-30 checkpoint inside copyKexts therefore fired during InitIOKit, not at mac\_policy\_initmach, and patching the whole function broke InitIOKit so every later checkpoint failed.
+- With only the copyKexts call inside loadSecurityExtensions neutralised, the checkpoint after OSKextLog at the top of that function still does not fire, so the stop is at that log call or the jump into the bootstrap segment rather than in the kext registry copy.
+- 2026-10-31 chain with kernel-bsd9: startup step 16, initialize\_screen, vm\_commpage\_init, vm\_commpage\_text\_init, mac\_policy\_initmach, vnguard\_policy\_init, dtrace\_early\_init, sdt\_early\_init, mbuf\_tag\_init all return; machine\_lockdown, kernel\_do\_post and PE\_lockdown\_iokit only return because they are patched out.
+- The stop after that is vm\_set\_restrictions, whose argument is machine\_info.max\_cpus and whose body starts with assert\(num\_cpus &gt; 0\); machine\_conf derives the value from the topology max\_cpu\_id, so a zero there panics before kperf\_init\_early and bsd\_init.
+- Checkpoints at or after ml\_set\_interrupts\_enabled\(1\) never fire unless that call is nop'd, which is why the earlier bisection reported contradictory results: with IRQs unmasked the checkpoint cave cannot complete its wait either.
+- With kernel-bsd11 the checkpoint after kperf\_init\_early fires: the whole kernel\_bootstrap\_thread completes and bsd\_init is entered. The checkpoint after bsd\_init does not fire, so bsd\_init itself now holds the boot.
+- A plain ret on kernel\_do\_post sent the boot to the Assert path at 0xfffffff007984414 because cbnz w0 tested a garbage return value; returning zero fixes it.
+- Inside bsd\_init the boot stops in throttle\_init: the checkpoints after throttle\_init and after its first thread\_call\_allocate never fire, while the earlier bsd\_init calls \(platform\_stall\_panic\_or\_spin, whose stall value is disabled\) do not stall.
+- throttle\_init first calls throttle\_init\_throttle\_window, which reads three kern.io\_throttle\_window\_tier\* defaults through PE\_get\_default. Restoring the real PE\_get\_default and replacing it with a clean mov x0,\#0; ret both leave the stop unchanged, so the PE\_get\_default bring-up patch is not what blocks it; the remaining suspects inside throttle\_init are its PE\_parse\_boot\_argn calls and the lck\_mtx\_init of each throttle lock.
+- throttle\_init stops in thread\_call\_allocate, which does not reach zalloc but kalloc\_type\_impl\_internal, the typed allocator; setup itself is trivial, so the allocation is what blocks.
+- bsd\_init's first printf also never returns: kprintf's disabled-output branch calls os\_log\_with\_args, and printf itself formats through console\_printbuf\_putc, which needs a console that PE\_create\_console and vcattach currently never create. Patching os\_log\_with\_args out is not enough; patching printf out moves the boot to kauth\_init, which then does not return either.
+- The interrupt controller is not part of the kernel image: the symbols are ArmCpu::mapGic, ArmCpu::prepareGic and ArmCpu::enableGic in the prelinked AppleARMCPU kext. Without kext loading and IOKit matching there is no GIC, so the bring-up kernel has to keep IRQs masked, and every wait that needs an interrupt or a timer never returns.
+- The devicetree generator added the arm-io window base to the GIC reg but pe\_arm\_map\_interrupt\_controller already maps soc\_phys + reg, so the GIC and timer landed at 0x2EA00000 instead of 0x17A00000. The injected reg now keeps the window offsets \(0xa00000, 0xa60000\) and the mapping resolves to the real addresses.
+- Restoring the real PE\_lockdown\_iokit \(IOKit matching\) with the printf/os\_log/throttle stubs in place still does not return, so driver matching is the next thing to walk.
+- PE\_lockdown\_iokit is zalloc\_iokit\_lockdown\(\) followed by a tail branch to StartIOKitMatching; StartIOKitMatching calls IOPlatformExpertDevice::startIOServiceMatching, which stops in IOWorkLoop::workLoop, whose first step is OSObject\_typed\_operator\_new - so the stop could never be about drivers: it is kalloc\_type\_impl\_internal.
+- kalloc\_type\_impl\_internal ends in zalloc\_ext with the Z\_NOFAIL flag set, and Z\_NOFAIL retries forever; with one CPU, no interrupt controller and IRQs masked, a zone that cannot reach a page never returns. ArmCpu::start \(drivers/ArmCpu/ArmCpu.cpp\) is what would call prepareGic/mapGic/enableGic, so the GIC, the kext matching and the allocator are one dependency cycle.
 
 ### Completion criteria
 
@@ -612,11 +630,11 @@ Components: `DarwinBoot`.
 
 ### Next action
 
-- Probe inside OSDictionary::copyCollection \(after super::copyCollection and after withDictionary\) to see whether the cycle check, the shallow copy or the per-entry loop is where it stops, or patch OSKext::copyKexts to return NULL and continue toward bsd\_init.
+- Break the cycle at the GIC: either build the kernel with the generic gic\_v3\_irq.c driver \(add it to osfmk/arm64/Makefile, it is not in the object list today, and it reads /arm-io/gic whose reg the ADT now encodes correctly\), or get ArmCpu::prepareGic to run before matching. Also confirm why zalloc\_ext cannot reach a page at that point.
 
 ### Evidence
 
-- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/fd655c9589bad1d68c5e5c8111dcafb9d376dbb4/docs/bring-up.md)
+- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
   Command: <code>flash each bisect image and photograph the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 </div>

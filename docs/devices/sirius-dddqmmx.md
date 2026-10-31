@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: entry, MMU, timer, PSCI, platform expert and the boot-progress console work on hardware; early boot and UI process launches work, but the local 256 MiB Data window runs out of space and visible UI remains unverified.
+Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: 8 GiB persistent APFS Data container resized in-kernel with zero ENOSPC, launchd early boot, SpringBoard, backboardd and Setup.app running with sustained \~19 fps CPU-copied GOP presentation, AppleKeyStoreState and FTS521/ShengHidInput touch active, and unattended USB FASTBOOT return to ABL verified.
 
-Source record: [porting.toml](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/porting.toml), `8d72bc8be4e7ad94f60667594d65c02e1050bd6d`.
+Source record: [porting.toml](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/porting.toml), `94b7f39286aff8de0b84f2243307a7d54a6b6b08`.
 
 This page is generated from the device record.
 
@@ -55,6 +55,7 @@ Components: `ArmDTPlatform`, `DarwinBoot`.
 
 ### Development findings
 
+- Local 2026-10-31 verification \(kernel ad6a9709..., payload afa7def2...\): removing sirius-skip-setup=1 while no Metal GPU driver exists avoids the PosterBoard SIGABRT loop and lets SpringBoard launch CPU-rendered Setup.app, while NativeEmmc + BootWatchdogPolicy seed and online-resize the persistent eMMC APFS Data container from 32 MiB to 8 GiB \(2097152 blocks\) with zero ENOSPC.
 - Local 2026-10-30 integration selects GopFramebuffer, AppleKeyStoreState and ShengHidInput, links the late display archive, enables CPU frequency, FTS521 touch and GMU phase 2, and carries a 256 MiB Data seed fallback. Persistent Data mounted on this unit, but 256 MiB still reaches ENOSPC. Default panic autoreset has been removed because the panic buffer may contain recovered assertions.
 - board.toml gained build-sirius-emmc.py in the archive list next to the USB console entry.
 - board.toml lists build-sirius-emmc.py alongside the other archives, because the SDCC1 probe is compiled the same way as the USB console and joins the same force-loaded archive.
@@ -85,7 +86,7 @@ Components: `ArmDTPlatform`, `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Firmware and boot {#firmware}
 
@@ -132,7 +133,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## CPU and interrupts {#cpu}
 
@@ -177,7 +178,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Memory and DMA {#memory}
 
@@ -217,7 +218,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Storage and root {#storage}
 
@@ -240,6 +241,7 @@ Components: `ArmCpu`.
 
 ### Development findings
 
+- In-kernel 8 GiB APFS Data container resize verified on hardware \(kernel ad6a9709..., payload afa7def2...\): when the eMMC Data container at LBA 35627008 has fewer than 2097152 4 KiB blocks, NativeEmmc::prepareDataWindow writes the clean 32 MiB fixture from /chosen/memory-map/RAMDisk to LBA 35627008 and publishes an 8 GiB \(16777216-sector\) NativeEmmcBlock store; after /dev/disk3s1 mounts, BootWatchdogPolicy calls sirius\_apfs\_try\_resize\_data\("post-mount"\), which invokes prelinked AppleAPFSUserClient::containerResize \(0xfffffff005673e7c, prologue-checked\) with new\_size=0, growing disk3 from 8192 to 2097152 blocks \(8 GiB\) with rc/status 0 and 0 ENOSPC across the entire boot.
 - scripts/grow-data-container-macos.sh prepares an 8 GiB copy of an existing Data seed using hdiutil and diskutil resizeContainer, checks the volume and geometry, and refuses Linux or overwriting an output. Shell syntax and Linux refusal tested; the macOS resize itself has not run here.
 - Local evidence: the 256 MiB persistent Data window at LBA 35627008 mounts disk3s1 OwnerData. Early boot completes, but containermanagerd reports ENOSPC at capture time 185.8s. The APFS Whole-media filter is present; successful Data lookup is confirmed. Increasing APFS capacity remains blocked on macOS diskutil/hdiutil or a larger prepared seed.
 - The data path works: ADMA2 reads return EFI PART from LBA 1, the GPT header parses \(entries\_lba=2, count=84, size=128\) and 81 partitions with geometry are listed; boot 1179648..1310719, vendor 11010048..17301503, userdata 17301504..122142686.
@@ -284,13 +286,13 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
   Command: <code>fastboot flash vendor sirius-obs.img; fastboot reboot; capture-usb-console.py --duration 240</code>. Revision: `d867b1d6498dc4d0f4ae4e18060762dcae6c5847`.
-- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
   Command: <code>./scripts/xnu-container.sh run bash -lc './unixnu build kernel --skip-setup -D ../sirius'</code>. Revision: `a47f0d6b4615c3cdebf92102400a1bc302eb6d73`.
-- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
   Command: <code>fastboot flash vendor sirius-if.img; fastboot reboot; capture-usb-console.py --duration 220</code>. Revision: `bb812428dccd1f676455813ad198ed2bee4a8e3e`.
-- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/package/sirius_emmc.c)
+- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/package/sirius_emmc.c)
 
 ## Display {#display}
 
@@ -314,6 +316,8 @@ Components: `GopFramebuffer`.
 
 ### Development findings
 
+- Post-interaction UI freeze root-caused and fixed on hardware \(kernel ff57d694..., payload fad069ea...\): after touch interaction in Setup.app, backboardd switches to the iPad7,1 1536x2048 canvas \(r0 = 0,0,1536,2048 -&gt; r1 = 0,0,1080,2240\), which NativeLegacyDisplay::validateSwap previously rejected with reason=3 \('verify\_swap failed for swap id: ...'\), freezing the display. NativeLegacyDisplay now validates and scales full-frame surfW x surfH -&gt; 1080x2240 BGRA surfaces with a 64-bit unrolled nearest-neighbor blit \(1332/1332 swaps accepted, 0 rejected\), BootWatchdogPolicy always writes SpringBoard's no-watchdog/no-auto-dim/no-idle-sleep preferences, and sirius\_touch flushes same-batch EVT\_ENTER/EVT\_LEAVE transitions so fast taps are not coalesced away.
+- With the 8 GiB persistent Data container and sirius-skip-setup=1 removed \(kernel ad6a9709..., payload afa7def2...\), SpringBoard \(135.2 s\), backboardd \(165.7 s\), iconservicesagent \(171.9 s\) and Setup.app \(294.6 s\) run without storage errors, and GopFramebuffer copies 5514 accepted frames \(0 rejected\) at \~10.3 ms mean \(\~19 fps\) with verified non-black pixel counts \(41011 on the Apple logo, 28199 on Setup\).
 - The local boot registers the GOP display and copies six frames; SpringBoard and backboardd exec events do not establish a visible or usable UI. HuajiFruit logs copied into docs/evidence are reference observations, not results for this unit.
 - The panel gained an EMMC row \(step, version, capabilities, state, clock, power, clock-branch halts\) next to the USB row, so the storage bring-up is visible without a serial link.
 - The USB row \(drawn by this panel\) labels its six values after what they now carry - step, txev, rxev, chars, echo, poll - because they were first wired to register names and had drifted.
@@ -334,7 +338,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Input {#input}
 
@@ -357,6 +361,7 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Development findings
 
+- Fast-tap coalescing fixed in package/sirius\_touch.c \(kernel ff57d694..., payload fad069ea...\): when EVT\_ENTER and EVT\_LEAVE for the same touch ID arrive within a single 32-event FIFO poll batch, publish\_contacts\(\) is now flushed with a 10 ms separation before clearing contact\_down so rapid taps are delivered as distinct down/up HID reports.
 - The local boot identifies the FTS521 and publishes IOHIDEventDriver, with TOUCH down/move/up coordinates in the capture. Visible UI response has not been verified on this unit.
 - The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.
 - No input component is selected; the button node exists so that BSPlatform and MobileGestalt read a coherent product.
@@ -507,6 +512,7 @@ Components: `AppleKeyStoreState`.
 
 ### Development findings
 
+- Device-verified 2026-10-30 \(kernel b94137f5, payload a5620f29\): writing FASTBOOT to the CDC console makes the unit reappear in ABL fastboot after 4.2 s without a key press; SPMI v5 PM660 PON channel 7 write/readback/PSCI reset works. See docs/evidence/sirius-20261030-local-boot.md.
 - SPMI v5 PON reads identify channel 7, owner 0, subtype 04, spare 00 on this unit. Write/readback and automatic return to ABL fastboot remain unverified. Corrected candidate uses length-minus-one byte count and refuses bootloader reset after failed readback.
 - The eMMC probe does not vote any RPMH resource; it re-enables the GCC SDCC1 branches that the boot chain had already set.
 - Reset works through PSCI \(the stage-3 reset loop proved it\).
@@ -525,7 +531,7 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Image assembly {#packaging}
 
@@ -584,7 +590,7 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
+- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
 
 ## Diagnostics {#diagnostics}
 
@@ -605,6 +611,7 @@ Components: `XnuPrelink`.
 
 ### Development findings
 
+- End-to-end unattended debug loop and Setup boot verified on local hardware \(kernel ad6a9709..., payload afa7def2...\): agent-flash.sh sends FASTBOOT over /dev/ttyACM0 to return XNU to ABL fastboot in 4-7 s without button presses, flashes vendor, reboots into XNU, and capture-usb-console.py records the in-kernel 8 GiB APFS containerResize, zero ENOSPC, Setup launch at 294.6 s, AppleKeyStoreState activity \(100 opens, 1430 calls\), IOHIDEventDriver attachment \(stage 4\), and 5514 accepted frame copies \(\~19 fps\). See docs/evidence/sirius-20261030-local-boot.md.
 - The previous ios-ui-up verdict was a false success based only on process launches: the same capture reports ENOSPC and only six confirmed frame copies. A later 12-second capture received zero bytes, and a nine-byte FASTBOOT request did not produce a fastboot device. USB corrections derive received length from completed TRB residual bytes, parse exact newline commands across packets, and serialize pollers. USB and mock flash failure regressions pass; hardware verification of the new image is pending. See docs/evidence/sirius-20261030-local-boot.md.
 - A register write-and-read-back test is the next diagnostic for the eMMC data phase, because SDHCI\_TRANSFER\_MODE reads back 0x33 after writing 0x13, which separates a write the vendor layer ignores from a command that is never sent.
 - The eMMC probe reports every step \(controller registers, the clock tree, the response registers around CMD0/CMD1 and each failure\) into the USB console ring, which is how the card clock and CMD2 findings above were obtained without a photograph.
@@ -641,8 +648,8 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/HANDOFF.zh-CN.md)
-- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/docs/evidence/sirius-usb-console-20261026-1605.log)
+- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/evidence/sirius-usb-console-20261026-1605.log)
   Command: <code>sudo python3 scripts/capture-usb-console.py --wait 60 --duration 190 --output /tmp/boot.log</code>. Revision: `366abe2948fdb0c1554f7e0b89b731160f4527a4`.
 
 ## boot-chain {#boot-chain}
@@ -695,7 +702,7 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/uboot/README.md)
-- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/dddqmmx/UniXNU-sirius/blob/8d72bc8be4e7ad94f60667594d65c02e1050bd6d/efi/README.md)
+- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/uboot/README.md)
+- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/efi/README.md)
 
 </div>

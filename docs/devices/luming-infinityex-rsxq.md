@@ -6,7 +6,7 @@
 
 Xiaomi Civi 5 Pro format-2 bring-up skeleton: native 4K XNU + XnuPrelink with the proven iPadOS 17.7.11 profile, a dada-shaped AMFI+PMGR kernel configuration, SM8735 measured hardware facts, SHNGROOT/VerifiedRoot userdata recipe and Mu-Silicium UEFI + DarwinBoot. Every area is planned; no build or boot evidence exists yet.
 
-Source record: [porting.toml](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/porting.toml), `25c9537ac4d85db12ad5eae4e65e5ee004acb1b6`.
+Source record: [porting.toml](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/porting.toml), `4bff1b93f409ca1fc8c1ba4403abf8fa37e51888`.
 
 This page is generated from the device record.
 
@@ -67,7 +67,7 @@ Components: `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Format-2 board configuration with pinned measured/placeholder values and sources](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/board.toml)
+- `source`: [Format-2 board configuration with pinned measured/placeholder values and sources](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -110,7 +110,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Firmware interface, required modules and Mu-Silicium patch set for the format-2 route](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/firmware/README.md)
+- `source`: [Firmware interface, required modules and Mu-Silicium patch set for the format-2 route](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/firmware/README.md)
 
 ## CPU and interrupts {#cpu}
 
@@ -151,7 +151,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Measured CPU/timer/GIC facts with their source paths](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/docs/KNOWN-VALUES.md)
+- `source`: [Measured CPU/timer/GIC facts with their source paths](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/docs/KNOWN-VALUES.md)
 
 ## Memory and DMA {#memory}
 
@@ -194,7 +194,7 @@ Components: `RamBlock`.
 
 ### Evidence
 
-- `source`: [DRAM window measurements and alignment risk \(sections 2-3\)](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/docs/KNOWN-VALUES.md)
+- `source`: [DRAM window measurements and alignment risk \(sections 2-3\)](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/docs/KNOWN-VALUES.md)
 
 ## Storage and root {#storage}
 
@@ -241,7 +241,7 @@ Components: `LumingUfs`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [Storage facts, component work order and acceptance criteria](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/docs/UFS.md)
+- `source`: [Storage facts, component work order and acceptance criteria](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/docs/UFS.md)
 
 ## Display {#display}
 
@@ -280,7 +280,7 @@ Components: `LumingUfs`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [Display/input scope, inputs and missing-component note](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/drivers/LumingDisplayTouch/README.md)
+- `source`: [Display/input scope, inputs and missing-component note](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/drivers/LumingDisplayTouch/README.md)
 
 ## Input {#input}
 
@@ -507,7 +507,7 @@ Components: `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Ordered build commands, artifacts and validation gates G0-G5](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/docs/FIRST-BUILD-PLAN.md)
+- `source`: [Ordered build commands, artifacts and validation gates G0-G5](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/docs/FIRST-BUILD-PLAN.md)
 
 ## Diagnostics {#diagnostics}
 
@@ -546,6 +546,6 @@ Components: `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [A-line fixes/findings classified for format 2 with landing points](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/25c9537ac4d85db12ad5eae4e65e5ee004acb1b6/docs/A-FIX-CROSSWALK.md)
+- `source`: [A-line fixes/findings classified for format 2 with landing points](https://github.com/infinityEX-RSXQ/UniXNU-luming-f2-ci/blob/4bff1b93f409ca1fc8c1ba4403abf8fa37e51888/docs/A-FIX-CROSSWALK.md)
 
 </div>

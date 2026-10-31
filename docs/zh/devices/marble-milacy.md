@@ -6,7 +6,7 @@
 
 Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). The UEFI image and UniXNU menu are buildable; XNU kernel entry needs user-supplied IPSW inputs; system entry is a documented later stage.
 
-源记录: [porting.toml](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/porting.toml), `069d3a184ccc7320fe7764b80b4abebf7e511701`.
+源记录: [porting.toml](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/porting.toml), `e13cbdc5da195f9e52ac72d406fadeac3107fb57`.
 
 本页按设备记录自动生成。
 
@@ -63,10 +63,10 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [Board identity, component selection, firmware paths and payload inputs.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/board.toml)
-- `source`: [Board memory, splash reservation and CPU cluster tags.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/dts/marble.dts)
-- `source`: [First-console kernel configuration.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/configs/marble_defconfig)
-- `source`: [Source-backed hardware inventory.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
+- `source`: [Board identity, component selection, firmware paths and payload inputs.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/board.toml)
+- `source`: [Board memory, splash reservation and CPU cluster tags.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/dts/marble.dts)
+- `source`: [First-console kernel configuration.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/configs/marble_defconfig)
+- `source`: [Source-backed hardware inventory.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
 
 ## 固件与启动 {#firmware}
 
@@ -109,7 +109,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `host`: [DEBUG FD built at 0x300000 bytes; build log lists UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi; the SEC entry-argument HOB GUID is present in the FD.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/README.md)
+- `host`: [DEBUG FD built at 0x300000 bytes; build log lists UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi; the SEC entry-argument HOB GUID is present in the FD.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/README.md)
   Command: <code>./unixnu build firmware -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --edk2 ../Mu-Silicium-marble/Mu_Basecore</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
 
 ## CPU 与中断 {#cpu}
@@ -151,8 +151,8 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [CPU, GIC and timer values with their vendor-DT source.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
-- `source`: [E/P cluster tags and enabled UFS nodes.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/dts/marble.dts)
+- `source`: [CPU, GIC and timer values with their vendor-DT source.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [E/P cluster tags and enabled UFS nodes.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/dts/marble.dts)
 
 ## 内存与 DMA {#memory}
 
@@ -189,7 +189,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [Memory map and reservation table.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
+- `source`: [Memory map and reservation table.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
 
 ## 存储与根卷 {#storage}
 
@@ -235,12 +235,12 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `device`: [UFS host/GCC/SMMU takeover and userdata GPT read on marble 2026-10-31; manifest status=1 windows=0.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/REAL-DEVICE-TESTS.md)
+- `device`: [UFS host/GCC/SMMU takeover and userdata GPT read on marble 2026-10-31; manifest status=1 windows=0.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/REAL-DEVICE-TESTS.md)
   Command: <code>fastboot boot boot.img (native-ufs-probe=10)</code>. Revision: `7f9a3e506235bf69479faf8f47dcda663fa9e658`.
-- `host`: [Absolute IOBlockStorageDevice ABI bindings recovered from IOBlockStorageDevice.o and the 21H461 prelink; full kernel links with NativeUfsBlock at kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/scripts/data/native-storage-original-bindings.S)
+- `host`: [Absolute IOBlockStorageDevice ABI bindings recovered from IOBlockStorageDevice.o and the 21H461 prelink; full kernel links with NativeUfsBlock at kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/scripts/data/native-storage-original-bindings.S)
   Command: <code>./unixnu build kernel -D ../UniXNU-marble</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
-- `source`: [Stream override implementation and SM8550 register constants.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/drivers/ShengUfs/NativeUfs.cpp)
-- `source`: [UFS, SMMU and GCC sources.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
+- `source`: [Stream override implementation and SM8550 register constants.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/drivers/ShengUfs/NativeUfs.cpp)
+- `source`: [UFS, SMMU and GCC sources.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
 
 ## 显示 {#display}
 
@@ -279,7 +279,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [Panel and splash values.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
+- `source`: [Panel and splash values.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
 
 ## 输入 {#input}
 
@@ -318,7 +318,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [Touch wiring and source values.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/HARDWARE.md)
+- `source`: [Touch wiring and source values.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
 
 ## GPU {#gpu}
 
@@ -463,7 +463,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `source`: [PMGR placeholder and staged power work.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/docs/FULL-SYSTEM.md)
+- `source`: [PMGR placeholder and staged power work.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/FULL-SYSTEM.md)
 
 ## 镜像组装 {#packaging}
 
@@ -508,7 +508,7 @@ Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). Th
 
 ### 证据
 
-- `host`: [Full UFS root kernel, prelink, payload and boot image built and verified on the host; hardware\_tested is false.](https://github.com/MiLacy/UniXNU-marble/blob/069d3a184ccc7320fe7764b80b4abebf7e511701/README.md)
+- `host`: [Full UFS root kernel, prelink, payload and boot image built and verified on the host; hardware\_tested is false.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/README.md)
   Command: <code>./unixnu build kernel -D ../UniXNU-marble &amp;&amp; ./unixnu build payload -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --trust-cache ../UniXNU-marble/build/marble-trust.bundle --unique-chip-id 4d4152424c45 &amp;&amp; ./unixnu bootimg -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --dtb ../Mu-Silicium-marble/Resources/DTBs/marble-unixnu.dtb</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
 
 ## 诊断 {#diagnostics}

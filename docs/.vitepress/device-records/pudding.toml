@@ -1,0 +1,189 @@
+schema_version = 1
+
+[device]
+name = "pudding"
+soc = "SM8850"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Xiaomi 17 (p11u). SoC values dual-verified (pandora live + pudding vendor DTB); board values from p11u-family dtbo. Pending: userdata GPT, RAM size, PON APID."
+
+[[area]]
+id = "configuration"
+status = "planned"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", ".gitmodules", ".github/**", ".gitignore"]
+inputs = ["Identify the configuration hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for configuration."]
+procedure = ["Follow the configuration stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: SoC feed sm8850 drafted (UniXNU-sm8850-common local). Board config written from p11u dtbo + pandora cross-checks.", "bootimg header v4 confirmed (TWRP BoardConfig BOARD_BOOT_HEADER_VERSION=4, pagesize 4096, boot partition 0x6000000)."]
+completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
+limits = ["feeds.toml commit is REQUIRED_SOC_COMMIT until the sm8850 repo is published.", "userdata first/last_lba are zeros pending live GPT export."]
+next_action = ["Publish UniXNU-sm8850-common and pin its commit; read-only GPT export from live device."]
+evidence = []
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = []
+paths = ["proprietary-files.txt", "scripts/extract-files.py", "scripts/gen-touch-firmware.py"]
+inputs = ["Identify the firmware and boot hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for firmware and boot."]
+procedure = ["Follow the firmware and boot stage in the porting guide and record the actual commands."]
+findings = ["Collect the first firmware and boot observation, its cause when established, and the resulting implementation decision."]
+completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required firmware and boot inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = []
+paths = ["package/CpuFreq*", "scripts/*armcpu*"]
+inputs = ["Identify the cpu and interrupts hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for cpu and interrupts."]
+procedure = ["Follow the cpu and interrupts stage in the porting guide and record the actual commands."]
+findings = ["Collect the first cpu and interrupts observation, its cause when established, and the resulting implementation decision."]
+completion = ["Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required cpu and interrupts inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["dts/**", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scripts/*memory*"]
+inputs = ["Identify the memory and dma hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for memory and dma."]
+procedure = ["Follow the memory and dma stage in the porting guide and record the actual commands."]
+findings = ["Collect the first memory and dma observation, its cause when established, and the resulting implementation decision."]
+completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required memory and dma inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "storage"
+status = "planned"
+components = ["VerifiedRoot"]
+paths = ["drivers/ShengUfs", "scripts/*ufs*", "scripts/*storage*", "scripts/*userdata*", "scripts/*root*"]
+inputs = ["Identify the storage and root hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for storage and root."]
+procedure = ["Follow the storage and root stage in the porting guide and record the actual commands."]
+findings = ["Collect the first storage and root observation, its cause when established, and the resulting implementation decision."]
+completion = ["Host: register, clock, link and SMMU facts match the board inventory.", "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.", "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required storage and root inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = ["GopFramebuffer"]
+paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
+inputs = ["Identify the display hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for display."]
+procedure = ["Follow the display stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: p11u-family dtbo primary panel = 'xiaomi p11u 42 0d 0a cmd mode dsc dsi panel' (NT37801 DDIC + CSOT AMOLED, LTPS): active area 1200x2608 (0x4b0 x 0xa30), 4 DSI lanes, DSC v1.2 (600x16 slices, 2/pkt, 8bpp), 60/90/120Hz timings.", "Panel GPIOs: reset 98, ESD IRQ 97, nt336-ason08 212, ason18 214. Backlight: bl_ctrl_dcs, bl-inverted-dbv, min 5 / max 0x3fff.", "splash/cont_splash_region 0xfc800000/0x2b00000 - three-way agreement (p11u dtbo fragment@179, pandora live, infiniti Display_Reserved).", "GOP handoff path chosen (GopFramebuffer); MDSS top-level registers must never be touched (unclocked reads reset the chip)."]
+completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required display inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
+inputs = ["Identify the input hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for input."]
+procedure = ["Follow the input stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: vol+ = TLMM GPIO 101 (pudding DTB pinctrl key-vol-up-default-state + p11u dtbo gpio_keys vol_up, dual-confirmed). TLMM real base 0x0f100000 (vendor DT 0x0f000000 is wrong; wrong read = bus hang + reset).", "Touch primary (p11u dtbo fragment@46): FocalTech focaltech_ts@0 on QUP4 SE0 SPI @0x1a80000, irq GPIO 158, reset GPIO 66, max 1200x2608, RX18xTX39, 15MHz SPI, trusted-touch vm_mode.", "TWRP tree shows Synaptics S3910P + Novatek NT38773 alternates (production multi-sourcing). FocalTech first, Synaptics fallback.", "power/vol- on PMK8850 PON SPMI (pandora APID 465 assumed; pudding APID not in available DTBO - live verify needed)."]
+completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required input inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = ["Identify the gpu hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for gpu."]
+procedure = ["Follow the gpu stage in the porting guide and record the actual commands."]
+findings = ["2026-10-26: pudding DTB confirms Adreno840v2 (gpu-model 'Adreno840v2', chipid 0x44050a01, qcom,ubwc-mode 6, compatible qcom,adreno-gpu-gen8-2-1), reg set kgsl_3d0 0x3d00000/0x40000 + rscc 0x3d50000 + cx_dbgc 0x3d61000 + cx_misc 0x3d9e000, IRQ SPI 300 + cx_host SPI 80.", "GMU gen8 @0x3d37000/0x68000 + ao_blk 0x3d40000, hfi SPI 304 / gmu SPI 305, hub OPP 150-400MHz; gpu_microcode(zap) region 0x9959a000/0x2000.", "GPU SMMU 0x3da0000 (qsmmu-v500/adreno-smmu, stream 5 for GMU)."]
+completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required gpu inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/Ath12kWifi", "package/*Wifi*", "package/MhiBoot*", "scripts/*wifi*", "scripts/*mhi*"]
+inputs = ["Identify the network hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for network."]
+procedure = ["Follow the network stage in the porting guide and record the actual commands."]
+findings = ["Collect the first network observation, its cause when established, and the resulting implementation decision."]
+completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required network inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Adsp*", "package/*Audio*", "package/*Gpr*", "package/QcomGlink*", "package/QcomMdt*", "package/QcomSmem*", "package/QcomSmp2p*", "scripts/*adsp*", "scripts/*audio*", "scripts/*gpr*"]
+inputs = ["Identify the audio hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for audio."]
+procedure = ["Follow the audio stage in the porting guide and record the actual commands."]
+findings = ["Collect the first audio observation, its cause when established, and the resulting implementation decision."]
+completion = ["Each declared route carries the selected audio format through playback or capture and handles start/stop correctly."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required audio inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = ["AppleKeyStoreState"]
+paths = ["package/*Battery*", "package/*Battmgr*", "package/*Power*", "package/*PlatformPower*", "package/QcomQmp*", "package/QcomRpmh*", "package/QcomScm.h", "scripts/*power*", "scripts/*battery*", "scripts/*pmgr*"]
+inputs = ["Identify the power hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for power."]
+procedure = ["Follow the power stage in the porting guide and record the actual commands."]
+findings = ["Collect the first power observation, its cause when established, and the resulting implementation decision."]
+completion = ["Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required power inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["scripts/*payload*", "scripts/*image*", "scripts/*flash*", "patches/**", "package/Kit.toml"]
+inputs = ["Identify the image assembly hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for image assembly."]
+procedure = ["Follow the image assembly stage in the porting guide and record the actual commands."]
+findings = ["Collect the first image assembly observation, its cause when established, and the resulting implementation decision."]
+completion = ["Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required image assembly inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/prepare-*", "scripts/data/**", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**", "unixnu.lock"]
+inputs = ["Identify the diagnostics hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for diagnostics."]
+procedure = ["Follow the diagnostics stage in the porting guide and record the actual commands."]
+findings = ["Collect the first diagnostics observation, its cause when established, and the resulting implementation decision."]
+completion = ["Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required diagnostics inputs before implementation."]
+evidence = []
