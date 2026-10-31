@@ -50,6 +50,7 @@ scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu options
 
 Any other `unixnu` option (`--uefi`, `--kernelcache`, `--dtb`, `--out`, `-j`) is passed on.
 Local inputs that are not in a repository come from `unixnu.local.toml`.
+The platform seed (`--unique-chip-id HEX` or `UNIXNU_UNIQUE_CHIP_ID`) and the firmware checkout (`--uefi DIR` or `UNIXNU_UEFI`) are not stored in any repository; the firmware step passes `UNIXNU_UEFI` to the board's preflight scripts.
 
 ## board.toml keys
 
@@ -70,6 +71,7 @@ remove = [ ... ]
 | `[package] unixnu` | Path of the UniXNU checkout, relative to the device repository |
 | `[package.defconfig]` | Defconfig for each OS profile; `release` uses it |
 | `[package] boot_partition_bytes` | Optional. `verify` refuses a larger `boot.img` |
+| `[bootimg] dtb` | Device tree of the boot image, relative to the build tree. A firmware preflight script builds it |
 | `[os_overrides."<profile>"]` | Tables merged over the board for that profile only |
 | `remove` in an override | Dotted keys the board sets for other profiles and this one does not |
 
