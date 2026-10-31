@@ -297,7 +297,10 @@ def cmd_release(ctx):
     args.steps = list(STEPS)
     cmd_build(ctx)
     log('step pack')
-    args.fd = args.dtb = args.ramdisk = args.output = None
+    args.fd = args.ramdisk = args.output = None
+    # The boot image's device tree is built by a firmware preflight script; [bootimg] dtb names it relative to the build tree.
+    dtb = ctx.board.get('bootimg', {}).get('dtb')
+    args.dtb = str(ctx.tree / dtb) if dtb else None
     cmd_bootimg(ctx)
     log('step verify')
     files = pipeline.outputs(ctx)
