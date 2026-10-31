@@ -2,6 +2,25 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-11-01: SETTINGS > PRIVACY & SECURITY > LOCATION SERVICES ROW IS BACK (user: "it show up all good")** -
+  CommCenter is in launchd's job list again. Boot `shim/out/umi-nofp-sample.img` (unchanged).
+  - Phone file changed (user OK'd): `/System/Library/xpc/launchd.plist` + job
+    `/System/Library/LaunchDaemons/com.apple.CommCenter-noncellular.plist` (532 jobs), made with
+    `tools/patch-launchd-plist.py IN OUT --add KEY=JOB.plist` (new option; the job plist is still on the phone's root,
+    no IPSW download needed). Previous file on the phone as `launchd.plist.sweet-nofp` (`.sweet-orig` = the pre-fairplayd
+    one, untouched); copies in `~/ios-umi-backup/root-edits-2026-10-31/` (not in git). Written with rm + put, read back
+    identical.
+  - Why noncellular: both CommCenter jobs have Label com.apple.CommCenter; the cellular one has
+    `_LimitLoadToDeviceTree baseband`, the noncellular one `_LimitLoadFromDeviceTree baseband`. umi's ADT has no
+    `baseband` node (only /product baseband-chipset), so only the noncellular job applies. (Image v13 had removed both.)
+  - Result: CommCenter starts early (before runningboardd), Settings opens Privacy & Security without a hang and shows
+    the Location Services row (`getSubscriptionInfoWithError:` now answers without an error, so
+    `refreshLocationServicesAvailable` defaults to true). SpringBoard unaffected.
+  - **CommCenter crash-loops but still answers** (KeepAlive relaunches it; 9 crashes in the first minutes, 10 execs):
+    sig 6 = uncaught C++ exception (std::terminate <- _dispatch_client_callout) and sig 11 =
+    `ApplePDPHelperInterface::callStructMethod` locking a never-set-up mutex (USB-C power-delivery helper, far 0,
+    from CommCenter main+0xa2e9e8). Harmless for the Settings row; cost is CPU + ReportCrash. Not investigated:
+    what the exception is (`sweetiolog=CommCenter` would show it) and whether Setup would now finish instead of hanging.
 - **🎉 2026-10-31: LOCATION SERVICES WORK (user: Weather shows the city for My Location)** - no kernel change, no
   FairPlay work: fairplayd.H2 is simply not in launchd's job list any more. Boot `shim/out/umi-nofp-sample.img` =
   0213c's kernel and line (without `sweetmgreset=1`) + `sweetsample=locationd,wifid`; the plain 0213c image works the
