@@ -49,6 +49,19 @@ def load(ctx, allow_fetch=False):
     result = {}
     for path in ctx.profile_files:
         result = merge(result, load_toml(path))
+    # board.toml [os_overrides."<profile>"] holds the board values that differ for one OS profile (kernel archives, kernel
+    # arguments); the table of the selected profile is merged over the board, the others are dropped.
+    overrides = result.pop('os_overrides', {})
+    chosen = deepcopy(overrides.get(os_name, {}))
+    removed = chosen.pop('remove', [])
+    result = merge(result, chosen)
+    for dotted in removed:   # keys the board sets for other profiles and this one does not have
+        *parents, leaf = dotted.split('.')
+        node = result
+        for key in parents:
+            node = node.get(key, {})
+        node.pop(leaf, None)
+    result.setdefault('board', {})['os_profile'] = os_name
     return result
 
 

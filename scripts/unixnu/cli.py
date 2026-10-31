@@ -5,7 +5,7 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, profiles, tree, userdata
+from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, tree, userdata
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
@@ -72,6 +72,9 @@ def parser():
     status = sub.add_parser('status', parents=[c], help='show the device, configuration and where each module comes from')
     status.add_argument('--json', action='store_true', help='print resolved configuration as JSON without fetching sources')
     sub.add_parser('clean', parents=[c], help='remove the build output of the device (keeps fetched sources)')
+    k = sub.add_parser('release', parents=[c], help='dependencies, patches, build steps and boot image of the device in one run, with a manifest')
+    k.add_argument('--no-deps', action='store_true', help='skip fetching sources and the IPSW members')
+    k.add_argument('--check', action='store_true', help='fetch, resolve and list the patch series, then stop before any build step')
     return top
 
 
@@ -264,6 +267,45 @@ def cmd_status(ctx):
         print(f'\nnot reproducible: {len(unpinned)} local source(s) are not pinned by unixnu.lock')
 
 
+def cmd_release(ctx):
+    """deps, patches, build, pack, verify: the fixed steps of the device packaging script (docs/porting/packaging.md)."""
+    ctx.refuse_example()
+    args = ctx.args
+    log('step deps')
+    if args.no_deps:
+        log('deps skipped (--no-deps)')
+    else:
+        args.names, args.update = [], False
+        cmd_fetch(ctx)
+        if ctx.board.get('ipsw', {}).get('url') or getattr(args, 'ipsw', None):
+            args.action, args.components = 'fetch', []
+            cmd_ipsw(ctx)
+    log('step preflight')
+    args.name = ctx.config_name
+    cmd_defconfig(ctx)
+    modules = feeds.resolve(ctx)
+    if ctx.soc:
+        modules[('soc', ctx.soc.name)] = ctx.soc
+    log('step patches')
+    order = patches.plan(ctx, modules) if ctx.schema_version == 2 else []
+    for number, path in enumerate(order, 1):
+        log(f'patch {number:02} {path}')
+    if args.check:
+        log(f'check done: {len(order)} patches, configuration {ctx.config_name}, OS {ctx.work.parent.name}')
+        return
+    log('step build')
+    args.steps = list(STEPS)
+    cmd_build(ctx)
+    log('step pack')
+    args.fd = args.dtb = args.ramdisk = args.output = None
+    cmd_bootimg(ctx)
+    log('step verify')
+    files = pipeline.outputs(ctx)
+    manifest = pipeline.write_manifest(ctx, modules, order, files)
+    pipeline.verify(ctx, files, manifest)
+    log(f'manifest {manifest}')
+
+
 def cmd_clean(ctx):
     for name in ('tree', 'logs', 'kernel', 'package', 'boot', 'edk2-conf'):
         shutil.rmtree(ctx.work / name, ignore_errors=True)
@@ -285,7 +327,7 @@ def main(argv=None):
     try:
         ctx = Context(args)
         {'defconfig': cmd_defconfig, 'fetch': cmd_fetch, 'tree': lambda c: prepare(c), 'build': cmd_build,
-         'bootimg': cmd_bootimg, 'ipsw': cmd_ipsw, 'status': cmd_status, 'clean': cmd_clean}[args.command](ctx)
+         'bootimg': cmd_bootimg, 'ipsw': cmd_ipsw, 'status': cmd_status, 'clean': cmd_clean, 'release': cmd_release}[args.command](ctx)
     except Error as error:
         sys.exit(f'unixnu: {error}')
     except KeyboardInterrupt:

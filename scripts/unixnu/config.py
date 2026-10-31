@@ -136,7 +136,7 @@ class Context:
         self.board = self.raw_board
         if self.schema_version == 2:
             from . import profiles
-            self.board = profiles.load(self, allow_fetch=args.command in ('fetch', 'tree', 'build', 'defconfig'))
+            self.board = profiles.load(self, allow_fetch=args.command in ('fetch', 'tree', 'build', 'defconfig', 'release'))
         self.name = self.board.get('board', {}).get('name')
         if not self.name:
             raise Error('board.toml needs [board] name')
@@ -148,12 +148,19 @@ class Context:
         if self.schema_version == 2:
             configurations = state.get('configurations', {})
             selected = (getattr(args, 'name', None) if args.command == 'defconfig' else None)
-            selected = selected or configurations.get(str(self.device)) or self.board.get('kernel', {}).get('defconfig')
+            from . import profiles
+            os_name = profiles.resolve_os(self, args.os) if getattr(args, 'os', None) else self.board['board']['os_profile']
+            # [package.defconfig] maps an OS profile to its defconfig; the packaging command always uses it, other commands when --os is given.
+            per_os = self.raw_board.get('package', {}).get('defconfig', {}).get(os_name)
+            if per_os and (args.command == 'release' or getattr(args, 'os', None)):
+                selected = selected or per_os
+            else:
+                selected = selected or configurations.get(str(self.device))
+            selected = selected or per_os or self.board.get('kernel', {}).get('defconfig')
             if not selected or Path(selected).name != selected or selected in ('.', '..'):
                 raise Error('schema_version = 2 needs [kernel] defconfig or a selected defconfig')
             self.config_name = selected
-            from . import profiles
-            self.work /= profiles.resolve_os(self, args.os) if getattr(args, 'os', None) else self.board['board']['os_profile']
+            self.work /= os_name
             self.work /= selected.removesuffix('_defconfig')
         self.tree = self.work / 'tree'
         self.logs = self.work / 'logs'
