@@ -11,6 +11,45 @@
 
 STATIC EFI_SERIAL_IO_PROTOCOL  *mSerial;
 
+//
+// Bring-up probe: publish the startup stage as a UEFI variable so the firmware
+// diagnostics can show how far UniXNU got even after the application returns.
+// Removed once the menu is confirmed on hardware.
+//
+STATIC CONST EFI_GUID  gUniXNUStageGuid = {
+  0x5b5c2f01, 0x88a3, 0x4a55, { 0xb6, 0x77, 0x19, 0x2c, 0xd3, 0x41, 0xab, 0x9e }
+};
+
+STATIC
+VOID
+UniXNUProbe (
+  IN UINT32  Stage
+  )
+{
+  gRT->SetVariable (
+         L"UniXNUStage",
+         (EFI_GUID *)&gUniXNUStageGuid,
+         EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS,
+         sizeof (Stage),
+         &Stage
+         );
+}
+
+VOID
+EFIAPI
+UniXNUProbeInfo (
+  IN CONST CHAR8  *Text
+  )
+{
+  gRT->SetVariable (
+         L"UniXNUInfo",
+         (EFI_GUID *)&gUniXNUStageGuid,
+         EFI_VARIABLE_BOOTSERVICE_ACCESS | EFI_VARIABLE_RUNTIME_ACCESS,
+         AsciiStrLen (Text) + 1,
+         (VOID *)Text
+         );
+}
+
 VOID
 UniXNULogInit (
   VOID
@@ -65,6 +104,7 @@ UniXNURun (
   //
   // A boot manager waits for people; the 5 minute BDS watchdog does not.
   //
+  UniXNUProbe (1);
   gBS->SetWatchdogTimer (0, 0, 0, NULL);
   UniXNULogInit ();
   UniXNULog (
@@ -82,7 +122,9 @@ UniXNURun (
     UniXNUConnectAll ();
   }
 
+  UniXNUProbe (2);
   UniXNUConfigLoad (ImageHandle, &Config);
+  UniXNUProbe (3);
   UniXNULog (
     "config: %u entries, %u drivers, %u dt patches, %u acpi tables, %u slices, %u kits loaded, %u skipped",
     (UINT32)Config.EntryCount,
@@ -103,8 +145,10 @@ UniXNURun (
   ZeroMem (&Stats, sizeof (Stats));
   UniXNUInjectDrivers (ImageHandle, &Config, &Stats);
   UniXNUInjectAcpi (&Config, &Stats);
+  UniXNUProbe (4);
 
   UniXNUUiInit (&Config, &Ui);
+  UniXNUProbe (5);
 
   UnicodeSPrint (
     Ui.Info,
@@ -117,8 +161,10 @@ UniXNURun (
     );
 
   Countdown = TRUE;
+  UniXNUProbe (6);
   for ( ; ;) {
     Index  = UniXNUMenuRun (&Ui, &Config, Countdown);
+    UniXNUProbe (7);
     Entry  = &Config.Entries[Index];
     BootCopy = *Entry;
     if (Entry->Confirm != NULL) {
@@ -153,7 +199,9 @@ UniXNURun (
     }
 
     Status = UniXNUBootEntry (ImageHandle, &Config, &BootCopy);
+    UniXNUProbe (8);
     if ((Entry->Type == UniXNUEntryAction) && (Entry->Action == UniXNUActionExit)) {
+      UniXNUProbe (0x99);
       return EFI_SUCCESS;
     }
 
