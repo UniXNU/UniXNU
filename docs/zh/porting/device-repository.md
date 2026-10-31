@@ -73,7 +73,8 @@ python3 scripts/porting-record.py check --device "$DEVICE_DIR"
 `tree/kits/<board.kit>/`。记录检查器输出已检查的结构化区域数量；发布前解决报告的错误。
 
 编译[板级 DTS](/zh/porting/device-tree)，再按[构建指南](/zh/building)生成内核、package、
-固件、payload 和启动镜像。记录每条命令、版本、输出与结果。按[启动验证](/zh/porting/bring-up)
+固件、payload 和启动镜像。设备仓库还带有[设备打包脚本](/zh/porting/packaging)，
+从干净检出、无需修改即可产出同样两项产物。记录每条命令、版本、输出与结果。按[启动验证](/zh/porting/bring-up)
 和[日志抓取](/zh/porting/log-capture)单独记录硬件检查点，并为各区域填写有证据支持的
 [完成等级](/zh/porting/records#completion-levels)。
 

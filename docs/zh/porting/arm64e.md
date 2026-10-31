@@ -3,8 +3,11 @@
 **仅适用于受支持的设备。** 只有满足全部[要求](#requirements)并列入[受支持设备](#supported-devices)的设备才能使用本方法。
 其他设备使用 arm64 配置 `ipados-17.7.11-21H461` 和常规[移植步骤](/zh/porting/steps)。
 
-iPadOS 18 及以后版本只提供 arm64e 用户空间。arm64e 配置以指针认证（PAC）编译 XNU，
-并链接目标 kernelcache 中的原版 arm64e kext。
+iPadOS 18 及以后版本只提供 arm64e 用户空间，因此 arm64 是最后的退路，其终点是 iOS 17 和 iPadOS 18。
+arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache 中的原版 arm64e kext。
+
+新移植应选择满足下列要求的设备。优先使用 iOS 或 iPadOS 27 配置：其驱动、补丁和构建配方
+处于持续维护中，本仓库的每个驱动和优化都同时面向 17 和 27 维护，只靠构建参数选择。
 
 ## 要求 {#requirements}
 
@@ -23,14 +26,16 @@ iPadOS 18 及以后版本只提供 arm64e 用户空间。arm64e 配置以指针�
 
 | 设备 | SoC | OS 配置 | 状态 |
 | --- | --- | --- | --- |
-| sheng | SM8550 | `ipados-26.5.2-23F84` | 开发中 |
+| sheng | SM8550 | `ipados-27.0.1-24A446` | 开发中 |
+| sheng | SM8550 | `ipados-26.5.2-23F84` | 保留为其早期 arm64e 配置 |
 
 ## 配置结构
 
 | 位置 | 内容 |
 | --- | --- |
 | `profiles/arch/arm64e` | arm64e 编译配置、PAC 密钥管理和 XNU 补丁系列 |
-| `profiles/os/ipados-26.5.2-23F84` | XNU `12377.121.6` 与 IPSW 固定版本、预链接根组件和 OS 补丁 |
+| `profiles/os/ipados-27.0.1-24A446` | XNU `12377.121.6` 加 Darwin 26 调用、iPadOS 27.0.1 IPSW 固定版本、预链接根组件和 OS 补丁 |
+| `profiles/os/ipados-26.5.2-23F84` | 先前的 arm64e 配置，同一 XNU 修订与各自的 IPSW 固定版本 |
 
 OS 配置用 `[os] arch = "arm64e"` 选择架构。没有该项的配置使用 `profiles/arch/arm64`。
 两种架构使用相同的组件，arm64e 构建把它们编译为 arm64e。
@@ -56,7 +61,7 @@ SM8550 没有 SME。iPadOS 26.5.2 的 dyld cache 在以 SME 命名的函数中�
 ## 操作步骤
 
 1. 在每个启用的 CPU 上完成[要求](#requirements)中的检查并记录结果。
-2. 在设备配置中设置 `board.os_profile = "ipados-26.5.2-23F84"`。
+2. 在设备配置中设置 `board.os_profile = "ipados-27.0.1-24A446"`，或对单次运行给 `./unixnu` 传 `--os 27`。
 3. 运行 `./unixnu fetch` 和 `./unixnu status --json`，确认 arm64e 配置、XNU 版本和补丁顺序。
 4. 按[构建](/zh/building)依次构建内核、package、固件、payload、userdata 和启动镜像。
 5. 按[启动验证顺序](/zh/porting/bring-up)记录每个检查点。

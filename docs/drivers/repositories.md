@@ -29,6 +29,7 @@ These repositories are maintained in the UniXNU organization.
 | AirNir | [UniXNU/AirNir](https://github.com/UniXNU/AirNir) | Compiler kit | [AirNir](/drivers/air-nir) |
 | AdrenoPM4 | [UniXNU/AdrenoPM4](https://github.com/UniXNU/AdrenoPM4) | GPU command kit | [AdrenoPM4](/drivers/adreno-pm4) |
 | AdrenoFirmware | [UniXNU/AdrenoFirmware](https://github.com/UniXNU/AdrenoFirmware) | GPU firmware kit | [AdrenoFirmware](/drivers/adreno-firmware) |
+| Sm8550Platform | [UniXNU/UniXNU-sm8550-common](https://github.com/UniXNU/UniXNU-sm8550-common) | SM8550 GPU platform kit | [Sm8550Platform](/drivers/sm8550-platform) |
 | DarwinBoot | [UniXNU/DarwinBoot](https://github.com/UniXNU/DarwinBoot) | UEFI loader | [DarwinBoot](/drivers/darwin-boot) |
 | VerifiedRoot | [UniXNU/VerifiedRoot](https://github.com/UniXNU/VerifiedRoot) | Root trust tooling | [VerifiedRoot](/drivers/verified-root) |
 | ShengPreflight | [UniXNU/ShengPreflight](https://github.com/UniXNU/ShengPreflight) | UEFI preflight | [ShengPreflight](/drivers/sheng-preflight) |

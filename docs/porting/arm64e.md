@@ -5,9 +5,16 @@ meets every [requirement](#requirements) and appears in
 [supported devices](#supported-devices). Other devices use the arm64 profile
 `ipados-17.7.11-21H461` and the regular [porting steps](/porting/steps).
 
-iPadOS 18 and later ship arm64e user space only. An arm64e profile builds XNU
-with pointer authentication (PAC) and links the original arm64e kexts of the
-target kernelcache.
+iPadOS 18 and later ship arm64e user space only, so arm64 is the last resort
+whose endpoints are iOS 17 and iPadOS 18. An arm64e profile builds XNU with
+pointer authentication (PAC) and links the original arm64e kexts of the target
+kernelcache.
+
+For a new port, choose a device whose CPUs meet the requirements below. Prefer
+the iOS or iPadOS 27 profile: its drivers, patches and build recipes are the
+ones under active development, and every driver and optimization in this
+repository is maintained against both 17 and 27, selected by build parameter
+alone.
 
 ## Requirements {#requirements}
 
@@ -26,14 +33,16 @@ Record the result of each check in the device `porting.toml`.
 
 | Device | SoC | OS profile | State |
 | --- | --- | --- | --- |
-| sheng | SM8550 | `ipados-26.5.2-23F84` | In development |
+| sheng | SM8550 | `ipados-27.0.1-24A446` | In development |
+| sheng | SM8550 | `ipados-26.5.2-23F84` | Kept as the earlier arm64e profile |
 
 ## Profile layout
 
 | Location | Contents |
 | --- | --- |
 | `profiles/arch/arm64e` | arm64e build configuration, PAC key management and XNU patch series |
-| `profiles/os/ipados-26.5.2-23F84` | XNU `12377.121.6` and IPSW pins, prelink roots and OS patches |
+| `profiles/os/ipados-27.0.1-24A446` | XNU `12377.121.6` with the Darwin 26 calls, iPadOS 27.0.1 IPSW pins, prelink roots and OS patches |
+| `profiles/os/ipados-26.5.2-23F84` | The earlier arm64e profile, same XNU revision and its own IPSW pins |
 
 The OS profile selects its architecture with `[os] arch = "arm64e"`. Profiles
 without the key use `profiles/arch/arm64`. Both architectures use the same
@@ -65,7 +74,8 @@ sysctls and the commpage capability words. SM8550 has no SME. The iPadOS
 ## Procedure
 
 1. Run the [requirement](#requirements) checks on every enabled CPU and record them.
-2. Set `board.os_profile = "ipados-26.5.2-23F84"` in the device configuration.
+2. Set `board.os_profile = "ipados-27.0.1-24A446"` in the device configuration, or pass
+   `--os 27` to `./unixnu` for one run.
 3. Run `./unixnu fetch` and `./unixnu status --json`. Confirm the arm64e profile, XNU revision and patch order.
 4. Build with [Building](/building): kernel, package, firmware, payload, userdata, boot image.
 5. Follow the [bring-up order](/porting/bring-up) and record each checkpoint.

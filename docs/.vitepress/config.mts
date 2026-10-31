@@ -72,6 +72,7 @@ function taskSidebars(prefix: string, zh: boolean) {
     ]),
     group('4. Verify and publish', '4. 验证与发布', [
       item('Build and boot', '构建与启动', 'building'),
+      item('Device packaging script', '设备打包脚本', 'porting/packaging'),
       item('Bring-up sequence', '启动验证顺序', 'porting/bring-up'),
       item('Log capture and boot tests', '日志抓取与启动测试', 'porting/log-capture'),
       item('Porting record', '适配记录', 'porting/records'),
