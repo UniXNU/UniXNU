@@ -2,6 +2,20 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-10-31 0212: THE AMBIENT LIGHT SENSOR READS** (patch `xnu/patches/0212-umi-als-see.patch`, boot
+  `shim/out/umi-0212-see.img` = 0204's line + `sweetslpi=1 sweetslpidelay=150`; sensor files already on the phone).
+  - SEE client in the kernel (QMI 400 at node 9 port 0xc, our QRTR port 0x4000): request 0x20 TLV 0x01 = u16 len +
+    protobuf sns_client_request_msg {suid 1, fixed32 msg_id 2, susp_config 3 {APSS 1, WAKEUP 0}, request 4 {payload 2}};
+    indications 0x21 TLV 0x02 = u16 len + sns_client_event_msg {suid 1, events 2 {fixed32 msg_id 1, fixed64 ts 2,
+    bytes payload 3}}. SUID lookup msg 512 to SUID 0xabab..ab with {data_type "ambient_light", register_updates,
+    default_only}; event 768 {data_type 1, suid 2 {fixed64 low 1, high 2}}; on-change config 514 (no payload); sensor
+    event 1025 {repeated float data 1} (floats decoded without the FPU).
+  - Phone: the first SUID event (5 s after the PD settled) is empty; the next one = 0x3733534354736d61 /
+    0x5f5f5f534c413130 = "amsTCS3701ALS___". Enable answered 0; events: 163.8, 146.6, 132.4, 153.8, 132.8, 153.3 lux
+    (3 floats each, 2nd close to the 1st) while the user covered the sensor and pointed at a lamp. The spread is small:
+    an under-display sensor whose raw value Xiaomi's Android compensates for the screen's own light (guess).
+  - Value in the kernel: `sweet_als_lux` / `sweet_als_time`. Next: an iOS ALS (HID ambient light) service for
+    CoreBrightness, then auto-brightness.
 - **2026-10-31 0211: FASTRPC - THE SLPI'S SENSOR PD INITIALIZES** (patch `xnu/patches/0211-umi-slpi-fastrpc.patch`,
   boot `shim/out/umi-0211-fastrpc.img` = 0204's line + `sweetslpi=1 sweetslpidelay=240`).
   - Files (user OK'd, read-only in TWRP; not in git, `research/sensors-umi/`): vendor (dynamic partition:
