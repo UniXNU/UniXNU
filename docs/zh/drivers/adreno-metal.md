@@ -21,6 +21,7 @@ render server 的沙盒访问不到 cryptex 路径。120 Hz 下空闲桌面每 2
 6 个命令缓冲区，所以只有超过 8 个时预编译才会等待。日志 PR 行显示进度；sheng 上
 162 个库已全部预编译。有列表时 render server 不扫描目录，并且只在显示空闲时读取
 每个库。
+列表、pipeline 包和续编译规则见[预热着色器缓存](/zh/porting/gpu#shader-warmup)。
 
 无法编码的 render pass 仍返回 encoder，并拒绝其命令缓冲区：RenderBox 会缓存
 encoder 的方法，不能接受 nil。每个进程的第一个问题由出错
