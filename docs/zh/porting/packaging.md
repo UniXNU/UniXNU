@@ -1,71 +1,85 @@
 # 设备打包脚本
 
-**每个设备仓库必须遵守。** 设备仓库只带一个打包脚本，从干净检出、不带参数、不需要修改即可产出启动镜像和 payload。
-其他设备仓库照搬本页的结构，只填写配置值，不修改脚本本身。
+**每个设备仓库必须遵守。** 设备仓库带有 `scripts/package.sh`，用一条命令从干净检出产出该设备的启动镜像和 payload。
+所有设备仓库中的脚本文本相同。板级只修改 `board.toml`，不修改脚本。
 
 ## 规则
 
-1. **一条命令，两项产物。** 设备仓库的 `scripts/package.sh` 同时构建两项产物。同一份源码第二次运行产出的字节完全相同。
-2. **配置来自 TOML。** 脚本读取 `board.toml` 及其引用的 `feeds.toml`、配置文件和本地文件。脚本里不出现设备名、路径、尺寸、内核参数或版本的字面值。脚本需要而 TOML 没有的值，先加进 `board.toml`。
-3. **脚本是共享的，不按设备各写一份。** 各设备仓库使用同一份脚本文本，差异只在 TOML 取值。流程改动只改一次，由所有设备仓库采用。
-4. **构建目标是参数。** 单一分支服务所有 OS 配置。`--os` 为本次运行选择 iOS 或 iPadOS 17、26、27。不存在按目标拆分的分支，也不存在为第二个目标另存一份的驱动、补丁或优化。
-5. **每一步都有名字和检查。** 失败的一步以其名称和命令输出终止本次运行；被跳过的一步要说明原因。
+1. **一条命令。** `scripts/package.sh` 按下列固定步骤运行，写出产物和清单。第一个失败的步骤会终止运行并指出步骤名。
+2. **配置来自 TOML。** 脚本和 `unixnu release` 中不出现设备名、路径、尺寸、内核参数或版本。取值读自 `board.toml`（以及它选择的配置文件和 feeds）。缺少的值先加进 `board.toml`。
+3. **脚本是固定的。** UniXNU 仓库的 `templates/package.sh` 是唯一来源，设备仓库原样复制。脚本自己读取的板级值只有 `[package] unixnu`，即 UniXNU 检出的路径。
+4. **构建目标是参数。** 单一分支服务所有 OS 配置。`--os 17|26|27|PROFILE` 为本次运行选择配置。随配置不同的取值写在 `board.toml` 的 `[os_overrides."<profile>"]` 下；不按目标建分支，也不为第二个目标另存驱动、补丁或优化。
+5. **源码已固定。** `deps` 只获取 `feeds.toml`、`.gitmodules` 和 `unixnu.lock` 指定的版本。
 
-## 结构
+## 步骤
 
-脚本按下列顺序执行。每一步是一个同名函数，运行前打印一行标题。
+`unixnu release` 按顺序运行下列步骤，每步之前打印一行 `step <名称>`。
 
 | 步骤 | 作用 | 读取 |
 | --- | --- | --- |
-| `deps` | 克隆或更新 UniXNU、设备仓库、其模块和 UEFI 仓库，并校验每个固定版本 | `feeds.toml`、`.gitmodules`、`unixnu.lock` |
-| `preflight` | 运行板级检查并解析配置 | `board.toml`、`--os` |
-| `patches` | 按应用顺序列出解析后的补丁系列，然后应用 | `patch_series`、各配置的系列 |
-| `build` | 按依赖顺序构建各阶段，遇到第一个失败即停止 | `components`、`kernel`、`firmware` |
-| `pack` | 写出两项产物及其清单 | `bootimg`、`payload` |
-| `verify` | 按清单校验产物并报告尺寸 | 清单 |
+| `deps` | 获取模块子模块和 git 源，写 `unixnu.lock`，解出板级列出的 IPSW 成员 | `feeds.toml`、`.gitmodules`、`[ipsw]` |
+| `preflight` | 选择该 OS 配置的 defconfig 并写出配置 | `[package.defconfig]`、`[kernel]` |
+| `patches` | 解析并按应用顺序列出补丁系列 | `[kernel] patch_series` |
+| `build` | 按依赖顺序构建内核、package、payload 和固件 | `[components]`、`[kernel]`、`[firmware]`、`[payload]` |
+| `pack` | 由固件卷、设备树和 payload 打包启动镜像 | `[bootimg]`、`[device_tree]` |
+| `verify` | 写清单并按清单检查产物 | 产物 |
 
 ## 接口
 
 ```sh
-scripts/package.sh [--os 17|26|27|PROFILE] [--device DIR] [--out DIR] [--jobs N] [--no-deps] [--check]
+scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 ```
 
 | 选项 | 含义 |
 | --- | --- |
-| `--os` | 本次运行的 OS 配置，默认取 `board.os_profile` |
-| `--device` | 设备仓库，默认为脚本所在目录 |
-| `--out` | 输出根目录，默认为 UniXNU 检出中的 `out/` |
-| `--jobs` | 编译阶段的并行任务数 |
-| `--no-deps` | 跳过 `deps`，用于源码已获取并固定版本的本机 |
-| `--check` | 只运行 `deps`、`preflight`、`patches` 和 `verify`，报告将会发生的变化 |
+| `--os` | 本次运行的 OS 配置，默认取 `[board] os_profile` |
+| `--no-deps` | 跳过 `deps`，用于源码已获取并固定的本机 |
+| `--check` | 运行 `deps`、`preflight` 和 `patches`，打印补丁列表后在任何构建之前停止 |
 
-每个选项都对应一个 `unixnu` 参数。`unixnu` 已经完成的步骤，脚本不再添加自己的逻辑。
+其他 `unixnu` 选项（`--uefi`、`--kernelcache`、`--dtb`、`--out`、`-j`）原样传递。不在仓库中的本地输入来自 `unixnu.local.toml`。
 
-## 必需产物
+## board.toml 键
 
-本次运行写出下列文件，清单为每个文件记录尺寸和 SHA-256。
+```toml
+[package]
+unixnu = "../UniXNU"
+
+[package.defconfig]
+"ipados-27.0.1-24A446" = "<device>_ipados27_defconfig"
+
+[os_overrides."ipados-17.7.11-21H461".kernel]
+archives = [ ... ]
+remove = [ ... ]
+```
+
+| 键 | 含义 |
+| --- | --- |
+| `[package] unixnu` | UniXNU 检出相对设备仓库的路径 |
+| `[package.defconfig]` | 各 OS 配置的 defconfig，`release` 使用 |
+| `[package] boot_partition_bytes` | 可选。`verify` 拒绝更大的 `boot.img` |
+| `[os_overrides."<profile>"]` | 仅对该配置合并到板级之上的表 |
+| 覆盖中的 `remove` | 板级为其他配置设置、而本配置没有的点分键 |
+
+## 产物
+
+路径都在 `out/<device>/<os_profile>/<config>/` 下。清单记录每个文件的尺寸和 SHA-256、每个模块解析后的版本、补丁顺序和内核命令行长度。
 
 | 产物 | 内容 |
 | --- | --- |
-| `out/<device>/<os_profile>/<config>/boot.img` | Android 启动镜像：shim、固件卷、设备树、payload ramdisk |
-| `out/<device>/<os_profile>/<config>/payload.img` | 启动镜像携带的 payload 卷 |
-| `out/<device>/<os_profile>/<config>/kernel.macho` | payload 启动的预链接内核 |
-| `out/<device>/<os_profile>/<config>/package.manifest.json` | 构建标识、OS 配置、解析后的版本、补丁系列、产物尺寸与哈希 |
-
-启动镜像必须放得进引导加载程序的分区，内核命令行必须保持在 1000 字节以内。两种情况脚本在写镜像之前就拒绝。
+| `boot/boot.img` | Android 启动镜像：shim、固件卷、设备树、payload ramdisk |
+| `payload/payload.img` | 启动镜像携带的 FAT payload 卷 |
+| `kernel/kernel.macho` | payload 启动的预链接内核 |
+| `package.manifest.json` | 清单 |
 
 ## 验证
 
-一次打包运行以 `verify` 通过为完成：两项产物存在，哈希与清单一致，内核命令行在限制之内，启动镜像不大于它所来自的分区。
-启动该产物是另一步，另行记录。
+产物缺失或与清单不符、内核命令行达到 1000 字节、`boot.img` 超过 `boot_partition_bytes`，`verify` 都会失败。启动这些产物是另一步，另行记录。
 
 ## 采用
 
-给尚无该脚本的设备仓库：
-
-1. 从参考设备仓库复制 `scripts/package.sh`。
-2. 填写 `board.toml`，直到 `--check` 不再报告缺失值。
-3. 把产物记录到设备 `porting.toml` 的 packaging 区域。
-4. 把运行方式加入构建文档。
+1. 把 `templates/package.sh` 复制为设备仓库的 `scripts/package.sh`。
+2. 在 `board.toml` 加 `[package]` 和 `[package.defconfig]`，为其他配置加 `[os_overrides]`。
+3. 对每个配置运行 `scripts/package.sh --check --os <profile>`，修正报告的问题。
+4. 把运行记录到 `porting.toml` 的 `packaging` 区域。
 
 [构建与启动](/zh/building)、[设备仓库](/zh/porting/device-repository)

@@ -19,6 +19,7 @@ UniXNU-<device>/
   configs/<device>_defconfig
   dts/<device>.dts
   patches/xnu/series
+  scripts/package.sh
   proprietary-files.txt
   package/
   local.toml.example

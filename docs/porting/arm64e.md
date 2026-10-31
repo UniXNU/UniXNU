@@ -5,16 +5,19 @@ meets every [requirement](#requirements) and appears in
 [supported devices](#supported-devices). Other devices use the arm64 profile
 `ipados-17.7.11-21H461` and the regular [porting steps](/porting/steps).
 
-iPadOS 18 and later ship arm64e user space only, so arm64 is the last resort
-whose endpoints are iOS 17 and iPadOS 18. An arm64e profile builds XNU with
-pointer authentication (PAC) and links the original arm64e kexts of the target
-kernelcache.
+arm64e needs native PAC hardware: a CPU that implements pointer
+authentication and a hypervisor that leaves it usable, as the
+[requirements](#requirements) check. A device without it stays on arm64, and
+iPadOS 18 is the last version that supports arm64. iPadOS 26 and later are
+arm64e only. An arm64e profile builds XNU with pointer authentication (PAC)
+and links the original arm64e kexts of the target kernelcache.
 
-For a new port, choose a device whose CPUs meet the requirements below. Prefer
-the iOS or iPadOS 27 profile: its drivers, patches and build recipes are the
-ones under active development, and every driver and optimization in this
-repository is maintained against both 17 and 27, selected by build parameter
-alone.
+For a new port, choose a device whose CPUs have PAC and prefer the iOS or
+iPadOS 27 profile. Its drivers, patches and build recipes are the ones under
+active maintenance. Every driver and optimization in this repository must work
+for 17 and 27, arm64 and arm64e, with the build target as the only difference:
+the `--os` parameter of [the packaging script](/porting/packaging). A change that
+works for one target only is not merged.
 
 ## Requirements {#requirements}
 

@@ -3,11 +3,13 @@
 **仅适用于受支持的设备。** 只有满足全部[要求](#requirements)并列入[受支持设备](#supported-devices)的设备才能使用本方法。
 其他设备使用 arm64 配置 `ipados-17.7.11-21H461` 和常规[移植步骤](/zh/porting/steps)。
 
-iPadOS 18 及以后版本只提供 arm64e 用户空间，因此 arm64 是最后的退路，其终点是 iOS 17 和 iPadOS 18。
+arm64e 需要原生 PAC 硬件：CPU 实现指针认证，且虚拟机监控程序不阻止使用，见下面的[要求](#requirements)。
+没有 PAC 的设备继续使用 arm64，iPadOS 18 是最后支持 arm64 的版本；iPadOS 26 及以后只提供 arm64e。
 arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache 中的原版 arm64e kext。
 
-新移植应选择满足下列要求的设备。优先使用 iOS 或 iPadOS 27 配置：其驱动、补丁和构建配方
-处于持续维护中，本仓库的每个驱动和优化都同时面向 17 和 27 维护，只靠构建参数选择。
+新移植应选择 CPU 带 PAC 的设备，并优先使用 iOS 或 iPadOS 27 配置：其驱动、补丁和构建配方处于持续维护中。
+本仓库的每个驱动和优化都必须同时适用于 17 和 27、arm64 和 arm64e，唯一的差别是构建目标，
+即[打包脚本](/zh/porting/packaging)的 `--os` 参数。只对一个目标有效的改动不予合并。
 
 ## 要求 {#requirements}
 

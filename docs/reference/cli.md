@@ -81,6 +81,14 @@ unixnu clean
 
 Removes `tree`, `logs`, `kernel`, `package`, `boot` and `edk2-conf` under the board output. Keeps fetched sources.
 
+### release
+
+```
+unixnu release [--os VERSION] [--no-deps] [--check]
+```
+
+Runs the fixed steps `deps`, `preflight`, `patches`, `build`, `pack` and `verify` for the device, then writes `package.manifest.json`. The device repository's `scripts/package.sh` calls it. See [Device packaging script](/porting/packaging).
+
 ## Options
 
 | Option | Meaning |

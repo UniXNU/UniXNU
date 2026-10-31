@@ -83,6 +83,14 @@ unixnu clean
 
 删除板级输出下的 `tree`、`logs`、`kernel`、`package`、`boot` 和 `edk2-conf`，保留已拉取源码。
 
+### release
+
+```
+unixnu release [--os VERSION] [--no-deps] [--check]
+```
+
+为设备依次运行固定步骤 `deps`、`preflight`、`patches`、`build`、`pack` 和 `verify`，然后写出 `package.manifest.json`。设备仓库的 `scripts/package.sh` 调用它。见[设备打包脚本](/zh/porting/packaging)。
+
 ## 选项
 
 | 选项 | 含义 |
