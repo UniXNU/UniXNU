@@ -23,6 +23,7 @@ cannot reach. The idle desktop submits about 6 command buffers per 250 ms at
 120 Hz, so priming waits only above 8. The PR log row shows its progress; all
 162 libraries are primed on sheng. With the list present the render server does
 not scan directories, and each library is read only while the display is quiet.
+The lists, the pipeline pack and the resume rules are in [Warm the shader caches](/porting/gpu#shader-warmup).
 
 A render pass that cannot be encoded still returns an encoder, and its command
 buffer is refused: RenderBox caches encoder methods and cannot take nil. The first problem of each process is written to the driver's
