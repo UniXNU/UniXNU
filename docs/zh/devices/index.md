@@ -109,7 +109,7 @@
 | [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up \(XTOM0706\)](/zh/devices/mondrian-xtom0706) | SM8475 | 2 | 适配记录 | [XTOM0706/UniXNU-mondrian](https://github.com/XTOM0706/UniXNU-mondrian) |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/zh/devices/munch) | SM8250 | 2 | 记录待补齐 | [WuBarlynn/unixnu-munch](https://github.com/WuBarlynn/unixnu-munch) |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\) \(ErodeNine\)](/zh/devices/munch-erodenine) | SM8250 | 2 | 适配记录 | [ErodeNine/unixnu-munch](https://github.com/ErodeNine/unixnu-munch) |
-| [Xiaomi Pad 7 Pro](/zh/devices/muyu) | SM8635 | 1 | 仓库链接 | [yehua123-oos/UniXNU-muyu](https://github.com/yehua123-oos/UniXNU-muyu) |
+| [小米平板 7 Pro（muyu）](/zh/devices/muyu) | SM8635 | 1 | 设备说明 | [yehua123-oos/UniXNU-muyu](https://github.com/yehua123-oos/UniXNU-muyu) |
 | [Redmi K90 Pro Max / Poco F8 Ultra（myron）](/zh/devices/myron) | SM8850 | 1 | 设备说明 | [zg7681/UniXNU-myron](https://github.com/zg7681/UniXNU-myron) |
 | [Redmi K90 Pro Max \(Typeun\)](/zh/devices/myron-typeun) | SM8850 | 1 | 仓库链接 | [Typeun/myron-device](https://github.com/Typeun/myron-device) |
 | [小米平板 5（nabu）](/zh/devices/nabu) | SM8150 | 1 | 设备说明 | [Lux12138/unixnu-nabu](https://github.com/Lux12138/unixnu-nabu) |

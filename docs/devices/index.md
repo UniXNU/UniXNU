@@ -109,7 +109,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up \(XTOM0706\)](/devices/mondrian-xtom0706) | SM8475 | 2 | Porting record | [XTOM0706/UniXNU-mondrian](https://github.com/XTOM0706/UniXNU-mondrian) |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/devices/munch) | SM8250 | 2 | Record pending | [WuBarlynn/unixnu-munch](https://github.com/WuBarlynn/unixnu-munch) |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\) \(ErodeNine\)](/devices/munch-erodenine) | SM8250 | 2 | Porting record | [ErodeNine/unixnu-munch](https://github.com/ErodeNine/unixnu-munch) |
-| [Xiaomi Pad 7 Pro](/devices/muyu) | SM8635 | 1 | Repository link | [yehua123-oos/UniXNU-muyu](https://github.com/yehua123-oos/UniXNU-muyu) |
+| [Xiaomi Pad 7 Pro \(muyu\)](/devices/muyu) | SM8635 | 1 | Device notes | [yehua123-oos/UniXNU-muyu](https://github.com/yehua123-oos/UniXNU-muyu) |
 | [Redmi K90 Pro Max / Poco F8 Ultra \(myron\)](/devices/myron) | SM8850 | 1 | Device notes | [zg7681/UniXNU-myron](https://github.com/zg7681/UniXNU-myron) |
 | [Redmi K90 Pro Max \(Typeun\)](/devices/myron-typeun) | SM8850 | 1 | Repository link | [Typeun/myron-device](https://github.com/Typeun/myron-device) |
 | [Xiaomi Pad 5 \(nabu\)](/devices/nabu) | SM8150 | 1 | Device notes | [Lux12138/unixnu-nabu](https://github.com/Lux12138/unixnu-nabu) |
