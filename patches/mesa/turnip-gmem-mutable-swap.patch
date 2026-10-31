@@ -284,18 +284,19 @@ index 62d1e43..7d59dc3 100644
  tu_cmd_fill_buffer_addr(VkCommandBuffer commandBuffer,
                          VkDeviceAddress dstAddr,
 diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
-index 33a22aa..1a0fdc8 100644
+index 33a22aa..bf21f25 100644
 --- a/src/freedreno/vulkan/tu_cmd_buffer.cc
 +++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
-@@ -27,6 +27,7 @@
+@@ -27,6 +27,8 @@
  #include "tu_subsampled_image.h"
  #include "tu_tile_config.h"
  #include "tu_tracepoints.h"
 +#include "util/os_time.h"
++#include "util/simple_mtx.h"
  
  enum tu_cmd_buffer_status {
     TU_CMD_BUFFER_STATUS_IDLE = 0,
-@@ -2899,6 +2900,8 @@ tu_emit_input_attachments(struct tu_cmd_buffer *cmd,
+@@ -2899,6 +2901,8 @@ tu_emit_input_attachments(struct tu_cmd_buffer *cmd,
  
        if (!iview->view.is_mutable)
           tu_desc_set_swap<CHIP>(dst, WZYX);
@@ -304,7 +305,7 @@ index 33a22aa..1a0fdc8 100644
  
        /* If FDM offset is used, the last row and column extend beyond the
         * framebuffer but are shifted over when storing. Expand the width and
-@@ -4056,6 +4059,87 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
+@@ -4056,7 +4060,153 @@ tu_cmd_render_sysmem(struct tu_cmd_buffer *cmd,
   */
  static uint64_t tu_render_mode_counts[8];
  
@@ -316,7 +317,9 @@ index 33a22aa..1a0fdc8 100644
 +#endif
 +
 +/* The last 512 render passes (tu_pass_ring_read), for the process's telemetry: when, how it was rendered and what its first colour
-+ * attachment is, so the passes of one frame and the byte order they write can be read back.
++ * attachment is, so the passes of one frame and the byte order they write can be read back. gpu_begin/gpu_end: when the GPU began and
++ * ended the pass's commands (ns of the GPU's always-on counter; 0 until it ran it), from timestamps the pass writes around itself into
++ * a slot of the first device's pass timestamp buffer (u_trace's RB_DONE_TS write, as tu_trace_record_ts emits it).
 + */
 +struct tu_pass_rec {
 +   uint64_t ns;           /* os_time_get_nano() when the pass was recorded */
@@ -329,12 +332,64 @@ index 33a22aa..1a0fdc8 100644
 +   uint16_t draws;
 +   uint16_t format;       /* VkFormat of the first colour attachment */
 +   uint32_t kpx;
++   uint64_t gpu_begin, gpu_end;
 +};
-+static_assert(sizeof(struct tu_pass_rec) == 32, "pass record");
++static_assert(sizeof(struct tu_pass_rec) == 48, "pass record");
 +static struct tu_pass_rec tu_pass_ring[512];
 +static uint32_t tu_pass_seq;
++static struct tu_device *tu_pass_ts_dev;
++static struct tu_bo *tu_pass_ts_bo;
++static simple_mtx_t tu_pass_ts_lock = SIMPLE_MTX_INITIALIZER;
 +
-+static void
++/* The GPU address of the pass timestamp slot of seq (two 64-bit words), its words cleared; 0 when cmd's device has no buffer (only
++ * the first device that records a pass gets one).
++ */
++static uint64_t
++tu_pass_ts_slot(struct tu_cmd_buffer *cmd, uint32_t seq)
++{
++   struct tu_device *dev = cmd->device;
++   if (!p_atomic_read(&tu_pass_ts_bo)) {
++      simple_mtx_lock(&tu_pass_ts_lock);
++      if (!tu_pass_ts_bo && !tu_pass_ts_dev) {
++         tu_pass_ts_dev = dev;
++         struct tu_bo *bo = NULL;
++         if (tu_bo_init_new(dev, NULL, &bo, 512 * 16, TU_BO_ALLOC_INTERNAL_RESOURCE, "pass timestamps") == VK_SUCCESS) {
++            if (tu_bo_map(dev, bo, NULL) == VK_SUCCESS) {
++               memset(bo->map, 0, 512 * 16);
++               p_atomic_set(&tu_pass_ts_bo, bo);
++            } else {
++               tu_bo_finish(dev, bo);
++            }
++         }
++      }
++      simple_mtx_unlock(&tu_pass_ts_lock);
++   }
++   struct tu_bo *bo = p_atomic_read(&tu_pass_ts_bo);
++   if (!bo || tu_pass_ts_dev != dev)
++      return 0;
++   uint64_t *words = (uint64_t *) bo->map + (seq % 512) * 2;
++   words[0] = words[1] = 0;
++   return bo->iova + (seq % 512) * 16;
++}
++
++template <chip CHIP>
+ static void
++tu_pass_stamp(struct tu_cs *cs, uint64_t iova)
++{
++   if (CHIP == A6XX) {
++      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE, 4);
++      tu_cs_emit(cs, CP_EVENT_WRITE_0_EVENT(RB_DONE_TS) | CP_EVENT_WRITE_0_TIMESTAMP);
++      tu_cs_emit_qw(cs, iova);
++      tu_cs_emit(cs, 0x00000000);
++   } else {
++      tu_cs_emit_pkt7(cs, CP_EVENT_WRITE7, 3);
++      tu_cs_emit(cs, CP_EVENT_WRITE7_0(.event = RB_DONE_TS, .write_src = EV_WRITE_ALWAYSON, .write_dst = EV_DST_RAM,
++                                       .write_enabled = true).value);
++      tu_cs_emit_qw(cs, iova);
++   }
++}
++
++static uint32_t
 +tu_note_pass(struct tu_cmd_buffer *cmd, bool sysmem, unsigned slot, uint64_t kpx)
 +{
 +   struct tu_pass_rec rec = {};
@@ -363,6 +418,7 @@ index 33a22aa..1a0fdc8 100644
 +   const uint32_t seq = p_atomic_inc_return(&tu_pass_seq);
 +   rec.seq = seq;
 +   tu_pass_ring[seq % 512] = rec;
++   return seq;
 +}
 +
 +/* Copies up to max records with a sequence number of from or more (oldest first) and returns how many; *newest is the newest
@@ -382,24 +438,64 @@ index 33a22aa..1a0fdc8 100644
 +      first = last - 511;
 +   uint32_t n = 0;
 +   for (uint32_t s = first; s <= last && n < max; s++) {
-+      const struct tu_pass_rec rec = tu_pass_ring[s % 512];
-+      if (rec.seq == s)
-+         out[n++] = rec;
++      struct tu_pass_rec rec = tu_pass_ring[s % 512];
++      if (rec.seq != s)
++         continue;
++      struct tu_bo *bo = p_atomic_read(&tu_pass_ts_bo);
++      if (bo) {
++         const volatile uint64_t *words = (const volatile uint64_t *) bo->map + (s % 512) * 2;
++         const uint64_t begin = words[0], end = words[1];
++         if (begin && end) {
++            rec.gpu_begin = tu_device_ticks_to_ns(tu_pass_ts_dev, begin);
++            rec.gpu_end = tu_device_ticks_to_ns(tu_pass_ts_dev, end);
++         }
++      }
++      out[n++] = rec;
 +   }
 +   return n;
 +}
 +
- static void
++static uint32_t
  tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
  {
-@@ -4066,6 +4150,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+    const VkExtent2D extent = cmd->state.render_areas[0].extent;
+@@ -4066,8 +4216,9 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
        !sysmem ? 0 : reason && !strcmp(reason, "Autotune selected sysmem") ? 2 : 4;
     p_atomic_inc(&tu_render_mode_counts[slot]);
     p_atomic_add(&tu_render_mode_counts[slot + 1], kpx);
-+   tu_note_pass(cmd, sysmem, slot, kpx);
++   const uint32_t seq = tu_note_pass(cmd, sysmem, slot, kpx);
     if (sysmem)
-       return;
+-      return;
++      return seq;
     for (unsigned i = 0; i < cmd->state.pass->attachment_count; i++) {
+       const struct tu_image_view *iview = cmd->state.attachments[i];
+       if (iview && tu_attachment_unpadded(cmd, iview)) {
+@@ -4075,6 +4226,7 @@ tu_note_render_mode(struct tu_cmd_buffer *cmd, bool sysmem)
+          break;
+       }
+    }
++   return seq;
+ }
+ 
+ extern "C" __attribute__((visibility("default"))) void tu_render_mode_stats(uint64_t out[8]);
+@@ -4097,11 +4249,16 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
+ 
+    tu_autotune::rp_ctx_t rp_ctx = NULL;
+    const bool sysmem = use_sysmem_rendering(cmd_buffer, &rp_ctx, rp_key);
+-   tu_note_render_mode(cmd_buffer, sysmem);
++   const uint32_t seq = tu_note_render_mode(cmd_buffer, sysmem);
++   const uint64_t stamps = tu_pass_ts_slot(cmd_buffer, seq);
++   if (stamps)
++      tu_pass_stamp<CHIP>(&cmd_buffer->cs, stamps);
+    if (sysmem)
+       tu_cmd_render_sysmem<CHIP>(cmd_buffer, rp_ctx);
+    else
+       tu_cmd_render_tiles<CHIP>(cmd_buffer, rp_ctx, fdm_offsets);
++   if (stamps)
++      tu_pass_stamp<CHIP>(&cmd_buffer->cs, stamps + 8);
+ }
+ 
+ static void tu_reset_render_pass(struct tu_cmd_buffer *cmd_buffer)
 diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
 index 0209408..67b7e2c 100644
 --- a/src/freedreno/vulkan/tu_knl_darwin.cc
