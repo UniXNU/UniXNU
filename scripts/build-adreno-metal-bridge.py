@@ -56,7 +56,10 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # A dedicated block of images whose image went stays spare for the next one of its pool (Core Animation's memoryless attachments,
     # backed at their first pass, were each a new 40-112 MiB allocation), freed after 10 s, when a block cannot be made, or under memory
     # pressure; room in the pools is kept by a thread of the device's, not in the creation call that asked for it.
-    '0021-spare-image-blocks-and-room-keeper.patch']]
+    '0021-spare-image-blocks-and-room-keeper.patch',
+    # stage_trace.rs: each command buffer's stages from its commit to its completion (commit, lowering, recording, the scheduler's
+    # holds, each submission, the completion waiter) and the scheduler's sleeps and wakes, read by the frontend (nmb_stage_ring_read).
+    '0022-command-buffer-stage-trace.patch']]
 
 
 def git_tree(*steps):
