@@ -76,7 +76,15 @@ def main():
     build_id = os.environ.get('UNIXNU_IPSW_BUILD')
     if not build_id:
         parser.error('UNIXNU_IPSW_BUILD is not set; run through unixnu build kernel')
-    policies = (args.policy_dir or tree / f'build/verified-root-{build_id}').resolve()
+    policies = (args.policy_dir or tree / f'build/verified-root-{build_id}')
+    if not args.policy_dir and not policies.is_dir():
+        # A clean checkout ships the signed headers in the assembled tree (scripts/policies, copied
+        # from the device repository); the full block tables stay a local input of the userdata image.
+        shipped = sorted(tree.glob(f'scripts/policies/*{build_id}'))
+        if len(shipped) != 1:
+            parser.error(f'no policy directory for {build_id}: pass --policy-dir or ship scripts/policies/*{build_id}')
+        policies = shipped[0]
+    policies = policies.resolve()
     # The resolved build tree links the device package as kits/sheng, while an
     # explicit device repository keeps package/ and drivers/ side by side.
     package_dirs = [device / 'package']
