@@ -2,6 +2,18 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-11-01: BOTH CS35L41 AMPS ANSWER FROM iOS** (boot `shim/out/umi-0222-amp.img` = 0215d's line + `sweetadsprpc=0
+  sweetadspafe=0 sweetadspprobe=0 sweetamp=1`; kernel = patch 0222, the probe code is from 0216). Read-only: nothing
+  configured or enabled, no sound.
+  - Steps (1 s apart, all logged): reset gpio 114 cfg 0x1 io 0 (input, pull-down, low = amps in reset); GCC vote
+    0x52008 0x0e3c007f -> 0x0e3c23ff (wrap0 m/s-ahb, core, core2x, s3), branches on, s3 RCG DFS (0x21) level 0 = XO/1;
+    **QUP0 SE3 fw 0x303 (proto 3 = I2C), FIFO interface on (if-disable 0)**, tx 0x20102864 / rx 0x20104800 (32-bit,
+    16-word FIFOs) -> FIFO-mode GENI I2C works, no GPI DMA; pins 119/120 qup3; reset low 3 ms, high 3 ms.
+  - **0x40 speaker and 0x42 earpiece: IRQ1_STATUS4 0x3 (OTP boot done), DEVID 0x35a40, REVID 0xb2** = CS35L41 rev B2, as
+    Linux reports. So the 0216c freeze was the I/O-map panic (fixed in 0217), not the probe.
+  - Next for the amps: their static configuration as the Linux driver does at probe (boost 4000 mA / 1000 nH / 15 uF,
+    ASP format, PCM source ASP) plus the per-stream sequence from the Linux lab trace. They still need SCLK from the
+    AFE port to play, which the ADSP does not give us yet.
 - **2026-11-01 0221: DIAG HANDSHAKE WITH THE ADSP WORKS; AUDIO SERVICES STILL SILENT** (patch
   `xnu/patches/0221-umi-adsp-diag-servers.patch`; boots `shim/out/umi-0221-diag.img`, `umi-0221b-diag-norpc.img`).
   - Linux lab `qrtr-lookup` (`research/audio-umi/twrp/qrtr-lookup-linux.txt`): APPS (node 1) serves DIAG 4097 for every
