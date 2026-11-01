@@ -76,11 +76,13 @@ UniXNURun (
     );
 
   //
-  // Started straight from BDS, storage may not be connected yet.
+  // Storage may not be connected yet, whichever way UniXNU was entered. Started
+  // from BDS it is because nothing has connected the controllers; started as a
+  // DXE driver it is because the ramdisk BlockIo is dispatched before
+  // UniXNURamDiskDxe installs it, so without this the initrd volume never gets a
+  // SimpleFileSystem and payload discovery reports that no payload exists.
   //
-  if (Host == UniXNUHostFirmware) {
-    UniXNUConnectAll ();
-  }
+  UniXNUConnectAll ();
 
   UniXNUConfigLoad (ImageHandle, &Config);
   UniXNULog (
