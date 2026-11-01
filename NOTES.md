@@ -2,6 +2,27 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-11-01 0230: SILEO ON THE HOME SCREEN AND IT OPENS (user: "Opens")** - stage 1 of the Sileo plan, no
+  kernel change (boot `shim/out/umi-0230-sileo-lsreset.img` = the 0227 kernel, 0229b's line without
+  `sweetadspprobe=0 sweetamp* sweetadsptone=1`, + `sweetlsreset=1`; booted twice, since the first boot's reset ran
+  before the app was on the phone).
+  - Survey: no bootstrap at all on the phone (no /var/jb, /etc/apt, /var/lib/dpkg, no shell: /bin = df, ps). What
+    makes third-party code run: the SWEET AMFI policy (0035/0036) makes every signed binary on the root mount a
+    platform binary with its own signature's entitlements, so a jailbreak app's ad-hoc signature is used as is
+    (no re-signing); /Applications bundles are picked up when LaunchServices rebuilds (`sweetlsreset=1`).
+  - Sileo 2.5.1 rootful deb (`org.coolstar.sileo_2.5.1_iphoneos-arm.deb`, GitHub Sileo/Sileo releases, SHA-256
+    85f4d93c...) unpacked on the Mac -> /Applications/Sileo.app (279 files, 7.6 MB, giveMeRoot 4755). Its only
+    non-iOS libraries: `@rpath/libzstd.1.dylib` and `@rpath/liblzma.5.dylib` (rpaths /usr/lib/swift,
+    /opt/procursus/lib, /var/jb/...; liblzma is in the 20H392 shared cache as /usr/lib/liblzma.5.dylib, found
+    through dyld's /usr/lib fallback). Added from Procursus rootful (`dists/iphoneos-arm64/1800`, arch
+    iphoneos-arm; SHA-256 checked against its index): /usr/lib/libzstd.1.5.5.dylib + libzstd.1.dylib link
+    (libzstd1 1.5.5), /usr/lib/libiosexec.1.dylib (libiosexec1 1.3.1, libzstd links it). All new paths, nothing
+    replaced. Pushed with `tools/umi-push-tree.sh` (mkdir / rm + put / link, every file read back and compared).
+  - Result: IconState.plist lists `org.coolstar.SileoStore`; log `exec Sileo`, IOSurfaces, AKS calls, no crash.
+  - **Next stages:** (2) Procursus rootful bootstrap (thousands of files: a bulk TAR verb in the file server or
+    tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
+    `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
+    gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
 - **2026-11-01 0227: test tone through the ADSP, not heard yet; paused** (patch `xnu/patches/0227-umi-adsp-test-tone.patch`,
   boots `shim/out/umi-0229-tone.img`, `umi-0229b-tone1k.img` = 0228b's line with `sweetadspprobe=0 sweetadsptone=1`).
   **The tone is opt-in (`sweetadsptone=1`, default off), as are `sweetamp` / `sweetampplay`: normal boots play nothing.**
