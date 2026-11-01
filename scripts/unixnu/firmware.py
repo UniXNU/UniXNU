@@ -1,5 +1,6 @@
 """Device UEFI firmware: the EDK II build of a Mu-Silicium checkout (uefi-sheng), driven by board.toml [firmware]."""
 import os
+import shlex
 import shutil
 from pathlib import Path
 
@@ -29,8 +30,10 @@ def build(ctx, modules, uefi, edk2, target='DEBUG'):
         # Upstream Mu-Silicium submodules the board needs (Mu_Basecore is provided separately).
         log('firmware: initializing submodules of the Mu-Silicium checkout')
         run(['git', '-C', uefi, 'submodule', 'update', '--init', '--depth', '1', '--', *fw['submodules']])
-    for script in [] if ctx.args.skip_preflight else fw.get('preflight', []):
-        run(['python3', ctx.tree / script], cwd=ctx.tree,
+    for entry in [] if ctx.args.skip_preflight else fw.get('preflight', []):
+        parts = shlex.split(entry)
+        script = Path(parts[0]) if Path(parts[0]).is_absolute() else ctx.tree / parts[0]
+        run(['python3', script, *parts[1:]], cwd=ctx.tree,
             env=dict(os.environ, UNIXNU_UEFI=str(uefi), UNIXNU_DEVICE=str(ctx.device)), log_file=ctx.logs / 'firmware-preflight.log')
     defines = {'FD_BASE': hex(base), 'FD_SIZE': hex(size), 'FD_BLOCKS': str(size // 0x1000)}
     defines.update({key: str(value) for key, value in fw.get('defines', {}).items()})
