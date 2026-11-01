@@ -65,6 +65,14 @@ unixnu bootimg [--fd FILE] [--dtb FILE] [--ramdisk FILE|none] [-o FILE]
 
 Packs the boot image. The firmware volume defaults to the output under `--uefi`. The ramdisk defaults to the payload output when it exists.
 
+### vendor_boot
+
+```
+unixnu vendor_boot --stock FILE [--ramdisk FILE|none] [--ramdisk-addr ADDR] [--verify-against] [-o FILE]
+```
+
+Rewrites the vendor ramdisk of a stock `vendor_boot` v4 image. The device tree, the ramdisk table, the bootconfig and the vbmeta blob are copied verbatim and the AVB footer is retargeted, so only the ramdisk and the sizes that depend on it change. `--ramdisk-addr` relocates the ramdisk when the stock window is too small for the payload. `--verify-against` repacks the stock ramdisk first and refuses a device whose layout does not reproduce its own image byte for byte. The output defaults to `vendor_boot.img` next to `--stock`.
+
 ### status
 
 ```
@@ -122,6 +130,9 @@ Runs the fixed steps `deps`, `preflight`, `patches`, `build`, `pack` and `verify
 | `--dtb FILE` | Compiled device tree for bootimg |
 | `--ramdisk FILE\|none` | Ramdisk for bootimg |
 | `-o FILE`, `--output FILE` | Boot image output |
+| `--stock FILE` | Stock vendor_boot image for vendor_boot |
+| `--ramdisk-addr ADDR` | Ramdisk load address for vendor_boot |
+| `--verify-against` | Repack the stock ramdisk and require a byte-identical result |
 
 ## Environment
 
