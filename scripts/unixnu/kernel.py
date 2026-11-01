@@ -142,7 +142,7 @@ def build_archives(ctx, env):
     """Build ordered component recipes and auxiliary archives from compile records."""
     if not ctx.need_config().get('XNU_BUILD_ARCHIVES'):
         return
-    env = dict(env, PATH=toolchain_path(env.get('PATH')))
+    env = dict(env, PATH=toolchain_path(env.get('PATH')), UNIXNU_DEVICE=str(ctx.device))
     for index, (kind, entry) in enumerate(archive_plan(ctx), 1):
         if kind == 'component':
             spec = entry
