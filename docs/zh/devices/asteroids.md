@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UFS userdata partition, with shared SM7635 support and board-owned storage, GPU, input and power integration. Bring-up runs as numbered staged tests; their results are in docs/asteroids-gpu-gen8.md and docs/asteroids-touch.md of rootstockos/iosonandng.
 
-源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/porting.toml), `541674cc36bca3d8caa91f616cbccebba9f3aba7`.
+源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/porting.toml), `1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c`.
 
 本页按设备记录自动生成。
 
@@ -75,7 +75,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -115,7 +115,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
 
 ## CPU 与中断 {#cpu}
 
@@ -159,7 +159,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/CpuFreqProbe.cpp)
 
 ## 内存与 DMA {#memory}
 
@@ -198,7 +198,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/dts/asteroids.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -240,7 +240,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 显示 {#display}
@@ -305,7 +305,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## 输入 {#input}
@@ -352,7 +352,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -448,6 +448,8 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T78s \(2026-10-31, asteroids-tu-trace=pdbsa, 90 s, no render server crash\): the occlusion T65-samples measured is unchanged on today's stack \(local/triage/occlusion-from-trace.py, the same script\): 2751 large passes with per-draw samples \(46 without\), 18.05 G samples, 70 % from opaque draws; at least 7.87 G \(43.6 %\) were shaded under a later opaque draw covering 95 % or more of the pass \(1290 passes have one; T65-samples 43.8 %\), and about 56.1 % counting partly covering opaque draws as independently placed \(T65 about 56 %\). Opaque draws are nearly all either tiny \(43711 under a tenth of the pass\) or full-screen \(4332 at nine tenths or more\), so the lower bound is the part a whole-draw rule could take: drawing nothing before a later full-screen opaque draw in the same pass.
 - T78s, what the hidden pixels cost \(local/tools/t78/pxcost\_s.py, hidcost\_strict.py\): large system-memory passes that load and store the screen \(LS, 2412\) follow their pixels, time = 342 us + 340 us per million opaque samples + 473 per million blended \(R2 0.90; the s letter's wait after each draw goes into the per-draw term\), opaque pixels about 61 % of their time: 0.34 ns a pixel is about 11.7 GB/s of 4-byte writes, T61's DRAM rate, so in system memory every shaded pixel is a DRAM write. That is why T69's depth prepass lost \(it added a full-screen depth buffer's traffic to every pass\). But what a draw-skipping rule could drop safely is small: of the opaque draws over 95 % of a pass, 1694 cover all of it and 2572 cover 97-98 % \(the rest of the screen still shows earlier draws\), and before a cover of the whole pass with all four channels written there are 2.62 G opaque samples in LS passes \(30 % of theirs, about 0.9 s at that rate\) and almost none in SC passes. On T78q's bursts that is about 1.1 of 18.5 s of GPU work, near 5 %, and the translator cannot know a draw covers the pass when it records it \(its positions come from the vertex shader\). The 43.6 % share counted the 97-98 % covers as hiding everything before them; hidden pixels are not a large lever by any rule known to be safe.
 - T79 \(2026-10-31, add-on 27, UniXNU 03a1d0c, AdrenoMetal 4ea92e4\): the shadows' cause, not their cost. metal2vulkan answers Metal's 16 bytes for a linear texture's offset and rows in a buffer \(deviceLinearTextureAlignmentBytes, minimumLinearTextureAlignmentForPixelFormat:\), while Turnip's linear images on the A810 start and step their rows at 64; QuartzCore lays out its textures over buffers by the device's answer, so the runtime bound none in place and shadowed each, copying every byte in before every use \(every shadow in T76-T78 was for pitch or placement\). The bridge now answers 64 for those queries and the linear private counts \(NativeMetalObjects.rs LINEAR\_IN\_PLACE\); the runtime still takes 16, so a texture placed by the old rule is shadowed as before; the IOSurface answers stay 16 \(no IOSurface texture was shadowed\) and the frontend's iosurfaceReadOnlyTextureAlignmentBytes asks for that answer instead of the linear one. Whether QuartzCore asks the device for each of these textures is what the boot shows: the SR row's pitch and placement counts and the trace's copy time against T78q. The same add-on carries the dirty-page measurement's fix \(pages read with mach\_vm\_read\_overwrite, DH gone counts the unmapped ones\), frame trace types 6 \(a commit's runtime half on the encoding thread, with the thread's CPU time\) and 7 \(encodeDrain waits\), to split T78q's commit-to-scheduled delay, and drops the colour-cache A/B. Planned boots: pdbaq, then pdbaqh if shadows remain.
+- T79q \(2026-10-31, two boots of pdbaq\): the copies went and the picture broke. Copy time over the run fell from 5839 ms \(T78q, 65 s\) to 136 ms \(115 s\); the L row's textures in place rose from 220 to 415, of them at Metal's pitch 31 to 18; shadows for pitch fell from 236 to 3, for placement stayed \(202 to 281\). The open/close animations felt smooth. But small textures were scrambled in blocks: text \(Settings' title and rows, the App Library's labels, with a garbled copy below\), the Dock's and Settings' icons and the wallpaper's blurred shadow, while full-screen layers, the clock's digits and the App Library's large icons were clean \(photos, no screen capture: the diag frame is the teardown's text\). Every texture over host pages is bound in place unchecked \(HostPageTexturePolicy::InPlaceWrites\), so the scrambled ones are read through a linear image. Turnip steps a linear image's rows at 64 bytes a texel byte \(256 for BGRA8, 64 for R8; fd6\_layout.c\) and takes an explicit layout at 64 bytes; the textures newly in place are mostly at Turnip's own step, so 1- and 2-byte mask textures \(glyphs, blurred shadows\) are the likeliest; the explicit-pitch ones were already in place in T78q without visible damage, which argues against them. Not settled: no log said which formats went in place. requiredLinearTextureBytesPerRowForDescriptor: still padded rows to 16 while the queries answered 64. The first boot also ended backboardd with SIGKILL at about 70 s \(cause not found\); the second had a Photos abort \(MobileSlideShow sig 6\), not looked into.
+- T80 \(2026-11-01, UniXNU f2ce6cc, AdrenoMetal 13b40af\): one add-on, the answer picked by TU\_DW\_TRACE letters: o the runtime's 16 \(T78's layout, to show the build itself is clean\), w 64 texels \(Turnip's own step: 64 bytes a texel byte, 256 where no format is named\), r 16 for 1- and 2-byte texels and 64 for the rest, none 64 \(T79\); requiredLinearTextureBytesPerRowForDescriptor: pads by the same answer. l logs each texture over a buffer \(m2v/gpu/textures-&lt;pid&gt;.txt: format, texel bytes, size, rows, Turnip's own row, the rows' class, in place and at Metal's pitch\). Planned boots: pdbaql, pdbaqwl, pdbaqrl \(pdbaqol if all three scramble\); the clean letter with the copy time nearest T79q's becomes the default.
 
 ### 完成条件
 
@@ -463,7 +465,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -504,7 +506,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## 网络 {#network}
@@ -598,7 +600,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -643,7 +645,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 镜像组装 {#packaging}
@@ -683,7 +685,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -736,6 +738,6 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/541674cc36bca3d8caa91f616cbccebba9f3aba7/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/BootProgress.c)
 
 </div>

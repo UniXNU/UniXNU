@@ -6,7 +6,7 @@
 
 OnePlus 8T \(KB2000\). Firmware, menu and payload volume work, and the kernel walks the whole kernel\_bootstrap\_thread into bsd\_init: IOKit initialisation, startup step 16, the commpage, mac\_policy, vnguard, dtrace, sdt, mbuf\_tag\_init and the rest all pass. What still holds it is the interrupt controller: ArmCpu::mapGic\(\), prepareGic\(\) and enableGic\(\) live in the prelinked AppleARMCPU kext, so a bring-up kernel that skips kext loading and IOKit matching has no interrupts at all - with IRQs masked every allocation that wants to sleep hangs, and with them unmasked the first IRQ stops the boot. The ADT also handed the GIC and timer window offsets that were made absolute by mistake, which double-mapped both; that is fixed.
 
-Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/porting.toml), `8b5295d81c61cef68a5dc521cf08695aa36f5d01`.
+Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/porting.toml), `02c7ba96d48007b68677511982e13accb41b3ec1`.
 
 This page is generated from the device record.
 
@@ -76,8 +76,8 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/board.toml)
-- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/porting.toml)
+- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/board.toml)
+- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/porting.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -128,7 +128,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/darwin-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## CPU and interrupts {#cpu}
@@ -184,9 +184,9 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>flash the reset-probe image and observe the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/scripts/patch-xnu-log-probe.py)
+- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/scripts/patch-xnu-log-probe.py)
 
 ## Memory and DMA {#memory}
 
@@ -233,7 +233,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>flash the entry-probe image and read the DarwinBoot physical base line</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Storage and root {#storage}
@@ -316,7 +316,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>boot the firmware and read the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Input {#input}
@@ -354,7 +354,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>boot the firmware and press volume and power</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## GPU {#gpu}
@@ -553,9 +553,9 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/probe-final-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/scripts/pack-payload-mbr.py)
+- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/scripts/pack-payload-mbr.py)
 
 ## Diagnostics {#diagnostics}
 
@@ -634,7 +634,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/8b5295d81c61cef68a5dc521cf08695aa36f5d01/docs/bring-up.md)
+- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/02c7ba96d48007b68677511982e13accb41b3ec1/docs/bring-up.md)
   Command: <code>flash each bisect image and photograph the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 </div>
