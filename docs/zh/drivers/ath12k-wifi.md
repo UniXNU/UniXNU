@@ -26,6 +26,20 @@ Ath12kWifi 在自己的兼容层（`shim/`）上编译 Linux 的 ath12k、MHI �
 | `sheng-wifi=5` | 启动 Wi-Fi。没有它模块不会运行。 |
 | `sheng-wifi-aj=0` | 启动时不加入网络，由设置加入。 |
 
+### iPadOS 27 服务启动
+
+sheng 的板级 DTS 通过 `unixnu,adt-name = "wlan"` 将 WCN7850 导出为
+`/arm-io/wlan`。24A446 原生 `com.apple.wifid` 任务带有
+`_LimitLoadToDeviceTree` 条件，launchd 加载前会检查。缺少匹配节点时，
+内核的 `join.txt` 路径仍能连接并收发数据，但设置中的 Wi-Fi 页面为空，
+开关无法打开。`/chosen/mac-address-wifi0` 和 IOService 网络对象不能满足
+这个设备树条件。
+
+27 的默认 payload 参数包含 `sheng-wifi=5`。修改 DTS 后需要重新生成
+payload 和 boot 镜像，并检查镜像内的 ADT。主机检查确认节点满足启动条件；
+wifid 启动、设置开关和扫描功能仍需上机验证。手动测试镜像的启动参数应移除
+`sheng-autoreset`。
+
 ### 事实
 
 - 六条 PMU 电源轨各需要 RPMh 的模式、电压和使能请求。缺少模式请求时有两条保持关闭，链路无法训练。

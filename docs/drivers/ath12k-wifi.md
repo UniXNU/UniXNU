@@ -28,6 +28,22 @@ Status: joins WPA2-Personal, gets DHCP, Safari loads pages. Throughput is low.
 | `sheng-wifi=5` | Start Wi-Fi. Without it the module never runs. |
 | `sheng-wifi-aj=0` | No join at boot; Settings joins. |
 
+### iPadOS 27 service startup
+
+The sheng board DTS exports WCN7850 as `/arm-io/wlan` using
+`unixnu,adt-name = "wlan"`. The stock 24A446 `com.apple.wifid` job checks
+`_LimitLoadToDeviceTree` before launchd loads it. Without a matching node,
+the kernel's `join.txt` path can still connect and exchange packets while
+Settings shows an empty Wi-Fi page and cannot enable the switch.
+`/chosen/mac-address-wifi0` and the IOService network objects do not satisfy
+this device-tree condition.
+
+The 27 payload defaults include `sheng-wifi=5`. After changing the DTS,
+rebuild the payload and boot image, then inspect the ADT inside the image.
+Host checks confirm the node satisfies the startup condition; starting
+wifid, enabling the Settings switch and scanning still require a device
+test. Remove `sheng-autoreset` from a manual test image's boot arguments.
+
 ### Facts
 
 - Each of the six PMU rails needs RPMh mode, voltage and enable requests. Without the mode request two rails stay off and the link never trains.

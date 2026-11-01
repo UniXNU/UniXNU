@@ -124,3 +124,43 @@ Booting the artifacts is a separate step with its own record.
 4. Record the run in the `packaging` area of `porting.toml`.
 
 [Build and boot](/building), [Device repository](/porting/device-repository)
+
+## Runtime inputs for sheng iPadOS 27
+
+The payload's `runtime` table enables preparation before kernel compilation.
+Apple static/System/App trust modules come from the selected IPSW unchanged. Turnip,
+AdrenoMetal and the board audio HAL are built from source; their CDHashes are
+appended as a separate owner trust module. Wallpaper overlays come from the
+read-only OS image. The official Xiaomi fastboot archive still supplies the
+firmware inputs through the board preflight scripts.
+
+An existing installation must reuse its original `data.dbr` with
+`--data-ramdisk FILE`. GPU and audio updates travel in the addon and do not edit
+that seed. The runtime step checks its APFS volume UUID against the generated
+kernel configuration and records the input SHA-256 values in the package manifest.
+A payload-only build refuses a different Data UUID and asks for a kernel rebuild.
+
+For a **first installation**, `scripts/package.sh --os 27 --init-data` creates an
+APFS seed from the IPSW's initial `private/var`, uses the board's `data_gib` and
+Setup preferences, and binds the new UUID into the kernel configuration. This
+writes host build files only; it does not erase or flash a device. Keep the seed
+at `out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr` for every later
+build of that installation. Its content identity, not just its UUID, identifies
+the persistent Data store. Regenerating it cannot preserve an older installation.
+
+The package workflow restores this seed from an installation cache, or accepts
+an original seed URL with a required SHA-256. A missing cache stops the build
+unless `init_data` is explicitly selected. The workflow uploads a separate seed
+backup with one-day retention. Download and retain it: Actions caches are not a
+permanent backup. The current device's seed is not supplied by either firmware
+archive. Automatic runtime generation currently targets the iPadOS 27 profile.
+
+`--gpu-addon FILE` and its matching `--owner-trust-cache FILE` remain available
+for reproducing an existing image. Omit both to compile the addon and generate
+its trust bundle. These generated binaries and installation seeds are not Git
+inputs.
+
+For the 24A446 fileset, `regression_policy` bounds the unresolved references by
+original kernel address and importing component. New gaps fail packaging even
+with `--allow-missing`; this check does not qualify the remaining experimental
+paths or replace a device boot test.
