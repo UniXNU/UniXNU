@@ -6,7 +6,7 @@
 
 Redmi K80: owner-confirmed desktop/basic touch, eight-core checks, retained8GiB Data and dim64. CPU1 narrow root publication has bounded controls; intermittent GUI stalls and long-term stability remain unresolved. Format2 host migration is separate from historical device qualification.
 
-Source record: [porting.toml](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/porting.toml), `e5b5706023dbec02c20d7ec41df0e39e0e235636`.
+Source record: [porting.toml](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/porting.toml), `ef13dcc71b9ca97bde15381d51fe74aeff81f854`.
 
 This page is generated from the device record.
 
@@ -45,6 +45,7 @@ This page is generated from the device record.
 ### Development findings
 
 - README was not the catalog ingestion source: the scanner selects format2 from root board.toml, then validates porting.toml. The old root was format1 even though the record checker passed.
+- Root userdata capacity now describes dedicated64GiB unixnu; the immutable historical compatibility board stays SHA d65567ec. Publication checks validate format2/iOS17 resolution and complete path ownership.
 
 ### Completion criteria
 
@@ -60,8 +61,8 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Root board now uses schema2 with four profiles,9 components and explicit157-patch order. The retained diagnostic board is SHA-pinned; host migration checks do not qualify a new native kernel or device run.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/repository-format.md)
-- `source`: [Format2 four-layer/9-component/157-patch resolution, DTS/ADT/tree, official catalog metadata simulation and fixed legacy-selection host checks passed. Source/record files remain uncommitted; this is not a new native kernel or phone result.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/format2-documentation-sync-2026-10-30.json)
+- `source`: [Root board now uses schema2 with four profiles,9 components and explicit157-patch order. The retained diagnostic board is SHA-pinned; host migration checks do not qualify a new native kernel or device run.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/repository-format.md)
+- `source`: [Format2 four-layer/9-component/157-patch resolution, DTS/ADT/tree, official catalog metadata simulation and fixed legacy-selection host checks passed. Source/record files remain uncommitted; this is not a new native kernel or phone result.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/format2-documentation-sync-2026-10-30.json)
 
 ## Firmware and boot {#firmware}
 
@@ -99,7 +100,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Archived UEFI touch power/clock handoff supports the FT3683 kernel communication path; this update reused the recorded FD and made no firmware build.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/touch-power-handoff-result.json)
+- `source`: [Archived UEFI touch power/clock handoff supports the FT3683 kernel communication path; this update reused the recorded FD and made no firmware build.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/touch-power-handoff-result.json)
 
 ## CPU and interrupts {#cpu}
 
@@ -124,6 +125,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 - Identical75b9ca39 kernel:0-fail/1-pass/0-fail/1-pass. With0 the late MRS TTBR1 was0; with1 it equaled CPU0 pre-start/final root and all8 cores/9 mapping rounds passed. The change cleans the single cache line containing cpu\_ttep,8bytes, without writing root/page tables.
 - Two uninstrumented layouts16KiB apart passed preflight; e700 had2 lock-screen runs and936 had1. Early source-slot word4 was0 even on success and is not the actual MMU-off load value. The old5b uninstrumented claim was withdrawn because start.o was stale.
 - c50 final capture had status0 on all8 cores in both epochs and USER/SYSTEM cumulative accounting increased on every core.
+- The CPU-owned memory caller exports the original full preflight gate without reading accounting handles. Native-device path resolution follows the existing native symlink; no new CPU\_ON, mapping round or CPU/GUI trial is introduced by publication.
 
 ### Completion criteria
 
@@ -139,11 +141,11 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Archived identical75b9ca39-kernel controls:0-fail/1-pass/0-fail/1-pass, with late TTBR1=0 versus the CPU0 root; original gates unchanged.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu1-root-publication-controlled-2026-10-30.json)
-- `source`: [Archived normal GUI observations:2 e700 runs and1 alternate936 layout, with all8 core gates, retained Data, dim64, fresh logs and camera lock-screen frames.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu1-root-publication-gui-2026-10-30.json)
-- `source`: [Archived a889900-second failure: CPU/Data/dim64 passed, but120/720-second camera frames remained on the Apple logo. GUI qualification failed and is preserved.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu1-root-publication-stability-2026-10-30.json)
-- `source`: [Archived25a same-full-kernel900-second lock-screen observation passed; this excludes the budget as a sufficient cause, not metadata/Data/timing causation.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/gui-budget-same-kernel-2026-10-30.json)
-- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu-active-trial-2026-10-30.json)
+- `source`: [Archived identical75b9ca39-kernel controls:0-fail/1-pass/0-fail/1-pass, with late TTBR1=0 versus the CPU0 root; original gates unchanged.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu1-root-publication-controlled-2026-10-30.json)
+- `source`: [Archived normal GUI observations:2 e700 runs and1 alternate936 layout, with all8 core gates, retained Data, dim64, fresh logs and camera lock-screen frames.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu1-root-publication-gui-2026-10-30.json)
+- `source`: [Archived a889900-second failure: CPU/Data/dim64 passed, but120/720-second camera frames remained on the Apple logo. GUI qualification failed and is preserved.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu1-root-publication-stability-2026-10-30.json)
+- `source`: [Archived25a same-full-kernel900-second lock-screen observation passed; this excludes the budget as a sufficient cause, not metadata/Data/timing causation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gui-budget-same-kernel-2026-10-30.json)
+- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu-active-trial-2026-10-30.json)
 
 ## Memory and DMA {#memory}
 
@@ -179,7 +181,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Board memory/VM-map investigation and compatibility limits are retained; the8GiB desktop result does not qualify the full nominal12GiB map.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/review-2026-10-28-official-houji.md)
+- `source`: [Board memory/VM-map investigation and compatibility limits are retained; the8GiB desktop result does not qualify the full nominal12GiB map.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/review-2026-10-28-official-houji.md)
 
 ## Storage and root {#storage}
 
@@ -193,7 +195,7 @@ Components: `VerifiedRoot`, `RamBlock`, `AppleKeyStoreState`, `SoftwareAES`.
 
 ### Configuration
 
-- OS/SystemOS read-only. Existing Data window:userdata-relative192GiB,2097217 blocks of4096B; original UUID C7D77FF3-6437-4C4A-8E05-E8E239AC1641/cookie2dde8229.
+- OS/SystemOS read-only. After owner stock reflash:slotA/OrangeFox, dedicated64GiB unixnu, exact GUID b279731f-ccad-4ef5-a8b7-e7440cd08de3 andLBA47271680..64048895. New8GiB Data window:unixnu-relative16GiB/2097217 blocks; same seedUUID C7D77FF3-6437-4C4A-8E05-E8E239AC1641, fresh metadata cookie1535636492. Old192GiB/cookie2dde8229 evidence is historical.
 
 ### Procedure
 
@@ -201,7 +203,7 @@ Components: `VerifiedRoot`, `RamBlock`, `AppleKeyStoreState`, `SoftwareAES`.
 
 ### Development findings
 
-- The8GiB UFS-backed Data volume persisted across the recorded desktop and later lock-screen boots; it does not require8GiB of dense RAM. c50 retained the same UUID/cookie with zero RAM/Data errors.
+- Historical8GiB Data/c50 results remain archived. The new unixnu64 installation completed its first initialization and retained-touch boot: identical new file-marker cookie2d931234, Data errors0, owner-confirmed unlock/taps and396.65s automatic Recovery. Android system/slotA preserved; Android boot itself was not tested.
 
 ### Completion criteria
 
@@ -209,16 +211,17 @@ Components: `VerifiedRoot`, `RamBlock`, `AppleKeyStoreState`, `SoftwareAES`.
 
 ### Current limits
 
-- No Android dual boot, automatic reset or window enlargement. Power-loss integrity, endurance and sustained storage stress are not qualified. board.toml userdata coordinates describe capacity-relative legacy input, not absolute GPT LBAs.
+- Dedicated dual-system storage is installed; full Android boot, cross-system switching, power-loss integrity, endurance and sustained storage stress are not qualified.64GiB partition currently uses an8GiB logical Data backend; never boot an old userdata-targeted image. board.toml userdata coordinates describe capacity-relative legacy input, not absolute GPT LBAs.
 
 ### Next action
 
-- Preserve the existing window and seed; require separate evidence for long-term consistency rather than reinitializing Data.
+- Keep Android/slotA and the dedicated unixnu64 profile. Root synchronization is limited to partition/Data/packer/log metadata per latest owner instruction; preserve the original compatibility board, baseline images and all historical proofs.
 
 ### Evidence
 
-- `source`: [Archived8GiB UFS-backed Data mount/retention preserved the original UUID/cookie without RAM/Data errors. The older unresponsive touch result is retained.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/data8-retained-touch-result.json)
-- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu-active-trial-2026-10-30.json)
+- `source`: [Archived8GiB UFS-backed Data mount/retention preserved the original UUID/cookie without RAM/Data errors. The older unresponsive touch result is retained.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/data8-retained-touch-result.json)
+- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu-active-trial-2026-10-30.json)
+- `source`: [Owner-authorized new64GiB unixnu:online F2FS shrink/GPTpair/Recoverygeometry, fullOS SHA and65-block metadata verified. New e328kernel/fresh5c622 image/11884inputs and retained e2b49 image/11896inputs; actual retained marker2d931234/Data errors0/owner unlock+tap confirmation/396.65s Recovery. Root storage-only synchronization adds matching descriptors/packer proof checks; no Android boot claim.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/dual-system-reinstall-2026-11-01.json)
 
 ## Display {#display}
 
@@ -257,9 +260,9 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Archived DCS307-to64 transition and fresh64 readback; this is a register value rather than calibrated luminance or a system brightness-slider implementation.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/brightness-dim-result.json)
-- `source`: [Archived second6aea bounded run recovered with a camera lock screen and v19 accepted/transfer/retired8/8/8; first run9/9/9 remains separate.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/display-progress-repeat-2026-10-30.json)
-- `source`: [Source/final-link audit found matching type5 queue offset5592;60Hz property counters do not prove client registration, receipt or GUI-stall causation.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/display-notification-contract-2026-10-30.json)
+- `source`: [Archived DCS307-to64 transition and fresh64 readback; this is a register value rather than calibrated luminance or a system brightness-slider implementation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/brightness-dim-result.json)
+- `source`: [Archived second6aea bounded run recovered with a camera lock screen and v19 accepted/transfer/retired8/8/8; first run9/9/9 remains separate.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/display-progress-repeat-2026-10-30.json)
+- `source`: [Source/final-link audit found matching type5 queue offset5592;60Hz property counters do not prove client registration, receipt or GUI-stall causation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/display-notification-contract-2026-10-30.json)
 
 ## Input {#input}
 
@@ -295,8 +298,8 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Archived42f3 desktop/unlock/icon-tap owner confirmation is bound to boot/kernel/fresh log and124 inputs; no new device test is asserted here.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/touch-desktop-fast-qualified.json)
-- `source`: [Archived second3a desktop run recorded2219 good frames,55 HID submissions without errors, and independent IDs0/1 for5188ms with release; system multi-touch remains unqualified.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/qualified-source-repeat-two-contacts.json)
+- `source`: [Archived42f3 desktop/unlock/icon-tap owner confirmation is bound to boot/kernel/fresh log and124 inputs; no new device test is asserted here.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/touch-desktop-fast-qualified.json)
+- `source`: [Archived second3a desktop run recorded2219 good frames,55 HID submissions without errors, and independent IDs0/1 for5188ms with release; system multi-touch remains unqualified.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/qualified-source-repeat-two-contacts.json)
 
 ## GPU {#gpu}
 
@@ -304,35 +307,53 @@ Components: `GopFramebuffer`.
 
 ### Hardware and dependencies
 
-- Board-specific firmware, memory/security ownership and frontend ABI require separate qualification.
+- Cached K80 Adreno750v2/gen7-9-1 profile, fixed stock AQE/SQE/GMU/ZAP and KGSL hashes; pinned OEM and Xiaomi14/OnePlusAce5 partial references.
 
 ### Configuration
 
-- This publication synchronization excludes GPU development progress and retains CPU presentation.
+- CPU presentation remains selected. A default-off CPU-owned backing preflight is now integrated in main device sources; one canonical compatibility full build and bounded CPU-owned-memory device trial pass. The GPU frontend and hardware activation are not selected.
 
 ### Procedure
 
-- Keep GPU work and its hardware qualification in a separate update.
+- Verify stock provenance and firmware requirements, explicit stopped ownership, Gen7 rings and per-command startup semantics before platform power/security/memory integration.
 
 ### Development findings
 
-- A CPU-rendered desktop does not establish hardware graphics acceleration.
+- Published CPU-owned memory preparation allocates8 backings/565248B; the historical0fe device run verified CPU allocation/mapping/zeroing, not GPU DMA, execution or rendering.
+- The opt-in D/v21 capture preserves the existing text/footer/trace through a bounded codec; default-off stubs and strict builder/payload guards remain. Host tests use explicit IOKit doubles, not hardware ownership.
+- Archived Gen7/HFI, platform-provider and compiler investigations are source summaries. Most isolated implementation capsules and large logs remain external local archives, not selected production components.
+- The57c2ed36 media qualification attempt was refused before boot/BCB/native I/O; its claim is consumed. The later owner stock reflash and unixnu64 reinstall invalidate its userdata/slotB runtime coordinates.
 
 ### Completion criteria
 
-- Firmware, isolated mappings, submission, fences, recovery and actual rendering have matching device evidence.
+- Firmware authentication, owned mappings, power/clock transitions, command submission, fences, recovery and actual rendering require matching K80 device evidence and native Darwin23 ABI/link audits.
 
 ### Current limits
 
-- No hardware graphics or Metal qualification is claimed by this non-GPU update. Existing GPU investigation files remain preserved separately.
+- Complete GPU power/security/stop, QSMMUv500 context/routing ownership, IOVA/DMA, authenticated firmware execution, command submission/fences and Metal rendering are unqualified.
+- Host peers, compiler objects, staged SDK links, DT resources and callback success are not live ownership or a boot lease. Original stock signatures/UUIDs and unknown native status are preserved.
+- Full native/format2 clean-bootstrap reproducibility and recovery-readable GPU query failures remain unqualified. Historical local artifact paths are provenance locators; no published host/device verification level is inferred from them.
 
 ### Next action
 
-- Update this area only in a separately scoped GPU synchronization; autonomous work remains paused.
+- Keep native GPU invocation disabled. Before a future explicitly authorized GPU trial, bind the current unixnu64 storage identity, readable failure protection, actual native kernel/FD/ADT/FAT/currentstart/immutable inputs and original independent watchdog/fresh BCB.
+- Do not repeat consumed57/c50/0fe trials or expand query/HFI carriers. Publication review updates source and documentation only; GPU adaptation requires its separate current plan.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `source`: [Isolated append-only Gen7 transport and unchanged legacy regression pass software-peer and ARM64 C/C++ relocatable linking; raw errors/ownership retained. No GPU MMIO, firmware execution, new kernel or phone operation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-hfi-transport-2026-10-30.json)
+- `source`: [Pure startup templates, exact generic/v5/START ACK assessment and raw MEM\_ALLOC requirement planning pass isolated source-oracle host and ARM64 interface checks. Board tables/platform ownership remain unavailable, runtime\_complete0; no new kernel or phone operation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-startup-contract-2026-10-30.json)
+- `source`: [Actual shared reg parser and generic memory getters integrated in an isolated K80 adapter, host IOKit-double controls and frozen native C++ recipe pass; original GPU source unchanged, no runtime resource ownership or hardware start claimed.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-native-platform-2026-10-30.json)
+- `source`: [Fixed-SHA8backing CPU-only provider and retained partial failure implemented in isolation; actual native C/C++ recipes and constinit storage pass. No GPU mappings/firmware execution/new kernel or hardware allocation evidence.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-owned-memory-2026-10-30.json)
+- `source`: [Main default-off CPU-only backing preflight, exact successful preflight gate, independent D/v21 wire and decoder passed host controls and actual frozen XNU/IOKit consumer compilation. Final kernel/virtual ABI auditor and first canonical full build are pending; allow\_boot=false, no GPU activation or phone test.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-owned-memory-integration-2026-10-30.json)
+- `source`: [Canonical compatibility full build independently checked13objects/48functions/336calls/81original virtual slots;6actual kernel mutations refused. One397s recovered fresh-log trial matched342inputs/190archives, prepared8CPU-owned backings565248B and preserved8core/Data/dim64/lockscreen. No GPU activation/rendering or repeat trial; source worktree is uncommitted.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-owned-memory-trial-2026-10-30.json)
+- `source`: [Isolated CPU-window owner uses real IOKit types and unchanged fixed K80 role parser.1023subsets/256overlap refusals/150native failures/73gate failures/3mutations pass;3native objects independently match SHA,98original Apple slots and11actual virtual calls checked. No active integration, new kernel, MMIO or phone operation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-native-window-owner-2026-10-30.json)
+- `source`: [Isolated real-EFI typed resolver passes36raw-status/12gate/23ABI-scope controls,128private contexts and3source mutations. Actual firmware LTO compile independently matches SHA; only usedClock1/10 andBootServices0x140 ABI bound. No live query, newFD/kernel, power/clock change or phone operation; EBS owner and exact archivedFD modules remain unqualified.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-power-resolver-2026-10-30.json)
+- `source`: [Real EBS event owner passes34native failure/partial controls,21exit injections/3mutations;2firmware LTO objects independently match SHA, callback/slot ABI and no-entry link annotation pass. Bounded originalFD extraction confirms3exact modules includingClock53c18. No actual firmware execution, newFD/kernel or phone operation.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-boot-lifecycle-2026-10-30.json)
+- `source`: [Default-off real staged firmware C caller/C++ABI links with4independently matching objects and realAutoGen/libraries; oldmodule excluded.23source-prefix host cases/4CLI refusals and critical finalPE call/callback/BSS/3module mutations pass. RAM-only272B capture, no finalFD/kernel, livequery or phone operation; sourceworktree uncommitted.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-real-caller-2026-10-30.json)
+- `source`: [Default-off staged firmwareproducer/realDarwinBoot ADTconsumer preserve272B scalar capture;14publication cases/35consumer refusals each,7actualsource pipeline scenarios,12independent nativeobjects/112inputs and5actualPE corruption refusals pass. Isolated preGenFw pair only; no nativeproperty consumer/recoveredfailuretransport or fullFD/phone/GPUactivation. Worktree source remains uncommitted.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-ram-handoff-2026-10-30.json)
+- `source`: [RealDarwin23 SecureDT/nativeconsumer and stagedBSD link with4independent objects/711native inputs and unchangedactualArmCpu SHA.40ASan/UBSan processes,16rawAPI errors,2source and3object mutants pass. Actual84slotring capacity/retention fails fullcapture preservation; no lossless recovery route claimed, no newFD/kernel/phone or GPUactivation. Worktree uncommitted.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-native-query-consumer-2026-10-31.json)
+- `source`: [Originalsinglelogblock coordinates and3archived storage modules fullSHA bound; pure realtype descriptorselector passes40candidate/12rawstatus controls and2source mutants, independentnative object/45inputs/ABI/noentrySDK closure. No live discovery/GPTCRC/write permission or fullcapture recoveredroute, no newFD/kernel/phone/GPUactivation; worktree uncommitted.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/gpu-early-checkpoint-provider-2026-10-31.json)
 
 ## Network {#network}
 
@@ -440,7 +461,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [Implemented PMGR compatibility covers service publication and original ABI/object lifetime. It does not claim charging, DVFS or sleep/wake support.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/native/pmgr/README.md)
+- `source`: [Implemented PMGR compatibility covers service publication and original ABI/object lifetime. It does not claim charging, DVFS or sleep/wake support.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/native/pmgr/README.md)
 
 ## Image assembly {#packaging}
 
@@ -464,6 +485,7 @@ Components: `XnuPrelink`.
 
 - 157 patches replayed twice and1011 fresh XNU objects linked;3a entered desktop twice. Controlled tool dates yielded identical full kernels across2 actual incremental links in one prepared workspace.
 - c50 complete kernel5310b1dd and bootc50ca7ea passed independent start.o,7-object correspondence,26 pre-pack functions/14 call edges/46 GOT/4 callbacks; the full preflight publisher was separately audited as a27th function.255 input hashes and77 immutable archive files matched at run completion.
+- The unixnu64 host entry pins its reviewed policy and compiled storage kernel; payload packing checks the matching descriptor/proof. Source relocation fixes replace workstation-specific paths; historical input manifests and validation grades remain unchanged.
 
 ### Completion criteria
 
@@ -479,11 +501,11 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Archived2 independent157-patch replays and1011 fresh XNU objects reached prelink/packaging; subsequent device failures are separate evidence.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/clean-source-replay-2026-10-29.json)
-- `source`: [Archived path-normalized source-control image3a reached owner-confirmed desktop/taps with221 inputs and fresh log; no general layout/root-cause claim.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/qualified-source-desktop-3a8ac966.json)
-- `source`: [Archived controlled ar/ld probes and2 actual incremental native links produced identical complete kernel bytes in one prepared workspace; clean-bootstrap/cross-machine claims are excluded.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/tool-date-reproducibility-2026-10-30.json)
-- `source`: [Archived c50 build passed independent start/object/FAT and26 pre-pack functions/14 call edges/46 GOT/4 callbacks; preflight publisher supplement was separately bound as a27th function.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu-active-linked-2026-10-30.json)
-- `source`: [Format2 four-layer/9-component/157-patch resolution, DTS/ADT/tree, official catalog metadata simulation and fixed legacy-selection host checks passed. Source/record files remain uncommitted; this is not a new native kernel or phone result.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/format2-documentation-sync-2026-10-30.json)
+- `source`: [Archived2 independent157-patch replays and1011 fresh XNU objects reached prelink/packaging; subsequent device failures are separate evidence.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/clean-source-replay-2026-10-29.json)
+- `source`: [Archived path-normalized source-control image3a reached owner-confirmed desktop/taps with221 inputs and fresh log; no general layout/root-cause claim.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/qualified-source-desktop-3a8ac966.json)
+- `source`: [Archived controlled ar/ld probes and2 actual incremental native links produced identical complete kernel bytes in one prepared workspace; clean-bootstrap/cross-machine claims are excluded.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/tool-date-reproducibility-2026-10-30.json)
+- `source`: [Archived c50 build passed independent start/object/FAT and26 pre-pack functions/14 call edges/46 GOT/4 callbacks; preflight publisher supplement was separately bound as a27th function.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu-active-linked-2026-10-30.json)
+- `source`: [Format2 four-layer/9-component/157-patch resolution, DTS/ADT/tree, official catalog metadata simulation and fixed legacy-selection host checks passed. Source/record files remain uncommitted; this is not a new native kernel or phone result.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/format2-documentation-sync-2026-10-30.json)
 
 ## Diagnostics {#diagnostics}
 
@@ -495,7 +517,7 @@ Components: `XnuPrelink`.
 
 ### Configuration
 
-- Autonomous work is paused by owner. Runtime logs remain hash-bound; v19 and experimental E/20-ZCLA/2 preserve old fields. No cross-core running-thread stack reads.
+- Owner explicitly resumed unattended GPU adaptation after the Git pause. Runtime logs remain hash-bound; original v18/v19/E20/v21 history and touch traces are preserved. No cross-core running-thread stack reads.
 
 ### Procedure
 
@@ -505,6 +527,7 @@ Components: `XnuPrelink`.
 
 - The c50 run17:53:39..18:00:14 recovered in395s;120s frame was lock screen4:02. Two epochs63744/243896ms had error0,maskff/status0 and raw tick192000, converted to10ms.
 - All8 USER/SYSTEM cumulative counters grew;8 accepted/transferred/retired with no rejection. No historical Apple-logo failure was reproduced or explained. The one planned observation is consumed.
+- Published host-only decoders and guarded runners preserve raw statuses and consumed claims. Reused unixnu64 claims are now refused before USB, input/archive closures and watchdog markers are checked before device action, and host test shims are versioned instead of read from a prior out tree.
 
 ### Completion criteria
 
@@ -516,10 +539,12 @@ Components: `XnuPrelink`.
 
 ### Next action
 
-- Keep automation paused until owner direction. Documentation checks must not build/boot or restart the completed diagnostic.
+- Owner-present recovery GPU adaptation resumed; query readback remains unqualified. Preserve diagnostics; no CPU/GUI/memory repeats or livequery. Fixed-target read-only recovery provenance is now recorded; all finalimage/watchdog/readback guards remain required.
 
 ### Evidence
 
-- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/e5b5706023dbec02c20d7ec41df0e39e0e235636/docs/evidence/cpu-active-trial-2026-10-30.json)
+- `source`: [Archived single c50 trial recovered in395s;255 inputs/77 archive files and distinct log matched. Lock screen/all8/Data/dim64 passed and every core had USER/SYSTEM accounting progress; no performance/root-cause qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/cpu-active-trial-2026-10-30.json)
+- `host`: [Publication-source host check:12 refusal controls trap all process/USB calls. The same summary records16 payload profile refusals and CPU-memory/wire host controls. No new native/device/GPU qualification.](https://github.com/kerrinz/UniXNU-zorn/blob/ef13dcc71b9ca97bde15381d51fe74aeff81f854/docs/evidence/publication-review-2026-11-01.json)
+  Command: <code>python3 scripts/check-zorn-unixnu64-admission.py</code>. Revision: `5c42733315d2428e63fe3a1b98cc56fe8d6cfd9c`.
 
 </div>

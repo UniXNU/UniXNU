@@ -32,20 +32,25 @@ findings = [
     "The firmware checkout is Janit8r/uefi-rmx3823, a fork of UniXNU/uefi-sheng on branch sheng. [firmware] now names config, dsc, fd, submodules and the full PACKAGES_PATH; Mu_Basecore is left out because the engine supplies it as {edk2}.",
     "rmx3823Pkg is derived from Platforms/Qualcomm/qrd8550Pkg rather than nuwaPkg or shengPkg: RMX3823 is a non-Xiaomi board on the same Qualcomm boot_images baseline, and no rmx3823 set exists in Device-Binaries or Silicium-ACPI, so Binaries/qrd8550 and the qrd8550 ACPI tables are reused deliberately.",
     "rmx3823Pkg is not buildable with Mu-Silicium's build_uefi.py: it carries UniXNUPkg and DarwinBootPkg in its DSC/FDF the way shengPkg does, and build_uefi.py has no PACKAGES_PATH for them. It must go through ./unixnu build firmware --uefi.",
+    "rmx3823Pkg compiles. uefi-rmx3823 run 41276749199 built it on ubuntu-24.04 with UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi, UniXNULib and DarwinBoot.efi in the volume, and the firmware volume came out at exactly 0x300000 bytes.",
+    "That build needed a fix first: [boot_image] carried only header_version, so build_uefi.py fell back to mkbootimg.py's defaults and produced kernel_addr 0x10008000 with pagesize 2048. SM8550's DDR starts at 0x80000000, so that address is not memory. The engine's own bootimg step uses different defaults (base 0, pagesize 4096), which is why the two paths disagreed silently. All five fields are now explicit.",
+    "The stock uefi.elf is an ELF with a single 3 MiB LOAD segment at 0xA7000000, which is where the vendor firmware volume actually lives; the entry point is 0xA7000000.",
+    "uefi.elf carries its uefiplatLA.cfg as an embedded string blob (the stock UEFI parses that text at boot: PlatConfigFileName = \"uefiplatLA.cfg\"). Extracting it gives the authoritative memory map: Version 3, MaxMemoryRegions 74, 39 regions in use - 25 DDR, 2 IMEM, 12 register windows.",
+    "[uefi_fd] moved from 0xA7100000+0x300000 to 0xA7000000+0x400000, the carveout the vendor cfg reserves as \"UEFI FD\". The stock image is 3 MiB of that 4 MiB window, so this occupies exactly the reserved range and leaves 1 MiB of headroom.",
+    "The ADT generator reads exactly one contiguous device_type = memory range from the hardware DTS and rejects anything else; /chosen/memory-map only ever carries RAMDisk, TrustCache, GpuAddon and RootPolicies. reserved-memory in dts/board.dts therefore does not become an ADT reservation - the handoff range is the only thing that keeps XNU out of firmware memory.",
 ]
 completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
 limits = [
-    "The memory base and size, and the reserved-memory sizes, are provisional.",
-    "Panel and touch are not identified; both need the vendor device tree from the firmware package.",
-    "rmx3823Pkg has not been compiled yet; the first firmware build is unverified.",
-    "The rmx3823Pkg memory map is still the QRD8550 reference layout. Sizes for Display Demura, Display Reserved and TZApps, and the freedom of the Kernel and UEFI FD windows, need the stock uefiplat.cfg or a device dump.",
+    "Installed RAM is still inferred from MemTotal 23645600 kB. The vendor memory map stops at 0x100000000 and does not state the DRAM size.",
+    "Panel and touch are not identified; the stock boot.img is header_version 4, so the base device tree lives in vendor_boot.img, which is not available.",
+    "Nothing has run on hardware. Whether the RMX3823 ABL accepts the boot image is unverified; a rejection shows as the device dropping to fastboot with nothing on screen.",
 ]
-next_action = ["Run ./unixnu build firmware --uefi ../uefi-rmx3823 and reconcile rmx3823Pkg/Library/MemoryMapLib against the stock firmware memory map."]
+next_action = ["Flash the CI boot image and capture the serial log; then widen the handoff range once the booter's carveout exclusions are verified."]
 evidence = [
     { kind = "source", reference = "docs/hardware-survey.md", result = "Device reads: soc_id 519, machine KALAMA, 8 cores (3x A510, 2x A710, 2x A715, 1x X3), page size 4096, 23645600 kB, panel 1240x2772." },
-    { kind = "source", reference = "dts/board.dts", result = "Board tree includes sm8550.dtsi and carries the memory range and the reservations read from the device." },
+    { kind = "source", reference = "dts/board.dts", result = "Board tree includes sm8550.dtsi and carries the handoff range plus the reservations read from the device." },
     { kind = "host", reference = "configs/rmx3823_defconfig", result = "unixnu defconfig resolved the OS profile and wrote a merged .config with the board deltas applied last.", command = "python unixnu defconfig rmx3823_defconfig --device .", revision = "3fda57be4ea8f454369bed38ffedf201723625c4" },
-    { kind = "source", reference = "docs/firmware.md", result = "Records the firmware layout: rmx3823Pkg descends from qrd8550Pkg, reuses Binaries/qrd8550 and the qrd8550 ACPI tables, carries the UniXNU module set, and keeps the QRD8550 memory map with its verification gaps named." },
+    { kind = "source", reference = "docs/firmware.md", result = "Records the firmware layout: rmx3823Pkg descends from qrd8550Pkg, reuses Binaries/qrd8550 and the qrd8550 ACPI tables, carries the UniXNU module set, and takes its memory map from the stock uefiplatLA.cfg." },
     { kind = "source", reference = "board.toml", result = "[firmware] names Platforms/Qualcomm/rmx3823Pkg/rmx3823.dsc, the FV output path, the six Mu-Silicium submodules and the full PACKAGES_PATH including {tree}/package and {tree}/drivers/DarwinBoot." },
 ]
 
@@ -79,17 +84,46 @@ evidence = []
 
 [[area]]
 id = "memory"
-status = "planned"
+status = "implemented"
 components = []
 paths = ["dts/**", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scripts/*memory*"]
-inputs = ["Identify the memory and dma hardware, resources and existing component interfaces for this board."]
-configuration = ["Record the board.toml fields, DTS properties and defconfig values used for memory and dma."]
-procedure = ["Follow the memory and dma stage in the porting guide and record the actual commands."]
-findings = ["Collect the first memory and dma observation, its cause when established, and the resulting implementation decision."]
+inputs = [
+    "The stock firmware set: uefi.elf (the vendor UEFI, 3 MiB at 0xA7000000), tz.mbn, uefi_sec.mbn, boot.img and recovery.img.",
+    "The board's uefiplatLA.cfg, recovered from the string blob inside uefi.elf.",
+    "The 28 reserved-memory regions previously listed from /sys/firmware/devicetree/base/reserved-memory, addresses only.",
+]
+configuration = [
+    "dts/board.dts declares one contiguous handoff range, memory@bab00000, reg = <0 0xbab00000 0 0x0d1c0000>.",
+    "0xBAB00000 + 0x0D1C0000 is the \"DXE Heap\" entry of the vendor memory map and the only region it marks EFI_RESOURCE_SYSTEM_MEMORY with EfiConventionalMemory.",
+    "aop_cmd_db_region@81c60000 keeps 0x20000, which the map supports: \"AOP\" is 0x81C00000 + 0xA0000 and aop_config_merged@81c80000 starts immediately after it.",
+    "smem_region@81d00000 corrected from 0x400000 to 0x200000, the map's \"SMEM\" size. The old value would have covered adsp_mhi@81f00000, which begins where SMEM ends.",
+]
+procedure = [
+    "Parsed the ELF program headers of uefi.elf: one LOAD segment, vaddr 0xA7000000, filesz 0x300000, entry 0xA7000000.",
+    "Located the embedded config text by searching for \"[MemoryMap]\" and dumped it between the [Config] and [ConfigParameters] markers, replacing NULs with newlines.",
+    "Parsed both the cfg and MemoryMapLib.c and compared address, size and name row by row; 39 rows, exact match, no overlaps within any section.",
+    "Cross-checked against tz.mbn's program headers and the dtbo overlay's carveout addresses.",
+]
+findings = [
+    "The vendor memory map has 39 regions: 25 DDR, 2 IMEM and 12 register windows. That is the whole of what UEFI may touch, and it is now what rmx3823Pkg carries.",
+    "tz.mbn's entry point and first LOAD vaddr are 0x14680000, exactly the map's \"IMEM Base\", and its 0xd830a000 segment falls inside \"TZApps Reserved\" 0xD8800000 + 0x07400000. Two independent files agreeing on the same extraction.",
+    "The map stops at 0x100000000 and does not describe installed RAM, so 24 GiB remains an inference from MemTotal. The DDR base 0x80000000 is confirmed by the map's first entry.",
+    "Twelve of the device's 28 reserved regions fall in gaps the vendor map does not describe at all - chipinfo@81cf4000, adsp_mhi@81f00000, global_sync@82600000, tz_stat@82700000, mpss@89800000, mpss_dsm@d4d00000, xbl_sc@d8100000, cpucp_fw@d8140000, qtee@d8300000, oem_vm@f7c00000, oem_vm_swiotlb@f7b00000, trust_ui_vm@f3800000 - so UEFI neither reserves nor maps them.",
+    "The handoff range cannot be the whole 24 GiB: the carveouts are interleaved through the low address space and no single contiguous range avoids them. The vendor's \"Kernel\" window 0xA8000000 + 0x10000000 is specifically wrong, because it is where ABL loads the boot image and this device's boot partition is 192 MiB, matching payload.size_mib.",
+    "reserved-memory in dts/board.dts does not protect anything: the ADT generator only reads the memory node, and /chosen/memory-map carries RAMDisk, TrustCache, GpuAddon and RootPolicies only. The nodes are kept as verified documentation and because ShengGmuCommandDbInputs and the GPU driver name those addresses.",
+]
 completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
-limits = ["Hardware inputs and implementation are pending for this example board."]
-next_action = ["Inventory the required memory and dma inputs before implementation."]
-evidence = []
+limits = [
+    "The handoff range is 210 MiB, enough to bring up but not to run a full system. Widening it needs the booter to exclude the carveouts, which is unverified.",
+    "Individual extents inside \"PIL Reserved\" are still unknown; only the enclosing range 0x8A800000 + 0x18280000 is established.",
+    "mpss@89800000 sits below 0x8A800000 and is not covered by any map entry, so its extent is unknown.",
+    "Installed RAM is unconfirmed; the map does not state it.",
+]
+next_action = ["Verify the handoff range on hardware, then extend it once the booter's carveout exclusions are established."]
+evidence = [
+    { kind = "source", reference = "dts/board.dts", result = "Handoff range 0xBAB00000 + 0x0D1C0000, corrected SMEM size, and the 28 device regions reconciled against the firmware map into covered, collectively-covered and undescribed groups." },
+    { kind = "source", reference = "docs/firmware.md", result = "Records that the firmware memory map is transcribed from the stock uefiplatLA.cfg, how the extraction was checked, and which values remain unverified." },
+]
 
 [[area]]
 id = "storage"
@@ -110,28 +144,48 @@ id = "display"
 status = "planned"
 components = []
 paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
-inputs = ["Identify the display hardware, resources and existing component interfaces for this board."]
+inputs = ["Identify the display hardware, resources and existing component interfaces for this board.", "The DSI controller and PHY nodes in dtbo.img entry 1."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for display."]
-procedure = ["Follow the display stage in the porting guide and record the actual commands."]
-findings = ["Collect the first display observation, its cause when established, and the resulting implementation decision."]
+procedure = ["Follow the display stage in the porting guide and record the actual commands.", "Decompiled the stock dtbo.img; the overlay carries qcom,dsi-ctrl-hw-v2.7, qcom,dsi-phy-v5.2 and qcom,dsi-display, but no panel node."]
+findings = [
+    "The panel itself is still unidentified. The overlay carries the DSI controller (v2.7), PHY (v5.2) and display nodes, but the panel node lives in the base device tree, which is in vendor_boot.img - and boot.img is header_version 4, so it does not carry it either.",
+    "Two facts about the panel are established. Its resolution is 1240x2772, confirmed independently by the touch node's display-coords 0x4D8 x 0xAD4, and the touch node reports panel_type 7.",
+    "Display Reserved is 0xB8000000 + 0x02B00000 and Display Demura is 0xA2A80000 + 0x02B00000 in the vendor memory map, so the framebuffer carveouts are known even though the panel is not.",
+]
 completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
-limits = ["Hardware inputs and implementation are pending for this example board."]
-next_action = ["Inventory the required display inputs before implementation."]
-evidence = []
+limits = [
+    "No panel model, and therefore no initialisation sequence. vendor_boot.img or a device-side /sys/firmware/fdt dump is required.",
+    "The firmware volume runs with RMX3823_VENDOR_HW = 0 and publishes a GOP over the framebuffer ABL already scans out, so this does not block bringing up the menu.",
+]
+next_action = ["Obtain vendor_boot.img or a device FDT dump to identify the panel, then extract its init sequence."]
+evidence = [
+    { kind = "source", reference = "docs/hardware-survey.md", result = "Section 10.3 explains why boot.img cannot carry the base device tree, and section 10.4 records the panel resolution and panel_type recovered from the touch node." },
+]
 
 [[area]]
 id = "input"
 status = "planned"
 components = []
 paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
-inputs = ["Identify the input hardware, resources and existing component interfaces for this board."]
+inputs = ["Identify the input hardware, resources and existing component interfaces for this board.", "The touch fragments in dtbo.img entry 1, machine Kalama MTP,zonda-A/B."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for input."]
-procedure = ["Follow the input stage in the porting guide and record the actual commands."]
-findings = ["Collect the first input observation, its cause when established, and the resulting implementation decision."]
+procedure = ["Follow the input stage in the porting guide and record the actual commands.", "Decompiled the stock dtbo.img and read fragment@66, which carries all three touch candidates."]
+findings = [
+    "The active touch controller is a Synaptics S3910 over SPI, from fragment@66 of the dtbo overlay. synaptics_tcm@0 is the only one of three candidates marked status = ok; goodix-berlin@5d and synaptics_tcm_hbp@0 are both disabled.",
+    "Wiring from that node: SPI CS0 at 15 MHz, IRQ GPIO 25 with interrupts = <25 0x2008> (falling edge, ONESHOT), reset GPIO 24, avdd GPIO 10, TX 17 x RX 38, panel_type 7, firmware AB641.",
+    "drivers/ShengNovatekTouch does not apply to this board; a Synaptics TCM (SPI) implementation is needed instead.",
+    "The same overlay carries a goodix node for a 1080x2400 panel, so the model ships with more than one touch and panel SKU. This unit is the 1240x2772 + S3910 combination.",
+]
 completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
-limits = ["Hardware inputs and implementation are pending for this example board."]
-next_action = ["Inventory the required input inputs before implementation."]
-evidence = []
+limits = [
+    "No Synaptics TCM driver exists in this tree yet.",
+    "The SPI bus instance is not identified: the overlay fragment targets a phandle rather than a named controller, so the bus number and its GPIO controller base still have to be resolved.",
+    "Touch firmware AB641 has not been extracted.",
+]
+next_action = ["Resolve the SPI bus instance and GPIO controller, then write a Synaptics TCM reader against the addresses above."]
+evidence = [
+    { kind = "source", reference = "docs/hardware-survey.md", result = "Section 10.4 records the S3910 node, its status, bus, GPIOs and panel_type, and why the two other candidates are disabled." },
+]
 
 [[area]]
 id = "gpu"

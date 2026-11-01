@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UFS userdata partition, with shared SM7635 support and board-owned storage, GPU, input and power integration. Bring-up runs as numbered staged tests; their results are in docs/asteroids-gpu-gen8.md and docs/asteroids-touch.md of rootstockos/iosonandng.
 
-Source record: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/porting.toml), `1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c`.
+Source record: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/porting.toml), `dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f`.
 
 This page is generated from the device record.
 
@@ -75,7 +75,7 @@ Components: `ArmDTPlatform`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -115,7 +115,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
 
 ## CPU and interrupts {#cpu}
 
@@ -159,7 +159,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/CpuFreqProbe.cpp)
 
 ## Memory and DMA {#memory}
 
@@ -198,7 +198,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/dts/asteroids.dts)
 
 ## Storage and root {#storage}
 
@@ -240,7 +240,7 @@ Components: `ShengUfs`, `RamBlock`, `SoftwareAES`, `VirtioMmioBlock`, `VerifiedR
 
 ### Evidence
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## Display {#display}
@@ -305,7 +305,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## Input {#input}
@@ -352,7 +352,7 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Evidence
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -450,6 +450,18 @@ Components: `Adreno740`, `AdrenoFirmware`, `AdrenoPM4`, `ArmSmmu4K`, `Sm7635Plat
 - T79 \(2026-10-31, add-on 27, UniXNU 03a1d0c, AdrenoMetal 4ea92e4\): the shadows' cause, not their cost. metal2vulkan answers Metal's 16 bytes for a linear texture's offset and rows in a buffer \(deviceLinearTextureAlignmentBytes, minimumLinearTextureAlignmentForPixelFormat:\), while Turnip's linear images on the A810 start and step their rows at 64; QuartzCore lays out its textures over buffers by the device's answer, so the runtime bound none in place and shadowed each, copying every byte in before every use \(every shadow in T76-T78 was for pitch or placement\). The bridge now answers 64 for those queries and the linear private counts \(NativeMetalObjects.rs LINEAR\_IN\_PLACE\); the runtime still takes 16, so a texture placed by the old rule is shadowed as before; the IOSurface answers stay 16 \(no IOSurface texture was shadowed\) and the frontend's iosurfaceReadOnlyTextureAlignmentBytes asks for that answer instead of the linear one. Whether QuartzCore asks the device for each of these textures is what the boot shows: the SR row's pitch and placement counts and the trace's copy time against T78q. The same add-on carries the dirty-page measurement's fix \(pages read with mach\_vm\_read\_overwrite, DH gone counts the unmapped ones\), frame trace types 6 \(a commit's runtime half on the encoding thread, with the thread's CPU time\) and 7 \(encodeDrain waits\), to split T78q's commit-to-scheduled delay, and drops the colour-cache A/B. Planned boots: pdbaq, then pdbaqh if shadows remain.
 - T79q \(2026-10-31, two boots of pdbaq\): the copies went and the picture broke. Copy time over the run fell from 5839 ms \(T78q, 65 s\) to 136 ms \(115 s\); the L row's textures in place rose from 220 to 415, of them at Metal's pitch 31 to 18; shadows for pitch fell from 236 to 3, for placement stayed \(202 to 281\). The open/close animations felt smooth. But small textures were scrambled in blocks: text \(Settings' title and rows, the App Library's labels, with a garbled copy below\), the Dock's and Settings' icons and the wallpaper's blurred shadow, while full-screen layers, the clock's digits and the App Library's large icons were clean \(photos, no screen capture: the diag frame is the teardown's text\). Every texture over host pages is bound in place unchecked \(HostPageTexturePolicy::InPlaceWrites\), so the scrambled ones are read through a linear image. Turnip steps a linear image's rows at 64 bytes a texel byte \(256 for BGRA8, 64 for R8; fd6\_layout.c\) and takes an explicit layout at 64 bytes; the textures newly in place are mostly at Turnip's own step, so 1- and 2-byte mask textures \(glyphs, blurred shadows\) are the likeliest; the explicit-pitch ones were already in place in T78q without visible damage, which argues against them. Not settled: no log said which formats went in place. requiredLinearTextureBytesPerRowForDescriptor: still padded rows to 16 while the queries answered 64. The first boot also ended backboardd with SIGKILL at about 70 s \(cause not found\); the second had a Photos abort \(MobileSlideShow sig 6\), not looked into.
 - T80 \(2026-11-01, UniXNU f2ce6cc, AdrenoMetal 13b40af\): one add-on, the answer picked by TU\_DW\_TRACE letters: o the runtime's 16 \(T78's layout, to show the build itself is clean\), w 64 texels \(Turnip's own step: 64 bytes a texel byte, 256 where no format is named\), r 16 for 1- and 2-byte texels and 64 for the rest, none 64 \(T79\); requiredLinearTextureBytesPerRowForDescriptor: pads by the same answer. l logs each texture over a buffer \(m2v/gpu/textures-&lt;pid&gt;.txt: format, texel bytes, size, rows, Turnip's own row, the rows' class, in place and at Metal's pitch\). Planned boots: pdbaql, pdbaqwl, pdbaqrl \(pdbaqol if all three scramble\); the clean letter with the copy time nearest T79q's becomes the default.
+- T80l \(2026-11-01, pdbaql\): icons still in shuffled blocks; backboardd restarted once and ran at 120 FPS after. The texture log shows backboardd's icons \(RGBA8 58x58 and 128x128 over buffers, rows 256 and 512\) in place over Turnip's own linear image \(driver pitch, not DRM\_FORMAT\_MOD\_LINEAR\); T78 refused that class for pitch and copied it, and its 31 explicit-pitch textures drew clean. Most glyphs \(A8\) lie 64 bytes into their buffer and stay copied \(placement\). L inp 82/5, refused 1 for pitch and 51 for placement.
+- T80r \(2026-11-01, pdbaqrl\): same blocks. The 16-byte answer for 1- and 2-byte texels left Core Animation's rows unchanged \(an A8 43 wide still 64\), so r and w lay icons out as none does; w and o were not booted. L inp 190/13. textures-&lt;pid&gt;.txt persists in the cache across boots: T80r's textures-253.txt is T80l's.
+- T81 \(2026-11-01\): AdrenoMetal bridge patch 0022 adds metal2vulkan boot letters: k takes the DRM\_FORMAT\_MOD\_LINEAR image at Metal's pitch for every texture in place, never the driver's own linear image; n keeps a texture only read a shadow \(its copies are what T79 removed\). Planned boots: pdbaqkl \(clean icons and smooth would make k the default\), then pdbaqnl if k still scrambles.
+- T81k \(2026-11-01, pdbaqkl\): still blocks in icons, text and the live wallpaper's shadow. All 1107 textures in place were the DRM\_FORMAT\_MOD\_LINEAR image \(L inp 1107/1107\), so the image kind is not the cause. Text glyphs are mostly shadows and the wallpaper is another process, so in-place textures over buffers are not the whole story either. The RM row moves with the answer: tile memory rendered 310M pixels in T78q \(16\) and 1127-1227M in T79q, T79q2 and T80r \(64\). textures-&lt;pid&gt;.txt appends across boots when a pid repeats.
+- T81 revert \(2026-11-01, AdrenoMetal a903895, UniXNU a0db373\): the bridge letters o, w, r and metal2vulkan patch 0022 \(k, n\) are gone, as none changed the scrambling; the 64-byte answer, its use in requiredLinearTextureBytesPerRowForDescriptor and the l texture log stay. Next: T82s, add-on 29 with asteroids-tu-debug=sysmem \(every pass in system memory, trace letters pl for the 1000-byte command line\).
+- T82s \(2026-11-01, pl + asteroids-tu-debug=sysmem\): no pass in tile memory \(RM gmem 0, 7701 passes in system memory\) and the same blocks: tile memory is not the cause.
+- T82c \(2026-11-01, pql + sheng-gpu-import-skip=0, imports cleaned around every submission\): worse, with blocks also on elements that were clean, 103 GPU hangs at 99 % busy and a backboardd SIGSEGV, after which the system drew on the CPU. The cleaning itself took 32 ms \(9234 passes, 1631 MiB\), so turning the whole switch back on is no fix and no answer.
+- T83 \(2026-11-01, AdrenoMetal 3814805, UniXNU 7140588\): two letters to split what is left. v sets HostPageTexturePolicy::Shadow, so every texture over host pages is copied in as in T78 while the answers stay 64: blocks with v are in the layout, none are in reading in place. x watches each sampled source over a buffer or surface \(hash at commit and at completion: RC row\) and copies an unchanged one back through the GPU on a queue of its own, comparing it with the CPU's bytes \(RB: checks, equal, different, moved, skipped, differing 64-byte lines and 4 KiB pages of those compared, all-zero; RF: the first four\). Planned boots pdbaqx, then pdbaqv.
+- T83x \(2026-11-01, pdbaqx\): RC watched 247/3 raced 0/0, RB n229 eq229 ne0: every source unchanged during GPU use, and the GPU's copy of each equal to the CPU's bytes. Its readback read client memory Core Animation had unmapped and crashed backboardd \(SIGSEGV\). T83v \(pdbaqv, HostPageTexturePolicy::Shadow\): still blocks, as the user saw before backboardd faulted on a null pointer. So neither reading in place nor any cache \(CPU or GPU\) is the cause: the GPU draws the bytes it is given, copied or not.
+- T85 \(2026-11-01, AdrenoMetal 6e83314, UniXNU 8446ded\): v and the readback are gone; letter y writes the CPU's bytes of the first 48 distinct small sources a frame samples \(then every 25th up to 96\) at their commit to m2v/gpu/dump-&lt;pid&gt;-&lt;n&gt;-f&lt;format&gt;-&lt;w&gt;x&lt;h&gt;-r&lt;rows&gt;-&lt;s\|b&gt;.bin; local/tools/dumps.py turns them into PNGs. Blocks in the dumps put the cause in whatever writes those bytes under the 64-byte answer.
+- T85y \(2026-11-01, pdbaqy\): 106 dumps of the render server's sampled sources \(icons 58x58 and 128x128 RGBA8, A8 text such as the date, RG8 64x64 masks\) are clean in memory. With T83x \(the GPU reads them as written\) the render server's sources are not where the blocks come from. The T79 photos put the blocks in the wallpaper's blurred flower shadows, drawn by the poster in its own process, which the boot letters \(render server only\) never reached. The watch's hashing at completion still read unmapped client memory: backboardd SIGSEGV with x or y on.
+- T86 \(2026-11-01, AdrenoMetal 39bb4ec, UniXNU 405641e\): the bridge answers 64 for linear alignment in backboardd only, the runtime's 16 in every other process. package/AsteroidsMetalPlugin.mm: boot letter z skips shader priming. Every new runtime or Turnip build primes all libraries again \(T81k: 34 of 155, 927 pipelines\) from 90 s after the device opens, during animations; a backboardd restarted after a crash ran at 120 Hz \(user, T80l and T85y\). Planned boots pdbaq \(blocks?\) and pdbaqz \(smooth from the start?\).
 
 ### Completion criteria
 
@@ -465,7 +477,7 @@ Components: `Adreno740`, `AdrenoFirmware`, `AdrenoPM4`, `ArmSmmu4K`, `Sm7635Plat
 
 ### Evidence
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -506,7 +518,7 @@ Components: `QcomPmicRtc`.
 
 ### Evidence
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## Network {#network}
@@ -600,7 +612,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -645,7 +657,7 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## Image assembly {#packaging}
@@ -685,7 +697,7 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/patches/xnu/series)
 
 ## Diagnostics {#diagnostics}
 
@@ -738,6 +750,6 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/1d8c8d50be74ceabb88d7f440b1da8b707e6ae9c/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/BootProgress.c)
 
 </div>

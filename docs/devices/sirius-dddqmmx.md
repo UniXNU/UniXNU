@@ -6,7 +6,7 @@
 
 Xiaomi Mi 8 SE running the UniXNU source kernel through its own U-Boot UEFI: 8 GiB persistent APFS Data container resized in-kernel with zero ENOSPC, launchd early boot, SpringBoard, backboardd and Setup.app running with sustained \~19 fps CPU-copied GOP presentation, AppleKeyStoreState and FTS521/ShengHidInput touch active, and unattended USB FASTBOOT return to ABL verified.
 
-Source record: [porting.toml](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/porting.toml), `94b7f39286aff8de0b84f2243307a7d54a6b6b08`.
+Source record: [porting.toml](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/porting.toml), `b0e8023540f212625bd86a32a8bb512b410b59ed`.
 
 This page is generated from the device record.
 
@@ -86,7 +86,7 @@ Components: `ArmDTPlatform`, `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [Hardware values, the boot chain and the bring-up history of the legacy port, from which this configuration is carried over.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Firmware and boot {#firmware}
 
@@ -133,7 +133,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-chain diagram, the marker-file boot rule and the DarwinBoot GIC pre-configuration rationale.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## CPU and interrupts {#cpu}
 
@@ -178,7 +178,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [Timer INTID measurement, the TOPO checkpoint and the AppleARMCPU panic analysis.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Memory and DMA {#memory}
 
@@ -218,7 +218,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [DRAM split, framebuffer address and the memory-map checkpoint.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Storage and root {#storage}
 
@@ -286,13 +286,13 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `device`: [NativeEmmc starts from bsd\_init, publishes 0x747BFDF blocks of 512 bytes, and IOStorageFamily reads block 0, block 1 and block 2 with 21 sectors \(the 84 GPT entries\) through doAsyncReadWrite; the heartbeat keeps ticking with the transfer count fixed at seven, so the boot ends at the root-device wait. Log in docs/HANDOFF.zh-CN.md.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
   Command: <code>fastboot flash vendor sirius-obs.img; fastboot reboot; capture-usb-console.py --duration 240</code>. Revision: `d867b1d6498dc4d0f4ae4e18060762dcae6c5847`.
-- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `host`: [The kernel links with NativeEmmc in the image \(kernel.macho sha256 372820eb1b2cd9ecee15d769d1296771d0c8141c2681626d54651a62473446b8\); the GitHub macOS runner builds the same archive \(kernel workflow run 40386710258\).](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
   Command: <code>./scripts/xnu-container.sh run bash -lc './unixnu build kernel --skip-setup -D ../sirius'</code>. Revision: `a47f0d6b4615c3cdebf92102400a1bc302eb6d73`.
-- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `device`: [APFS mounts disk0/disk1s1/disk2s1, bsd\_init completes, execve of /sbin/launchd prints activate enter, namei 0, 'exec policy answered 1, skipped by boot arg' and finally 'execve activate 0'; the driver then has no transfer in flight and the read count stops at 0x10D, so the remaining wait is past storage.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
   Command: <code>fastboot flash vendor sirius-if.img; fastboot reboot; capture-usb-console.py --duration 220</code>. Revision: `bb812428dccd1f676455813ad198ed2bee4a8e3e`.
-- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/package/sirius_emmc.c)
+- `source`: [SDCC1 bring-up, the ADMA2 read path and the GPT parse.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/package/sirius_emmc.c)
 
 ## Display {#display}
 
@@ -316,6 +316,8 @@ Components: `GopFramebuffer`.
 
 ### Development findings
 
+- Display copy latency reduced 4x–6x on hardware \(kernel dc3bcc04..., payload aa62b8c3...\): moving flush\_dcache64 out of the per-row scaling loop \(eliminating 2048 per-row dsb sy barriers that broke write-combining\), caching IOSurface IOMemoryMap mappings across frames \(eliminating per-frame 3072-page kernel\_map setup and cross-CPU TLB shootdowns\), and reusing scaled row buffers for duplicate rows reduced frame copy time from 31–38 ms down to 5.77 ms last / 9.65 ms mean.
+- Full-screen iOS SpringBoard Home Screen and Preferences.app verified on hardware \(kernel 3b36199b..., payload ddd8d1fa...\): with the 8 GiB APFS Data volume and 1536x2048 -&gt; 1080x2240 scaling, PosterBoard no longer hits ENOSPC \(0 exits\), so sirius-skip-setup=1 \(writing purplebuddy, springboard, migration and DataMigration plists plus /private/var/containers directories\) boots directly past Setup.app into SpringBoard, launches Spotlight \(205.7 s\), InputUI \(214.6 s\), splashboardd and Preferences.app \(231.4 s\) upon touch interaction, with full 1080x2240 presentation \(sheng-banner=0\) and 211/211 swaps accepted \(0 rejected\).
 - Post-interaction UI freeze root-caused and fixed on hardware \(kernel ff57d694..., payload fad069ea...\): after touch interaction in Setup.app, backboardd switches to the iPad7,1 1536x2048 canvas \(r0 = 0,0,1536,2048 -&gt; r1 = 0,0,1080,2240\), which NativeLegacyDisplay::validateSwap previously rejected with reason=3 \('verify\_swap failed for swap id: ...'\), freezing the display. NativeLegacyDisplay now validates and scales full-frame surfW x surfH -&gt; 1080x2240 BGRA surfaces with a 64-bit unrolled nearest-neighbor blit \(1332/1332 swaps accepted, 0 rejected\), BootWatchdogPolicy always writes SpringBoard's no-watchdog/no-auto-dim/no-idle-sleep preferences, and sirius\_touch flushes same-batch EVT\_ENTER/EVT\_LEAVE transitions so fast taps are not coalesced away.
 - With the 8 GiB persistent Data container and sirius-skip-setup=1 removed \(kernel ad6a9709..., payload afa7def2...\), SpringBoard \(135.2 s\), backboardd \(165.7 s\), iconservicesagent \(171.9 s\) and Setup.app \(294.6 s\) run without storage errors, and GopFramebuffer copies 5514 accepted frames \(0 rejected\) at \~10.3 ms mean \(\~19 fps\) with verified non-black pixel counts \(41011 on the Apple logo, 28199 on Setup\).
 - The local boot registers the GOP display and copies six frames; SpringBoard and backboardd exec events do not establish a visible or usable UI. HuajiFruit logs copied into docs/evidence are reference observations, not results for this unit.
@@ -338,7 +340,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [Boot-progress panel behaviour, the panic snapshot fix and the geometry of the U-Boot framebuffer.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Input {#input}
 
@@ -361,6 +363,7 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Development findings
 
+- Bottom-edge FromEdgeTip \(0x800\) clamping and virtual Home button \(Consumer Menu 0x40\) dispatch verified on hardware \(kernel e7c1f9eb... / 3b36199b..., payload 44f26ef0... / ddd8d1fa...\): contacts starting at y &gt;= 2050 clamp their initial frame Y to 20200 so NativeHidInput::edge::mark sets kIOHIDDigitizerEventFromEdgeTip \(from\_edge = 8 verified in NEMMC touch edge/home\), and SiriusHidProbe dispatches Consumer Menu 0x40 on bottom-edge swipes/taps or initial cover sheets, unlocking the Hello / Lock Screen into the Home Screen and launching Preferences.app on tap.
 - Fast-tap coalescing fixed in package/sirius\_touch.c \(kernel ff57d694..., payload fad069ea...\): when EVT\_ENTER and EVT\_LEAVE for the same touch ID arrive within a single 32-event FIFO poll batch, publish\_contacts\(\) is now flushed with a 10 ms separation before clearing contact\_down so rapid taps are delivered as distinct down/up HID reports.
 - The local boot identifies the FTS521 and publishes IOHIDEventDriver, with TOUCH down/move/up coordinates in the capture. Visible UI response has not been verified on this unit.
 - The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.
@@ -400,6 +403,7 @@ Collect evidence using the next action.
 
 ### Development findings
 
+- Adreno 616 Phase 3 verified on hardware \(kernel dc3bcc04..., payload aa62b8c3..., sirius-gpu=3\): HFI v1 performance table \(msg 4, error=0\), bandwidth table \(msg 3, error=0\) and HFI test \(msg 5, error=0\) all acknowledged by the GMU; GPUCC gx\_gmu branch clock enabled \(cbcr=0x00000001 on\) and OOB\_GPU\_SET acknowledged \(oob\_gpu=1, gx\_gdscr=0xf8222000, sptprac=0x28\); 3D GPU MMIO \(0x05000000\) readable \(rbbm\_status=0x00000001\); GPU SMMUv2 Context Bank 0 programmed for Stream 0 \(3D GPU\) with hardware ATS1PR translation verified at IOVA 0x10000000 \(par=0x40000000a8c25b80 ok\); a630\_sqe.fw \(34188 bytes, sha256 1c21b527...\) loaded and UCHE/GMEM/CP\_SQE\_INSTR\_BASE/CP\_RB\_BASE/CP\_RB\_RPTR\_ADDR registers initialized \(phase=13\). Starting CP\_SQE\_CNTL=1 \(sirius-gpu=4\) requires programming the GPUCC gfx3d\_clk PLL first to avoid AHB CX master timeout.
 - The imported Adreno 616 phase-2 probe logs GMU up and HFI v1 answers on the local unit. This is not a Metal device or a completed graphics driver.
 - The Adreno family components in the catalog target the A740 of SM8550; a different implementation would be needed here.
 
@@ -531,7 +535,7 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [PSCI reset evidence and the reason sleep is disabled.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Image assembly {#packaging}
 
@@ -590,7 +594,7 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
+- `source`: [Build and deploy loop, the CI kernel artifact and the payload layout on the vendor partition.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
 
 ## Diagnostics {#diagnostics}
 
@@ -648,8 +652,8 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/HANDOFF.zh-CN.md)
-- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/docs/evidence/sirius-usb-console-20261026-1605.log)
+- `source`: [Entry probe, panic screen, panel rows and the evidence convention of the port.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/HANDOFF.zh-CN.md)
+- `device`: [3813 bytes of kernel log read from /dev/ttyACM0 over the DWC3 CDC console.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/docs/evidence/sirius-usb-console-20261026-1605.log)
   Command: <code>sudo python3 scripts/capture-usb-console.py --wait 60 --duration 190 --output /tmp/boot.log</code>. Revision: `366abe2948fdb0c1554f7e0b89b731160f4527a4`.
 
 ## boot-chain {#boot-chain}
@@ -702,7 +706,7 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/uboot/README.md)
-- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/dddqmmx/UniXNU-sirius/blob/94b7f39286aff8de0b84f2243307a7d54a6b6b08/efi/README.md)
+- `source`: [The build recipe, the four environment lines that add the UniXNU chain, and the two partition/short-scan traps.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/uboot/README.md)
+- `source`: [Provenance of the vendored EDK II package \(framework commit f85b5a6\) and what the payload takes from it.](https://github.com/dddqmmx/UniXNU-sirius/blob/b0e8023540f212625bd86a32a8bb512b410b59ed/efi/README.md)
 
 </div>
