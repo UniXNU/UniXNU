@@ -1,0 +1,147 @@
+From a135789d4eb72b434d3fa430976bb953fed2cd61 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 18:12:39 +0100
+Subject: [PATCH] umi: ADSP F3 debug log over diag (mask + HDLC decoder), no
+ messages yet
+
+After the diag ID exchange an F3 mask enabling every SSID goes to the
+ADSP, and LPASS:DATA frames are HDLC-decoded and printed (0x79 messages
+with their strings, others as bytes). On the phone the mask is taken but
+no data arrives yet (the ADSP probably also wants the diag mode / DTR
+control messages Linux sends). Boot-arg sweetadspf3=0 skips the mask.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 103 +++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 100 insertions(+), 3 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 1ab45da..cf9f7c9 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -1082,15 +1082,109 @@ diag_announce(uint32_t node)
+ 	printf("SWEET ADSP: diag: announced LPASS:CNTL (4097/64) and LPASS:DATA (4097/66) to node %u\n", node);
+ }
+ 
++/*
++ * The ADSP's own debug log: an F3 mask with every SSID enabled (DIAG_CTRL_MSG_F3_MASK 11, struct
++ * diag_ctrl_msg_mask {cmd, data_len, u8 stream 1, u8 status 2 = ALL_ENABLED, u8 mode 0, u16 ssid_first,
++ * u16 ssid_last, u32 mask_size 1} + one mask word), then its messages on LPASS:DATA, HDLC-framed (0x7e end,
++ * 0x7d escape ^ 0x20, 2-byte CRC). Extended messages (cmd 0x79: u8 cmd, ts_type, num_args, drop, u64 ts, u16 line,
++ * u16 ssid, u32 ss_mask, u32 args[num_args], "format\0file\0") are printed with their strings; anything else
++ * (QShrink hashed messages, logs, events) as command + bytes. Boot-arg sweetadspf3=0: no mask.
++ */
++static void
++diag_f3_enable(uint32_t node, uint32_t port)
++{
++	uint32_t on = 1;
++	PE_parse_boot_argn(SL_ARG "f3", &on, sizeof(on));
++	if (!on) {
++		return;
++	}
++	uint8_t m[8 + 11 + 4];
++	uint32_t h[2] = { 11, 11 + 4 };
++	uint16_t first = 0, last = 0xffff;
++	uint32_t size = 1, mask = 0x1f;         /* LOW MED HIGH ERROR FATAL */
++	memcpy(m, h, 8);
++	m[8] = 1;
++	m[9] = 2;
++	m[10] = 0;
++	memcpy(m + 11, &first, 2);
++	memcpy(m + 13, &last, 2);
++	memcpy(m + 15, &size, 4);
++	memcpy(m + 19, &mask, 4);
++	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, m, sizeof(m));
++	printf("SWEET ADSP: diag -> CNTL F3 mask: every SSID, levels 0x1f\n");
++}
++
++static void
++diag_frame(const uint8_t *f, uint32_t n)
++{
++	static unsigned shown;
++	if (n < 3 || shown >= 400) {
++		return;
++	}
++	n -= 2;                                 /* CRC */
++	shown++;
++	if (f[0] == 0x79 && n >= 20) {
++		uint32_t nargs = f[2], at = 20 + 4 * nargs;
++		uint16_t line, ssid;
++		memcpy(&line, f + 12, 2);
++		memcpy(&ssid, f + 14, 2);
++		if (at < n) {
++			uint32_t a[4] = { 0 };
++			for (uint32_t i = 0; i < nargs && i < 4; i++) {
++				memcpy(&a[i], f + 20 + 4 * i, 4);
++			}
++			const char *fmt = (const char *)f + at;
++			uint32_t fl = 0;
++			while (at + fl < n && fmt[fl]) {
++				fl++;
++			}
++			const char *file = at + fl + 1 < n ? fmt + fl + 1 : "";
++			uint32_t fil = 0;
++			while (at + fl + 1 + fil < n && file[fil]) {
++				fil++;
++			}
++			printf("SWEET ADSP: F3 [%u] %.*s:%u \"%.*s\" %#x %#x %#x %#x\n", ssid, (int)MIN(fil, 40u), file, line,
++			    (int)MIN(fl, 120u), fmt, a[0], a[1], a[2], a[3]);
++			return;
++		}
++	}
++	char hex[3 * 24 + 1];
++	uint32_t k;
++	for (k = 0; k < n && k < 24; k++) {
++		snprintf(hex + 3 * k, 4, "%02x ", f[k]);
++	}
++	hex[3 * k] = 0;
++	printf("SWEET ADSP: diag frame cmd %#x, %u bytes: %s\n", f[0], n, hex);
++}
++
++static void
++diag_data(const uint8_t *p, uint32_t len)
++{
++	static uint8_t frame[2048];
++	static uint32_t fl;
++	static bool esc;
++	for (uint32_t i = 0; i < len; i++) {
++		uint8_t c = p[i];
++		if (c == 0x7e) {
++			diag_frame(frame, fl);
++			fl = 0;
++			esc = false;
++		} else if (c == 0x7d) {
++			esc = true;
++		} else if (fl < sizeof(frame)) {
++			frame[fl++] = esc ? (uint8_t)(c ^ 0x20) : c;
++			esc = false;
++		}
++	}
++}
++
+ static void
+ diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint32_t len)
+ {
+ 	static unsigned logged;
+ 	static uint32_t next_id = 1;
+ 	if (dst_port == DIAG_DATA_PORT) {
+-		if (logged++ < 20) {
+-			printf("SWEET ADSP: diag <- DATA %u bytes from %u:%#x\n", len, node, port);
+-		}
++		diag_data(p, len);
+ 		return;
+ 	}
+ 	for (uint32_t at = 0; at + 8 <= len;) {
+@@ -1132,6 +1226,9 @@ diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint3
+ 			qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, r, 16 + nlen + 1);
+ 			printf("SWEET ADSP: diag -> CNTL diag id %u for \"%.*s\"\n", next_id, (int)nlen, name);
+ 			next_id++;
++			if (next_id == 3) {
++				diag_f3_enable(node, port);
++			}
+ 		}
+ 		at += 8 + plen;
+ 	}
+-- 
+2.54.0 (Apple Git-157)
+

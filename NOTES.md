@@ -15,8 +15,15 @@
     (`sweetadsprpc=0`, 0221b). Votes still answered.
   - The downstream service-notifier registers exactly as we do (REGISTER_LISTENER, state from the reply), so servreg is
     not the difference either. Ruled out so far: timing, FastRPC, diag, servreg, packet size, root vs audio PD.
-  - Next: Linux's real APR bytes. The lab kernel has no /dev/mem, no kprobes, no debugfs, but maybe /proc/kcore (with
-    kptr_restrict 0): read the SMEM mapping and the GLINK FIFOs (items 479/480, `tools/smem-apr-decode.py`) after a tone.
+  - Linux's real APR bytes are out of reach in the lab: no /dev/mem, no /proc/kcore, no kprobes, no debugfs (only
+    tracefs: regmap / i2c events, no glink/apr events). `tools/smem-apr-decode.py` is ready for an SMEM dump if one
+    turns up.
+  - 0222 (`xnu/patches/0222-umi-adsp-diag-f3.patch`, boot `shim/out/umi-0221c-f3.img`): after the diag IDs an F3 mask
+    {11, 15, stream 1, status 2 ALL_ENABLED, mode 0, ssid 0-0xffff, size 1, 0x1f} goes to the ADSP and LPASS:DATA is
+    HDLC-decoded; the mask is taken but **no F3 data arrives** in 4 minutes. Linux's diag also sends DIAGMODE (3, real
+    time) / DTR (2) and per-SSID-range masks; probably needed before the ADSP streams.
+  - Still open: why ASM / ADM / AFE ignore our commands while they answer Linux. Independent and now unblocked: the
+    CS35L41 bring-up on iOS (I/O-map panic fixed; Linux's register sequence above).
 - **🎉 2026-11-01: THE SPEAKER PLAYS UNDER LINUX ON THIS PHONE (user heard a 5 s 1 kHz tone)** - a reference lab for
   the iOS port, all from RAM, nothing written to the phone (read-only mounts, binaries in TWRP's RAM /tmp).
   - Image `shim/out/umi-stockkernel-twrp.img` (not in git): the kernel + dtb of the phone's own boot image backup
