@@ -29,6 +29,13 @@
     The PD wants heap from APPS: Android allocates an ION buffer and maps it into the ADSP with FastRPC INIT_MMAP
     (handle 1, method 4: {pgid, flags, vaddrin, num pages} + pages -> vaddrout), then answers request_map64 with
     {vapps, vadsp}. 0217f accepts apps_mem and logs each request's words, to size that pool.
+  - **0217f (booted 14:13):** the audio PD asks apps_mem **method 2 = request_map64** once, words
+    `0 0xa0000000 0x8 0 0 0 0x1000 0` = heapid 0, lflags 0xa0000000, **rflags 8 = ADSP_MMAP_REMOTE_HEAP_ADDR**, vin 0,
+    **len 0x1000** (4 KiB). We fail it; the PD then goes on with the voice-module fopens and goes quiet, and the AFE
+    clock set is again never answered. Next (Linux fastrpc_req_mmap): take 4 KiB of low RAM, FastRPC INIT_MMAP (handle
+    1, method 4, sc (4, 2, 1), pid 0): in {s32 pgid, u32 flags 8, u64 vaddr 0, s32 num 1} + page {pa, 0x1000}, out
+    {u64 vaddr}; then (REMOTE_HEAP_ADDR) MP_ASSIGN that page HLOS -> LPASS + ADSP_HEAP like the heap; answer
+    request_map64 with {u64 vapps (our VA or 0), u64 vadsp = the returned vaddr}.
 - **2026-11-01 (no boot): WHAT ANDROID RUNS FOR THE ADSP AUDIO PD** - read-only TWRP pull (user OK'd) of vendor
   `etc/init/vendor.qti.adsprpc-service.rc`, `bin/adsprpcd`, `lib/libadsprpc.so`, `etc/acdbdata/adsp_avs_config.acdb`
   + the ACDB list, and the audio modules of `lib/rfsa/adsp` (not in git, `research/audio-umi/{vendor-init,rfsa-adsp}`).
