@@ -36,9 +36,20 @@ sheng 的板级 DTS 通过 `unixnu,adt-name = "wlan"` 将 WCN7850 导出为
 这个设备树条件。
 
 27 的默认 payload 参数包含 `sheng-wifi=5`。修改 DTS 后需要重新生成
-payload 和 boot 镜像，并检查镜像内的 ADT。主机检查确认节点满足启动条件；
-wifid 启动、设置开关和扫描功能仍需上机验证。手动测试镜像的启动参数应移除
-`sheng-autoreset`。
+payload 和 boot 镜像，并检查镜像内的 ADT。sheng 的设置页面可以切换
+Wi-Fi 开关并显示 SSID 列表。手动测试镜像应移除 `sheng-autoreset`。
+
+WifiNet 支持 592 字节的旧版关联请求和 656 字节的 24A446 请求，
+并在认证前校验凭据。手动 WPA2 关联和 DHCP 已获上机确认。
+
+关闭 Wi-Fi 或断开连接会发布链路断开通知，并隐藏旧连接状态。
+重复加入当前网络会回报完成；切换网络会等待旧连接断开后再提交新请求。
+认证查询将 WPA2 个人网络报告为 0x10。AddressSanitizer 和
+UndefinedBehaviorSanitizer 主机回归测试、内核与 payload 编译、镜像校验
+均已通过。当前镜像的加入网络、网络切换、Wi-Fi 图标和密码弹窗行为待上机验证。
+
+吞吐量偏低，仍待排查。使用 `log-wifi=1` 记录加入日志，
+使用 `sheng-wifi-aj=0` 关闭驱动自动连接。
 
 ### 事实
 
