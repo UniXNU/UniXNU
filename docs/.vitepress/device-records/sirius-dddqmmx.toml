@@ -259,6 +259,8 @@ procedure = [
   "Build kernel, payload and volume, boot, and read the panel: stage lines, TOPO, PROBE, MEM and panic text.",
 ]
 findings = [
+  "Display copy latency reduced 4x–6x on hardware (kernel dc3bcc04..., payload aa62b8c3...): moving flush_dcache64 out of the per-row scaling loop (eliminating 2048 per-row dsb sy barriers that broke write-combining), caching IOSurface IOMemoryMap mappings across frames (eliminating per-frame 3072-page kernel_map setup and cross-CPU TLB shootdowns), and reusing scaled row buffers for duplicate rows reduced frame copy time from 31–38 ms down to 5.77 ms last / 9.65 ms mean.",
+  "Full-screen iOS SpringBoard Home Screen and Preferences.app verified on hardware (kernel 3b36199b..., payload ddd8d1fa...): with the 8 GiB APFS Data volume and 1536x2048 -> 1080x2240 scaling, PosterBoard no longer hits ENOSPC (0 exits), so sirius-skip-setup=1 (writing purplebuddy, springboard, migration and DataMigration plists plus /private/var/containers directories) boots directly past Setup.app into SpringBoard, launches Spotlight (205.7 s), InputUI (214.6 s), splashboardd and Preferences.app (231.4 s) upon touch interaction, with full 1080x2240 presentation (sheng-banner=0) and 211/211 swaps accepted (0 rejected).",
   "Post-interaction UI freeze root-caused and fixed on hardware (kernel ff57d694..., payload fad069ea...): after touch interaction in Setup.app, backboardd switches to the iPad7,1 1536x2048 canvas (r0 = 0,0,1536,2048 -> r1 = 0,0,1080,2240), which NativeLegacyDisplay::validateSwap previously rejected with reason=3 ('verify_swap failed for swap id: ...'), freezing the display. NativeLegacyDisplay now validates and scales full-frame surfW x surfH -> 1080x2240 BGRA surfaces with a 64-bit unrolled nearest-neighbor blit (1332/1332 swaps accepted, 0 rejected), BootWatchdogPolicy always writes SpringBoard's no-watchdog/no-auto-dim/no-idle-sleep preferences, and sirius_touch flushes same-batch EVT_ENTER/EVT_LEAVE transitions so fast taps are not coalesced away.",
   "With the 8 GiB persistent Data container and sirius-skip-setup=1 removed (kernel ad6a9709..., payload afa7def2...), SpringBoard (135.2 s), backboardd (165.7 s), iconservicesagent (171.9 s) and Setup.app (294.6 s) run without storage errors, and GopFramebuffer copies 5514 accepted frames (0 rejected) at ~10.3 ms mean (~19 fps) with verified non-black pixel counts (41011 on the Apple logo, 28199 on Setup).",
   "The local boot registers the GOP display and copies six frames; SpringBoard and backboardd exec events do not establish a visible or usable UI. HuajiFruit logs copied into docs/evidence are reference observations, not results for this unit.",
@@ -296,6 +298,7 @@ procedure = [
   "Follow the input guide once a touch controller is known, then select an implementation.",
 ]
 findings = [
+  "Bottom-edge FromEdgeTip (0x800) clamping and virtual Home button (Consumer Menu 0x40) dispatch verified on hardware (kernel e7c1f9eb... / 3b36199b..., payload 44f26ef0... / ddd8d1fa...): contacts starting at y >= 2050 clamp their initial frame Y to 20200 so NativeHidInput::edge::mark sets kIOHIDDigitizerEventFromEdgeTip (from_edge = 8 verified in NEMMC touch edge/home), and SiriusHidProbe dispatches Consumer Menu 0x40 on bottom-edge swipes/taps or initial cover sheets, unlocking the Hello / Lock Screen into the Home Screen and launching Preferences.app on tap.",
   "Fast-tap coalescing fixed in package/sirius_touch.c (kernel ff57d694..., payload fad069ea...): when EVT_ENTER and EVT_LEAVE for the same touch ID arrive within a single 32-event FIFO poll batch, publish_contacts() is now flushed with a 10 ms separation before clearing contact_down so rapid taps are delivered as distinct down/up HID reports.",
   "The local boot identifies the FTS521 and publishes IOHIDEventDriver, with TOUCH down/move/up coordinates in the capture. Visible UI response has not been verified on this unit.",
   "The SDCC1 probe does not touch the ADT buttons, so the input row and its hold/voldown/volup mapping are unchanged.",
@@ -316,7 +319,7 @@ evidence = []
 id = "gpu"
 status = "planned"
 components = []
-paths = ["docs/HANDOFF.zh-CN.md"]
+paths = ["docs/HANDOFF.zh-CN.md", "package/sirius_gpu.c", "scripts/build-sirius-gpu.py"]
 inputs = [
   "Adreno 616 with the SDM710 GPU firmware; no GPU component is selected yet.",
 ]
@@ -327,6 +330,7 @@ procedure = [
   "Follow the GPU guide to evaluate Adreno740/AdrenoMetal for this revision; the A616 is not the A740 the component targets.",
 ]
 findings = [
+  "Adreno 616 Phase 3 verified on hardware (kernel dc3bcc04..., payload aa62b8c3..., sirius-gpu=3): HFI v1 performance table (msg 4, error=0), bandwidth table (msg 3, error=0) and HFI test (msg 5, error=0) all acknowledged by the GMU; GPUCC gx_gmu branch clock enabled (cbcr=0x00000001 on) and OOB_GPU_SET acknowledged (oob_gpu=1, gx_gdscr=0xf8222000, sptprac=0x28); 3D GPU MMIO (0x05000000) readable (rbbm_status=0x00000001); GPU SMMUv2 Context Bank 0 programmed for Stream 0 (3D GPU) with hardware ATS1PR translation verified at IOVA 0x10000000 (par=0x40000000a8c25b80 ok); a630_sqe.fw (34188 bytes, sha256 1c21b527...) loaded and UCHE/GMEM/CP_SQE_INSTR_BASE/CP_RB_BASE/CP_RB_RPTR_ADDR registers initialized (phase=13). Starting CP_SQE_CNTL=1 (sirius-gpu=4) requires programming the GPUCC gfx3d_clk PLL first to avoid AHB CX master timeout.",
   "The imported Adreno 616 phase-2 probe logs GMU up and HFI v1 answers on the local unit. This is not a Metal device or a completed graphics driver.",
   "The Adreno family components in the catalog target the A740 of SM8550; a different implementation would be needed here.",
 ]

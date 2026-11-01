@@ -4,17 +4,17 @@ schema_version = 1
 name = "kebab"
 soc = "SM8250"
 os_profile = "ipados-17.7.11-21H461"
-summary = "OnePlus 8T (KB2000). Firmware, menu and payload volume work, and the kernel walks the whole kernel_bootstrap_thread into bsd_init: IOKit initialisation, startup step 16, the commpage, mac_policy, vnguard, dtrace, sdt, mbuf_tag_init and the rest all pass. What still holds it is the interrupt controller: ArmCpu::mapGic(), prepareGic() and enableGic() live in the prelinked AppleARMCPU kext, so a bring-up kernel that skips kext loading and IOKit matching has no interrupts at all - with IRQs masked every allocation that wants to sleep hangs, and with them unmasked the first IRQ stops the boot. The ADT also handed the GIC and timer window offsets that were made absolute by mistake, which double-mapped both; that is fixed."
+summary = "OnePlus 8T (KB2000). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds with the 407db1a source fixes and is reproducible. The BSD kebab_ufs driver is linked (kebab_ufs_rootdev) with the /kebab-ufs ADT node and rd=ufsroot0 ufsroot=userdata rootrw=0 documented, but root discovery is not reached on hardware: the kernel stops before bsd_init with the last line 'Unable to find vm tag ?+z for btlog'. The GIC handler is installed and the first PPI-27 IRQ fires, but the virtual timer never repeats; the same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point. The blocker is the periodic timer/early allocator path, not the UFS driver."
 
 [[area]]
 id = "configuration"
 status = "implemented"
 components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
 paths = ["board.toml", "feeds.toml", "porting.toml", "proprietary-files.txt", "local.toml.example", "AGENTS.md", "README.md", "configs/**", "dts/**", "docs/**", ".github/**", ".gitmodules", ".gitignore", ".gitattributes"]
-inputs = ["UniXNU format 2 device repository", "UniXNU-sm8250-common SoC feed pinned in feeds.toml", "iPad7,1 17.7.11 21H461 donor IPSW"]
-configuration = ["board.toml schema_version = 2", "components include ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink and DarwinBoot", "kernel.prelink slide -0x1000000 against kernelcache f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7", "kernel archives add build-arm-driver.py ArmDTPlatform and ArmCpu"]
+inputs = ["UniXNU format 1 device repository (old-fw branch)", "UniXNU-sm8250-common SoC feed pinned in feeds.toml", "iPad7,1 17.7.11 21H461 donor IPSW"]
+configuration = ["board.toml schema_version = 1 (old-fw branch)", "components include ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink and DarwinBoot", "kernel.prelink slide -0x1000000 against kernelcache f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7", "kernel archives add build-arm-driver.py ArmDTPlatform and ArmCpu"]
 procedure = ["Clone UniXNU, UniXNU-kebab and UniXNU-sm8250-common as siblings", "Run ./unixnu fetch and ./unixnu defconfig kebab_defconfig", "./unixnu status --json reports the resolved pins"]
-findings = ["The format 2 builder exports an arm-io child only for device tree nodes that carry a unixnu,adt-name property, so an untagged tree yields an empty arm-io and the kernel has no interrupt controller.", "The boot image has to use the phone own device tree; the tree shipped with Mu-Silicium lacks cont_splash_region@9c000000 and ABL then keeps the panel dark.", "Two inputs are not in any repository and must be captured per handset: the live device tree from /sys/firmware/fdt and the kernel built on a macOS runner. proprietary-files.txt names both with their hashes and consumers.", "Every change to a file an area owns has to update that area findings or evidence in the same commit; the catalog workflow fails otherwise and names the path.", "The device summary is what the generated page shows first, so it has to name the current stage rather than the first blocker found.", "The README status table names the current PE_init_iokit to bsd_init gap and links the 32-checkpoint capture in docs/log-capture.md.", "The shared ADT generator gained platform_node() for nested [adt.*] nodes and reads unixnu,cluster-type (E or P) from a cpu node, so kebab's 1+3+4 clusters can be described without a device-side patch.", "The ADT generator emits a plain phandle property, while IOKit registers and looks up AAPL,phandle. Until the generator maps one to the other, no device tree node is reachable by phandle inside XNU."]
+findings = ["The format 2 builder exports an arm-io child only for device tree nodes that carry a unixnu,adt-name property, so an untagged tree yields an empty arm-io and the kernel has no interrupt controller.", "The boot image has to use the phone own device tree; the tree shipped with Mu-Silicium lacks cont_splash_region@9c000000 and ABL then keeps the panel dark.", "Two inputs are not in any repository and must be captured per handset: the live device tree from /sys/firmware/fdt and the kernel built on a macOS runner. proprietary-files.txt names both with their hashes and consumers.", "Every change to a file an area owns has to update that area findings or evidence in the same commit; the catalog workflow fails otherwise and names the path.", "The device summary is what the generated page shows first, so it has to name the current stage rather than the first blocker found.", "The README status table names the 2026-11-01 early stop (btlog warning, no periodic timer) and links docs/bring-up.md.", "The shared ADT generator gained platform_node() for nested [adt.*] nodes and reads unixnu,cluster-type (E or P) from a cpu node, so kebab's 1+3+4 clusters can be described without a device-side patch.", "The ADT generator emits a plain phandle property, while IOKit registers and looks up AAPL,phandle. Until the generator maps one to the other, no device tree node is reachable by phandle inside XNU."]
 completion = ["Every source pin resolves and the selected components have records; unixnu status reports the intended overrides."]
 limits = ["No device-side repository record was published before this file; the entries below are the first complete record."]
 next_action = ["Keep the record current as firmware and kernel patches land."]
@@ -92,17 +92,27 @@ result = "DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB 
 
 [[area]]
 id = "storage"
-status = "planned"
+status = "implemented"
 components = []
-paths = ["docs/bring-up.md"]
-inputs = ["UFS host 0x1D84000", "userdata first_lba 4748320, last_lba 61748338 at 4096-byte blocks"]
-configuration = ["UFSDxe removed from the firmware because the vendor driver asserts; ConfigurationMapLib sets EnableUfsIOC = 1, which removes the assert but still yields no block device"]
-procedure = ["Not started; the kernel has no storage driver yet"]
-findings = ["The vendor UEFI UFS driver asserts in UFS.c and must stay out of the firmware image.", "With no block device, the firmware cannot expose the root volume and the kernel cannot mount anything.", "DXE.inc includes ScmDxeLA and SdccDxe, comments out UFSDxe and TzDxeLA. The phone has no SD slot, so SDCC does not replace UFS; the missing UFS block device is still what blocks userdata/root."]
-completion = ["The root volume mounts read-only from the OS window and Data is persistent."]
-limits = ["No storage driver in firmware or kernel; userdata geometry is recorded but unverified against this handset."]
-next_action = ["Decide between a native UFS driver and a RAM root image for the first userspace milestone."]
-evidence = []
+paths = ["docs/bring-up.md", "scripts/ufs-ci-pre-build.sh", "patches/xnu/kebab-ufs-10063.patch"]
+inputs = ["UFS host controller 0x1D84000", "root /kebab-ufs ADT node reg <0x01d84000 0x30000>", "userdata GPT partition on LUN 0"]
+configuration = ["BSD bdevsw driver bsd/dev/kebab_ufs.c added through bsd/conf/files; no IOKit IOBlockStorageDevice or VerifiedRoot", "boot args rd=ufsroot0 ufsroot=userdata rootrw=0", "read-only unless ufsrw=1", "polled UFSHCI legacy transfer list, one physically contiguous DMA allocation, 512-byte BSD sectors over 4 KiB device blocks"]
+procedure = ["Apply patches/xnu/kebab-ufs-10063.patch and add /kebab-ufs with reg <0x01d84000 0x30000> to the ADT", "Build payload/firmware and flash boot_a", "Read the KEBAB UFS and BSD root colour markers in the framebuffer logger"]
+findings = ["The BSD UFS driver compiles and links; kebab_ufs_rootdev is present in the kernel image and the ADT carries the absolute controller window.", "It is not reached on hardware yet: the kernel stops before bsd_init with the last line 'Unable to find vm tag ?+z for btlog'; bsd_init, IOFindBSDRoot and KEBAB UFS markers never appear.", "The GIC stub installs its handler and the first PPI-27 timer IRQ fires (magenta/cyan bands), but no second tick follows; re-arming CNTV_TVAL/CNTV_CTL after rtclock_intr and a run that skips rtclock_intr both stay static.", "The same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point, so the immediate blocker is the periodic timer/early allocator path rather than the UFS driver source."]
+completion = ["IOFindBSDRoot selects ufsroot0 and the root APFS volume mounts read-only from the userdata partition."]
+limits = ["No UFS hardware result yet; the UFS host, PHY, clocks and IOMMU state are owned by the firmware and no UART is attached."]
+next_action = ["Fix the PPI-27 periodic timer or route another timer source so the early allocator can progress, then re-test rd=ufsroot0."]
+[[area.evidence]]
+kind = "source"
+reference = "patches/xnu/kebab-ufs-10063.patch"
+result = "Adds bsd/dev/kebab_ufs.c, the bsd/conf/files entry and the rd=ufsroot0 hook in IOFindBSDRoot."
+
+[[area.evidence]]
+kind = "device"
+reference = "docs/bring-up.md"
+command = "flash the old-fw kernel with GIC/FB/bring-up and rd=ufsroot0"
+revision = "fab2f0f31aa13fa3a86579611c5df8b5e93c174a"
+result = "Early kernel log appears, but the last line is the btlog vm-tag warning and no bsd_init/IOFindBSDRoot/KEBAB UFS marker appears."
 
 [[area]]
 id = "display"

@@ -1686,7 +1686,7 @@ result = "2026-10-27 P22显式线性会话成功照片确认：NOW VALID next=si
 [[area]]
 id = "storage"
 status = "planned"
-components = ["ShengUfs", "VerifiedRoot", "VirtioMmioBlock"]
+components = ["J716FUfs", "VerifiedRoot", "VirtioMmioBlock"]
 paths = ["dts/**", "proprietary-files.txt", "README.md"]
 inputs = ["UFS controller, PHY, LUN and userdata geometry are not yet represented by a reviewed J716F component source."]
 configuration = ["No UFS node, root volume UUID, GPT window or Data seed is declared in the public board configuration."]

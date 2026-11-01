@@ -28,6 +28,41 @@ result = "Board identity, partition geometry, archive order, firmware package, p
 kind = "source"
 reference = "feeds.toml"
 result = "SM8550 shared source pinned to a full commit"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "gpu archive plan keeps build-adreno-link-stubs.py; build-gop-legacy-display.py was tried and reverted because its audit-mobile-graphics-legacy step needs the owner-root reference candidates (native-owner-*-candidate.macho) that only the audited UFS/owner-root chain produces. The GPU/display kit is tracked as its own workstream."
+[[area.evidence]]
+kind = "source"
+reference = ".github/workflows/package.yml"
+result = "tools step now installs the lld-link toolchain (dtc llvm lld cmake mtools ipsw) with a fail-fast check, matching the upstream packaging template; the kernel link needs lld-link on the macOS runner."
+[[area.evidence]]
+kind = "source"
+reference = ".github/workflows/package.yml"
+result = "the ishtar device binaries are vendored in the uefi-sheng fork and installed into Binaries/ishtar before packaging, because the Binaries submodule upstream does not carry this device; the firmware build needs RawFiles/SecParti.cfg from there."
+[[area.evidence]]
+kind = "source"
+reference = ".github/workflows/package.yml"
+result = "the uefi-sheng checkout is recursive, because the firmware volume submodules are the binary modules the volume builds from (the framework template and docs say so); the ishtar Binaries set is then installed over the submodule path."
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "bootimg.dtb names ../device-tree/hardware.dtb relative to the tree, which is where the dts build writes it; the release flow passes it to bootimg, which otherwise fails with device tree (--dtb) not found."
+[[area.evidence]]
+kind = "source"
+reference = ".github/workflows/package.yml"
+result = "the images leave the runner encrypted: a random AES-256 key encrypts the tar, and RSA-OAEP to ci/boot-image-recipient.pem protects the key, because the images carry the prelinked Apple kernelcache."
+
+
+
+
+
+
+
 
 [[area]]
 id = "firmware"
@@ -64,6 +99,11 @@ next_action = ["Record per-CPU entry and the secondary-core MPIDR values on the 
 kind = "source"
 reference = "dts/ishtar.dts"
 result = "Board device tree including the shared SM8550 description"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+
 
 [[area]]
 id = "memory"
@@ -100,6 +140,11 @@ next_action = ["Read the UFS controller base and PHY window out of the stock ish
 kind = "source"
 reference = "board.toml"
 result = "Userdata partition geometry and the selected storage components"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+
 
 [[area]]
 id = "display"
@@ -154,6 +199,11 @@ next_action = ["Run the Adreno probe builders against the ishtar firmware and re
 kind = "source"
 reference = "scripts/build-adreno-link-stubs.py"
 result = "Builds the stub archive the kernel link uses while the full driver is unavailable"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+
 
 [[area]]
 id = "network"
@@ -208,6 +258,11 @@ next_action = ["Read the fuel gauge on the first device boot and compare it agai
 kind = "source"
 reference = "board.toml"
 result = "Power-related kernel arguments and the sleep-disabled bring-up default"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+
 
 [[area]]
 id = "packaging"
@@ -231,6 +286,11 @@ result = "Board kernel configuration including the extra link archive and the bo
 kind = "source"
 reference = "board.toml"
 result = "Archive plan, payload policy and boot-image device-tree overlay"
+[[area.evidence]]
+kind = "source"
+reference = "configs/gpu_defconfig"
+result = "gpu profile builds without the boot-progress layer (CONFIG_XNU_BOOT_PROGRESS=n); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet."
+
 
 [[area]]
 id = "diagnostics"

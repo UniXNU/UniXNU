@@ -6,7 +6,7 @@
 
 Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and owns its board tree, partition geometry, firmware package and payload policy. This record states what is implemented, what is only configured, and what has not been observed on hardware.
 
-Source record: [porting.toml](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/porting.toml), `f2847d19e7f76f9cb7a6964ac8ad49f50904e283`.
+Source record: [porting.toml](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/porting.toml), `e42ad4d6141a85ca8811868048eb43865d8bf5db`.
 
 This page is generated from the device record.
 
@@ -69,8 +69,15 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Board identity, partition geometry, archive order, firmware package, payload policy and ADT overrides](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
-- `source`: [SM8550 shared source pinned to a full commit](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/feeds.toml)
+- `source`: [Board identity, partition geometry, archive order, firmware package, payload policy and ADT overrides](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [SM8550 shared source pinned to a full commit](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/feeds.toml)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
+- `source`: [gpu archive plan keeps build-adreno-link-stubs.py; build-gop-legacy-display.py was tried and reverted because its audit-mobile-graphics-legacy step needs the owner-root reference candidates \(native-owner-\*-candidate.macho\) that only the audited UFS/owner-root chain produces. The GPU/display kit is tracked as its own workstream.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [tools step now installs the lld-link toolchain \(dtc llvm lld cmake mtools ipsw\) with a fail-fast check, matching the upstream packaging template; the kernel link needs lld-link on the macOS runner.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/.github/workflows/package.yml)
+- `source`: [the ishtar device binaries are vendored in the uefi-sheng fork and installed into Binaries/ishtar before packaging, because the Binaries submodule upstream does not carry this device; the firmware build needs RawFiles/SecParti.cfg from there.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/.github/workflows/package.yml)
+- `source`: [the uefi-sheng checkout is recursive, because the firmware volume submodules are the binary modules the volume builds from \(the framework template and docs say so\); the ishtar Binaries set is then installed over the submodule path.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/.github/workflows/package.yml)
+- `source`: [bootimg.dtb names ../device-tree/hardware.dtb relative to the tree, which is where the dts build writes it; the release flow passes it to bootimg, which otherwise fails with device tree \(--dtb\) not found.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [the images leave the runner encrypted: a random AES-256 key encrypts the tar, and RSA-OAEP to ci/boot-image-recipient.pem protects the key, because the images carry the prelinked Apple kernelcache.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/.github/workflows/package.yml)
 
 ## Firmware and boot {#firmware}
 
@@ -115,7 +122,7 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Firmware inventory with upstream commit and per-file SHA-256 digests](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/proprietary-files.txt)
+- `source`: [Firmware inventory with upstream commit and per-file SHA-256 digests](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/proprietary-files.txt)
 
 ## CPU and interrupts {#cpu}
 
@@ -160,7 +167,8 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Board device tree including the shared SM8550 description](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/dts/ishtar.dts)
+- `source`: [Board device tree including the shared SM8550 description](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/dts/ishtar.dts)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
 
 ## Memory and DMA {#memory}
 
@@ -204,7 +212,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Declared DRAM size and the reserved splash framebuffer region](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/dts/ishtar.dts)
+- `source`: [Declared DRAM size and the reserved splash framebuffer region](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/dts/ishtar.dts)
 
 ## Storage and root {#storage}
 
@@ -252,7 +260,8 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [Userdata partition geometry and the selected storage components](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Userdata partition geometry and the selected storage components](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
 
 ## Display {#display}
 
@@ -297,7 +306,7 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [Panic framebuffer geometry used by the direct framebuffer path](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Panic framebuffer geometry used by the direct framebuffer path](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
 
 ## Input {#input}
 
@@ -340,7 +349,7 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [Novatek touch firmware pinned with its SHA-256 digest](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/proprietary-files.txt)
+- `source`: [Novatek touch firmware pinned with its SHA-256 digest](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/proprietary-files.txt)
 
 ## GPU {#gpu}
 
@@ -388,7 +397,8 @@ Components: `Adreno740`, `Sm8550Platform`, `AdrenoPM4`, `AdrenoFirmware`, `ArmSm
 
 ### Evidence
 
-- `source`: [Builds the stub archive the kernel link uses while the full driver is unavailable](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/scripts/build-adreno-link-stubs.py)
+- `source`: [Builds the stub archive the kernel link uses while the full driver is unavailable](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/scripts/build-adreno-link-stubs.py)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
 
 ## Network {#network}
 
@@ -431,7 +441,7 @@ Components: `Adreno740`, `Sm8550Platform`, `AdrenoPM4`, `AdrenoFirmware`, `ArmSm
 
 ### Evidence
 
-- `source`: [Component selection showing that no network component is included](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Component selection showing that no network component is included](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
 
 ## Audio {#audio}
 
@@ -474,7 +484,7 @@ Components: `Adreno740`, `Sm8550Platform`, `AdrenoPM4`, `AdrenoFirmware`, `ArmSm
 
 ### Evidence
 
-- `source`: [Component selection showing that no audio component is included](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Component selection showing that no audio component is included](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
 
 ## Power {#power}
 
@@ -519,7 +529,8 @@ Components: `Adreno740`, `Sm8550Platform`, `AdrenoPM4`, `AdrenoFirmware`, `ArmSm
 
 ### Evidence
 
-- `source`: [Power-related kernel arguments and the sleep-disabled bring-up default](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Power-related kernel arguments and the sleep-disabled bring-up default](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
 
 ## Image assembly {#packaging}
 
@@ -568,8 +579,9 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Board kernel configuration including the extra link archive and the boot-progress switch](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/configs/gpu_defconfig)
-- `source`: [Archive plan, payload policy and boot-image device-tree overlay](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [Board kernel configuration including the extra link archive and the boot-progress switch](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
+- `source`: [Archive plan, payload policy and boot-image device-tree overlay](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/board.toml)
+- `source`: [gpu profile builds without the boot-progress layer \(CONFIG\_XNU\_BOOT\_PROGRESS=n\); the kernel baseline guard requires the audited native-UFS and owner-root builds, which this profile does not carry yet.](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/configs/gpu_defconfig)
 
 ## Diagnostics {#diagnostics}
 
@@ -616,7 +628,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Self-contained boot-progress observer that renders stages to the raw framebuffer](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/package/BootProgressMin.c)
-- `source`: [Build script with an undefined-symbol gate that rejects the object when the kernel image cannot satisfy it](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/scripts/build-boot-progress-min.py)
+- `source`: [Self-contained boot-progress observer that renders stages to the raw framebuffer](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/package/BootProgressMin.c)
+- `source`: [Build script with an undefined-symbol gate that rejects the object when the kernel image cannot satisfy it](https://github.com/peter8889/UniXNU-ishtar/blob/e42ad4d6141a85ca8811868048eb43865d8bf5db/scripts/build-boot-progress-min.py)
 
 </div>
