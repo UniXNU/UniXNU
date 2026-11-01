@@ -2,6 +2,45 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0215: THE AUDIO DSP (ADSP) RUNS, Q6 CORE READY OVER APR** - first step to sound (patch
+  `xnu/patches/0215-umi-adsp-start.patch`, boot `shim/out/umi-0215d-adsp.img` = umi-nofp-sample's line +
+  `sweetadsp=1 sweetadspdelay=200`). Nothing plays yet; the amps are untouched.
+  - Firmware (user OK'd, read-only in TWRP, not in git, `research/audio-umi/`): modem partition `image/adsp.mdt` +
+    `adsp.b00-b18` (19 MB), copied to the new phone folder `/private/var/sweet/adsp/` (rm + put + read back, nothing
+    overwritten); also vendor `etc/mixer_paths*.xml`, `audio_platform_info_intcodec.xml`, `audio_policy_configuration.xml`
+    and `firmware/cs35l41-dsp1-*` (amp protection firmware + tunings) for later.
+  - Kernel: `sweet_slpi.c` takes the remote processor as parameters; `sweet_adsp.c` compiles it again for the ADSP:
+    pas 1, dt pil_adsp_region 0x8bb00000 + 0x2500000, SMEM host 2, IPCC client 3 (0 GLINK, 2 SMP2P), SMP2P items
+    443 in / 429 out, crash reason item 423, AOP load_state "adsp"; GLINK channel "apr_audio_svc" (intents 20 x 0x200)
+    instead of FastRPC. Boot-args `sweetadsp`, `sweetadspdelay`, `sweetadspsecs` (GLINK service time, default 600).
+  - Result: TrustZone auth + reset 0; SMP2P ready+handover in 10 ms; the ADSP OPENs pcie_drv, mhi_sat,
+    fastrpcglink-apps-dsp, IPCRTR, LOOPBACK_CTL_LPASS and **apr_audio_svc** (Elite APR; no "adsp_apps" = not
+    AudioReach); QRTR node 5 announces 0x301, 0x42 (inst 0x4a01), 0x1005, 0x2b, 0xf x2, 0x33, 0x18 and asks our service
+    locator for "avs/audio" (1 domain) and tms/pdr_enabled / pddump_disabled. APR (hdr 0x150, APPS domain 5 -> ADSP 4,
+    svc 3) GET_STATE 0x1290c -> **1 = ready** on the first query; GET_VERSIONS 0x12905 -> core 0x3 (0x40002), **AFE 0x4
+    (0x260000), ASM 0x7 (0x70002), ADM 0x8 (0x70000)**, voice 0x9-0xb, 0xc, 0xd.
+  - Panics on the way (both fixed in 0215): (a) `vm_map_delete ... Attempting to remove permanent VM map entry`:
+    kfree_data of whole-segment kalloc_data buffers (the ADSP has 2.4 and 11 MB segments, the SLPI none that big) -
+    segments are now streamed from the file through a 16 KiB buffer; (b) `kmem_alloc(.., 2097152, 0x100021): failed
+    with 3` = the ADSP's own `ml_io_map` of SMEM (2 MiB): I/O VA space is nearly full - both DSPs now share one cache
+    of device maps (`sweet_dsp_io_map`). A plain (non-permanent) VA-only 2 MiB window also found no space (0215b), so
+    the copy window stays KMA_PERMANENT. The SLPI still starts (auto-brightness readings in the same boot).
+  - **Hardware path to the speaker** (umi dtbo overlay 9 + vendor mixer paths): two **Cirrus CS35L41** amps on
+    QUP SE3 I2C (`i2c@98c000`, GSI DMA): 0x40 speaker (IRQ GPIO 113), 0x42 earpiece "RCV" (IRQ 112), shared reset
+    GPIO 114; boost 4000 mA / 1000 nH / 15 uF. Android plays speaker through **TERT_MI2S_RX** (AFE port 0x1004,
+    48 kHz, 2 ch, S16/S24) into the amps' ASPRX1, amp DSP running "Protection" firmware (`PCM Source DSP`, gain 18);
+    the bolero/WSA881x speaker path in the base DT is unused on umi.
+  - **iOS side:** no built-in HAL plug-in file on iOS; CoreAudio itself has `HALS_IOA2Device` / `HALS_IOA2UCDevice`,
+    which match IOKit `IOAudio2Device` services and talk through a user client (stream formats, controls,
+    MapIOBufferForStream, MapEngineStatus, config change); the ABI can be read out of CoreAudio in the 20H392 cache as
+    was done for IOMFB. VirtualAudio.plugin (disabled since image v12: crashed without a device) builds the default
+    'vdef' device on top of it and comes back once a real device exists.
+  - **Plan:** (2) APR to AFE: Linux q6afe port start of TERT_MI2S_RX (0x1004) with the MI2S clock set over AFE
+    (AFE_PARAM_ID_LPAIF_CLK_CONFIG / clock set), pinctrl for the tert MI2S pins; (3) CS35L41 over SE3 I2C (reuse the GPI
+    I2C of touch): reset, DEVID 0x35a40, boost + ASP config, PCM source ASPRX1 (DSP bypassed first), unmute;
+    (4) ASM stream + ADM route (or AFE's direct port path) with PCM from shared memory mapped for the ADSP (its SMMU
+    streams, as FastRPC's 0x541 for the SLPI) -> a kernel test tone (boot-arg); (5) an IOAudio2Device + user client
+    for CoreAudio feeding that buffer, VirtualAudio back, mediaserverd/audiomxd routing to the speaker.
 - **🎉 2026-11-01: SETTINGS > PRIVACY & SECURITY > LOCATION SERVICES ROW IS BACK (user: "it show up all good")** -
   CommCenter is in launchd's job list again. Boot `shim/out/umi-nofp-sample.img` (unchanged).
   - Phone file changed (user OK'd): `/System/Library/xpc/launchd.plist` + job
