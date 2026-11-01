@@ -30,19 +30,18 @@ the complete dependency set. Verify memory ranges, CPU affinities, interrupts,
 firmware hashes, and partition geometry from board evidence. Set `example = false`
 after completing the inputs. Pin the SoC commit and inspect resolved profiles.
 
-Run from UniXNU, replacing the device path and defconfig:
+Build with the packaging script from the device repository; every value it needs
+comes from board.toml ([package], [os_overrides], the sections the steps read):
 
 ```sh
-./unixnu defconfig example_defconfig -D ../UniXNU-example
-./unixnu fetch
-./unixnu status --json
-./unixnu tree
-./unixnu build kernel
-./unixnu build package
-./unixnu build firmware --uefi ../uefi-example
-./unixnu build payload --unique-chip-id <hex> --trust-cache <bundle> --data-ramdisk <seed>
-./unixnu bootimg --uefi ../uefi-example --dtb <firmware.dtb>
+scripts/package.sh --check --os <profile>              # deps, preflight, patches; stops before building
+scripts/package.sh --os <profile> --uefi ../uefi-example
 ```
+
+The platform seed (`UNIXNU_UNIQUE_CHIP_ID`) and the firmware checkout are not in
+any repository. `.github/workflows/package.yml` runs the same script on a macOS
+runner: run it in a fork, set the seed as the fork's secret, download the images,
+then delete the run.
 
 For a Mu-Silicium initrd payload, include `UniXNURamDiskDxe`, DiskIoDxe and
 FAT support in the firmware DSC and FDF. Follow

@@ -12,8 +12,8 @@ hardware inputs before building.
 5. List firmware sources and hashes in `proprietary-files.txt`.
 6. Set partition geometry and payload inputs from the device's records.
 7. Match the identity in `porting.toml` to `board.toml`. Cover every selected component and dependency, with board-specific ownership paths, findings and completion criteria.
-8. Enable the template CI workflow and require its `Porting record` check on the official device branch.
-9. Set `example = false`, select the defconfig, fetch, and inspect `status --json`. Commit the generated `unixnu.lock`; keep local overrides in the ignored `local.toml`.
+8. Enable the template CI workflows and require the `Porting record` check on the official device branch.
+9. Set `example = false`, then run `scripts/package.sh --check --os <profile>` and fix what it reports. Commit the generated `unixnu.lock`; keep local overrides in the ignored `local.toml`.
 10. Complete the shared [repository checklist](https://unixnu.com/porting/device-repository#completion), build and record results, then follow [publication](https://unixnu.com/porting/device-repository#publish). Add the **`unixnu` GitHub topic** and verify it appears in the repository topics.
 
 The zero memory range and `REQUIRED_` values identify inputs to complete.
