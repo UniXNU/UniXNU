@@ -236,6 +236,21 @@ def stage_native(kernel, output):
     return output
 
 
+def check_prelink_regressions(record, policy):
+    """An experimental allow-missing build may improve, but cannot add gaps."""
+    slide = int(record['collection_slide'], 16)
+    for kind in ('missing', 'stubbed'):
+        for owner, targets in record[kind].items():
+            for target, count in targets.items():
+                original = hex((int(target, 16) - slide) & ((1 << 64) - 1))
+                allowed = policy[kind].get(owner, {}).get(original, 0)
+                if count > allowed:
+                    raise Error(f'prelink regression: {kind} {owner} original {original}, {count} sites (allowed {allowed})')
+    branches = {entry['symbol'] for entry in record.get('native_original_branches', [])}
+    if set(policy.get('required_original_branches', [])) - branches:
+        raise Error('prelink lacks required absolute adapter branch relocations')
+
+
 def prelink(ctx):
     """Produce out/<device>/kernel/kernel.macho from the XNU build and the original kernelcache."""
     spec = ctx.board.get('kernel', {}).get('prelink')
@@ -277,6 +292,11 @@ def prelink(ctx):
             run(command + ['--output', candidate], cwd=ctx.tree, log_file=ctx.logs / 'prelink.log')
             if not candidate.is_file():
                 raise Error('prelink completed without writing a kernel candidate')
+            if spec.get('regression_policy'):
+                policy = json.loads((ctx.tree / spec['regression_policy']).read_text())
+                if policy['kernelcache_sha256'] != sha256_file(cache):
+                    raise Error('prelink regression policy names another kernelcache')
+                check_prelink_regressions(json.loads(candidate.with_suffix('.json').read_text()), policy)
             success = True
         finally:
             if candidate_map.is_file():

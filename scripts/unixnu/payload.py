@@ -38,6 +38,21 @@ def check_args(arguments):
     return line
 
 
+def check_data_input(ctx, data):
+    """An owner-Data kernel needs a seed even when it resumes a persistent overlay."""
+    if data:
+        return
+    from .config import parse_config
+    config = ctx.config
+    if not ctx.config_path.is_file() and ctx.config_name:
+        selected = ctx.device / 'configs' / ctx.config_name
+        if selected.is_file():
+            config = parse_config(selected.read_text())
+    if config.get('XNU_OWNER_DATA_MOUNT'):
+        raise Error('CONFIG_XNU_OWNER_DATA_MOUNT requires --data-ramdisk FILE (or [build] data_ramdisk); '
+                    'persistent Data still needs its original seed to publish the volume')
+
+
 def check_native_root(kernel, arguments, vmm_present=False):
     """Refuse the known bare-metal AMFI panic before the volume is written.
 
@@ -111,6 +126,7 @@ def build(ctx, kernel=None):
         if allowed and not owner_trust and sha256_file(trust) not in allowed:
             raise Error(f'{trust} is not one of the trust caches this board accepts (board.toml [payload] trust_cache_sha256)')
     data = expand(args.data_ramdisk) if getattr(args, 'data_ramdisk', None) else None
+    check_data_input(ctx, data)
     if data and not data.is_file():
         raise Error(f'Data ramdisk not found: {data}')
     if getattr(args, 'skip_setup', False):

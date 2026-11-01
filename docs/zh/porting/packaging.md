@@ -106,3 +106,32 @@ remove = [ ... ]
 4. 把运行记录到 `porting.toml` 的 `packaging` 区域。
 
 [构建与启动](/zh/building)、[设备仓库](/zh/porting/device-repository)
+
+## sheng iPadOS 27 运行输入
+
+`payload.runtime` 在编译内核前准备运行输入。Apple 静态、System 和 App 信任模块从所选
+IPSW 原样提取；Turnip、AdrenoMetal 和设备音频 HAL 从源码编译，其 CDHash 写入
+单独的 owner 信任模块。壁纸覆盖文件从只读 OS 镜像生成。小米官方 fastboot 固件
+继续由设备 preflight 脚本下载、校验和提取。
+
+保留现有安装的数据时，必须通过 `--data-ramdisk FILE` 复用原来的 `data.dbr`。
+GPU 和音频更新放在 addon 中，不修改 seed。构建会检查 APFS 卷 UUID，将它绑定到
+本次生成的内核配置，并把输入 SHA-256 写入打包清单。只打包 payload 时，若 UUID
+与内核配置不同则报错，要求重新编译内核。
+
+**首次安装**可用 `scripts/package.sh --os 27 --init-data`，从 IPSW 的初始
+`private/var` 生成 APFS seed，采用设备配置的 `data_gib` 和 Setup 偏好，并把新
+UUID 写入内核配置。该命令只写本机构建文件，不擦除或刷写设备。此后应一直保留
+`out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr`。
+持久化 Data 绑定的是 seed 的内容身份，仅保留 UUID 或从同一 IPSW 重做都不能替代原文件。
+
+Actions 会恢复安装对应的 seed 缓存，也支持原 seed 的下载 URL 加必填 SHA-256。
+缓存丢失时默认停止，只有明确选择 `init_data` 才会新建。工作流另提供保留一天的
+seed 备份下载；请自行长期保存，Actions 缓存不能作为永久备份。当前设备的原 seed
+无法从官方固件包恢复。自动生成运行输入目前只适用于 iPadOS 27。
+
+要复现已有镜像，可同时指定 `--gpu-addon FILE` 和配套的
+`--owner-trust-cache FILE`；省略二者则从源码构建。生成的二进制和 seed 不提交 Git。
+
+24A446 的 `regression_policy` 按原内核地址和导入组件限制未解析引用；即使启用
+`--allow-missing`，新增缺口也会使打包失败。这不代表剩余实验路径已验证，仍需上机启动测试。

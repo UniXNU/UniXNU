@@ -1,0 +1,62 @@
+{
+  "kernelcache_sha256": "38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a",
+  "description": "Remaining unresolved references of the 24A446 startup baseline. This bounds regressions, not runtime qualification.",
+  "required_original_branches": [
+    "__ZN25IOMobileFramebufferLegacyC2EPK11OSMetaClass",
+    "__ZN11IOHIDDevice10handleOpenEP9IOServicejPv"
+  ],
+  "missing": {
+    "com.apple.driver.AppleARMWatchdogTimer": {
+      "0xfffffe00070446a8": 1
+    },
+    "com.apple.iokit.IOHIDFamily": {
+      "0xfffffe000b8b3ce8": 1
+    }
+  },
+  "stubbed": {
+    "com.apple.driver.AppleARMPlatform": {
+      "0xfffffe000aebcc3c": 1,
+      "0xfffffe000aebdee4": 1,
+      "0xfffffe000aebdef4": 1,
+      "0xfffffe000b433e68": 1,
+      "0xfffffe000b4ca1d0": 1,
+      "0xfffffe000b4ca260": 1,
+      "0xfffffe000b4ca2e8": 1
+    },
+    "com.apple.driver.AppleARMWatchdogTimer": {
+      "0xfffffe000ad53f60": 1,
+      "0xfffffe000aebdee4": 1
+    },
+    "com.apple.driver.ApplePMGR": {
+      "0xfffffe000ad6df18": 1,
+      "0xfffffe000ad6e204": 1
+    },
+    "com.apple.iokit.IOCryptoAcceleratorFamily": {
+      "0xfffffe000aec5fe0": 1
+    },
+    "com.apple.iokit.IOGPUFamily": {
+      "0xfffffe000ae14d08": 1
+    },
+    "com.apple.iokit.IOHIDFamily": {
+      "0xfffffe000b417540": 1,
+      "0xfffffe000b430ab8": 1,
+      "0xfffffe000b430bd4": 1
+    },
+    "com.apple.iokit.IOStorageFamily": {
+      "0xfffffe000b430ab8": 1,
+      "0xfffffe000b430bd4": 1
+    },
+    "com.apple.iokit.IOSurface": {
+      "0xfffffe000b4b6724": 1
+    },
+    "com.apple.security.AppleImage4": {
+      "0xfffffe000b5a3ba8": 1
+    },
+    "com.apple.security.Image4": {
+      "0xfffffe000b2a1694": 1,
+      "0xfffffe000b2a170c": 1,
+      "0xfffffe000b2a1778": 1,
+      "0xfffffe000b2a1798": 1
+    }
+  }
+}

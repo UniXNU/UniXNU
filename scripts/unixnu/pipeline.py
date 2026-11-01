@@ -38,6 +38,11 @@ def write_manifest(ctx, modules, patch_order, files):
                 'revisions': revisions, 'patches': [str(path) for path in patch_order],
                 'kernel_command_line_bytes': len(command_line(ctx)),
                 'outputs': {name: {'bytes': path.stat().st_size, 'sha256': sha256_file(path)} for name, path in files.items()}}
+    runtime = ctx.work / 'runtime/inputs.json'
+    if runtime.is_file():
+        inputs = json.loads(runtime.read_text())
+        manifest['runtime'] = {'data_volume_uuid': inputs['data_volume_uuid'],
+                               'inputs': {key: value['sha256'] for key, value in inputs['inputs'].items()}}
     target = ctx.work / 'package.manifest.json'
     target.write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
     return target
