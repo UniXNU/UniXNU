@@ -94,8 +94,15 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
             raise Error('invalid compiled device tree')
         combined = shim + firmware
-        kernel = gzip.compress(combined, mtime=0) + tree
-        kernel_path = scratch / 'Image.gz-dtb'
+        # [bootimg.image] kernel_compression selects the kernel encoding. The
+        # default keeps the gzip convention; "none" writes the uncompressed
+        # BootShim and firmware blob, which is useful when a vendor ABL is
+        # suspected of mishandling the compressed stream.
+        compression = str(image.get('kernel_compression', 'gzip')).lower()
+        if compression not in ('gzip', 'none'):
+            raise Error(f'unsupported kernel_compression: {compression}')
+        kernel = (gzip.compress(combined, mtime=0) if compression == 'gzip' else combined) + tree
+        kernel_path = scratch / (('Image.gz-dtb' if compression == 'gzip' else 'Image-dtb'))
         kernel_path.write_bytes(kernel)
         if ramdisk:
             ramdisk_path = Path(ramdisk)
@@ -109,7 +116,7 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
             if key in image:
                 command += [f'--{key}', str(image[key])]
         run(command, capture=True)
-        report = verify(out, combined, tree, ramdisk_path, image)
+        report = verify(out, combined, tree, ramdisk_path, image, compression)
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
                   dtb_sha256=sha256_file(dtb), shim_bytes=len(shim), hardware_tested=False)
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
@@ -117,7 +124,7 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     return out
 
 
-def verify(path, combined, tree, ramdisk_path, image):
+def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
     """Unpack the image and compare every part with its input."""
     data = Path(path).read_bytes()
     if data[:8] != b'ANDROID!':
@@ -143,9 +150,12 @@ def verify(path, combined, tree, ramdisk_path, image):
         start = 0
         ramdisk_start = page * (1 + -(-kernel_size // page))
     kernel = data[start:start + kernel_size]
-    unpacker = zlib.decompressobj(16 + zlib.MAX_WBITS)
-    if unpacker.decompress(kernel) != combined or not unpacker.eof or unpacker.unused_data != tree:
-        raise Error('gzip, firmware and appended device tree do not round-trip')
+    if compression == 'gzip':
+        unpacker = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        if unpacker.decompress(kernel) != combined or not unpacker.eof or unpacker.unused_data != tree:
+            raise Error('gzip, firmware and appended device tree do not round-trip')
+    elif kernel != combined + tree:
+        raise Error('firmware and appended device tree do not round-trip')
     if data[ramdisk_start:ramdisk_start + ramdisk_size] != Path(ramdisk_path).read_bytes():
         raise Error('ramdisk bytes differ')
     return {'kernel_sha256': hashlib.sha256(kernel).hexdigest(), 'ramdisk_bytes': ramdisk_size,
