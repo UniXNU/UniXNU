@@ -121,7 +121,13 @@ def main():
     # declarations missing from the source checkout; used inputs are hashed below.
     includes = ['-I', str(include), '-idirafter', str(sdk_kernel)]
     extra = ['-I', str(tree / '.cache/xnu-work/osfmk')]
-    firmware = (args.touch_firmware or device / '.cache/firmware/novatek/novatek_nt36532_n81a_fw_csot.bin').resolve()
+    # The pinned firmware of proprietary-files.txt: the extracting machine's cache first, the
+    # repository's copy (firmware/novatek) on a clean checkout.
+    firmware = Path(args.touch_firmware) if args.touch_firmware else next(
+        candidate for candidate in (device / '.cache/firmware/novatek/novatek_nt36532_n81a_fw_csot.bin',
+                                    device / 'firmware/novatek/novatek_nt36532_n81a_fw_csot.bin')
+        if candidate.is_file())
+    firmware = firmware.resolve()
     data = firmware.read_bytes()
     if not data:
         raise SystemExit(f'{firmware}: empty touch firmware')
