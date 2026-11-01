@@ -60,8 +60,10 @@ checkouts beside the device repository, and offers `boot.img`, `payload.img`,
 `kernel.macho` and `package.manifest.json` as the run's artifacts.
 
 The run installs its tools itself (Homebrew dtc, llvm, lld, cmake, mtools and
-the ipsw tap for the AEA keys) and asserts them before the build; the firmware
-checkout comes with its submodules, the binary modules the volume builds from.
+the ipsw tap for the AEA keys) and asserts them before the build. The board
+names the official firmware archive in board.toml `[firmware.image]`; the run
+downloads it with concurrent HTTP ranges, keeps only the named inputs, deletes
+the archive and generates the binary modules the firmware volume builds from.
 
 Run it in a fork of the device repository:
 
