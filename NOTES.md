@@ -2,6 +2,33 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0217: THE ADSP AUDIO PD IS CREATED AND LOADS ITS MODULES FROM US; AFE still silent** (patch
+  `xnu/patches/0217-umi-adsp-audiopd-fastrpc.patch`; boots `shim/out/umi-0217b..e-audiopd.img` = 0215d's line, last
+  `umi-0217e-audiopd.img`; built not booted: `umi-0217f-audiopd.img` with apps_mem logging).
+  - Phone files (user OK'd, new only, rm + put + read back): `/private/var/sweet/adsp-rpc/adsp/` = capi_v2_cirrus_sp.so,
+    misound_res.bin, misound_karaoke_res.bin, misound_karaokemix_res.bin, hrtf5c.bin, libapps_mem_heap.so (vendor
+    lib/rfsa/adsp) and `/private/var/sweet/adsp-rpc/acdb/adsp_avs_config.acdb`.
+  - **The "freezes" were panics with the screen off:** `IO_MAP_SIZE` (osfmk/arm/io_map.c) is 8 MiB and the port's
+    ml_io_maps (61 call sites, SMEM 2 MiB, 16 KiB pages) used it up; io_map allocates KMA_NOFAIL|PAGEABLE|PERMANENT =
+    the `kmem_alloc(.., 0x100021): failed with 3` of 0215c. 0216c (amp probe: TLMM/GCC/SE3 maps) and 0217 (three
+    SMMU route maps) died at that point with the panel already off (auto-lock), so no panic text. **64 MiB on
+    SWEET** fixed it (0217b+: no freeze). The amp probe may simply have hit this too (not retried yet).
+  - Sequence that works now: SMMU streams 0x1803-0x1805 routed (cb 3 in address bits 32+); heap 0xd4000000 +
+    0xc00000 zeroed and **SCM MP_ASSIGN** (svc 0xc cmd 0x16, arginfo 0x1117, extra args via x5: src {HLOS 3}, mem
+    {addr, size}, dest {LPASS 22 RWX, ADSP_HEAP 37 RWX}) -> 0; FastRPC method 8 on handle 1, pid 0, ctx pd 1 (USER_PD):
+    {pgid, namelen 8, pageslen 0}, "audiopd", {heap pa, size} -> **createstaticpd 0**; remotectl open
+    adsp_default_listener, register, init2 -> 0; then the audio PD's reverse calls.
+  - GLINK gotcha: the ADSP advertises dozens of 0x80 intents per channel (apr_audio_svc, IPCRTR); the 128-entry remote
+    intent table filled and the FastRPC channel never got one ("could not send", 0217b/c) -> 512 entries.
+  - What the audio PD asks: apps_std open; fopen `adsp_avs_config.acdb` (ADSP_AVS_CFG_PATH -> acdb/) + **ftell** (method
+    8, added with flen 10, rewind 11, feof 12); fopen **capi_v2_cirrus_sp.so** (loaded, 312952 bytes); the aptX
+    encoder/decoder (not copied); **remotectl open "apps_mem" (refused)**, then a call on handle -1 method 2
+    (apps_mem request_map64); fopens of voice modules `fluence_voiceplus_module.so.1`, `mmecns_module.so.1`,
+    `custom_{sm,dm,qm}_ecns_{1,2}.so.1` (not on the vendor partition either: optional); then quiet.
+  - **AFE clock set still never answered** (9 tries, sent right after the listener came up). Next: apps_mem.
+    The PD wants heap from APPS: Android allocates an ION buffer and maps it into the ADSP with FastRPC INIT_MMAP
+    (handle 1, method 4: {pgid, flags, vaddrin, num pages} + pages -> vaddrout), then answers request_map64 with
+    {vapps, vadsp}. 0217f accepts apps_mem and logs each request's words, to size that pool.
 - **2026-11-01 (no boot): WHAT ANDROID RUNS FOR THE ADSP AUDIO PD** - read-only TWRP pull (user OK'd) of vendor
   `etc/init/vendor.qti.adsprpc-service.rc`, `bin/adsprpcd`, `lib/libadsprpc.so`, `etc/acdbdata/adsp_avs_config.acdb`
   + the ACDB list, and the audio modules of `lib/rfsa/adsp` (not in git, `research/audio-umi/{vendor-init,rfsa-adsp}`).
