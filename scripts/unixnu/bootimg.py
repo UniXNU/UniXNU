@@ -17,7 +17,8 @@ from .config import load_toml
 from .util import Error, log, run, sha256_file, tool
 
 DEFAULTS = {'header_version': 0, 'base': 0, 'kernel_offset': 0x8000, 'tags_offset': 0x1e00000, 'pagesize': 4096}
-MKBOOTIMG_FLAGS = ('base', 'kernel_offset', 'tags_offset', 'pagesize', 'header_version', 'ramdisk_offset', 'second_offset', 'cmdline')
+MKBOOTIMG_FLAGS = ('base', 'kernel_offset', 'tags_offset', 'pagesize', 'header_version', 'os_version',
+                   'os_patch_level', 'ramdisk_offset', 'second_offset', 'cmdline')
 
 
 def compile_shim(uefi, base, size, requires_header, scratch):
