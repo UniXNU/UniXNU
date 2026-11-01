@@ -141,6 +141,7 @@ The selected defconfig applies after `config_fragments`. File prefixes are
 | `tags_offset` | integer | Tags offset |
 | `pagesize` | integer | Image page size |
 | `header_version` | integer | Android boot image header version |
+| `kernel_compression` | string | `gzip` (default) or `none`; selects how the kernel is stored in the boot image |
 
 ### [[bootimg.dtb_node]]
 
