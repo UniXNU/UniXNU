@@ -2,6 +2,35 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-11-01: THE SPEAKER PLAYS UNDER LINUX ON THIS PHONE (user heard a 5 s 1 kHz tone)** - a reference lab for
+  the iOS port, all from RAM, nothing written to the phone (read-only mounts, binaries in TWRP's RAM /tmp).
+  - Image `shim/out/umi-stockkernel-twrp.img` (not in git): the kernel + dtb of the phone's own boot image backup
+    (`~/ios-umi-backup/boot-read-2026-10-21.img`, a custom ROM's 4.19.325, audio techpack built in) + TWRP's ramdisk,
+    no recovery dtbo (ABL then uses the dtbo partition), cmdline = the boot image's + `androidboot.selinux=permissive
+    buildvariant=eng androidboot.usbconfigfs=true`, os_version 16.0.0 / 2026-02 (`mkbootimg` from toolbin). TWRP comes
+    up with adb on this kernel. (TWRP's own kernel 4.19.157 has no audio stack at all.)
+  - Bring-up by hand: modem partition vfat read-only on `/vendor/firmware_mnt` and `/firmware` (ueventd
+    firmware_directories), `echo 1 > /sys/kernel/boot_adsp/boot` (ADSP ONLINE, apr_tal_rpmsg "apr_audio_svc" Up), then
+    the vendor's own **`qrtr-ns -f`** and **`pd-mapper`** run from a read-only vendor mount
+    (`LD_LIBRARY_PATH=/tmp/v/lib64:/system/lib64`): sysmon-qmi connects to the ADSP's SSCTL, diag connects, `servloc:
+    Connection established with the Service locator`, `service-notifier: ... 74 service`, `msm/adsp/audio_pd ... is up
+    on adsp`, **`apr_adsp_up: Q6 is Up`**, sound card **kona-mtp-snd-card** with `tert_mi2s_rx_cs35l41_dai_links`.
+  - `tools/umi-atone.c` (+ `tools/umi-atone-build.sh`, libc-free static aarch64): ALSA controls by name + a 1 kHz S16
+    stereo 48 kHz tone on pcmC0D0p (MultiMedia1). Settings: `TERT_MI2S_RX Channels` Two, `Format` S16_LE,
+    `SampleRate` KHZ_48, **`PCM Source` = ASP and `RCV PCM Source` = ASP** (amp DSP bypassed: items {None, ASP, DSP}),
+    `TERT_MI2S_RX Audio Mixer MultiMedia1` = 1, then `umi-atone tone 5 6000` -> heard.
+  - Kernel log of a tone: cs35l41 1-0040 / 1-0042 hw_params + `set_sysclk freq=1536000` (our MI2S bit clock),
+    `__afe_port_start: port id: 0x1004` (topology id -22 and missing cal blocks are harmless), `adm_open: port 0x1004
+    ... topology 0x10312 bit_width 16`, unmute, 3 s, adm_close / afe_close. **So the ADSP's AFE/ADM/ASM answer Linux.**
+  - CS35L41 per-stream writes (regmap trace, both amps; static config was written at probe): 0x2c04 0xb70 -> 0xb60 ->
+    0x360 -> 0x370 -> 0x10370 (PLL from SCLK), 0x201c 0x1001010, 0x4800 0x10000, 0x2018 0x21, test key 0x40 = 0x55,
+    0xaa, 0x2084 0x2f1aa0, 0x40 = 0xcc, 0x33, 0x2014 0x1 (global enable), 0x6000 0x8000 -> 0xa000; stop: 0x4800 0,
+    0x2018 0x20, 0x2c04 0x370, 0x2014 0, read 0x10010 (IRQ1 status) / write 0x800000, 0x2084 0x2f1aa3 (test key around
+    it), 0x201c 0x1001000. Files `research/audio-umi/twrp/` (dmesg, mixer list, regmap trace; not in git).
+  - **What Linux does before its first APR command that we may not:** the APPS QRTR name service (qrtr-ns) runs, the
+    kernel connects to the ADSP's SSCTL and DIAG services, the service locator is a separate APPS QRTR server, and the
+    PDR notifier registers for instance 74. Next: diff this against our kernel's QRTR/servreg/APR sequence (and, if
+    needed, trace more here: i2c events, the GLINK/QRTR control traffic) until the iOS side gets an AFE answer.
 - **2026-11-01 0220: NOT TIMING, NOT OUR FASTRPC, NOT THE ROOT PD** (patch `xnu/patches/0220-umi-adsp-probe-rounds-rootpd.patch`).
   - `umi-0219b-norpc-longprobe.img` (`sweetadsprpc=0 sweetadspafe=0 sweetadspprobeevery=10 sweetadspproberounds=30`):
     no FastRPC at all, the five probes every ~15 s for 5+ minutes: the core answers GET_FWK_VERSION every round (22/22),
