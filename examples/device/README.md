@@ -9,7 +9,7 @@ hardware inputs before building.
 2. Set the board name, description, firmware paths, and complete component selection. Add the shared `UniXNURamDiskDxe` and filesystem dependencies to the firmware DSC and FDF using the [firmware integration guide](https://unixnu.com/porting/uefi-firmware#required-integration).
 3. Pin a reviewed SoC commit in `feeds.toml`.
 4. Rename `configs/example_defconfig` and `dts/board.dts` for the board, then update `kernel.defconfig` and `device_tree.source`. Fill the DTS model, compatible values, memory map, CPU selection, and peripherals.
-5. List firmware sources and hashes in `proprietary-files.txt`.
+5. Pin the official firmware archive in `board.toml` `[firmware.image]` and list the extracted inputs and hashes in `proprietary-files.txt`; extracted firmware lives in no repository.
 6. Set partition geometry and payload inputs from the device's records.
 7. Match the identity in `porting.toml` to `board.toml`. Cover every selected component and dependency, with board-specific ownership paths, findings and completion criteria.
 8. Enable the template CI workflows and require the `Porting record` check on the official device branch.
