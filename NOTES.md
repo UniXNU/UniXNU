@@ -2,6 +2,21 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0221: DIAG HANDSHAKE WITH THE ADSP WORKS; AUDIO SERVICES STILL SILENT** (patch
+  `xnu/patches/0221-umi-adsp-diag-servers.patch`; boots `shim/out/umi-0221-diag.img`, `umi-0221b-diag-norpc.img`).
+  - Linux lab `qrtr-lookup` (`research/audio-umi/twrp/qrtr-lookup-linux.txt`): APPS (node 1) serves DIAG 4097 for every
+    peripheral (LPASS:CNTL 64, LPASS:DATA 66, LPASS:DCI 68 ...) and the ADSP (node 5) then publishes **4097/65
+    LPASS:CMD**, which it never did for our kernel. Instances = base (LPASS 64) + type (CNTL 0, CMD 1, DATA 2, DCI 4).
+  - Ours now: NEW_SERVER 4097/64 + 4097/66 on the ADSP's HELLO; control packets {u32 id, u32 len, data}: the ADSP sends
+    feature mask (msg 8) -> we answer {8, 8, 4, bits FEATURE_MASK_SUPPORT + DIAGID_SUPPORT}; msg 12; **diag ID requests
+    (msg 33, v1) for "msm/adsp/root_pd" and "msm/adsp/audio_pd"** -> {33, len, version 1, id, name}; then dozens of msg 1
+    (command registrations), and 4097/65 appears. Diag works.
+  - **ASM / ADM / AFE still never answer** (probes and AFE steps), with the audio PD FastRPC (0221) and without it
+    (`sweetadsprpc=0`, 0221b). Votes still answered.
+  - The downstream service-notifier registers exactly as we do (REGISTER_LISTENER, state from the reply), so servreg is
+    not the difference either. Ruled out so far: timing, FastRPC, diag, servreg, packet size, root vs audio PD.
+  - Next: Linux's real APR bytes. The lab kernel has no /dev/mem, no kprobes, no debugfs, but maybe /proc/kcore (with
+    kptr_restrict 0): read the SMEM mapping and the GLINK FIFOs (items 479/480, `tools/smem-apr-decode.py`) after a tone.
 - **🎉 2026-11-01: THE SPEAKER PLAYS UNDER LINUX ON THIS PHONE (user heard a 5 s 1 kHz tone)** - a reference lab for
   the iOS port, all from RAM, nothing written to the phone (read-only mounts, binaries in TWRP's RAM /tmp).
   - Image `shim/out/umi-stockkernel-twrp.img` (not in git): the kernel + dtb of the phone's own boot image backup

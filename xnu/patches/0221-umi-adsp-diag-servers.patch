@@ -1,0 +1,155 @@
+From 7603db5386ad6eed15025167c13fb79896475bd2 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 17:42:02 +0100
+Subject: [PATCH] umi: DIAG control servers for the ADSP (LPASS:CNTL /
+ LPASS:DATA)
+
+Under Linux the kernel's diag driver serves QRTR 4097/64 and 4097/66 on
+APPS; the ADSP connects, exchanges feature masks and diag IDs and then
+publishes 4097/65 (LPASS:CMD). Our kernel now does the same: the
+announcements on the ADSP's HELLO, the APPS feature mask and diag ID
+answers (boot-arg sweetadspdiag=0 turns it off). On the phone the
+handshake completes (diag ids for msm/adsp/root_pd and audio_pd, LPASS:CMD
+published), but ASM, ADM and AFE still do not answer, with or without the
+audio PD FastRPC.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 88 ++++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_slpi.c |  9 +++++
+ 2 files changed, 97 insertions(+)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 1a5d9fa..1ab45da 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -1048,4 +1048,92 @@ svc_probe(uint32_t ms)
+ 		break;
+ 	}
+ }
++
++/*
++ * DIAG control for the ADSP (LPASS). Under Linux the kernel's diag driver serves QRTR service 4097 instances 64
++ * (LPASS:CNTL) and 66 (LPASS:DATA) on APPS; the ADSP connects, exchanges feature masks and diag IDs and then
++ * publishes 4097/65 (LPASS:CMD). Our kernel never served them and the ADSP never published 65 (qrtr-lookup in the
++ * Linux lab, 2026-11-01); its audio services also never answered. Here: the two servers, the APPS feature mask
++ * (FEATURE_MASK_SUPPORT + DIAGID_SUPPORT, as diag_send_feature_mask_update) and diag ID answers (process_diagid,
++ * version 1). Control packets are {u32 id, u32 len, data[len]}, possibly several per message. Boot-arg
++ * sweetadspdiag=0 turns it off.
++ */
++#define DIAG_SVC                4097
++#define DIAG_CTRL_FEATURE       8
++#define DIAG_CTRL_DIAGID        33
++
++static bool
++diag_on(void)
++{
++	uint32_t on = 1;
++	PE_parse_boot_argn(SL_ARG "diag", &on, sizeof(on));
++	return on != 0;
++}
++
++static void
++diag_announce(uint32_t node)
++{
++	if (!diag_on()) {
++		return;
++	}
++	uint32_t c[4] = { DIAG_SVC, 64, QR_NODE_APPS, DIAG_CNTL_PORT }, d[4] = { DIAG_SVC, 66, QR_NODE_APPS, DIAG_DATA_PORT };
++	qr_ctrl(QR_TYPE_NEW_SERVER, node, c, 4);
++	qr_ctrl(QR_TYPE_NEW_SERVER, node, d, 4);
++	printf("SWEET ADSP: diag: announced LPASS:CNTL (4097/64) and LPASS:DATA (4097/66) to node %u\n", node);
++}
++
++static void
++diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint32_t len)
++{
++	static unsigned logged;
++	static uint32_t next_id = 1;
++	if (dst_port == DIAG_DATA_PORT) {
++		if (logged++ < 20) {
++			printf("SWEET ADSP: diag <- DATA %u bytes from %u:%#x\n", len, node, port);
++		}
++		return;
++	}
++	for (uint32_t at = 0; at + 8 <= len;) {
++		uint32_t id, plen;
++		memcpy(&id, p + at, 4);
++		memcpy(&plen, p + at + 4, 4);
++		if (plen > len - at - 8) {
++			plen = len - at - 8;
++		}
++		const uint8_t *d = p + at + 8;
++		if (logged++ < 40) {
++			uint32_t w[3] = { 0 };
++			memcpy(w, d, MIN(plen, 12u));
++			printf("SWEET ADSP: diag <- CNTL msg %u, %u bytes from %u:%#x: %#x %#x %#x\n", id, plen, node, port, w[0],
++			    w[1], w[2]);
++		}
++		if (id == DIAG_CTRL_FEATURE) {
++			/* struct diag_ctrl_feature_mask {id, data_len = 4 + FEATURE_MASK_LEN, feature_mask_len 4} + 4 bytes */
++			uint8_t r[16] = { 0 };
++			uint32_t h[3] = { DIAG_CTRL_FEATURE, 4 + 4, 4 };
++			memcpy(r, h, 12);
++			r[12] = 1u << 0;                /* F_DIAG_FEATURE_MASK_SUPPORT */
++			r[13] = 1u << (15 - 8);         /* F_DIAG_DIAGID_SUPPORT */
++			qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, r, sizeof(r));
++			printf("SWEET ADSP: diag -> CNTL feature mask\n");
++		} else if (id == DIAG_CTRL_DIAGID && plen >= 8) {
++			/* request {version, diag_id, process_name} (v1) or {version, diag_id, feature_len, mask, name} (v2) */
++			uint32_t version;
++			memcpy(&version, d, 4);
++			const char *name = (const char *)d + (version == 2 && plen >= 16 ? 16 : 8);
++			uint32_t nlen = 0, room = plen - (uint32_t)((const uint8_t *)name - d);
++			while (nlen < room && nlen < 30 && name[nlen] != 0) {
++				nlen++;
++			}
++			uint8_t r[64] = { 0 };
++			uint32_t h[4] = { DIAG_CTRL_DIAGID, 4 + 4 + nlen + 1, 1, next_id };
++			memcpy(r, h, 16);
++			memcpy(r + 16, name, nlen);
++			qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, r, 16 + nlen + 1);
++			printf("SWEET ADSP: diag -> CNTL diag id %u for \"%.*s\"\n", next_id, (int)nlen, name);
++			next_id++;
++		}
++		at += 8 + plen;
++	}
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index 134cb7b..94d6941 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -79,6 +79,10 @@ static int fr_create_audio_pd(void);                    /* heap hyp-assign + cre
+ struct fr_buf;
+ static int adsp_apps_mem(uint32_t method, const uint32_t *w, uint8_t *prim, struct fr_buf *out, uint32_t nout);
+ #define SERVREG_PORT            0x4001          /* our QRTR client port for the servreg notifier */
++#define DIAG_CNTL_PORT          0x4002          /* our DIAG servers for the ADSP (LPASS:CNTL / LPASS:DATA) */
++#define DIAG_DATA_PORT          0x4003
++static void diag_announce(uint32_t node);
++static void diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint32_t len);
+ #endif
+ #define SL_MDT_MAX              (64 * 1024)
+ #define SL_SEGMENTS_MAX         64
+@@ -1204,6 +1208,9 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ 		printf("SWEET " SL_TAG ": QRTR <- HELLO from node %u; answering, announcing the service locator\n", src_node);
+ 		qr_ctrl(QR_TYPE_HELLO, src_node, NULL, 0);
+ 		qr_announce_pdm(src_node);
++#if SL_EDGE_ADSP
++		diag_announce(src_node);
++#endif
+ 		break;
+ 	case QR_TYPE_NEW_SERVER:
+ 	case QR_TYPE_DEL_SERVER:
+@@ -1241,6 +1248,8 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ #else
+ 		} else if (dst_port == SERVREG_PORT) {
+ 			servreg_rx(src_node, src_port, p, size);
++		} else if (dst_port == DIAG_CNTL_PORT || dst_port == DIAG_DATA_PORT) {
++			diag_rx(src_node, src_port, dst_port, p, size);
+ #endif
+ 		} else if (qr_logged++ < 20) {
+ 			printf("SWEET " SL_TAG ": QRTR <- DATA %u bytes from %u:%#x to %u:%#x\n", size, src_node, src_port, dst_node,
+-- 
+2.54.0 (Apple Git-157)
+
