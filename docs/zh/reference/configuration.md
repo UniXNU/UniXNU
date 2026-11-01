@@ -140,6 +140,7 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 | `tags_offset` | 整数 | tags 偏移 |
 | `pagesize` | 整数 | 镜像页大小 |
 | `header_version` | 整数 | Android 启动镜像 header 版本 |
+| `kernel_compression` | 字符串 | `gzip`（默认）或 `none`，决定内核在启动镜像中的存储方式 |
 
 ### [[bootimg.dtb_node]]
 

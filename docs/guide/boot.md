@@ -99,6 +99,52 @@ Useful logs:
 | DarwinBoot | Serial console, lines with `DARWINBOOT:` |
 | XNU | Serial console, kernel output |
 
+## Payload in vendor_boot {#vendor-boot-payload}
+
+A payload larger than a few megabytes does not fit in `boot`. On a GKI device
+`boot` carries no ramdisk at all (`ramdisk_size` is 0) and a vendor ABL rejects
+one, so the payload belongs in the `vendor_ramdisk` field of `vendor_boot` and
+`./unixnu bootimg` is run with `--ramdisk none`.
+
+Three limits decide whether the image is accepted:
+
+- **Window.** A stock `vendor_boot` header places the ramdisk at `0x01000000`
+  and the device tree at `0x01f00000`, which leaves 15 MiB. Relocate the ramdisk
+  with `--ramdisk-addr` before the payload passes that size, or it overwrites the
+  device tree.
+- **Partition.** The rebuilt image has to stay inside the partition. The AVB
+  footer in the last 64 bytes is retargeted at the vbmeta blob, so no footer has
+  to be removed.
+- **Filesystem.** The firmware mounts the ramdisk as FAT. `mformat -F` can
+  produce a volume it cannot read; `mformat -T 8192 -h 64 -s 32` produces a FAT16
+  volume that mounts.
+
+The menu reports what it found as `payload: initrd <start>-<end> [<id>] fs <n>`.
+`fs 0` means the block device exists but carries no readable filesystem, and a
+missing payload line means the ramdisk never reached the loader.
+
+## When the panel is the only output {#panel-diagnostics}
+
+A board without a serial console reports progress on the framebuffer, and the
+loader and the kernel each have their own signal:
+
+- DarwinBoot paints the top sixteenth of the framebuffer green immediately
+  before the branch to the kernel. A green band means every stage before the
+  kernel succeeded.
+- The optional entry probe paints one band per stage below the green one: blue at
+  the kernel entry with the MMU off, magenta just before the MMU is enabled, and
+  with `entry_probe_reset_delay` a reset through PSCI some seconds after the MMU
+  is on, which turns "the CPU got that far" into a reboot.
+- `payload.panic_screen = true` patches the panic path so the format string is
+  drawn on the kernel's own framebuffer mapping. It shares the zero padding after
+  `_start` with a stage-four probe, so the two cannot be enabled together.
+- `entry_probe_reset_after` bisects `_arm_init`: a reset after the named call
+  means the kernel returned from it.
+
+A loader that fails after drawing its own diagnostics has them overwritten as
+soon as the menu redraws. Hold the screen for a few seconds on the failure path
+when a photograph is the only record.
+
 ## Recovery
 
 Use the device's hardware reset sequence to return to its bootloader. Once fastboot responds, the following command restarts that bootloader:
