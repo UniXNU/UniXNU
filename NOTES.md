@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **🎉 2026-11-01 0226: AFE ANSWERS, TERT_MI2S_RX RUNNING FROM iOS, BOTH AMPS PLL-LOCKED** (patch
+  `xnu/patches/0226-umi-apr-seqcmd-afe-running.patch`, boot `shim/out/umi-0228b-clkv1-amp.img` = 0215d's line +
+  `sweetadsprpc=0 sweetadspprobeevery=10 sweetadspproberounds=3 sweetamp=1 sweetampstepms=200 sweetampplay=1`).
+  - **Root cause of the silent ASM / ADM / AFE (0215-0225): our APR header field was 0x150 = message type 1
+    (APR_MSG_TYPE_CMD_RSP).** The ADSP executed the commands but, taking them for responses, sent no
+    APR_BASIC_RSP_RESULT; only replies with their own opcode (core state, versions, LPASS hw votes) came back. Linux
+    sends 0x250 (APR_MSG_TYPE_SEQ_CMD). Found through the ADSP's own F3 log: `AFEPortAprHandler.cpp:300 "Executing
+    APR cmd with opcode"` for each of our commands, with the I2S config parsed, while nothing came back on GLINK.
+  - Then: port stop 0, I2S config 0, **clock set via AFE_SVC_CMD_SET_PARAM 0x100f3 (param header v1) 0** (the V2 form
+    0x100fc with a v3 header returns 0x2 EBADPARAM: this AFE has no instance-id support, Linux picks v1 then), port
+    start 0x100e5 0 -> RUNNING (zeros: no stream yet). ASM / ADM / AFE unmap with handle 0 -> 0x2 (expected), core
+    CREATE_LPASS_NPA_CLIENT -> 0x11.
+  - **Amps: IRQ1 status 0x1401000 / 0 / 0x2000002f / 0x3 on both: power-up done (STATUS1 bit 24) and PLL lock (STATUS3
+    bit 1)**, vs 0x401000 / 0x20000080 without a clock (0223). The bit clock reaches the CS35L41s; no sound yet.
+  - Diag (boots 0227 / 0227b): time sync + one F3 mask per msm SSID range (diagchar.h MSG_SSID_0..26) + DIAGMODE v2 per
+    diag id make the ADSP stream F3. Most messages are QShrink4 terse (0x92: line, SSID, ss mask, 32-bit hash,
+    args); the hash database is not on the phone, plain-text ones still decode. Firmware rebuilt as an ELF from
+    adsp.mdt + .bNN disassembles with Homebrew LLVM's Hexagon objdump (audio PD code = segment 11 at 0xb0200000).
+  - Next for a test tone: an ASM stream into TERT_MI2S_RX (shared memory map, ASM open write, ADM COPP + matrix
+    routing, as the Linux card), or an AFE-level source (RT proxy port / loopback) if simpler.
 - **2026-11-01 0225: UAUDIO announced and every ADSP GLINK channel opened; still no ASM / ADM / AFE answer** (patch
   `xnu/patches/0225-umi-adsp-uaudio-glink-all.patch`, boots `shim/out/umi-0225-uaudio.img` and `umi-0226-openall.img` =
   0215d's line + `sweetadsprpc=0 sweetadspprobeevery=10 sweetadspproberounds=8`).
