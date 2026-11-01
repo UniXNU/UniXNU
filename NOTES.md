@@ -2,6 +2,18 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0225: UAUDIO announced and every ADSP GLINK channel opened; still no ASM / ADM / AFE answer** (patch
+  `xnu/patches/0225-umi-adsp-uaudio-glink-all.patch`, boots `shim/out/umi-0225-uaudio.img` and `umi-0226-openall.img` =
+  0215d's line + `sweetadsprpc=0 sweetadspprobeevery=10 sweetadspproberounds=8`).
+  - QMI 0x41d (UAUDIO_STREAM_SERVICE) announced to node 5 (boot-arg `sweetadspuaudio`): no QRTR traffic to it, no change.
+  - The ADSP opens 6 channels itself (pcie_drv, mhi_sat, fastrpcglink-apps-dsp, IPCRTR, LOOPBACK_CTL_LPASS,
+    apr_audio_svc); we accept all and open glink_ssr after VERSION_ACK (`sweetadspopenall`): **all 7 open both ways, no
+    data on the extras**. Core / versions / LPASS hw votes still answer; AFE port stop, I2S config, the ASM / ADM / AFE
+    UNMAP probes get nothing over 8 rounds. Ruled out: missing GLINK channels, glink_ssr handshake, UAUDIO.
+  - Diag note: the ADSP sends CNTL msg 1 (registration tables, SSID ranges 0x12/0x0c/0x5a ...) after the F3 mask: the
+    per-range masks Linux answers with are the next diag lead.
+  - Live log tip: an unplugged / unenumerated USB cable gives an empty log on a working boot (no en8); replug and run
+    `tools/umi-usbnet.sh` right after `fastboot boot`.
 - **2026-11-01 0224: ADSP diag real-time mode; still no F3 stream** (patch `xnu/patches/0224-umi-adsp-diag-realtime.patch`,
   boot `shim/out/umi-0224-f3rt.img`). DIAGMODE v1 {3, 36, version 1, sleep vote 1, real time 1} after the F3 mask: taken,
   no data on LPASS:DATA. Linux sends DIAGMODE **v2** (with the diag id) when diag ids are in use, plus time sync, log and

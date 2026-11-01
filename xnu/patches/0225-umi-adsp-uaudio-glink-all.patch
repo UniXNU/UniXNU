@@ -1,0 +1,116 @@
+From adad1b3409fca1931c44da82e5d1fbc0498fc98a Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 21:10:19 +0100
+Subject: [PATCH] umi: ADSP announces UAUDIO and opens every GLINK channel
+
+Announce QMI 0x41d (UAUDIO_STREAM_SERVICE) to node 5 (boot-arg
+sweetadspuaudio), accept the ADSP's LOOPBACK_CTL_LPASS, mhi_sat and
+pcie_drv channels, and open glink_ssr after VERSION_ACK (boot-arg
+sweetadspopenall), logging any data on them. On the phone all seven
+channels open both ways but carry no data, and ASM, ADM and AFE port
+commands still get no answer.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c |  8 ++++++++
+ bsd/dev/sweet_slpi.c | 30 +++++++++++++++++++++++++++++-
+ 2 files changed, 37 insertions(+), 1 deletion(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 46b6b91..dffa3f4 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -1150,6 +1150,14 @@ diag_announce(uint32_t node)
+ 	uint32_t c[4] = { DIAG_SVC, 64, QR_NODE_APPS, DIAG_CNTL_PORT }, d[4] = { DIAG_SVC, 66, QR_NODE_APPS, DIAG_DATA_PORT };
+ 	qr_ctrl(QR_TYPE_NEW_SERVER, node, c, 4);
+ 	qr_ctrl(QR_TYPE_NEW_SERVER, node, d, 4);
++	/* Linux's APPS also serves QMI 0x41d (UAUDIO_STREAM_SERVICE, uaudio_qmi: USB audio offload, v1 instance 0) */
++	uint32_t on = 1;
++	PE_parse_boot_argn(SL_ARG "uaudio", &on, sizeof(on));
++	if (on) {
++		uint32_t u[4] = { 0x41d, 1, QR_NODE_APPS, UAUDIO_PORT };
++		qr_ctrl(QR_TYPE_NEW_SERVER, node, u, 4);
++		printf("SWEET ADSP: announced QMI 0x41d (UAUDIO_STREAM_SERVICE) to node %u\n", node);
++	}
+ 	printf("SWEET ADSP: diag: announced LPASS:CNTL (4097/64) and LPASS:DATA (4097/66) to node %u\n", node);
+ }
+ 
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index 94d6941..250aaf8 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -81,6 +81,7 @@ static int adsp_apps_mem(uint32_t method, const uint32_t *w, uint8_t *prim, stru
+ #define SERVREG_PORT            0x4001          /* our QRTR client port for the servreg notifier */
+ #define DIAG_CNTL_PORT          0x4002          /* our DIAG servers for the ADSP (LPASS:CNTL / LPASS:DATA) */
+ #define DIAG_DATA_PORT          0x4003
++#define UAUDIO_PORT             0x4004          /* QMI UAUDIO_STREAM_SERVICE 0x41d (USB audio offload), as Linux's APPS */
+ static void diag_announce(uint32_t node);
+ static void diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint32_t len);
+ #endif
+@@ -521,7 +522,8 @@ sl_smp2p_create(void)
+ #if SL_EDGE_ADSP
+ #define GL_LCID_APR             2               /* "apr_audio_svc" */
+ #define GL_LCID_RPC             3               /* "fastrpcglink-apps-dsp" */
+-#define GL_CHANNELS             3
++#define GL_LCID_EXTRA           4               /* from here: channels Linux also opens, only logged (0226) */
++#define GL_CHANNELS             7
+ #else
+ #define GL_LCID_RPC             2               /* "fastrpcglink-apps-dsp" */
+ #define GL_CHANNELS             2
+@@ -544,6 +546,12 @@ static struct {
+ 	{ .name = "apr_audio_svc", .intents = { { 0x200, 20 } } },  /* dt qcom,apr_tal_rpmsg */
+ #endif
+ 	{ .name = "fastrpcglink-apps-dsp", .intents = { { 0x64, 64 } } },
++#if SL_EDGE_ADSP
++	{ .name = "LOOPBACK_CTL_LPASS", .intents = { { 0x200, 4 } } },
++	{ .name = "mhi_sat", .intents = { { 0x200, 4 } } },
++	{ .name = "pcie_drv", .intents = { { 0x200, 4 } } },
++	{ .name = "glink_ssr", .intents = { { 0x200, 4 } } },      /* APPS opens it (dt qcom,adsp_glink_ssr) */
++#endif
+ };
+ 
+ static int
+@@ -1250,6 +1258,11 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ 			servreg_rx(src_node, src_port, p, size);
+ 		} else if (dst_port == DIAG_CNTL_PORT || dst_port == DIAG_DATA_PORT) {
+ 			diag_rx(src_node, src_port, dst_port, p, size);
++		} else if (dst_port == UAUDIO_PORT) {
++			uint32_t w[4] = { 0 };
++			memcpy(w, p, MIN(size, 16u));
++			printf("SWEET ADSP: uaudio <- %u bytes from %u:%#x: %#x %#x %#x %#x\n", size, src_node, src_port, w[0], w[1],
++			    w[2], w[3]);
+ #endif
+ 		} else if (qr_logged++ < 20) {
+ 			printf("SWEET " SL_TAG ": QRTR <- DATA %u bytes from %u:%#x to %u:%#x\n", size, src_node, src_port, dst_node,
+@@ -2054,6 +2067,16 @@ gl_rx_one(void)
+ 	case GL_VERSION_ACK:
+ 		gl_advance(8);
+ 		printf("SWEET " SL_TAG ": GLINK <- VERSION_ACK %u features %#x\n", p1, p2);
++#if SL_EDGE_ADSP
++		{
++			uint32_t all = 1;
++			PE_parse_boot_argn(SL_ARG "openall", &all, sizeof(all));
++			if (all) {
++				gl_open(GL_CHANNELS);   /* glink_ssr: APPS-initiated, as Linux's glink_ssr driver */
++				printf("SWEET ADSP: GLINK -> OPEN \"glink_ssr\"\n");
++			}
++		}
++#endif
+ 		return true;
+ 	case GL_OPEN: {
+ 		uint32_t len = (8 + p2 + 7) & ~7u;
+@@ -2154,6 +2177,11 @@ gl_rx_one(void)
+ #if SL_EDGE_ADSP
+ 			} else if (ch + 1 == GL_LCID_APR) {
+ 				apr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
++			} else if (ch + 1 >= GL_LCID_EXTRA) {
++				uint32_t w[4] = { 0 };
++				memcpy(w, gl_ch[ch].rx, MIN(gl_ch[ch].rx_used, 16u));
++				printf("SWEET ADSP: GLINK <- %u bytes on \"%s\": %#x %#x %#x %#x\n", gl_ch[ch].rx_used, gl_ch[ch].name,
++				    w[0], w[1], w[2], w[3]);
+ #endif
+ 			} else {
+ 				fr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
+-- 
+2.54.0 (Apple Git-157)
+
