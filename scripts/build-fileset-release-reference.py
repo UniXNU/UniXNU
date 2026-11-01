@@ -2,6 +2,7 @@
 """Build a symbol-bearing RELEASE comparison kernel in an isolated output tree."""
 import json
 import os
+import re
 import shutil
 import hashlib
 import argparse
@@ -65,11 +66,21 @@ args = ['make','-C',str(source),'build','SDKROOT=iphoneos',
 with (output/f'{mode}-build.log').open('w') as log:
     result = subprocess.run(args,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
 print('RELEASE reference exit',result.returncode,'log',output/f'{mode}-build.log',flush=True)
-if result.returncode:
-    raise SystemExit(result.returncode)
+# The bring-up patch calls native hooks from the kernel core behind weak_import declarations; on arm64e
+# the authenticated pointer of an undefined weak symbol fails the link. The private copy stubs them: this
+# comparison kernel never runs, the prelink step reads its layout.
+build_log = (output / f'{mode}-build.log').read_text()
+stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_log_rounds))"', build_log, re.M)))
+if stub_names:
+    (output / 'native-stubs.c').write_text(''.join(f'long {name[1:]};\n' for name in stub_names))   # the linker names carry the leading underscore
+    iphoneos = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
+    subprocess.run(['xcrun', 'clang', '-arch', 'arm64e', '-mkernel', '-isysroot', iphoneos, '-c',
+                    '-o', str(output / 'native-stubs.o'), str(output / 'native-stubs.c')], check=True)
+    at = next(i for i, a in enumerate(args) if a.startswith('LD_KERNEL_ARCHIVES='))
+    args[at] += f' -Wl,-force_load,{output}/native-stubs.o'
 # Forced exports the built objects cannot provide: remove them from this private copy and link again
-# (the symbols are absent from the comparison kernel either way; the second link stops the forced-export
-# list from failing it).
+# (the symbols are absent from the comparison kernel either way; the first link can stop exactly there,
+# and its file list is what names the objects that were built).
 objects = (output / f'{mode}-obj/RELEASE_ARM64_BCM2837/link.filelist').read_text().splitlines()
 names = set()
 for i in range(0, len(objects), 100):
@@ -94,6 +105,6 @@ print('RELEASE reference exit', result.returncode, 'log', output / f'{mode}-buil
 if result.returncode:
     raise SystemExit(result.returncode)
 import shutil as _shutil
-built = output / f'{mode}-sym/RELEASE_ARM64_BCM2837/mach.release.bcm2837.unstripped.noctf'
+built = output / f'{mode}-obj/RELEASE_ARM64_BCM2837/mach.release.bcm2837.unstripped'
 _shutil.copyfile(built, final)
 print('reference', final)
