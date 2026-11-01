@@ -2,6 +2,22 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0223: BOTH CS35L41 AMPS CONFIGURED FROM iOS (Linux driver's writes replayed); they wait for a bit
+  clock** (patch `xnu/patches/0223-umi-cs35l41-configure.patch`, boot `shim/out/umi-0223-ampinit.img` = 0222-amp's line
+  + `sweetampstepms=200 sweetampplay=1`).
+  - Source: Linux lab regmap traces (`research/audio-umi/twrp/regmap-probe.txt`: driver unbind/bind = the I2C probe;
+    `regmap-full.txt`: tracing on before the card first comes up = the ASoC component probe, then one tone). Tables in
+    `bsd/dev/sweet_cs35l41_umi.h` (generated, per chip: the OTP trims differ): init = probe + component writes
+    (amp 0x40: 107, 0x42: 109), start = stream writes up to the global enable 0x2014 = 1, stop = the rest.
+  - Component probe writes: 0x3808 = 0x40 (boost peak current), 0x4220 = 3, 0x480c = 1, 0x2018 0x3321 -> 0x3320, IRQ
+    poll of 0x10010, 0x10010 = 0x800000, test key + 0x2084 = 0x2f1aa3, 0x2018 = 0x20, 0x201c = 0x1001000. Stream start:
+    0x2c04 0x810 -> ... -> 0x10370 (PLL from SCLK), 0x4808 = 0x10200200, 0x4840 = 0x10, (0x40 only: 0x4820 0x101 -> 1),
+    0x201c = 0x1001010, 0x4800 = 0x10000, 0x2018 = 0x21, test key + 0x2084 = 0x2f1aa0, 0x2014 = 1.
+  - Phone: **all init writes OK, read-backs equal the Linux values** (0x3808 0x40, 0x4220 3, 0x480c 1, 0x2018 0x20,
+    0x201c 0x1001000, 0x4c50-0x4c5c 0x28 / 0x21 / 0x3a / 0x3b, 0x6404 0x200530e) on both amps. Stream start OK, after 1 s
+    IRQ1 status 0x401000 / 0 / 0x20000080 / 0x3: **PLL lock (STATUS3 bit 1) clear, no power-up done (STATUS1 bit 24)**
+    -> the amps are ready but have no I2S bit clock: the remaining blocker is the ADSP's AFE (TERT_MI2S_RX) not
+    answering our kernel.
 - **🎉 2026-11-01: BOTH CS35L41 AMPS ANSWER FROM iOS** (boot `shim/out/umi-0222-amp.img` = 0215d's line + `sweetadsprpc=0
   sweetadspafe=0 sweetadspprobe=0 sweetamp=1`; kernel = patch 0222, the probe code is from 0216). Read-only: nothing
   configured or enabled, no sound.
