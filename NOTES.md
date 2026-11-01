@@ -2,6 +2,19 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0220: NOT TIMING, NOT OUR FASTRPC, NOT THE ROOT PD** (patch `xnu/patches/0220-umi-adsp-probe-rounds-rootpd.patch`).
+  - `umi-0219b-norpc-longprobe.img` (`sweetadsprpc=0 sweetadspafe=0 sweetadspprobeevery=10 sweetadspproberounds=30`):
+    no FastRPC at all, the five probes every ~15 s for 5+ minutes: the core answers GET_FWK_VERSION every round (22/22),
+    ASM / ADM / AFE never. So a slow audio PD start or our createstaticpd disturbing it are ruled out.
+  - `umi-0219c-rootpd.img` (`sweetadsppd=0`): FastRPC INIT_ATTACH to the ADSP **root PD** (pd bits 0, as postmarketOS
+    hexagonrpcd) -> 0, listener registered, **no reverse calls at all**; ASM / ADM / AFE still silent over 10 rounds.
+  - Upstream Linux runs this kind of Elite ADSP (RB5 / sm8250 boards) with q6core/q6afe/q6asm and no audiopd: it waits for
+    the "avs/audio" PDR UP (ours is UP) and sends the same APR packets (same src/dest domain + svc addressing; apr_tal is
+    plain rpmsg, no GLINK signals). Something else is different here.
+  - **Next idea (read-only, needs the user's OK):** the phone's TWRP runs Xiaomi's own kernel with the whole downstream
+    audio stack (apr, q6core, q6afe, adsp-loader). Boot TWRP from RAM and read its dmesg / debugfs (apr, q6core,
+    audio_notifier, adsp ssr) to see the working APPS<->ADSP start-up order and any command we never send. Other
+    options: ADSP-side logs (diag / QDSS / FARF via adspmsgd), or a deliberate ADSP crash to read the SFR.
 - **2026-11-01 0219: NO AUDIO-PD SERVICE ANSWERS ANYTHING** (patch `xnu/patches/0219-umi-adsp-service-probe.patch`, boot
   `shim/out/umi-0219-probe.img`, 0215d's line). After core ready, one harmless command a second:
   - core (svc 3, root PD) AVCS_CMD_GET_FWK_VERSION 0x1292c -> **answered** (0x1292d, 148 bytes, 9 services; note the

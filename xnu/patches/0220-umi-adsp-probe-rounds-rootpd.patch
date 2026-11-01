@@ -1,0 +1,95 @@
+From 0e31f08341f89aa4557ccef9245dd18caea11135 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 16:09:15 +0100
+Subject: [PATCH] umi: ADSP probe rounds and a root-PD FastRPC option
+
+sweetadspprobeevery / sweetadspproberounds repeat the service probes;
+sweetadsppd=0 attaches the FastRPC listener to the ADSP root PD
+(INIT_ATTACH, as postmarketOS's hexagonrpcd) instead of creating the
+static audio PD. Neither wakes ASM, ADM or AFE: without FastRPC, five
+minutes of probes get answers from the core only; the root PD attaches
+and makes no reverse calls.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 19 ++++++++++++++++---
+ bsd/dev/sweet_slpi.c | 17 +++++++++++++++--
+ 2 files changed, 31 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index b242b8e..1a5d9fa 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -999,11 +999,23 @@ adsp_apps_mem(uint32_t method, const uint32_t *w, uint8_t *prim, struct fr_buf *
+ static void
+ svc_probe(uint32_t ms)
+ {
+-	static unsigned next;
++	static unsigned next, rounds;
+ 	static uint32_t last;
+-	uint32_t on = 1;
++	uint32_t on = 1, every = 0, nrounds = 1;
+ 	PE_parse_boot_argn(SL_ARG "probe", &on, sizeof(on));
+-	if (!on || apr_core_state != 2 || next >= 5 || ms - last < 1000) {
++	PE_parse_boot_argn(SL_ARG "probeevery", &every, sizeof(every));        /* seconds between rounds */
++	PE_parse_boot_argn(SL_ARG "proberounds", &nrounds, sizeof(nrounds));
++	if (!on || apr_core_state != 2 || rounds >= nrounds) {
++		return;
++	}
++	if (next >= 5) {                        /* round done: wait, then again (a late-starting audio PD?) */
++		if (ms - last < every * 1000) {
++			return;
++		}
++		next = 0;
++		printf("SWEET ADSP: probe round %u\n", rounds + 1);
++	}
++	if (ms - last < 1000) {
+ 		return;
+ 	}
+ 	last = ms;
+@@ -1032,6 +1044,7 @@ svc_probe(uint32_t ms)
+ 	case 4:
+ 		printf("SWEET ADSP: probe -> AFE SERVICE_CMD_SHARED_MEM_UNMAP_REGIONS (handle 0)\n");
+ 		apr_send(APR_SVC_AFE, 0x000100ec, &zero, 4);
++		rounds++;
+ 		break;
+ 	}
+ }
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index e990a1e..134cb7b 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -1301,7 +1301,8 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+  */
+ #define FR_POOL_PA              0xd3100000u
+ #define FR_SID                  3ull
+-#define FR_PD                   1               /* USER_PD, as fastrpc_init_create_static_process sets */
++static uint32_t fr_pd_adsp = 1;                 /* USER_PD (createstaticpd); 0 = ROOT_PD (INIT_ATTACH, sweetadsppd=0) */
++#define FR_PD                   fr_pd_adsp
+ #define FR_DIR                  "/private/var/sweet/adsp-rpc/"
+ #define FR_HEAP_PA              0xd4000000u
+ #define FR_HEAP_SIZE            0xc00000u
+@@ -1913,7 +1914,19 @@ fr_run(unsigned seconds)
+ 		(void)sweet_smmu_route_sid(fr_sids[i]);
+ 	}
+ #if SL_EDGE_ADSP
+-	int r = fr_create_audio_pd();
++	uint32_t pd = 1;
++	PE_parse_boot_argn(SL_ARG "pd", &pd, sizeof(pd));
++	int r;
++	if (pd == 0) {
++		/* the root PD, as postmarketOS's hexagonrpcd for the ADSP (fastrpc_init_attach(fl, ROOT_PD)) */
++		fr_pd_adsp = 0;
++		int32_t tgid = FR_TGID;
++		in[0] = (struct fr_buf){ &tgid, 4 };
++		r = fr_invoke(0, FR_HANDLE_INIT, FR_SC(0, 1, 0), in, out, 3000);
++		printf("SWEET " SL_TAG ": FastRPC INIT_ATTACH (root PD) -> %d\n", r);
++	} else {
++		r = fr_create_audio_pd();
++	}
+ #else
+ 	int32_t tgid = FR_TGID;
+ 	in[0] = (struct fr_buf){ &tgid, 4 };
+-- 
+2.54.0 (Apple Git-157)
+
