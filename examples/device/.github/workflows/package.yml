@@ -40,8 +40,20 @@ jobs:
         with:
           repository: REPLACE/uefi-example   # this board's firmware checkout
           path: uefi-example
+          submodules: recursive   # the firmware volume builds from the checkout's submodules
       - name: tools
-        run: brew install dtc llvm
+        run: |
+          brew install dtc llvm lld cmake mtools blacktop/tap/ipsw
+          # Fail fast, naming the tool, before forty minutes of build.
+          ok=1
+          for t in clang xcodebuild make git ninja cmake dtc fdtget fdtput aea compression_tool \
+                   mformat mcopy ipsw; do
+            command -v "$t" >/dev/null || { echo "missing tool: $t"; ok=0; }
+          done
+          for t in lld-link llvm-lib llvm-rc llvm-nm llvm-objcopy; do
+            [ -f "/opt/homebrew/opt/llvm/bin/$t" ] || [ -f "/opt/homebrew/opt/lld/bin/$t" ] || { echo "missing tool: $t"; ok=0; }
+          done
+          [ "$ok" = 1 ]
       - name: platform seed
         env:
           seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
