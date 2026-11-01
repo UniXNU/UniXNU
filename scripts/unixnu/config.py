@@ -195,6 +195,8 @@ class Context:
     def need_config(self):
         if not self.config_path.is_file():
             raise Error(f'no configuration: run "unixnu defconfig NAME" first (see {self.device / "configs"})')
+        # Re-read: a release writes the configuration at its preflight step, after this context exists.
+        self.config = parse_config(self.config_path.read_text())
         return self.config
 
     def option_text(self, flag, env=None):
