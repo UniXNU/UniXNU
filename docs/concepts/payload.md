@@ -103,6 +103,13 @@ An `--owner-trust-cache` bundle is copied without the `[payload] trust_cache_sha
 
 ## Data ramdisk
 
+When the selected kernel configuration enables `CONFIG_XNU_OWNER_DATA_MOUNT`,
+the payload requires `--data-ramdisk FILE` or `[build] data_ramdisk` in the local
+build configuration. Without a generated `.config`, this check reads the
+selected device defconfig. A persistent overlay still needs its original seed
+to publish the Data volume; changing the seed is not a way to resume old Data.
+Missing seeds stop packaging before the payload is written.
+
 A Data seed can be delivered in two forms:
 
 | Form | ADT placeholder | Behavior |

@@ -92,11 +92,9 @@ sdk = run(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
 binding_objects = [OUT / 'original-bindings.o']
 if FILESET:
     # As for the Legacy display (build-gop-legacy-display-27.py): original functions are reached through owned stubs in kernel text
-    # (signed and moved like native code) whose branch lands on the original after the collection slide, less the measured move of the
-    # native kernel (native-slide); the metaclass is data, reached through the GOT at its plain address.
+    # (signed and moved like native code). XnuPrelink retargets their branches after placing native text.
+    # The metaclass is data, reached through the GOT at its fixed collection address.
     slide = int(plan['collection_slide'], 16)
-    native_slide_file = ROOT / 'build/native-legacy-display/native-slide'
-    native_slide = int(native_slide_file.read_text(), 16) if native_slide_file.exists() else 0
     text, addresses = '.text\n.p2align 2\n', ''
     for n, a in sorted(bindings.items()):
         if n not in undefined:
@@ -104,7 +102,7 @@ if FILESET:
         if n.endswith('gMetaClassE'):
             addresses += f'.globl {n}\n.set {n}, {a + slide:#x}\n'
         else:
-            addresses += f'.globl {n}.original\n.set {n}.original, {(a + slide - native_slide) & ((1 << 64) - 1):#x}\n'
+            addresses += f'.globl {n}.original\n.set {n}.original, {a + slide:#x}\n'
             text += f'.globl {n}\n{n}:\n bti c\n b {n}.original\n'
     asm.write_text(text)
     (OUT / 'original-addresses.S').write_text(addresses)

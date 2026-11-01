@@ -5,12 +5,12 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, tree, userdata
+from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, tree, userdata
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
 STEPS = ('kernel', 'package', 'firmware', 'payload')
-OPTIONAL_STEPS = ('userdata',)   # large; built only when named
+OPTIONAL_STEPS = ('userdata', 'runtime')
 
 
 def common():
@@ -34,7 +34,8 @@ def common():
     p.add_argument('--trust-cache', metavar='FILE', help='trust cache bundle for the payload')
     p.add_argument('--owner-trust-cache', metavar='FILE', help='owner-signed trust cache bundle that carries the original caches and extra modules; replaces --trust-cache and skips the board allow-list')
     p.add_argument('--skip-setup', action='store_true', help='mark Setup as done in the Data seed, so the Hello pages are skipped (needs --data-ramdisk; optional)')
-    p.add_argument('--data-ramdisk', metavar='FILE', help='Data ramdisk seed for the payload (an input; not built here)')
+    p.add_argument('--data-ramdisk', metavar='FILE', help='preserved Data ramdisk seed for this installation')
+    p.add_argument('--init-data', action='store_true', help='create and retain a new Data seed from the IPSW for a FIRST installation; requires kernel build')
     p.add_argument('--gpu-addon', metavar='FILE', help='GPU addon file (scripts/make-gpu-addon.py) the kernel writes into the Data volume at boot')
     p.add_argument('--unique-chip-id', metavar='HEX', help='platform seed for the device tree; or UNIXNU_UNIQUE_CHIP_ID')
     p.add_argument('--ipsw', metavar='PATH_OR_URL', help='the target IPSW: a local file or an https URL (default: url of board.toml [ipsw]); or UNIXNU_IPSW')
@@ -158,6 +159,8 @@ def cmd_build(ctx):
     if 'firmware' in steps:
         need_uefi(ctx)   # fail before fetching anything
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
+    if 'payload' in steps or 'runtime' in steps:
+        runtime.prepare(ctx, kernel_build='kernel' in steps)
     if 'kernel' in steps:
         kernel.build(ctx, modules)
         kernel.prelink(ctx)
