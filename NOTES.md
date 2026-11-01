@@ -2,6 +2,33 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0216: AUDIO PD IS UP, BUT THE AFE NEVER ANSWERS; amp probe froze the phone** (patch
+  `xnu/patches/0216-umi-adsp-afe-amp.patch`; boots `shim/out/umi-0216-afe.img`, `umi-0216b-afe.img`, `umi-0216c-amp.img`,
+  all 0215d's line). No sound, nothing changed on the phone.
+  - After core ready the kernel sends the AFE steps Linux q6afe uses for an MI2S port, each waiting for the
+    APR_BASIC_RSP_RESULT: (1) AFE_SVC_CMD_SET_PARAM 0x100f3, AFE_MODULE_CLOCK_SET 0x1028f / AFE_PARAM_ID_CLOCK_SET 0x10290
+    {version 1, clk id TER_MI2S_IBIT 0x104, 1536000 Hz, attr COUPLE_NO, root 0, enable}; (2) tert MI2S pins
+    133/134/135 function 1 (mi2s2_sck/data0/ws, 8 mA), AFE_PORT_CMD_SET_PARAM_V2 0x100ef port 0x1004,
+    AFE_MODULE_AUDIO_DEV_INTERFACE 0x1020c / AFE_PARAM_ID_I2S_CONFIG 0x1020d {1, 16 bit, SD0, stereo, WS internal,
+    48000}; (3) AFE_PORT_CMD_DEVICE_START 0x100e5.
+  - **Step 1 is never answered**: 9 sends 3 s apart, each consumed by the ADSP (GLINK RX_DONE on apr_audio_svc), no
+    result, no error, no crash (0216, 0216b). The core (svc 3) answers in the same session.
+  - Servreg notifier (QMI 0x42 at node 5 port 3, register listener 0x20 for "msm/adsp/audio_pd"): result 0,
+    **audio PD state 0x1fffffff = UP**. So the AFE's domain runs; its service looks blocked rather than absent.
+  - Leading hypothesis (unproven): the audio PD waits on its APPS FastRPC listener. The ADSP opens
+    "fastrpcglink-apps-dsp" and nothing serves it; on SM8250 Android `audioadsprpcd audiopd` attaches to the audio PD
+    and serves apps_std file reads (as hexagonrpcd/sscrpcd did for the SLPI's sensor PD, 0211). Next evidence: vendor
+    `etc/init/*audio*` / `*adsprpc*` rc files and the lists of `/vendor/lib/rfsa/adsp`, `/vendor/dsp` (TWRP, read-only,
+    needs the user's OK); then FastRPC to the audio PD (sweet_slpi.c's FastRPC listener for the ADSP edge).
+    Other candidates: AFE_CMD_REMOTE_LPASS_CORE_HW_VOTE_REQUEST 0x100f4 first (Linux votes LPASS_HW_MACRO 3 /
+    DCODEC 4 for the codec path), or a different AFE set-param version.
+  - **Amp probe froze the phone (0216c):** the log stops ~1-2 s before the probe's first line would show (the last
+    lines before a hard hang never reach the Mac), screen off, no input, needed Vol Down + Power. The probe maps TLMM
+    north (gpio 114), votes GCC 0x52008 bits 6-9 + 13 (wrap0 m/s-ahb, core, core2x, s3), checks branches, then reads
+    QUP0 SE3 (0x98c000). Unknown which access hangs. The probe is now opt-in (`sweetamp=1`) and logs + pauses 1 s per
+    step (`sweetampstepms`); image `shim/out/umi-0216d-amp.img` has it on, not booted yet.
+  - The GLINK service loop for the ADSP ends after `sweetadspsecs` (600 s); the ADSP stays up after that (0215d log,
+    item 423 then only holds its boot placeholder "SFR Init: wdog or kernel error suspected.").
 - **2026-11-01 0215: THE AUDIO DSP (ADSP) RUNS, Q6 CORE READY OVER APR** - first step to sound (patch
   `xnu/patches/0215-umi-adsp-start.patch`, boot `shim/out/umi-0215d-adsp.img` = umi-nofp-sample's line +
   `sweetadsp=1 sweetadspdelay=200`). Nothing plays yet; the amps are untouched.
