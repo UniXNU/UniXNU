@@ -2,6 +2,18 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0227: test tone through the ADSP, not heard yet; paused** (patch `xnu/patches/0227-umi-adsp-test-tone.patch`,
+  boots `shim/out/umi-0229-tone.img`, `umi-0229b-tone1k.img` = 0228b's line with `sweetadspprobe=0 sweetadsptone=1`).
+  **The tone is opt-in (`sweetadsptone=1`, default off), as are `sweetamp` / `sweetampplay`: normal boots play nothing.**
+  - PCM in low RAM 0xd3800000 (256 KiB), read by the ADSP through APPS SMMU stream 0x1801 (kona msm_audio_ion, routed to
+    bypass, sid bits 1 in address bits 32+). ASM map (handle back), open write v3 session 1 (PP none, PCM v2), media
+    format, ADM open v5 on 0x1004 (NULL topology, copp 0), matrix route, run, 4 writes: **every step 0, all writes
+    done**; the ADSP F3 log shows both PP stages "Received first data buffer" and the AFE connecting the stream.
+  - Not heard: 480 Hz / amplitude 1000 / 0.6 s, then 1 kHz / 4000 / 1 s (Linux lab tone: 1 kHz / 6000). Amp 0x40 at play:
+    DAC source 0x4c00 = 0x8 (ASPRX1), volume 0x6000 = 0x8000 (0 dB), gain 0x6c04 = 0x273, PLL locked, powered up.
+  - Next suspect: the amps' I2S data line. We configure SD0 (gpio 134); the stock DT's `qcom,msm-mi2s-rx-lines` for
+    tertiary MI2S is in `shim/out/umi-stockkernel-twrp.img` (string at offset ~40 MB, not yet decoded).
+  - iOS's own sounds (ringtones) need an audio device for CoreAudio on top of this kernel path: not started.
 - **🎉 2026-11-01 0226: AFE ANSWERS, TERT_MI2S_RX RUNNING FROM iOS, BOTH AMPS PLL-LOCKED** (patch
   `xnu/patches/0226-umi-apr-seqcmd-afe-running.patch`, boot `shim/out/umi-0228b-clkv1-amp.img` = 0215d's line +
   `sweetadsprpc=0 sweetadspprobeevery=10 sweetadspproberounds=3 sweetamp=1 sweetampstepms=200 sweetampplay=1`).
