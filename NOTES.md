@@ -2,6 +2,28 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0218: AFE ANSWERS THE LPASS CORE VOTES, BUT NOT ITS PORT/SERVICE COMMANDS** (patch
+  `xnu/patches/0218-umi-adsp-appsmem-votes.patch`; boots `shim/out/umi-0218{,b,c,d,e,f}-*.img`, 0215d's line).
+  - apps_mem request_map64 (4 KiB, rflags 8) answered: low RAM 0xd4c00000 (1 MiB, 16 KiB steps), FastRPC mmap on
+    handle 1 **method 2** (the downstream umi adsprpc.c 64-bit call `REMOTE_SCALARS_MAKE(2, 2, 1)`; method 4 = its
+    32-bit compat variant: the ADSP answered -1), {pgid, flags, vaddrin 0, num 1} + {pa, size} -> vaddr. 0218b got
+    0x8000040e (DSP base 0x80000400 + 14 = AEE_EBADPARM).
+  - **createstaticpd with pageslen 1** (downstream sets 1 when it passes the heap; upstream sends 0): with it the
+    audio PD no longer asks apps_mem at all (0218c) - the heap was ignored before.
+  - **LPASS core hardware votes** (Linux q6afe-clocks: AFE_CMD_REMOTE_LPASS_CORE_HW_VOTE_REQUEST 0x100f4 {block 3
+    LPASS_HW_MACRO / 4 LPASS_HW_DCODEC, "SWEET"}) -> 0x100f5 with 0x1b / 0x1c (the client handles): **the first AFE
+    answers ever** (0218d).
+  - Still unanswered, every try: AFE_SVC_CMD_SET_PARAM clock set (0x100f3, and SVC_SET_PARAM_V2 0x100fc tried in
+    0218e's plan), AFE_PORT_CMD_SET_PARAM_V2 I2S config (68 bytes, hex-dumped, byte-exact against the downstream
+    los techpack structs), and a 24-byte AFE_PORT_CMD_DEVICE_STOP for 0x1004 (0218f) -> not a size problem: the AFE's
+    port/service handler is not running while the vote path (resource manager) is.
+  - Downstream sources for reference (not in git): LineageOS android_kernel_xiaomi_sm8250 lineage-20 techpack/audio
+    `dsp/q6afe.c`, `dsp/q6core.c`, `include/dsp/apr_audio-v2.h`; Xiaomi umi-q-oss `drivers/char/adsprpc.c`
+    (`research/linux-refs/`).
+  - Next test, built: `umi-0218g-nocirrus1.img` (`sweetadspnocirrus=1`: our apps_std reports capi_v2_cirrus_sp.so
+    missing - is the AFE stuck behind that module's load?) and `umi-0218g-nocirrus0.img` (loads it and logs each
+    module fread). Other leads in q6core.c: AVCS_CMD_REGISTER_TOPOLOGIES / LOAD_TOPO_MODULES / MAP_MDF_SHARED_MEMORY
+    / CREATE_LPASS_NPA_CLIENT, which the Android audio HAL drives before the first AFE port.
 - **2026-11-01 0217: THE ADSP AUDIO PD IS CREATED AND LOADS ITS MODULES FROM US; AFE still silent** (patch
   `xnu/patches/0217-umi-adsp-audiopd-fastrpc.patch`; boots `shim/out/umi-0217b..e-audiopd.img` = 0215d's line, last
   `umi-0217e-audiopd.img`; built not booted: `umi-0217f-audiopd.img` with apps_mem logging).
