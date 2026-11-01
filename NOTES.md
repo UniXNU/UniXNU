@@ -24,6 +24,9 @@
     missing - is the AFE stuck behind that module's load?) and `umi-0218g-nocirrus0.img` (loads it and logs each
     module fread). Other leads in q6core.c: AVCS_CMD_REGISTER_TOPOLOGIES / LOAD_TOPO_MODULES / MAP_MDF_SHARED_MEMORY
     / CREATE_LPASS_NPA_CLIENT, which the Android audio HAL drives before the first AFE port.
+  - **0218g nocirrus1 (booted 15:24):** with capi_v2_cirrus_sp.so reported missing (fopen -2), the votes are answered
+    as before and the DEVICE_STOP probe and every I2S config try are still unanswered -> **the speaker-protection
+    module's load is not what blocks the AFE.** Remaining lead: the AVCS start-up commands the HAL sends (q6core.c).
 - **2026-11-01 0217: THE ADSP AUDIO PD IS CREATED AND LOADS ITS MODULES FROM US; AFE still silent** (patch
   `xnu/patches/0217-umi-adsp-audiopd-fastrpc.patch`; boots `shim/out/umi-0217b..e-audiopd.img` = 0215d's line, last
   `umi-0217e-audiopd.img`; built not booted: `umi-0217f-audiopd.img` with apps_mem logging).
