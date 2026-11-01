@@ -47,8 +47,9 @@ scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 运行的产物。
 
 运行自行安装工具（Homebrew 的 dtc、llvm、lld、cmake、mtools 和取 AEA 密钥的
-ipsw tap），并在构建前断言齐全；固件检出连同其子模块，固件卷从子模块里的
-二进制模块构建。
+ipsw tap），并在构建前断言齐全。板级在 board.toml 的 `[firmware.image]` 钉住
+官方固件包；运行用并发 HTTP 分段下载，只保留列出的输入，删除源包，并生成
+固件卷构建所需的二进制模块。
 
 在设备仓库的 fork 中运行：
 
