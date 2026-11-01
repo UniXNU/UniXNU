@@ -2,6 +2,27 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 (no boot): WHAT ANDROID RUNS FOR THE ADSP AUDIO PD** - read-only TWRP pull (user OK'd) of vendor
+  `etc/init/vendor.qti.adsprpc-service.rc`, `bin/adsprpcd`, `lib/libadsprpc.so`, `etc/acdbdata/adsp_avs_config.acdb`
+  + the ACDB list, and the audio modules of `lib/rfsa/adsp` (not in git, `research/audio-umi/{vendor-init,rfsa-adsp}`).
+  - The rc starts two FastRPC daemons on the ADSP: `vendor.adsprpcd` (`/vendor/bin/adsprpcd`, default/root PD) and
+    **`vendor.adsprpcd_audiopd` (`/vendor/bin/adsprpcd audiopd`, user media)**. adsprpcd only dlopens
+    libadsp_default_listener.so and runs `adsp_default_listener_start`; libadsprpc.so does
+    **`createstaticpd:audiopd`** (FastRPC create of the static audio PD, with a remote heap) and serves the PD's
+    reverse calls: **apps_std** (file open/read; search path `ADSP_LIBRARY_PATH` =
+    `/vendor/lib/rfsa/adsp;/vendor/lib/rfsa/dsp;/vendor/dsp`) and **apps_mem** (`apps_mem_request_map64`: the PD
+    asks APPS for heap memory, mapped for the DSP).
+  - This fits the silent AFE of 0216: the audio PD is "UP" for servreg, but without its listener it cannot get files
+    or heap. Next kernel step: FastRPC on the ADSP edge (sweet_slpi.c's listener is SLPI-only): createstaticpd
+    "audiopd" (Linux fastrpc.c FASTRPC_IOCTL_INIT_CREATE_STATIC: method 8 on handle 1 {namelen, memlen, name, mem
+    page}, memory from the DT adsp remote heap `qcom,msm-adsprpc-mem` 0xc00000 bytes, hyp-assigned to the ADSP VMIDs
+    `qcom,adsp-remoteheap-vmid` 0x16/0x25), then the listener with apps_std files from the iOS root and apps_mem from
+    a low-RAM pool, and an ADSP SMMU stream route like the SLPI's 0x541.
+  - `lib/rfsa/adsp` audio files: **`capi_v2_cirrus_sp.so`** (Cirrus speaker protection running on the ADSP, CSPL),
+    misound_res.bin / karaoke / karaokemix, hrtf5c.bin, aptX encoder/decoder, libapps_mem_heap.so. `/vendor/dsp` is
+    empty. `adsp_avs_config.acdb` (1120 bytes) = the AMDB list (QCMSNDDB/AMDB: capi_v2_cirrus_sp "CIRRUS_SP", aptX...)
+    the audio HAL registers with the ADSP. ACDB: `etc/acdbdata/Tutu/Tutu_{Speaker,Handset,Headset,Bluetooth,
+    General,Global,Hdmi}_cal.acdb` + workspace (not pulled).
 - **2026-11-01 0216: AUDIO PD IS UP, BUT THE AFE NEVER ANSWERS; amp probe froze the phone** (patch
   `xnu/patches/0216-umi-adsp-afe-amp.patch`; boots `shim/out/umi-0216-afe.img`, `umi-0216b-afe.img`, `umi-0216c-amp.img`,
   all 0215d's line). No sound, nothing changed on the phone.
