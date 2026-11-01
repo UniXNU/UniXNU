@@ -6,24 +6,24 @@
 
 Format-2 first-console port for the Redmi Note 12 Turbo / POCO F5 \(SM7475\). The UEFI image and UniXNU menu are buildable; XNU kernel entry needs user-supplied IPSW inputs; system entry is a documented later stage.
 
-Source record: [porting.toml](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/porting.toml), `e13cbdc5da195f9e52ac72d406fadeac3107fb57`.
+Source record: [porting.toml](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/porting.toml), `78f4e7bf00e88129f8b6ef5680d81770d386832d`.
 
 This page is generated from the device record.
 
 | Area | Status |
 | --- | --- |
 | [Configuration](#configuration) | `implemented` |
-| [Firmware and boot](#firmware) | `host-verified` |
+| [Firmware and boot](#firmware) | `device-verified` |
 | [CPU and interrupts](#cpu) | `planned` |
 | [Memory and DMA](#memory) | `planned` |
-| [Storage and root](#storage) | `host-verified` |
+| [Storage and root](#storage) | `device-verified` |
 | [Display](#display) | `planned` |
 | [Input](#input) | `planned` |
 | [GPU](#gpu) | `not-applicable` |
 | [Network](#network) | `not-applicable` |
 | [Audio](#audio) | `not-applicable` |
 | [Power](#power) | `planned` |
-| [Image assembly](#packaging) | `host-verified` |
+| [Image assembly](#packaging) | `device-verified` |
 | [Diagnostics](#diagnostics) | `planned` |
 
 ## Configuration {#configuration}
@@ -44,6 +44,7 @@ This page is generated from the device record.
 
 ### Development findings
 
+- The legacy ios-port-marble tree is an iOS 16 / XNU 8796 / 16 KiB-page shim port; this repository is a source-backed Format-2 migration to the upstream iPadOS 17 / XNU 10063 / 4 KiB UEFI profile. The subsystem-by-subsystem mapping and the deliberately unported audio/GPU/touch work are recorded in docs/MIGRATION.md.
 - The common ADT generator now emits AAPL,phandle instead of the FDT spelling phandle. XNU's AddPHandle/IODTFindInterruptParent look up AAPL,phandle; without the rename the UFS interrupt-parent resolved to NULL and IODTGetICellCounts\(\) data-aborted at PC 0xfffffff0078ec2d4 \(ESR 0x96000005, FAR 0\).
 - The board is SM7475-AB \(Cape\), not SM8550. The CPU topology is 4x A510, 3x A710 and 1x X2, so the shared DTSI differs from SM8550 even though GIC and UFS addresses match.
 - The apps-SMMU stream from the vendor DT is 0xE0, while upstream ShengUfs programs 0x60. The local drivers/ShengUfs fork adds native-ufs-stream with a 0xE0 default.
@@ -63,14 +64,14 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Board identity, component selection, firmware paths and payload inputs.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/board.toml)
-- `source`: [Board memory, splash reservation and CPU cluster tags.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/dts/marble.dts)
-- `source`: [First-console kernel configuration.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/configs/marble_defconfig)
-- `source`: [Source-backed hardware inventory.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [Board identity, component selection, firmware paths and payload inputs.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/board.toml)
+- `source`: [Board memory, splash reservation and CPU cluster tags.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/dts/marble.dts)
+- `source`: [First-console kernel configuration.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/configs/marble_defconfig)
+- `source`: [Source-backed hardware inventory.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
 
 ## Firmware and boot {#firmware}
 
-`host-verified`
+`device-verified`
 
 Components: `DarwinBoot`.
 
@@ -90,8 +91,8 @@ Components: `DarwinBoot`.
 
 - The stock marble DSC already includes DiskIoDxe, PartitionDxe, Fat and EnglishDxe; the UniXNU integration adds the four modules and the UniXNULib, FdtLib and HobLib mappings.
 - The FD is 3 MiB at 0xA7100000, the same window the stock Mu-Silicium marble port uses.
-- Host build 2026-10-30: the DEBUG FD is exactly 0x300000 bytes \(SHA-256 6c52e8a4dcdd1483d7ca672de67725f8c76a60ececa956ba81d38a3aa4f7d4b4\), and the build log contains UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi.
-- The stock BootShim header was updated to describe the complete shim plus payload; without that fix the UniXNU boot-image check rejects the image.
+- Host build 2026-11-01 from upstream fc9e410d plus integration d1f18525: the DEBUG FD is exactly 0x300000 bytes \(one build SHA-256 9a0a727f136cd7e97d4a6aaf43adee6517f637b122f09e444d9db090c6a51f2a; a later rebuild produced 7bce194a... because EDK II embeds a timestamp\). The build log lists UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi, and FVMAIN used 99% of its space.
+- The stock BootShim header did not describe the complete shim plus payload; bootimg rejected the image. BootShim.S now writes \`FD\_SIZE + \_Payload - \_Head\` as the ARM64 image size.
 - The marble SEC did not save the previous stage's x0 or build gSiliciumEntryArgHobGuid, so UniXNURamDiskDxe could not publish the payload volume and the menu reported no boot entry found. ModuleEntryPoint.S now keeps x0 in x19 and passes it as the third CEntryPoint argument; Sec.c builds the HOB after InitializeMemory. The GUID is present in the FD. DarwinBoot also detects EL2 and returns to EL1h \(SPSR\_EL2/ELR\_EL2 eret, HCR\_EL2.RW=1, CNTHCTL\_EL2=3, CNTVOFF\_EL2=0, CPTR\_EL2=0, CPACR\_EL1 FPEN\) as a defensive guard. The observed fiq\_context\_init panic was already at EL1 and persisted with that guard; the actual cause is Gunyah trapping the EL1 \`CNTP\_CTL\_EL0\` write as UNDEF \(instr d51be228, PC 0xfffffff0074204fc\), fixed by the device kernel patch marble-virtual-timer-only.patch.
 - Resources/DTBs/marble-unixnu.dtb removes the stock /chosen linux,initrd-start/end values so the bootloader's real payload range is the only one the driver sees.
 
@@ -101,16 +102,18 @@ Components: `DarwinBoot`.
 
 ### Current limits
 
-- No hardware boot has been observed in this workspace. The FD size may need RELEASE instead of DEBUG if the added modules overflow 3 MiB.
+- The DEBUG FVMAIN is 99% full; a later module needs RELEASE or removal of an unused vendor driver. The console image deliberately has no UFS or root device.
 
 ### Next action
 
-- Run the Stage 1 real-device test with boot-empty.img and report the first screen/log line.
+- Build the unverified UFS root image, then decide whether to flash userdata for the root stage.
 
 ### Evidence
 
-- `host`: [DEBUG FD built at 0x300000 bytes; build log lists UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi; the SEC entry-argument HOB GUID is present in the FD.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/README.md)
-  Command: <code>./unixnu build firmware -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --edk2 ../Mu-Silicium-marble/Mu_Basecore</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
+- `host`: [DEBUG FD built at 0x300000 bytes from upstream fc9e410d plus the integration patch; build log and FVMAIN.inf list UniXNU.efi, UniXNUDxe.efi, UniXNURamDiskDxe.efi and DarwinBoot.efi; the SEC entry-argument HOB GUID is present in Sec.efi.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/firmware/README.md)
+  Command: <code>./unixnu build firmware -D ../UniXNU-marble --uefi ../uefi-marble --edk2 ../uefi-marble/Mu_Basecore</code>. Revision: `d1f18525135544426fae87c9497155df7f9e1fc7`.
+- `device`: [POCO F5 / Redmi Note 12 Turbo booted the 3 MiB FD, UniXNU and DarwinBoot into XNU. The console kernel then reached IOKitBSDInit.cpp:984 with \`Failed to mount root device\` \(frames IOFindBSDRoot+0xc88, bsd\_init+0x6e8\), which is the expected no-root stop. Image SHA-256 d169cb16d8d9bb25b6184bd544ce0d831a6f01499f037ab1424972b67b696b7e.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/REAL-DEVICE-TESTS.md)
+  Command: <code>fastboot boot artifacts/marble-xnu-console/boot.img</code>. Revision: `0a6717c3212147f65c1b59a173dfd1565e9c5adb`.
 
 ## CPU and interrupts {#cpu}
 
@@ -143,16 +146,16 @@ Components: `ArmDTPlatform`, `ArmCpu`.
 
 ### Current limits
 
-- No real-device SMP result has been recorded. The first-console command line currently includes cpus=8 but not sheng-smp=1.
+- Only the boot CPU was enabled in the verified console image \(cpus=1\). SMP, IPIs and the P cluster are still untested.
 
 ### Next action
 
-- Boot the first-console kernel, then enable sheng-smp=1, armcpu-spi-ipi=1 and armcpu-self-ipi=1 and record per-core counters.
+- Enable the remaining CPUs and IPI paths, then record per-core counters.
 
 ### Evidence
 
-- `source`: [CPU, GIC and timer values with their vendor-DT source.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
-- `source`: [E/P cluster tags and enabled UFS nodes.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/dts/marble.dts)
+- `source`: [CPU, GIC and timer values with their vendor-DT source.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
+- `source`: [E/P cluster tags and enabled UFS nodes.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/dts/marble.dts)
 
 ## Memory and DMA {#memory}
 
@@ -189,11 +192,11 @@ Components: `ArmDTPlatform`, `ArmCpu`.
 
 ### Evidence
 
-- `source`: [Memory map and reservation table.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [Memory map and reservation table.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
 
 ## Storage and root {#storage}
 
-`host-verified`
+`device-verified`
 
 Components: `SoftwareAES`, `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`, `AppleKeyStoreState`.
 
@@ -211,6 +214,10 @@ Components: `SoftwareAES`, `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedR
 
 ### Development findings
 
+- 2026-11-01 verified image: macOS GitHub artifact verified-root-data \(OS policy 04769D26..., SystemOS 8846FE78..., Data seed 6f984785..., owner public key\) was used on Linux to build libVerifiedRootProbe.a and a verified kernel with OS/SystemOS policies and Data. kernel.macho SHA-256 46873b37e857dd9f5e8ec58a1f6e01b5bc0f58af2f38e4c02edfae3821b478ed; payload cdf90334d3076338ff58ed5f1791d420d9b7e387d646779227d9db21903b8c89; boot.img 23592cd6ad4b3b2db96c6c825605dc0bde5e562dc0e9ddc298ba3c3493af9e4d. No device test yet. The macOS-15 workflow run failed at seed-data-grow.py \(No APFS container found on the attached seed\); the image uses the previous successful artifact.
+- 2026-11-01 unverified tail-root build: marble-root\_defconfig enables ShengUfs and links NativeUfsBlock without the verified-root bundle; kernel.macho SHA-256 b1ae430bf1105e433f780ae88c762ddfcb2ab39d96963da4a98ae174f6105918, payload SHA-256 531158dfcc33aed5797ad3bbd9f5c74d4fb16236de39c4bb562f5bee7047a2db, boot.img SHA-256 ce31ab2fa3a8bdf7109ce59c0dc6f653e3fcf05d776b869450c1142538caa611. The userdata image is 9,382,658,048 bytes \(SHA-256 fd43ee7035ce185ce4215ac93fdc006fd784a54b3b7442e21457c226cbe03093\) and is written only at LBA 59589627..61880314, leaving Android ext4 data at the start intact. The payload opts in with native-ufs-allow-unverified=1 and root-unverified=1.
+- The first launchd mount phase exited 66 with \`failed to get boot-manifest-hash\`; the unverified kernel did not publish \`/chosen/boot-manifest-hash\`. board.toml now supplies a development-only 48-byte value \(SHA-384 of \`MarbleBringup.BootSet.v1\\0\`\) in \[adt.chosen.bytes\], which the common ADT generator emits at \`/chosen\`; the boot image changed from 6ac2fc9e... to ce31ab2f.... This is an opaque bring-up identity, not an owner signature. Retest pending.
+- The first tail-root boot mounted OS and reached load\_init\_program, then initproc failed with \`Library not loaded: /usr/lib/libSystem.B.dylib\` and \`no dyld cache\` because CONFIG\_XNU\_OWNER\_CACHE\_MOUNT and CONFIG\_XNU\_OWNER\_UNION\_SYSTEMOS were off. A development-only build now enables both and resolves the SystemOS APFS UUID through package/MarbleUnverifiedRoot.cpp without the owner signature; the verified path stays fail-closed. This is still unverified and has no Data seed.
 - Upstream ShengUfs hardcodes stream 0x60; the vendor marble DT uses 0xE0. The fork changes the stream argument and the SMR match scan.
 - Device probe 2026-10-31 \(read-only, no writes\): UFS host/GCC and the SMMU bank-2 takeover work. userdata first=0x2f6a00 last=0x3b037fa \(4096-byte LBAs, 224.2 GiB\); block0 has no SHNGROOT manifest \(manifest status=1, windows=0\), so it is the Android ext4 userdata. The geometry is now in board.toml \[userdata\].
 - The first UFS probe reached SMMU planning and stopped at \`conflicting UFS stream mapping\`. The device reported slot=2 bank=74 smr=800000e0 s2cr=2 id2=5111: the firmware leaves an exclusive SMR for stream 0xE0 mapped to translating context bank 2.
@@ -227,20 +234,26 @@ Components: `SoftwareAES`, `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedR
 
 ### Current limits
 
-- No full UFS root transaction has been run on marble yet. The verified-root bundle and Data seed are not provisioned, so root authentication and /private/var are unresolved.
+- The unverified tail root reaches launchd and the SystemOS union; launchd then spawns /sbin/mount as PID 3 and the child exits 66 because no boot-manifest-hash is published. The root remains unauthenticated, there is no Data seed, and no verified-root/owner policy is present.
 
 ### Next action
 
-- Flash userdata-root.img to marble \(after backing up Android data\), boot the full root image, and record the root-matching/authentication result.
+- Provide the verified-root bundle and Data seed, enable XNU\_OWNER\_BOOT\_MANIFEST, then rerun the tail root and record whether mount -P 1 passes. Do not use fastboot flash userdata for this layout.
 
 ### Evidence
 
-- `device`: [UFS host/GCC/SMMU takeover and userdata GPT read on marble 2026-10-31; manifest status=1 windows=0.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/REAL-DEVICE-TESTS.md)
+- `device`: [UFS host/GCC/SMMU takeover and userdata GPT read on marble 2026-10-31; manifest status=1 windows=0.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/REAL-DEVICE-TESTS.md)
   Command: <code>fastboot boot boot.img (native-ufs-probe=10)</code>. Revision: `7f9a3e506235bf69479faf8f47dcda663fa9e658`.
-- `host`: [Absolute IOBlockStorageDevice ABI bindings recovered from IOBlockStorageDevice.o and the 21H461 prelink; full kernel links with NativeUfsBlock at kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/scripts/data/native-storage-original-bindings.S)
+- `device`: [OS root mounted from the userdata tail and launchd started with the SystemOS union \(libSystem resolved\). launchd then spawned /sbin/mount as PID 3; the child exited 66 with \`mount\[3\] exited -- no exit reason available\`, the known missing boot-manifest-hash checkpoint. Image SHA-256 6ac2fc9e...; Android first userdata block had remained UNCHANGED after the tail write.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/REAL-DEVICE-TESTS.md)
+  Command: <code>fastboot boot artifacts/marble-root/boot.img</code>. Revision: `7b8f56b4b3c6464c242ec213f835050f118bcc44`.
+- `host`: [Verified kernel/payload/boot image linked from the GitHub macOS owner-policy artifact and local libVerifiedRootProbe.a; verified-root symbols present, Data seed included; hardware\_tested=false.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/package/BootProgress.c)
+  Command: <code>./unixnu build payload ... --data-ramdisk artifacts/verified-root-data-old/owner-data/data-3g.dbr &amp;&amp; ./unixnu bootimg ...</code>. Revision: `7f74d9e0564f7c917e325c25f85515fc106cfa62`.
+- `host`: [Unverified UFS root kernel \(NativeUfsBlock, no verified-root bundle\) and 9,382,658,048-byte tail image built and header-checked on the host; no device write.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/configs/marble-root_defconfig)
+  Command: <code>./unixnu build kernel -D ../UniXNU-marble --ipsw ../iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw &amp;&amp; ./unixnu build userdata -D ../UniXNU-marble --ipsw ../iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw</code>. Revision: `0a6717c3212147f65c1b59a173dfd1565e9c5adb`.
+- `host`: [Absolute IOBlockStorageDevice ABI bindings recovered from IOBlockStorageDevice.o and the 21H461 prelink; full kernel links with NativeUfsBlock at kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/scripts/data/native-storage-original-bindings.S)
   Command: <code>./unixnu build kernel -D ../UniXNU-marble</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
-- `source`: [Stream override implementation and SM8550 register constants.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/drivers/ShengUfs/NativeUfs.cpp)
-- `source`: [UFS, SMMU and GCC sources.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [Stream override implementation and SM8550 register constants.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/drivers/ShengUfs/NativeUfs.cpp)
+- `source`: [UFS, SMMU and GCC sources.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
 
 ## Display {#display}
 
@@ -279,7 +292,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Panel and splash values.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [Panel and splash values.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
 
 ## Input {#input}
 
@@ -318,7 +331,7 @@ Components: `QcomGeniSpi`.
 
 ### Evidence
 
-- `source`: [Touch wiring and source values.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/HARDWARE.md)
+- `source`: [Touch wiring and source values.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/HARDWARE.md)
 
 ## GPU {#gpu}
 
@@ -463,11 +476,11 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [PMGR placeholder and staged power work.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/docs/FULL-SYSTEM.md)
+- `source`: [PMGR placeholder and staged power work.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/FULL-SYSTEM.md)
 
 ## Image assembly {#packaging}
 
-`host-verified`
+`device-verified`
 
 Components: `XnuPrelink`.
 
@@ -477,7 +490,7 @@ Components: `XnuPrelink`.
 
 ### Configuration
 
-- \[kernel\] prelink comes from the iPadOS 17.7.11 profile. \[payload\] selects a 64 MiB FAT16 volume, panic screen and the full UFS root arguments. \[firmware\] supplies the FD path.
+- \[kernel\] prelink comes from the iPadOS 17.7.11 profile. \[payload\] selects a 160 MiB FAT16 volume, panic screen and the full UFS root arguments. \[firmware\] supplies the FD path.
 
 ### Procedure
 
@@ -485,13 +498,17 @@ Components: `XnuPrelink`.
 
 ### Development findings
 
+- 2026-11-01 on-screen boot log: CONFIG\_XNU\_BOOT\_PROGRESS=y links libBootProgress.a and routes vcputc/PE\_kputc to the GOP framebuffer. The screen-log kernel is SHA-256 51f44694f19cf829a87462f0c431b2dfa00cf7c7914c355fa90a13e074be2716 and its boot.img is 99998e8a5b9b72d2d7143ddab699e785791a2d9a8dcbe9dcad9e5b62cde84f7b; userdata is unchanged. This gives stage and exec lines on screen but still no host log channel.
+- 2026-11-01 unverified tail-root package: 51,146,752-byte kernel b1ae430b..., 160 MiB payload 992815d5..., 169,607,168-byte boot.img ce31ab2f..., and 9,382,658,048-byte userdata image fd43ee70.... The boot image uses cpus=1, native-ufs-root=1, LBA 59589627, 2290688 blocks, stream 0xE0, SMMU takeover, native-ufs-allow-unverified=1 and root-unverified=1.
+- 2026-11-01 first-entry console build: marble-console\_defconfig \(no UFS/root/Data/display\) with the 21H461 IPSW, kernel.macho SHA-256 5270a0b93bea8db7de01f56440f8142430df4395954bf18335f8f5806c32e6df, 160 MiB payload SHA-256 4a416b4ef506ea69279cde3e7ebe5ffeacc9fbb3a77630f54b0d43612e36f1c9, and 169,607,168-byte boot.img SHA-256 d169cb16d8d9bb25b6184bd544ce0d831a6f01499f037ab1424972b67b696b7e. The image passes cpus=1 and zeroed UFS arguments; it is host-built only.
+- The first console boot reached IOKit and data-aborted at IODTGetICellCounts+0x2c \(PC 0xfffffff0078ec634, ESR 0x96000005, FAR 0\), with IODTMapInterruptsSharing+0x290 in the stack. The generated ADT had only \`phandle\`; AddPHandle records \`AAPL,phandle\`, so interrupt-parent resolved to NULL. The ADT generator now maps phandle/linux,phandle to AAPL,phandle; the regenerated ADT contains the property and the payload hash changed. The kernel itself was unchanged.
 - The OS profile pins the same 21H461 kernelcache and trust caches used by sheng and alioth.
 - The payload path is resolved relative to \\EFI\\UniXNU, so the builder writes \\EFI\\UniXNU\\Payloads\\kernel.macho; a file at the FAT root is not found.
 - mformat -F produced a FAT32 BPB that the EDK2 FAT driver refused \(TotSec16 nonzero with TotSec32 zero\). The builder now creates FAT16 \(mkfs.fat -F 16, or mformat without -F\) and rejects FAT32 or a missing 0x55AA signature.
 - UniXNURamDiskDxe validates the FAT boot sector, aligns initrd-end down to 512 bytes and calls ConnectController after installing BlockIo. UniXNU also connects all controllers before scanning for unixnu.toml, so the payload volume appears without relying on BDS enumeration order.
-- The working fastboot boot path is an Android v0 image: kernel 0x80008000, ramdisk 0x80C00000, DTB /chosen initrd 0x80C00000-0x84C00000. The earlier v4 image did not load the ramdisk reliably.
-- Host build 2026-10-30: the two-module original trust bundle SHA-256 7416ca4f8377146626bb284e2133c76bee6cb4e3ee0af5d648b186235a7323a7; the empty-ramdisk Stage 1 image is 1839104 bytes.
-- Host build 2026-10-31 \(full UFS root\): kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd; boot.img 68947968 bytes with the Android v0 header \(SHA-256 ce8b5f6e57c716ecf0605839734bd2806d4ae470c83d96eb829842caff6147cc\); payload.img 64 MiB FAT16; userdata-root.img 9382658048 bytes \(SHA-256 fd43ee7035ce185ce4215ac93fdc006fd784a54b3b7442e21457c226cbe03093\) with OS/SystemOS windows.
+- The working fastboot boot path is an Android v0 image: kernel 0x80008000, 160 MiB payload at 0xA8000000, DTB /chosen initrd 0xA8000000-0xB2000000. The earlier v4 image did not load the ramdisk reliably.
+- Host build 2026-10-30 produced the historical two-module original trust bundle \(SHA-256 7416ca4f...\); that file is not in this checkout. The 2026-11-01 empty-ramdisk Stage 1 image is 1,835,008 bytes \(SHA-256 8adf6380c2991c389b6c08cbfc86036543f2fa647c71c34e3d52523c69f891cd\) and is derived from the current FD and DTB.
+- Host build 2026-10-31 \(full UFS root\): kernel.macho SHA-256 c3ea36a2b438f2f84bca0e342699b9640dfb61a7631463576674a1b63a1795bd; boot.img 68947968 bytes with the Android v0 header \(SHA-256 ce8b5f6e57c716ecf0605839734bd2806d4ae470c83d96eb829842caff6147cc\); payload.img 64 MiB FAT16 \(historical build\); userdata-root.img 9382658048 bytes \(SHA-256 fd43ee7035ce185ce4215ac93fdc006fd784a54b3b7442e21457c226cbe03093\) with OS/SystemOS windows.
 - The payload FAT volume contains EFI/UniXNU/unixnu.toml, Payloads/kernel.macho, kernel.macho.adt and kernel.macho.trustcache; the packed command line includes native-ufs-stream=0xe0, native-ufs-smmu-takeover=1, native-ufs-root=1 and sheng-pmgr=2.
 
 ### Completion criteria
@@ -500,16 +517,26 @@ Components: `XnuPrelink`.
 
 ### Current limits
 
-- The userdata image has not been flashed to marble, so no root mount or launchd result exists. hardware\_tested is false in boot.json.
+- The console boot image has no UFS/root driver, so it stops at IOKitBSDInit.cpp:984 as expected. The userdata image has not been flashed and no launchd result exists.
 
 ### Next action
 
-- Back up Android data, flash userdata-root.img, boot boot.img on marble and record the root result.
+- Build an unverified root kernel/image first; only then decide whether to back up and flash userdata.
 
 ### Evidence
 
-- `host`: [Full UFS root kernel, prelink, payload and boot image built and verified on the host; hardware\_tested is false.](https://github.com/MiLacy/UniXNU-marble/blob/e13cbdc5da195f9e52ac72d406fadeac3107fb57/README.md)
-  Command: <code>./unixnu build kernel -D ../UniXNU-marble &amp;&amp; ./unixnu build payload -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --trust-cache ../UniXNU-marble/build/marble-trust.bundle --unique-chip-id 4d4152424c45 &amp;&amp; ./unixnu bootimg -D ../UniXNU-marble --uefi ../Mu-Silicium-marble --dtb ../Mu-Silicium-marble/Resources/DTBs/marble-unixnu.dtb</code>. Revision: `f0721e9745c45ad2600cd69c74730f1cca55d56a`.
+- `host`: [Stage 1 firmware and empty-ramdisk boot image built and round-trip verified on the host; boot.json records ramdisk\_bytes=0, kernel\_address=0x80008000, hardware\_tested=false.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/firmware/README.md)
+  Command: <code>./unixnu build firmware -D ../UniXNU-marble --uefi ../uefi-marble --edk2 ../uefi-marble/Mu_Basecore &amp;&amp; ./unixnu bootimg -D ../UniXNU-marble --uefi ../uefi-marble --fd ../uefi-marble/Build/marblePkg/DEBUG_CLANGPDB/FV/SILICIUM_UEFI.fd --dtb ../uefi-marble/Resources/DTBs/marble-unixnu.dtb --ramdisk none</code>. Revision: `d1f18525135544426fae87c9497155df7f9e1fc7`.
+- `host`: [Console kernel, 160 MiB payload and 169,607,168-byte boot.img built and round-trip verified on the host; no verified-root/Data inputs; hardware\_tested=false.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/configs/marble-console_defconfig)
+  Command: <code>./unixnu build kernel -D ../UniXNU-marble --ipsw ../iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw &amp;&amp; ./unixnu build payload ... --kernel-arg cpus=1 ... &amp;&amp; ./unixnu bootimg ...</code>. Revision: `466b025c2d8c74dc60c3122e9eb8766de9f783c0`.
+- `host`: [Screen-log kernel and 169,607,168-byte boot image built; BootProgress symbols link and the payload retains the tail-root arguments. Not yet device-tested.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/package/BootProgress.c)
+  Command: <code>./unixnu build kernel -D ../UniXNU-marble --ipsw ../iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw &amp;&amp; ./unixnu build payload ... &amp;&amp; ./unixnu bootimg ...</code>. Revision: `12e6d2977166292b5a5898234162e338265b665f`.
+- `host`: [Unverified UFS tail-root payload and boot image built; payload record names LBA 59589627/2290688 blocks and zeroed Data inputs.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/configs/marble-root_defconfig)
+  Command: <code>./unixnu build payload ... --kernel .../marble-root/kernel/kernel.macho ... &amp;&amp; ./unixnu bootimg ...</code>. Revision: `0a6717c3212147f65c1b59a173dfd1565e9c5adb`.
+- `device`: [XNU booted from the 169,607,168-byte console image and failed at IOFindBSDRoot+0xc88 \(\`IOKitBSDInit.cpp:984\`\) because UFS/root is deliberately absent. This is the Stage 2 success checkpoint, not a regression.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/REAL-DEVICE-TESTS.md)
+  Command: <code>fastboot boot artifacts/marble-xnu-console/boot.img</code>. Revision: `0a6717c3212147f65c1b59a173dfd1565e9c5adb`.
+- `host`: [Previous full UFS root kernel, payload and 8.8 GiB userdata image; not present in this checkout and not a current verification.](https://github.com/MiLacy/UniXNU-marble/blob/78f4e7bf00e88129f8b6ef5680d81770d386832d/docs/REAL-DEVICE-TESTS.md)
+  Command: <code>./unixnu build kernel -D ../UniXNU-marble &amp;&amp; ./unixnu build payload ... &amp;&amp; ./unixnu bootimg ...</code>. Revision: `e13cbdc5da195f9e52ac72d406fadeac3107fb57`.
 
 ## Diagnostics {#diagnostics}
 

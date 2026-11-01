@@ -1,0 +1,739 @@
+# Xiaomi Pad 6S Pro \(tkings4chan\)
+
+[tkings4chan/UniXNU-sheng](https://github.com/tkings4chan/UniXNU-sheng)
+
+<div v-pre>
+
+Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input, firmware and power integration. This record describes implementation coverage and the evidence required for each milestone.
+
+源记录: [porting.toml](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/porting.toml), `d774c55df9d056b1d35c0063c109ff89d124b176`.
+
+本页按设备记录自动生成。
+
+| 部分 | 状态 |
+| --- | --- |
+| [配置](#configuration) | `implemented` |
+| [固件与启动](#firmware) | `implemented` |
+| [CPU 与中断](#cpu) | `implemented` |
+| [内存与 DMA](#memory) | `implemented` |
+| [存储与根卷](#storage) | `implemented` |
+| [显示](#display) | `implemented` |
+| [输入](#input) | `implemented` |
+| [GPU](#gpu) | `implemented` |
+| [网络](#network) | `implemented` |
+| [音频](#audio) | `implemented` |
+| [电源](#power) | `implemented` |
+| [镜像组装](#packaging) | `implemented` |
+| [诊断](#diagnostics) | `implemented` |
+| [arm64e-os](#arm64e-os) | `planned` |
+
+## 配置 {#configuration}
+
+`implemented`
+
+### 硬件与依赖
+
+- SM8550 profile, iPadOS 26.5.2 build 23F84, arm64e sheng\_ipados26\_defconfig and pinned component sources.
+
+### 配置
+
+- board.soc\_source = sm8550; board.os\_profile = ipados-26.5.2-23F84; schema\_version = 2.
+- The device owns ShengUfs, ShengHidInput, ShengNovatekTouch and ShengPreflight submodules.
+
+### 操作步骤
+
+- Read https://unixnu.com/porting/device-repository and https://unixnu.com/porting/records.
+- Run ./unixnu defconfig sheng\_ipados26\_defconfig -D ../UniXNU-sheng from UniXNU.
+- Run ./unixnu status --json -D ../UniXNU-sheng and review profiles, components, source pins and patch order.
+
+### 开发经验
+
+- Tables merge in ARM64, SoC, OS, device order. Arrays replace inherited selections, so include every required component and fragment.
+- The selected defconfig applies after the explicit configuration fragments. Keep OS ABI and IPSW pins in the OS profile.
+- The active 23F84 configuration remains minimal. Source storage/input archives are built separately and are not yet selected for boot. OS-profile source pins select the public macOS 26.5 families without claiming binary ABI compatibility.
+- feeds.toml pins the SoC source at the commit that holds patches/xnu-12377/series, which board.toml lists as soc:patches/xnu-12377/series; a pin older than that commit leaves the series missing.
+- board.toml carries the 27 values at the top level and the differences of the 17 and 26 profiles under os\_overrides, so one branch serves every profile., .github/workflows/package.yml runs scripts/package.sh on a macOS runner with the UniXNU and uefi-sheng checkouts beside the device repository; the platform seed comes from the UNIXNU\_UNIQUE\_CHIP\_ID secret, and the run offers boot.img, payload.img, kernel.macho and the manifest as its artifacts. Run it in a fork and delete the run after downloading them., and the run passes its own GITHUB\_TOKEN to the packaging step for api.github.com, whose anonymous quota a hosted runner exhausts., The kernel archives of the 27 and 26 profiles list build-sheng-source-storage.py after component:ShengUfs, so the source storage archive and root-policies.bin the defconfigs link no longer depend on a leftover of an earlier build., and name scripts/policies/&lt;profile&gt; in --policy-dir, the signed headers the repository ships., and the 27 kernel archives run fetch-adreno-inputs.py and the three prepare-sheng-\* generators before build-adreno740-kits.py, so the generated GMU and SMMU headers no longer come from earlier local runs., with fetch-sheng-dts.py first: the firmware step runs after the kernel step, and the generators read the DTS sources it fetches.
+- \[firmware\] preflight lists scripts/fetch-sheng-dts.py before scripts/check-sheng.py, and \[bootimg\] dtb names the device tree it builds \(build/sheng/sheng.dtb\) for the pack step.
+- .gitignore keeps policies/\*\*/\*.bin tracked under the global \*.bin ignore: the signed root-policy headers are repository inputs of the storage area.
+- .gitignore keeps firmware/\*\*/\*.bin tracked under the global \*.bin ignore.
+
+### 完成条件
+
+- All source pins resolve; every selected component has a record; status shows the intended overrides and patch order.
+
+### 当前范围
+
+- Local overrides can select a different source from the published pin; record the effective source in each verification result.
+
+### 下一步
+
+- Compare the effective status output whenever a profile, source or component selection changes.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/board.toml)
+
+## 固件与启动 {#firmware}
+
+`implemented`
+
+组件: `ShengPreflight`.
+
+### 硬件与依赖
+
+- uefi-sheng firmware, stock firmware DTB, GOP handoff, PSCI SMC interface and vendor firmware inventory.
+
+### 配置
+
+- firmware.dsc = Platforms/Xiaomi/shengPkg/sheng.dsc; firmware.config = sheng.
+- proprietary-files.txt records input paths and provenance.
+- The firmware DSC and FDF embed UniXNU, UniXNUDxe, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and FAT support.
+
+### 操作步骤
+
+- Run ./unixnu build firmware -D ../UniXNU-sheng --uefi ../uefi-sheng.
+- Record the firmware commit, output FD and handoff memory map before a boot attempt.
+- Build the payload, then run ./unixnu bootimg with the firmware DTB. Inspect boot.json ramdisk\_bytes and the required firmware modules.
+
+### 开发经验
+
+- The firmware DTB is an input to boot-image assembly. XNU consumes the separately generated ADT.
+- The sheng preflight component belongs with board integration and its firmware requirements.
+- The shared UniXNURamDiskDxe reads the Mu-Silicium entry-argument HOB and FDT initrd range to publish the payload block device. ShengBootMemoryDxe owns memory expansion.
+- Configured menu entries require a payload FAT filesystem containing EFI/UniXNU/unixnu.toml. Check the UNIXNURAMDISK initrd block-device status when entries are absent.
+- fetch-sheng-dts.py writes the firmware device tree at build/sheng/sheng.dtb and the copy the GPU generators bind to at build/adreno-firmware/sheng.dtb.
+- firmware/novatek/novatek\_nt36532\_n81a\_fw\_csot.bin is the pinned touch firmware of proprietary-files.txt; the build reads the extracting machine cache first and this copy on a clean checkout.
+
+### 完成条件
+
+- Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations.
+
+### 当前范围
+
+- Boot-image assembly requires the selected firmware DTB and proprietary input files.
+
+### 下一步
+
+- Capture firmware revision and memory reservations with the next image verification.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/proprietary-files.txt)
+- `source`: [Shared FDT initrd block-device publication; board memory policy remains in uefi-sheng.](https://github.com/UniXNU/UniXNU/blob/8d157ee18ae9c4d518aba28cb3040a84e860dcd1/package/UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.c)
+- `host`: [2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/reports/ipados26-boot-build.json)
+  Command: <code>shasum -a 256 ../UniXNU/out/sheng/ipados-26.5.2-23F84/sheng_ipados26/boot/boot.img</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
+
+## CPU 与中断 {#cpu}
+
+`implemented`
+
+组件: `ArmCpu`, `ArmDTPlatform`.
+
+### 硬件与依赖
+
+- SM8550 CPU affinities, GIC distributor at 0x17100000, redistributors at 0x17180000, 0x40000 stride and 19.2 MHz timer.
+- PSCI uses SMC. All eight CPUs are enabled; the DTS tags cpu0 to cpu2 \(A510\) as an E cluster and cpu3 to cpu7 as a P cluster with unixnu,cluster-type.
+
+### 配置
+
+- dts/sheng.dts includes sm8550.dtsi; shared CPU and interrupt definitions come from the SoC source.
+- Kernel arguments select sheng-smp=1 and armcpu-spi-ipi=1.
+
+### 操作步骤
+
+- Compile the board DTS and inspect enabled CPUs, GIC ranges and timer properties in the ADT.
+- Record per-CPU entry, timer interrupts and inter-processor interrupt delivery.
+
+### 开发经验
+
+- CPU affinity values are hardware identifiers. Enabled CPU count and MPIDR affinities must be checked together.
+- GIC register ranges must use translated physical addresses from the hardware tree.
+- XNU accepts work interval operations 6, 7 and 8 \(interval start, update and finish\) through patches/xnu/native-work-interval-instance.patch in UniXNU; without a performance controller they only succeed.
+- patches/xnu/zzyf-sheng-amp.patch runs the Edge scheduler with the E and P clusters from the ADT; UI work stays on the P cluster and coreduetd is stopped.
+
+### 完成条件
+
+- Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU.
+
+### 当前范围
+
+- CPU selection and frequency policy are board inputs; SoC topology describes all cores.
+
+### 下一步
+
+- Attach per-CPU and interrupt observations for the selected firmware and image.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/dts/sheng.dts)
+
+## 内存与 DMA {#memory}
+
+`implemented`
+
+### 硬件与依赖
+
+- Handoff DRAM at 0x80000000 with size 0x80000000; splash reservation at 0xb8000000 with size 0x2b00000.
+- Payload owned-memory request is 0x130000000. Device DMA requires controller stream IDs, address widths and ownership.
+
+### 配置
+
+- device\_tree.source = device:dts/sheng.dts; include\_dirs = \[soc:dts\].
+- payload.adt.owned\_memory\_size and firmware reservations describe separate allocations.
+
+### 操作步骤
+
+- Compare firmware RAM ranges, reserved regions, DTS ranges and ADT memory-map entries.
+- Check DMA buffers against controller address width, cache policy and SMMU mapping before submitting work.
+
+### 开发经验
+
+- Physical register translation and CPU virtual mappings have different purposes. Preserve physical resource ranges in hardware descriptions.
+- GPU and UFS use different SMMU instances and stream assignments.
+- The DTS carries each CPU's cluster type for the ADT \(see the cpu area\).
+
+### 完成条件
+
+- All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy.
+
+### 当前范围
+
+- The DTS declares the current handoff window and splash region; memory sizing requires the selected firmware map.
+
+### 下一步
+
+- Record the firmware memory map and each DMA consumer when changing reserved memory.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/dts/sheng.dts)
+
+## 存储与根卷 {#storage}
+
+`implemented`
+
+组件: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
+
+### 硬件与依赖
+
+- UFS host 0x01d84000/0x3000; PHY 0x01d80000/0x2000; GCC base 0x00100000.
+- GCC AXI, AHB, UniPro, symbol and PHY auxiliary branches; power domains and firmware link state.
+- Apps SMMU at 0x15000000, UFS stream 0x60, context-bank ownership, DMA width and cache maintenance.
+- LUN 0 uses 4096-byte blocks; userdata spans LBAs 3094592 through 64007162.
+
+### 配置
+
+- iOS 17 uses CONFIG\_XNU\_NATIVE\_UFS=y. The 23F84 source adapter uses the deferred source archive with native-source-storage=1 native-ufs-root=1; do not also install the old personality.
+- userdata defines OS and SystemOS windows. 23F84 payload.adt.root\_match\_volume\_uuid = 546DFF4A-4172-4026-9F1B-7FDAD45F3D2E.
+
+### 操作步骤
+
+- Read https://unixnu.com/porting/ufs with this storage record.
+- Inspect clock enables, power state, HCE/HCS, link state, request-list base and SMMU mappings before changing controller ownership.
+- Validate SCSI capacity and GPT reads, then publish root windows and mount the configured root UUID.
+- Verify persistent Data writes on the documented Data allocation with a recovery image available.
+
+### 开发经验
+
+- ShengUfs also owns the apps SMMU stage 1 windows for the display bank \(sheng-dpu-scanout\) and the WiFi endpoint \(sheng-wifi=2 or more\); both are off by default.
+- An idle AHB branch may report CLK\_OFF with hardware gating enabled. Check enable and gating bits together.
+- SMMU bypass still has address-width constraints. Validate every DMA range and context-bank assignment.
+- ShengUfs contains controller access, GPT/window parsing and sheng Data/log policy. Reuse each layer according to its inputs.
+- iPadOS 26 source-interface build: ShengUfs and all 15 public IOStorageFamily 337.100.1 compilation units produce arm64e iOS 26 objects. Verified-root policy flags remain enabled; four root-path host suites pass ASan/UBSan.
+- The display bank's TCR2 SEP field \(bits 17:15\) is set so IOVAs with bit 31 translate. The userdata reserve past the log and its export region is readable through native\_ufs\_import\_read and is never written by the driver.
+- scripts/policies/ipados-\* carry the signed root-policy headers \(manifest.header.bin, trusted-key.bin, verification.json\) of each OS profile; the kernel archives pass scripts/policies/&lt;profile&gt; to build-sheng-source-storage.py with --policy-dir, and the full block tables stay local inputs of the userdata image., and .gitignore keeps scripts/policies/\*\*/\*.bin tracked under the global \*.bin ignore.
+
+### 完成条件
+
+- Host: register, clock, link and SMMU facts match the board inventory.
+- Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.
+- Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region.
+
+### 当前范围
+
+- The SoC DTSI exports host and PHY ranges. GCC and UFS SMMU handling currently use constants and operations in ShengUfs.
+- The root transport uses a polled request slot. Its firmware adoption path requires a usable existing request list.
+- 23F84 now has deferred source storage registration, original IOStorageFamily/APFS loading, signed policy sidecar handoff and build selection. These latest changes have not been built or run: the user explicitly stopped testing. Runtime class/interface compatibility, root mount and persistence remain unqualified. See reports/ipados26-source-storage-runtime.json.
+
+### 下一步
+
+- Record clock/PHY/reset initialization ownership and the SMMU stream before adapting this driver to another board.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/reports/ipados26-source-drivers.json)
+  Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
+
+## 显示 {#display}
+
+`implemented`
+
+组件: `GopFramebuffer`.
+
+### 硬件与依赖
+
+- UEFI GOP framebuffer, stride, pixel format, splash reservation and board panel/backlight controls.
+
+### 配置
+
+- Select GopFramebuffer; CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y; artwork-display-gamut = sRGB.
+- sheng-vsync=120 requests board display timing.
+- sheng-dpu-scanout=2 lets the display pipes fetch the compositor surface through a stage 1 window of the display bank \(TCR2 SEP 7\); off by default. The flip waits for the GPU fence of the frame \(always on\).
+
+### 操作步骤
+
+- Verify GOP address, dimensions, stride and pixel layout before enabling presentation.
+- Build the late display archive with the selected OS ABI records, then check display publication and frame presentation.
+
+### 开发经验
+
+- The display source and ABI binding are selected independently from the physical panel configuration.
+- The board configuration declares sRGB for the current 8-bit framebuffer path.
+- scripts/build-gop-legacy-display.py also builds the board driver objects in the display archive, including the ADSP, IPC router, FAT reader and battery manager.
+- With sheng-dpu=2 DisplayTimingProbe reads the VIG 0 and 1 pipes, CTL 0 and the tear checks; sheng-dpu=3 also rewrites the pipe addresses and times the flush latch \(5.4 ms, no start needed: the panel refreshes by itself\).
+- Direct scanout: the compositor submits a swap when the command buffer is scheduled, so the flip waits until the GPU wrote the frame; the wait removes the flicker \(content changes of the shown surface fell from 808 to 2 per run\). Direct scanout needs the 8-bit BGRA framebuffer.
+- The GENI I2C core also moves 1 to 8 byte writes and 1 to 4 byte reads \(the audio amplifiers use 32-bit registers\); the backlight keeps its 8-bit transfers.
+- The legacy display builder now refuses arm64e/iOS 26 before reading original ABI addresses. Its existing use of kernel\_target.TRIPLE does not qualify the iOS 17 class layout for 23F84. Source input transport compilation is independent of this builder.
+- The 24A446 adapter creates a BGRA IOSurface through the original IOSurfaceRoot factory, checks allocation and geometry, and transfers its reference to the family default-surface field. The void create\_default\_fb\_surface slot is invoked by the original start method.
+- build-gop-legacy-display-27.py reads the device checkout from UNIXNU\_DEVICE \(set by the release\) before the sibling directory name, so a checkout under any name works., and the HID source is the tree pin \(refer/IOHIDFamily of the feed\) instead of a hand-placed driver-sources copy.
+
+### 完成条件
+
+- A known frame appears with correct geometry and colors, then userland presentation and backlight controls work.
+
+### 当前范围
+
+- The late display builder needs qualified prelink candidates and ABI records. A timing request requires a measured presentation result. The 24A446 default-surface adapter still requires a hardware boot result.
+
+### 下一步
+
+- Record frame timing, pixel format and presentation evidence for each image used to qualify display.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/package/LegacyDisplayProbe.cpp)
+
+## 输入 {#input}
+
+`implemented`
+
+组件: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
+
+### 硬件与依赖
+
+- Novatek NT36532 sensor, GENI SPI controller, pin configuration, reset/interrupt lines, firmware and touch coordinate geometry.
+
+### 配置
+
+- Select ShengHidInput, ShengNovatekTouch and QcomGeniSpi; sheng-touch=4 and sheng-touch-hid=1 select board integration.
+
+### 操作步骤
+
+- Read TouchBoard.h and verify the SPI clock and mode against the controller setup.
+- Validate protocol reports, contact tracking and coordinate orientation before publishing HID events.
+
+### 开发经验
+
+- Controller transfer logic, sensor protocol and board sensor geometry are separate inputs.
+- Track contact IDs across movement and lift events; a register read alone covers only transport access.
+- sheng\_buttons\_press\(\) holds a button mask for a given time through the HID sink, for unattended tests \(the audio lock sound test uses it\).
+- iPadOS 26 source-interface build: IOHIDDevice reports and independent touch/button, GENI SPI, Novatek and firmware archives compile. Four host model suites pass ASan/UBSan. The source path does not patch a foreign vtable.
+- On arm64e the event driver's vtable is copied and every slot is re-signed with the 220 discriminators read from the 24A446 kernelcache; each slot is checked against the original table first, and AppleUserHIDEventService, this device's event driver, takes the copy as well. A search over 16-bit values can accept a second discriminator with the same 24-bit signature and stops touch events.
+
+### 完成条件
+
+- Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports.
+
+### 当前范围
+
+- Sensor firmware and board dimensions remain sheng inputs.
+- 23F84 HID linking/startup and edge gestures remain unqualified. Apple IOHIDFamily 2238.120.5 omits event-type/struct headers and the complete device build needs private reporting/analytics dependencies.
+
+### 下一步
+
+- Attach contact and orientation observations when firmware or geometry changes.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/package/TouchBoard.h)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/reports/ipados26-source-drivers.json)
+  Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
+
+## GPU {#gpu}
+
+`implemented`
+
+组件: `Adreno740`, `AdrenoMetal`, `AirNir`, `Sm8550Platform`, `AdrenoPM4`, `AdrenoFirmware`, `ArmSmmu4K`.
+
+### 硬件与依赖
+
+- A740 GPU/GMU registers, GPU SMMU streams 0/1 and GMU stream 5, signed ZAP firmware and board power votes.
+- Turnip, metal2vulkan, AIR translation and the selected OS GPU/Metal ABI.
+
+### 配置
+
+- Select Adreno740, AdrenoMetal and AirNir; shared SM8550 operations arrive through component dependencies.
+- Board scripts combine shared GMU code with package/ShengGmuVotes.c.
+
+### 操作步骤
+
+- Qualify power, firmware, SMMU and GMU startup before command submission.
+- Check memory mapping, command completion and a known rendered image before staging the Metal plugin.
+
+### 开发经验
+
+- GPU generation and the frontend ABI define component scope. Firmware, votes and display integration remain board inputs.
+- Shared platform code and board votes require separate include paths during archive assembly.
+- A frame is one submission of up to 128 IBs \(24 at most observed\). WPTR writes check the GMU AHB fence status; none were dropped. Jobs take about 5 ms against the client's 1 ms waits, so the stall handler's write-pointer and TLB recovery runs on ordinary jobs: mapping-time TLB invalidation did not change it.
+- The render server primes all 162 Metal libraries of the OS image while the desktop is idle \(the PR log row\). The payload carries the library list and a copy of the cryptex QuartzCore library. The idle desktop submits 6 command buffers per 250 ms at 120 Hz, so priming waits only above 8.
+- Each client holds up to 16384 objects. Owned BOs and imports that share one cache class and overlap no owned page map without the alias check against existing ranges; an unmap of up to 512 pages invalidates page by page; a submission no longer invalidates the GPU TLB.
+- A render pass the bridge cannot encode returns an encoder whose command buffer is refused, never nil: RenderBox caches encoder methods.
+- The existing xnu-12377 migration makes build-adreno740-kits.py use kernel\_target.TRIPLE for firmware assembly instead of a fixed arm64 iOS 17 target. The current minimal boot configuration does not select this GPU archive; historical rendering observations above remain iOS 17 evidence.
+- Slow frames on iPadOS 27 \(widget page, Settings, Safari\) mostly wait in the ring behind other processes' jobs \(a poster extension submits jobs of about 77 ms; the ring has no priority\). Driver lock waits stay under 7 ms and a render pass takes 0.5 ms of GPU time at the median.
+- The kits build searches build/sheng-gpu-smmu beside build/sheng-gmu: prepare-sheng-gpu-smmu.py writes ShengGpuSmmuSource.h there.
+
+### 完成条件
+
+- GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it.
+
+### 当前范围
+
+- A740 coverage depends on the selected firmware and OS ABI; board qualification requires its own memory and power evidence.
+
+### 下一步
+
+- Record the exact firmware, compiler inputs, driver revision and rendered output for the next qualification.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/build-adreno740-kits.py)
+- `device`: [325 BO maps at 0.20 ms each \(0.66 ms in i568\), 1024 MiB pool with 0 fallbacks, WidgetRenderer reported a refused command buffer and did not crash; 130 fps idle, delay 4.9 ms mean, 14 ms max.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot-i570.img; python3 scripts/read-sheng-log.py</code>. Revision: `eb026be0b22dff2a32f9a161a5547657122276c0`.
+
+## 网络 {#network}
+
+`implemented`
+
+组件: `Ath12kWifi`.
+
+### 硬件与依赖
+
+- Ath12k device on PCIe, BAR windows, MSI routing, DMA callbacks, firmware, MHI and QRTR services.
+
+### 配置
+
+- Select Ath12kWifi. build-gop-legacy-display.py compiles its objects through build-ath12k-wifi.py.
+- board.toml sets sheng-wifi=5 in the kernel arguments; WifiProbe and the UFS driver read it.
+
+### 操作步骤
+
+- Verify PCIe enumeration and MSI delivery before MHI startup.
+- Record firmware startup, scan, association, address configuration and bidirectional packet delivery separately.
+
+### 开发经验
+
+- The reusable Wi-Fi stack consumes board callbacks; PCIe and the OS network interface are owned by the device integration.
+- MHI startup and network traffic are separate completion points.
+- WifiNet includes sys/kpi\_mbuf.h, the KPI an SDK build may use; sys/mbuf.h is not reachable from one. WifiProbe holds its copy of the RPMh command database and its arena block table in memory allocated at start, so neither sits in the kernel \_\_DATA.
+- build-ath12k-wifi.py runs tools/fetch-sources.sh of Ath12kWifi before tools/prepare.sh, so a clean checkout fetches the pinned Linux v7.0.14 sparse tree the module compiles.
+
+### 完成条件
+
+- Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware.
+
+### 当前范围
+
+- Throughput is low for an 80 MHz link. The system cannot store the network password, so the network is not remembered.
+
+### 下一步
+
+- Raise throughput on the 80 MHz link and let the system store the network password.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/package/WifiNet.cpp)
+- `device`: [Firmware c7-00108, WPA2-Personal access point on 5 GHz, 80 MHz, -73 dBm: DHCP address within 31 s of boot, speed test about 12 Mbit/s down and 24 Mbit/s up, under 1 percent transmit loss.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot-i480.img (sheng-wifi=5); python3 scripts/read-sheng-log.py</code>. Revision: `a57341b4028514aedb961fe8ce636bb05f5e5925`.
+
+## 音频 {#audio}
+
+`implemented`
+
+### 硬件与依赖
+
+- ADSP firmware from modem\_a, SMEM, SMP2P, GLINK, the GPR channel adsp\_apps.
+- Speakers: six CS35L43 amplifiers on QUP1 SE5 and QUP2 SE0 \(I2C 0x40 to 0x42\), shared reset gpio90, secondary MI2S \(gpio121 to 124\).
+- Microphones: WCD938x codec on the TX SoundWire master \(0x6d30000\), reset gpio108, supply ldob15; TX and VA macros.
+
+### 配置
+
+- sheng-audio takes bits \(sheng-adsp=2 is required\): any nonzero value serves the audio service, 2 plays a 1.5 s 750 Hz test tone at boot, 4 brings up the microphone path and reads two seconds of capture, 8 runs the lock sound test.
+- sheng-audio-pa moves the DSP period buffer \(default 0xd0000000\); sheng-audio-tone-ms and sheng-audio-atten set the tone.
+- The payload addon carries hal/ShengAudio.driver under audio/; patches/xnu/zzyd-sheng-audio-addon-mount.patch mounts it over /System/Library/Audio/Plug-Ins/HAL. Its CDHash joins the owner trust cache.
+
+### 操作步骤
+
+- Read the \[audio\], \[amps\], \[audio-glink\], \[audio-buffer\], \[mic\], \[mic regs\] and \[mic capture\] log lines with scripts/read-sheng-log.py.
+- Read \[audio-props\], \[audio-service\], \[audio-io\], \[audio-thread\], \[audio-clock\], \[audio-requests\] and \[audio-sync\] for the iOS path: the plug-in's volume and peak, late and silent periods, write-ahead and read-behind, IO cycle intervals, clock skew, the audio server's IO thread scheduling and host clock, and the plug-in's last start and stop requests.
+- Run scripts/check-audioreach-host.py, scripts/check-cs35l43-host.py and scripts/check-geni-i2c-host.py after changing the codecs.
+
+### 开发经验
+
+- The ADSP image loads in place from the split adsp and adsp\_dtb files in /image of the modem\_a FAT volume.
+- The DSP offers 24 intents of 128 bytes on adsp\_apps and grants a 4 KiB one on request; the GLINK remote intent table keeps it.
+- The amplifiers play ASP RX1 directly \(DSP bypassed, no amplifier firmware\): top three slot 0, bottom three slot 1, gain 18 dB, 16-bit I2S at 48 kHz from the SoC as clock master.
+- The DSP takes buffers as a 32-bit address with the stream index \(0x1001 &amp; 0xf\) in the upper word. The period buffer is low DRAM outside the kernel's window, mapped write-combined; the audio streams stay in SMMU pass-through.
+- Programming a translating SMMU context for the audio streams resets the board; the hypervisor keeps those context banks.
+- PRM commands go from the PRM port \(2\) and use PRM clock ids: the TX core clock is 0x30c. The macro and digital codec votes make the LPASS registers accessible.
+- The VA macro gates the TX SoundWire master's clock on SM8550; with its gate and the TX macro's on, the link comes up and the codec enumerates as device 1.
+- The primary microphone is AMIC3 on micbias 3 into ADC2, codec data port 1 channel 2, master port 2, TX decimator 0 from SWR\_MIC1 and codec DMA TX3, mono 48 kHz.
+- iOS sees the plug-in device only with the Thunderbolt transport type: VirtualAudio makes it a driver device with one output and one input port. Built-in devices need Apple port descriptions, and a USB device needs a location the audio server does not take from a plug-in.
+- The plug-in and the service share one timeline anchored at boot on the 19.2 MHz host timer \(400 ticks per frame, computed in 128-bit\). Playback and capture rings hold 65536 frames; the service takes 480-frame periods and keeps four in flight.
+- The DSP answers a playback buffer once it has copied it, so the steady lead is measured per run \(about 1600 to 2000 frames\) and the published lead is at least 300 ms.
+- Capture answers carry a byte count and an offset; only those bytes are taken, and a short period is normal.
+- CoreAudio takes the host clock to be 24 MHz \(one constant behind AudioGetHostClockFrequency\). The plug-in finds that constant and the service sets it to 19.2 MHz on its shared page; without it the audio server's IO cycles ran 25 percent long and playback and recording stuttered.
+- The zero time stamps start at the frame IO starts on, every 65536 frames, with the raw clock algorithm. A period under the safety offset stops the audio server's IO.
+- The audio server's IO thread runs with a time constraint \(priority 97, period 409600 ticks, computation 204800\).
+- The audio server is arm64e on iPadOS 27: dlsym signs the pointer it returns, so the plug-in strips the signature to read the two instructions behind AudioGetHostClockFrequency and calls through the signed pointer. The VirtualAudio image-added rebind is built for arm64 only, because the slot pointers there are authenticated with their slot address and a plain rebind faults.
+
+### 完成条件
+
+- Each declared route carries the selected audio format through playback or capture and handles start/stop correctly.
+
+### 当前范围
+
+- Playback sounds harsh in places; no speaker equalization or protection runs.
+
+### 下一步
+
+- Qualify iOS playback and capture across apps and routes, then add speaker equalization and protection.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/package/AudioProbe.cpp)
+- `host`: [PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/check-audioreach-host.py)
+  Command: <code>python3 scripts/check-audioreach-host.py; python3 scripts/check-cs35l43-host.py; python3 scripts/check-geni-i2c-host.py</code>. Revision: `9e9971883be72b2fd76b8fb552367a9e4940aa63`.
+- `device`: [Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (sheng-adsp=2 sheng-audio=6); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `9e2e6de1e63d9493e841d51c6b41108e75c7d537`.
+- `device`: [Playback and recording smooth from the start. Host clock set to 19200000 Hz, IO thread period 409600 ticks. 4822 of 4843 IO cycles 15 to 25 ms apart. Write-ahead 16501 to 19638 frames, skew -474 to 1 frames, 0 late periods.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (sheng-adsp=2 sheng-audio=14); play music and record in Voice Memos; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `dea464ef093349dd746582691b0eaa3807fe1441`.
+
+## 电源 {#power}
+
+`implemented`
+
+组件: `AppleKeyStoreState`.
+
+### 硬件与依赖
+
+- Board PMGR integration, clocks/regulators and per-peripheral power requirements.
+- ADSP battery manager: PMIC GLINK owner 32778 on PMIC\_RTR\_ADSP\_APPS; board properties use opcode 0x50; fuel gauges 0x8a/0x8b and 0xa6/0xa7.
+
+### 配置
+
+- CONFIG\_XNU\_SHENG\_PMGR=y; sheng-pmgr=2 selects the board integration.
+- AppleKeyStoreState is selected with the OS event integration.
+- sheng-adsp=2 publishes the battery as an IOPMPowerSource; sheng-battery=0 leaves it off.
+- sheng-usb-sdp-ma sets the input limit on a standard computer port \(default 900; 0 keeps the firmware limit\).
+- sheng-cpufreq=4 scales the CPU domains with load \(sheng-cpufreq-min sets a floor in MHz\); sheng-cpufreq=3 fixes the highest non-turbo level.
+- sheng-gpu-dcvs=1 scales the GPU clock with its busy time \(sheng-gpu-dcvs-min sets the floor level, default 3\); sheng-gpu-perf fixes a level instead.
+
+### 操作步骤
+
+- Document each clock, regulator and firmware-owned state before enabling power transitions.
+- Check battery units and update behavior separately from suspend/resume and peripheral power.
+- Read the \[battery\], \[battery-raw\] and \[charger\] log lines with scripts/read-sheng-log.py.
+
+### 开发经验
+
+- The ADSP firmware runs charging and PD/PPS negotiation without host requests.
+- Battery properties after 11 are shifted by one: charge current 12, temperature 13, charge counter 15, cycles 16, design 17, full 18, time to full 20, time to empty 21.
+- Charge is the sum of both fuel gauges' remaining over full capacity. Battery current is reported discharge-positive.
+- USB property 6 reads SDP on every port. Property 7 carries the adapter type \(6 PD, 8 PD PPS\).
+- A PPS adapter gets a 3 A input limit at about 8.7 V; the battery charges at the 2000 mA charge current with the charge pump off.
+- Both cells and the PD adapter read unauthenticated.
+- A Mac USB-C port negotiates PD 5 V with a 1.2 A input limit: about 1.1 A in, and the battery gains 0.25 to 0.4 A on the desktop.
+- Power policy belongs to the board even when controller operations are shared.
+- The GPU power probe hands the ring its register window without a GMU fence callback: only the GPU service checks fenced WPTR writes.
+- The CPU governor reads each CPU idle time through patches/xnu/zzye-sheng-cpu-idle.patch. Domain 0, the E cluster, scales with load like the other domains.
+- The GPU governor reads the GMU XO busy counter and votes over HFI with the level bandwidth.
+- A touch holds the P CPU domains and the GPU at their top level for sheng-cpufreq-boost-ms and sheng-gpu-dcvs-boost-ms \(1000\) after the last report. GPU submits in 2 of 4 windows keep every CPU domain at 60 percent of its top for 300 ms. A fence waiter sleeps up to sheng-gpu-pause-us \(1000\) and the fence interrupt wakes it.
+- The existing xnu-12377 migration uses kernel\_target.TRIPLE and DEPLOYMENT for platform-power binding assembly and the deployment audit instead of a fixed iOS 17 target. This compilation-target change does not provide new 23F84 power or charging device evidence.
+
+### 完成条件
+
+- Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals.
+
+### 当前范围
+
+- Adapter details shown to iOS come from USB property 6, so every adapter reads as a computer port.
+- Charge current stays at 2 A without fuel gauge and adapter authentication.
+- A low-battery shutdown panics in vnode\_rele\_ext during unmount.
+- Per-peripheral controls and battery publication have separate coverage from system suspend.
+- The GPU governor changes level several times a second and spends most busy time at 680 MHz; its effect on frame times is not measured.
+
+### 下一步
+
+- Take adapter details from property 7.
+- Authenticate both fuel gauges, then qualify PPS charge pump charging; Xiaomi adapter authentication follows.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/package/ShengBattery.cpp)
+- `host`: [PASS battery manager: 4074 checks](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/check-battery-host.py)
+  Command: <code>python3 scripts/check-battery-host.py</code>. Revision: `8719a19294bc79eed72366a19070acfd8e131737`.
+- `device`: [PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `8f5d921d7a3b71a20a97f551cad546dc8e2f3700`.
+- `device`: [CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (sheng-cpufreq=4 sheng-gpu-dcvs=1); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `a338c71a6f83809c84686b4996478f1c4cd3f3ab`.
+
+## 镜像组装 {#packaging}
+
+`implemented`
+
+组件: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
+
+### 硬件与依赖
+
+- Prelinked kernel, hardware DTB, generated ADT, trust cache, Data seed, platform identity and firmware DTB.
+
+### 配置
+
+- Payload volume is 208 MiB. kernel.patch\_series selects ARM64, SoC, OS and device series in order.
+
+### 操作步骤
+
+- Build kernel and package, then payload with --unique-chip-id and the selected trust-cache/Data inputs.
+- Run ./unixnu bootimg -D ../UniXNU-sheng --uefi ../uefi-sheng --dtb &lt;firmware.dtb&gt; and inspect the assembly report.
+
+### 开发经验
+
+- The OS boot-progress integration follows the SoC hooks in patch order.
+- The payload carries kernel.macho.adt; the boot image carries the firmware FDT. Keep the two inputs named explicitly.
+- The device patch series adds zzyd-sheng-audio-addon-mount.patch: the payload addon's audio directory is union-mounted over /System/Library/Audio/Plug-Ins/HAL \(mount4 in the A log line\).
+- zzyf-sheng-amp.patch follows it: the AMP Edge scheduler for the E and P clusters \(see the cpu area\).
+- The selected xnu-12377 board series contains CPU-idle, AMP and audio-addon patches. The new source-driver archives are compile-audit outputs only and are not added to the minimal 23F84 boot payload.
+- scripts/package.sh is the shared packaging script of the device repositories \(templates/package.sh in UniXNU\) and holds no board value: board.toml \[package\] names the UniXNU checkout and the defconfig of each OS profile, and \[os\_overrides\] holds the kernel, payload and component values of the 17 and 26 profiles. unixnu release --check lists 64 patches for 17, 75 for 26 and 78 for 27. scripts/package.sh --os 27 produces boot.img \(185733120 bytes\), payload.img \(184549376 bytes\) and kernel.macho \(96354304 bytes\) when --uefi and UNIXNU\_UNIQUE\_CHIP\_ID are given. The firmware preflight runs scripts/fetch-sheng-dts.py, which builds the firmware device tree that board.toml \[bootimg\] dtb names, and scripts/check-sheng.py reads the firmware checkout from UNIXNU\_UEFI. build-ath12k-wifi.py runs tools/fetch-sources.sh of Ath12kWifi first, which fetches the pinned Linux sources.
+
+### 完成条件
+
+- Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit.
+
+### 当前范围
+
+- Image output depends on the selected ABI audits, firmware and volume policy inputs.
+
+### 下一步
+
+- Attach artifact paths and exact source revisions to the next image build record.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/patches/xnu/series)
+
+## 诊断 {#diagnostics}
+
+`implemented`
+
+### 硬件与依赖
+
+- Serial or framebuffer diagnostics, panic region, boot checkpoints and a recovery path.
+
+### 配置
+
+- boot-progress=2 enables checkpoints; source and image revisions accompany every log.
+- On the iPadOS 27 native source path, sheng-log=1 plus boot-ui-trace=1 starts a separate process-capture worker. boot-ui-focus3=chronod adds the display-query client to backboardd and SpringBoard. Arm64e return-address PAC is stripped for diagnostic stacks.
+
+### 操作步骤
+
+- Run the existing check for the changed area and keep its command, output and input revision.
+- Record the last completed checkpoint and the first failing operation; link the captured output.
+
+### 开发经验
+
+- A source implementation, a host check and a device observation establish different completion levels.
+- Keep an unresolved cause explicit and record the next measurement that can distinguish it.
+- The UFS log carries \[adsp\], \[qrtr\], \[battery\], \[battery-raw\] and \[charger\] lines for the DSP, the IPC router and the charger.
+- BatteryProbe starts the battery with sheng-adsp=2, so the \[battery\] and \[charger\] lines appear on every DSP image; a missing \[battery\] line on such an image means sheng-battery=0 or a failed start.
+- Host checks for the ADSP path: check-adsp-host.py, check-modem-fw-host.py, check-qrtr-host.py and check-battery-host.py.
+- The log carries \[audio\], \[amps\], \[audio-glink\], \[audio-buffer\], \[mic\] and \[mic regs\] for the audio path, and \[gpu wptr\] for fenced GPU write pointer writes.
+- GPU memory rows: \[vm map\], \[vm unmap\], \[vm kinds\] \(time per owned map, fast and full import, unmap by page and by ASID\) and \[bo memory\]. Governor rows: \[cpu gov\] with boost and frame-floor counts, \[cpu throttle\] and \[gpu dcvs\] with touch and wake boosts. Display rows \(sheng-dpu=2 or 3, sheng-dpu-scanout\): \[dpu vig0\], \[dpu vig1\], \[dpu ctl0\], \[swap surfaces\], \[direct scanout\] and \[dpu smmu\].
+- The 23F84 branch lock and source-driver report describe different stages: unixnu.lock covers the selected minimal build, while reports/ipados26-source-drivers.json records separate public-family compile inputs, object hashes, warning counts and unresolved imports. Neither report qualifies source-driver device execution.
+- unixnu.lock records the sm8550 source at the same commit as feeds.toml; fetch rewrites it, so a hand edit and a fetch must agree.
+- scripts/check-sheng.py reads the firmware checkout from UNIXNU\_UEFI, which the firmware step of unixnu sets for its preflight scripts.
+
+### 完成条件
+
+- Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result.
+
+### 当前范围
+
+- Source references in this record describe implemented behavior. Host and device status require their respective evidence entries.
+
+### 下一步
+
+- Add captured host or device evidence when repeating a checkpoint on a known image.
+
+### 证据
+
+- `source`: [Implementation and configuration described in this section](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/scripts/read-sheng-log.py)
+
+## arm64e-os {#arm64e-os}
+
+`planned`
+
+### 硬件与依赖
+
+- iPadOS 26.5.2 build 23F84 IPSW for iPad17,1 to iPad17,4; target identity iPad17,3 J820AP.
+- Public XNU source xnu-12377.121.6; arm64e profile requirements in https://unixnu.com/porting/arm64e.
+
+### 配置
+
+- board.os\_profile = ipados-26.5.2-23F84 with \[os\] arch = "arm64e"; kernel defconfig sheng\_ipados26\_defconfig selects the full sheng component set; the xnu-12377 patch series is split into arch, SoC, OS and device layers.
+- Payload kernel arguments: -v serial=3 debug=0x14e kt\_fixed\_zones=120 -no\_slto\_panic; no install menu.
+- The arm64e build uses the BCM2837 machine config restored for xnu-12377, the non-SPTM pmap and no Apple CPU counters.
+
+### 操作步骤
+
+- Check FEAT\_PAuth, EL1 key register writes and PAC instruction behavior on all eight CPUs.
+- Build the arm64e kernel from xnu-12377.121.6 with the ported 4 KiB patches, then prelink the 23F84 kexts.
+- Follow the bring-up order: arm\_init, bsd\_init, root mount, launchd, SpringBoard.
+
+### 开发经验
+
+- The 23F84 kernelcache is xnu-12377.122.8; xnu-12377.121.6 is the closest public source.
+- SM8550 CPUs implement FEAT\_PAuth; signatures are created on the device, so the PAC algorithm need not match Apple's.
+- Public XNU programs PAC keys only for VMAPPLE through HVC; the arm64e profile provides native key programming.
+- The 23F84 dyld cache is arm64e and contains SME code; SM8550 has no SME.
+- The arm64e xnu-12377.121.6 kernel compiles and links as MH\_EXECUTE with chained fixups.
+- The 23F84 kernelcache is an MH\_FILESET with stripped symbol tables; kext code branches directly into the kernel, so the prelink step for iPadOS 17 does not apply.
+
+### 完成条件
+
+- The arm64e kernel reaches launchd on sheng from the 23F84 root volume, then SpringBoard.
+
+### 当前范围
+
+- Facts: only the boot core has a recorded PAC check; the other seven cores are unmeasured.
+- Facts: no fileset prelink output exists yet, so the kernel has not booted.
+- Facts: the storage, AES, HID, platform power, Adreno and GOP binding archives use original kext addresses recorded from the iPadOS 17 kernelcache; the iPadOS 26 kernelcache has no symbols for them.
+- Guess: the SME functions are selected at run time from hw.optional and commpage features; this is unconfirmed.
+
+### 下一步
+
+- Produce a fileset kernel collection from the native kernel and the selected 23F84 kexts.
+- Read ID\_AA64ISAR1\_EL1 and ID\_AA64ISAR2\_EL1 on all eight CPUs and run a PACIA and AUTIA round trip on each.
+
+### 证据
+
+- `host`: [IPSW SHA-256 f7f55fa36097a0c8f8784eefcd9eabfce3a1c55ecd470f6885f4862a9446f9c3; kernel Darwin 25.5.0, xnu-12377.122.8\~1/RELEASE\_ARM64\_T8142; 317 kexts.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
+  Command: <code>shasum -a 256 &lt;ipsw&gt;; ipsw extract --kernel &lt;ipsw&gt;; ipsw kernel version &lt;kernelcache&gt;</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
+- `host`: [dyld cache iOS 26.5, 4261 images, 83 subcaches; 1208 SMSTART SM and 1287 SMSTART ZA in 11 subcaches. Sampled functions with names include \_sme\_sgemm, \_sme\_strsm and \*\_SME2.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
+  Command: <code>ipsw extract --dyld -a arm64e &lt;ipsw&gt;; scan 4-byte aligned words for SMSTART SM (0xd503437f) and SMSTART ZA (0xd503457f)</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
+- `host`: [27 patches on xnu-12377.121.6; mach.development.bcm2837 links, 19789128 bytes, arm64e MH\_EXECUTE with LC\_DYLD\_CHAINED\_FIXUPS \(pointer format 7\). The prelink step stops: the input is MH\_FILESET.](https://github.com/tkings4chan/UniXNU-sheng/blob/d774c55df9d056b1d35c0063c109ff89d124b176/configs/sheng_ipados26_defconfig)
+  Command: <code>./unixnu defconfig sheng_ipados26_defconfig -D ../UniXNU-sheng; ./unixnu kernel -D ../UniXNU-sheng</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
+- `host`: [298 entries, base 0xfffffe0007004000, 585131 fixups in pointer format 8, 0 symbols in every entry. For the 31 prelink roots \(30 with code, 7 kernel resources\): 1864 kernel targets, 47807 pointer sites, 42027 branch sites.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
+  Command: <code>parse LC_FILESET_ENTRY, LC_DYLD_CHAINED_FIXUPS and kext __TEXT_EXEC branches of the decompressed kernelcache</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
+
+</div>

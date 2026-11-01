@@ -6,7 +6,7 @@
 
 Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and owns its board tree, partition geometry, firmware package and payload policy. This record states what is implemented, what is only configured, and what has not been observed on hardware.
 
-源记录: [porting.toml](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/porting.toml), `65592496e814ede46cc89721ee792b31912d38bd`.
+源记录: [porting.toml](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/porting.toml), `f2847d19e7f76f9cb7a6964ac8ad49f50904e283`.
 
 本页按设备记录自动生成。
 
@@ -69,8 +69,8 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Board identity, partition geometry, archive order, firmware package, payload policy and ADT overrides](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
-- `source`: [SM8550 shared source pinned to a full commit](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/feeds.toml)
+- `source`: [Board identity, partition geometry, archive order, firmware package, payload policy and ADT overrides](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
+- `source`: [SM8550 shared source pinned to a full commit](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/feeds.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -115,7 +115,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Firmware inventory with upstream commit and per-file SHA-256 digests](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/proprietary-files.txt)
+- `source`: [Firmware inventory with upstream commit and per-file SHA-256 digests](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/proprietary-files.txt)
 
 ## CPU 与中断 {#cpu}
 
@@ -160,7 +160,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Board device tree including the shared SM8550 description](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/dts/ishtar.dts)
+- `source`: [Board device tree including the shared SM8550 description](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/dts/ishtar.dts)
 
 ## 内存与 DMA {#memory}
 
@@ -204,7 +204,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Declared DRAM size and the reserved splash framebuffer region](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/dts/ishtar.dts)
+- `source`: [Declared DRAM size and the reserved splash framebuffer region](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/dts/ishtar.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -252,7 +252,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Userdata partition geometry and the selected storage components](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Userdata partition geometry and the selected storage components](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 显示 {#display}
 
@@ -297,7 +297,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Panic framebuffer geometry used by the direct framebuffer path](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Panic framebuffer geometry used by the direct framebuffer path](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 输入 {#input}
 
@@ -340,7 +340,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Novatek touch firmware pinned with its SHA-256 digest](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/proprietary-files.txt)
+- `source`: [Novatek touch firmware pinned with its SHA-256 digest](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/proprietary-files.txt)
 
 ## GPU {#gpu}
 
@@ -388,7 +388,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Builds the stub archive the kernel link uses while the full driver is unavailable](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/scripts/build-adreno-link-stubs.py)
+- `source`: [Builds the stub archive the kernel link uses while the full driver is unavailable](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/scripts/build-adreno-link-stubs.py)
 
 ## 网络 {#network}
 
@@ -431,7 +431,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Component selection showing that no network component is included](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Component selection showing that no network component is included](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 音频 {#audio}
 
@@ -474,7 +474,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Component selection showing that no audio component is included](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Component selection showing that no audio component is included](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 电源 {#power}
 
@@ -519,7 +519,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Power-related kernel arguments and the sleep-disabled bring-up default](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Power-related kernel arguments and the sleep-disabled bring-up default](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 镜像组装 {#packaging}
 
@@ -568,8 +568,8 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Board kernel configuration including the extra link archive and the boot-progress switch](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/configs/gpu_defconfig)
-- `source`: [Archive plan, payload policy and boot-image device-tree overlay](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/board.toml)
+- `source`: [Board kernel configuration including the extra link archive and the boot-progress switch](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/configs/gpu_defconfig)
+- `source`: [Archive plan, payload policy and boot-image device-tree overlay](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/board.toml)
 
 ## 诊断 {#diagnostics}
 
@@ -616,7 +616,7 @@ Xiaomi 13 Ultra \(ishtar\) reuses shared SM8550 support and the sheng kit, and o
 
 ### 证据
 
-- `source`: [Self-contained boot-progress observer that renders stages to the raw framebuffer](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/package/BootProgressMin.c)
-- `source`: [Build script with an undefined-symbol gate that rejects the object when the kernel image cannot satisfy it](https://github.com/peter8889/UniXNU-ishtar/blob/65592496e814ede46cc89721ee792b31912d38bd/scripts/build-boot-progress-min.py)
+- `source`: [Self-contained boot-progress observer that renders stages to the raw framebuffer](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/package/BootProgressMin.c)
+- `source`: [Build script with an undefined-symbol gate that rejects the object when the kernel image cannot satisfy it](https://github.com/peter8889/UniXNU-ishtar/blob/f2847d19e7f76f9cb7a6964ac8ad49f50904e283/scripts/build-boot-progress-min.py)
 
 </div>
