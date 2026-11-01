@@ -59,6 +59,10 @@ The device repository carries `.github/workflows/package.yml`. It runs
 checkouts beside the device repository, and offers `boot.img`, `payload.img`,
 `kernel.macho` and `package.manifest.json` as the run's artifacts.
 
+The run installs its tools itself (Homebrew dtc, llvm, lld, cmake, mtools and
+the ipsw tap for the AEA keys) and asserts them before the build; the firmware
+checkout comes with its submodules, the binary modules the volume builds from.
+
 Run it in a fork of the device repository:
 
 1. Fork the device repository and set its secret `UNIXNU_UNIQUE_CHIP_ID` to the

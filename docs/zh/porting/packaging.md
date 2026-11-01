@@ -46,6 +46,10 @@ scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 `boot.img`、`payload.img`、`kernel.macho` 和 `package.manifest.json` 作为
 运行的产物。
 
+运行自行安装工具（Homebrew 的 dtc、llvm、lld、cmake、mtools 和取 AEA 密钥的
+ipsw tap），并在构建前断言齐全；固件检出连同其子模块，固件卷从子模块里的
+二进制模块构建。
+
 在设备仓库的 fork 中运行：
 
 1. fork 设备仓库，把它的 secret `UNIXNU_UNIQUE_CHIP_ID` 设为设备的平台
