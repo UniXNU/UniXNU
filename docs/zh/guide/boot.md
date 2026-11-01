@@ -97,6 +97,43 @@ DarwinBoot 把内核段复制到连续物理窗口，构造 `boot_args`，把 AD
 | DarwinBoot | 串口，`DARWINBOOT:` 行 |
 | XNU | 串口内核输出 |
 
+## 把 payload 放进 vendor_boot {#vendor-boot-负载}
+
+超过几 MB 的 payload 放不进 `boot`。GKI 设备的 `boot` 本身没有 ramdisk
+（`ramdisk_size` 为 0），厂商 ABL 也会拒绝带 ramdisk 的 boot 镜像，因此 payload
+属于 `vendor_boot` 的 `vendor_ramdisk` 字段，`./unixnu bootimg` 用 `--ramdisk none`
+运行。
+
+三个上限决定镜像能否被接受：
+
+- **窗口**。原厂 `vendor_boot` header 把 ramdisk 放在 `0x01000000`、设备树放在
+  `0x01f00000`，只剩 15 MiB。payload 超过这个大小前要用 `--ramdisk-addr` 重新定位，
+  否则会覆盖设备树。
+- **分区**。重建后的镜像必须放得进分区。末尾 64 字节的 AVB footer 会被重新指向
+  vbmeta blob，因此不需要删掉 footer。
+- **文件系统**。固件按 FAT 挂载 ramdisk。`mformat -F` 可能生成固件读不了的卷；
+  `mformat -T 8192 -h 64 -s 32` 生成的 FAT16 卷可以挂载。
+
+菜单会以 `payload: initrd <起>-<止> [<id>] fs <n>` 报告结果。`fs 0` 表示块设备存在但
+没有可读文件系统；完全没有 payload 行则表示 ramdisk 没到达加载器。
+
+## 只有屏幕可用时 {#屏幕诊断}
+
+没有串口的板子只能在帧缓冲上报告进度，加载器和内核各有自己的信号：
+
+- DarwinBoot 在跳转内核前把帧缓冲顶部十六分之一刷成绿色。出现绿带表示内核之前的
+  所有阶段都已通过。
+- 可选的入口探针在绿带下方按阶段各画一条：蓝色是内核入口（MMU 关闭），品红色是
+  即将开启 MMU 之前；配合 `entry_probe_reset_delay` 会在 MMU 开启后若干秒通过 PSCI
+  复位，把"CPU 走到了这一步"变成一次重启。
+- `payload.panic_screen = true` 会打补丁，让 panic 把格式串画到内核自己的帧缓冲映射上。
+  它与第四阶段探针共用 `_start` 之后的零填充，二者不能同时启用。
+- `entry_probe_reset_after` 用来二分 `_arm_init`：在指定调用之后复位，说明内核已从该
+  调用返回。
+
+加载器失败前画出的诊断会在菜单重绘时被立即覆盖。只能靠拍照留证时，应在失败路径上
+让屏幕停留数秒。
+
 ## 恢复
 
 使用设备硬件复位方式返回 bootloader。fastboot 响应后，以下命令可重启 bootloader：
