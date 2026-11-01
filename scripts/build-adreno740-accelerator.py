@@ -136,9 +136,9 @@ native = ROOT / 'build/adreno740/libAdreno740.a'
 if native.exists():
     run(['xcrun', 'ar', 'rcs', native, late, *binding_objects])
 (OUT / 'build-report.json').write_text(json.dumps(dict(
-    # The header the source includes (#include "../NativeMetal/OriginalAcceleratorABI.h", beside the driver's own checkout).
+    # The header the source includes (#include "../AdrenoMetal/OriginalAcceleratorABI.h", beside the driver's own checkout).
     source_sha256={str(source.relative_to(ROOT)): sha(source),
-                   'OriginalAcceleratorABI.h': sha(source.resolve().parent.parent / 'NativeMetal/OriginalAcceleratorABI.h')},
+                   'OriginalAcceleratorABI.h': sha(source.resolve().parent.parent / 'AdrenoMetal/OriginalAcceleratorABI.h')},
     archive_sha256=sha(archive), original_abi_sha256=sha(plan_path), bindings={n: hex(a) for n, a in bindings.items()},
     original_instructions_modified=False, runtime_qualified=False), indent=2) + '\n')
 print('PASS: staged AGXAccelerator builds against the audited original IOAcceleratorES imports')
