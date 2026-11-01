@@ -161,9 +161,22 @@ PublishInitrd (
 
   Start = ReadCells (StartProp, StartLength / 4);
   End   = ReadCells (EndProp, EndLength / 4);
-  if ((End <= Start) || (((End - Start) % RAM_BLOCK_SIZE) != 0)) {
-    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: initrd 0x%lx-0x%lx is not a whole number of sectors\n", Start, End));
+  if (End <= Start) {
+    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: empty initrd 0x%lx-0x%lx\n", Start, End));
     return;
+  }
+
+  //
+  // The bootloader does not always end the initrd on a sector boundary: the
+  // nubia NX769J hands over an end address whose low bits are 0x430. Round the
+  // published length up instead of refusing the ramdisk; the bytes between the
+  // real end and the rounded end are inside the RAM the bootloader reserved for
+  // the initrd, and the volume is read-only.
+  //
+  if (((End - Start) % RAM_BLOCK_SIZE) != 0) {
+    UINT64  Rounded = ((End - Start) + RAM_BLOCK_SIZE - 1) / RAM_BLOCK_SIZE * RAM_BLOCK_SIZE;
+    DEBUG ((DEBUG_WARN, "UNIXNURAMDISK: initrd 0x%lx-0x%lx rounded to 0x%lx bytes\n", Start, End, Rounded));
+    End = Start + Rounded;
   }
 
   mRamBase                = (UINT8 *)(UINTN)Start;
