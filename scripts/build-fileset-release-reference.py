@@ -5,16 +5,23 @@ import os
 import shutil
 import hashlib
 import argparse
+import fnmatch
 from pathlib import Path
 import subprocess
 
 repo = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--tree', required=True, type=Path, help='prepared XNU build tree of the OS profile')
 parser.add_argument('--lto', action='store_true', help='enable the RELEASE default link-time optimization')
 options = parser.parse_args()
 mode = 'lto' if options.lto else 'snapshot'
-root = repo / 'out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree'
+root = options.tree.resolve()
 output = root / 'build/xnu/fileset-reference'
+final = output / 'mach.release.bcm2837.unstripped.noctf'
+if final.is_file():
+    # An earlier run of this step left the comparison kernel in place.
+    print(f'reference present: {final}')
+    raise SystemExit(0)
 output.mkdir(parents=True, exist_ok=True)
 source = output / 'source'
 if not source.exists():
@@ -42,9 +49,10 @@ args = ['make','-C',str(source),'build','SDKROOT=iphoneos',
     'ARCH_CONFIGS=ARM64','MACHINE_CONFIGS=BCM2837','KERNEL_CONFIGS=RELEASE',
     'ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64e','LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY',
     'ARM64_LINK_ADDR=0xfffffff007004000','ARM64_PLKSEG_ADDR=0xfffffff004004000',
-    'DEPLOYMENT_TARGET_FLAGS=-miphoneos-version-min=26.0 -DXNU_TARGET_OS_IOS',
-    'DEPLOYMENT_LINKER_FLAGS=-Wl,-ios_version_min,26.0',
-    'RC_DARWIN_KERNEL_VERSION=25.5.0','RC_ProjectSourceVersion=12377.121.6',
+    f'DEPLOYMENT_TARGET_FLAGS=-miphoneos-version-min={os.environ.get("UNIXNU_IOS_VERSION", "26.0")} -DXNU_TARGET_OS_IOS',
+    f'DEPLOYMENT_LINKER_FLAGS=-Wl,-ios_version_min,{os.environ.get("UNIXNU_IOS_VERSION", "26.0")}',
+    f'RC_DARWIN_KERNEL_VERSION={os.environ.get("UNIXNU_XNU_DARWIN", "25.5.0")}',
+    f'RC_ProjectSourceVersion={os.environ.get("UNIXNU_XNU_VERSION", "12377.121.6")}',
     f'BUILD_LTO={int(options.lto)}','BOUND_CHECKS=0','BUILD_WERROR=0','MAKEJOBS=-j8',
     'LDFLAGS_KERNEL_LTO=-miphoneos-version-min=26.0 -Wl,-mllvm,-inline-threshold=100',
     f'CFLAGS_EXTRA={flags}',
@@ -57,4 +65,35 @@ args = ['make','-C',str(source),'build','SDKROOT=iphoneos',
 with (output/f'{mode}-build.log').open('w') as log:
     result = subprocess.run(args,cwd=root,env=env,stdout=log,stderr=subprocess.STDOUT)
 print('RELEASE reference exit',result.returncode,'log',output/f'{mode}-build.log',flush=True)
-raise SystemExit(result.returncode)
+if result.returncode:
+    raise SystemExit(result.returncode)
+# Forced exports the built objects cannot provide: remove them from this private copy and link again
+# (the symbols are absent from the comparison kernel either way; the second link stops the forced-export
+# list from failing it).
+objects = (output / f'{mode}-obj/RELEASE_ARM64_BCM2837/link.filelist').read_text().splitlines()
+names = set()
+for i in range(0, len(objects), 100):
+    listed = subprocess.run(['xcrun', 'nm', '-gUj', *objects[i:i + 100]], capture_output=True, text=True, check=True)
+    names.update(symbol for symbol in listed.stdout.splitlines() if symbol.startswith('_') and ' ' not in symbol)
+removed = []
+for filename in ('Private.exports', 'Private.arm64.exports'):
+    path = output / 'source/config' / filename
+    lines = path.read_text().splitlines(keepends=True)
+    rejected = {line.strip() for line in lines
+                if line.strip().startswith('_') and ':' not in line and not any(fnmatch.fnmatchcase(n, line.strip()) for n in names)}
+    removed.extend(sorted(rejected))
+    path.write_text(''.join(line for line in lines if line.strip() not in rejected))
+import json as _json
+record = output / 'omitted-unavailable-forced-exports.json'
+previous = _json.loads(record.read_text()) if record.exists() else []
+record.write_text(_json.dumps(sorted(set(previous + removed)), indent=2) + chr(10))
+print('removed', len(removed), 'unavailable forced exports; linking again')
+with (output / f'{mode}-build.log').open('a') as log:
+    result = subprocess.run(args, cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT)
+print('RELEASE reference exit', result.returncode, 'log', output / f'{mode}-build.log', flush=True)
+if result.returncode:
+    raise SystemExit(result.returncode)
+import shutil as _shutil
+built = output / f'{mode}-sym/RELEASE_ARM64_BCM2837/mach.release.bcm2837.unstripped.noctf'
+_shutil.copyfile(built, final)
+print('reference', final)
