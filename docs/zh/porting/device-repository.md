@@ -14,6 +14,7 @@ UniXNU-<device>/
   board.toml
   porting.toml
   .github/workflows/porting-record.yml
+  .github/workflows/package.yml
   feeds.toml
   configs/<device>_defconfig
   dts/<device>.dts
@@ -48,6 +49,7 @@ UniXNU-<device>/
 | `package/`、板级代码和构建配方 | 所选组件与板级服务具备构建配方、启动接入和所需 OS ABI 输入 |
 | `proprietary-files.txt`、固件配置 | 固件来源与哈希、DSC/FDF 集成、分区几何和镜像输入完整 |
 | `porting.toml`、`.github/workflows/porting-record.yml` | 每个所选组件及依赖都有对应区域；记录实际源码、主机和设备结果；启用记录检查 |
+| `.github/workflows/package.yml` | [设备打包脚本](/zh/porting/packaging)的打包 action |
 | `README.md`、`AGENTS.md` | 设备范围、前置条件、构建命令，以及通用指南和设备记录链接 |
 | `.gitignore`、`local.toml.example` | 忽略本机覆盖文件与生成目录；说明示例路径 |
 
