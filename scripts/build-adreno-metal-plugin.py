@@ -5,6 +5,7 @@ and the launchd probe daemon with its job plist (NativeAdrenoProbeDaemon.cpp).
 Output (ignored, never committed): build/adreno-metal-plugin/NativeAdrenoMetal.bundle with a 4 KiB-page ad-hoc signature, and
 trust.json with its CDHash. The bundle is staged into the Data seed by add-gpu-plugin-data.py and trusted through an extra
 owner trust module (make-owner-trust-bundle.py); neither changes the original trust modules, AMFI or any Apple signature."""
+import argparse
 import json
 import plistlib
 import re
@@ -15,7 +16,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 # --target ios27: the arm64e build for iPadOS 27 (24A446), whose render server is an arm64e process.
-IOS27 = sys.argv[1:] == ['--target', 'ios27']
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--target', choices=('ios', 'ios27'), default='ios')
+parser.add_argument('--no-replay', action='store_true', help='omit the optional host simulation capture used by diagnostic probes')
+args = parser.parse_args()
+IOS27 = args.target == 'ios27'
 OUT = ROOT / ('build/adreno-metal-plugin27' if IOS27 else 'build/adreno-metal-plugin')
 bundle = OUT / 'NativeAdrenoMetal.bundle'
 if OUT.exists():
@@ -30,7 +35,10 @@ if not TURNIP.is_file():
     raise SystemExit('Build Turnip first: python3 scripts/build-turnip-darwin.py --target ' + ('ios27' if IOS27 else 'ios'))
 subprocess.run(['python3', ROOT / 'scripts/gen-turnip-smoke-shaders.py'], check=True)
 # Turnip's first submission, recorded on the host, for the plugin's prefix replay (build/turnip-smoke/TurnipReplay.h).
-subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
+if args.no_replay:
+    (ROOT / 'build/turnip-smoke/TurnipReplay.h').unlink(missing_ok=True)
+else:
+    subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
 BRIDGE_TARGET = 'ios27' if IOS27 else 'ios'
 subprocess.run(['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET], check=True)
 BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'

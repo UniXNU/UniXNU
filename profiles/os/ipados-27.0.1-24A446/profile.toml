@@ -31,6 +31,7 @@
 "kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
 "kernelcache_sha256" = "38e6d9fa5f789b8228f4617ef4c6d2a3fd8ab564abdc9b62920f1db53fc1780a"
 "slide" = "-0x1000000"
+regression_policy = "scripts/policies/ipados-27.0.1-24A446/prelink-regression.json"
 # The AMFI wrapper that calls _initializeAppleMobileFileIntegrity and returns 0; the kernel patch calls it early.
 "early_security_init" = "com.apple.driver.AppleMobileFileIntegrity=0xfffffe00092551ac"
 # Bring-up: match against the symbol-bearing RELEASE build of the same XNU source
