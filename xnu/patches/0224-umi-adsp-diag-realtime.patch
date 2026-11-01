@@ -1,0 +1,42 @@
+From 6b45ad89df6d96f9d3bf270b72fa1bde22d4e2e8 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 20:36:46 +0100
+Subject: [PATCH] umi: ADSP diag real-time mode after the F3 mask
+
+DIAGMODE v1 {3, 36, version 1, sleep vote 1, real time 1} follows the F3
+mask, and control message ids are logged compactly. On the phone the ADSP
+still streams no F3 data.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 8cd21cd..46b6b91 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -1183,6 +1183,10 @@ diag_f3_enable(uint32_t node, uint32_t port)
+ 	memcpy(m + 19, &mask, 4);
+ 	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, m, sizeof(m));
+ 	printf("SWEET ADSP: diag -> CNTL F3 mask: every SSID, levels 0x1f\n");
++	/* real-time mode (diag_send_diag_mode_update_by_smd, version 1): flush messages at once, no buffering */
++	uint32_t mode[11] = { 3, 9 * 4, 1, 1 /* sleep vote */, 1 /* real time */, 0, 0, 0, 0, 0, 0 };
++	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, mode, sizeof(mode));
++	printf("SWEET ADSP: diag -> CNTL DIAGMODE real time\n");
+ }
+ 
+ static void
+@@ -1266,7 +1270,8 @@ diag_rx(uint32_t node, uint32_t port, uint32_t dst_port, const uint8_t *p, uint3
+ 			plen = len - at - 8;
+ 		}
+ 		const uint8_t *d = p + at + 8;
+-		if (logged++ < 40) {
++		static unsigned ids[64];
++		if (id < 64 && ids[id]++ < 3 && logged++ < 200) {
+ 			uint32_t w[3] = { 0 };
+ 			memcpy(w, d, MIN(plen, 12u));
+ 			printf("SWEET ADSP: diag <- CNTL msg %u, %u bytes from %u:%#x: %#x %#x %#x\n", id, plen, node, port, w[0],
+-- 
+2.54.0 (Apple Git-157)
+

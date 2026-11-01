@@ -2,6 +2,16 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0224: ADSP diag real-time mode; still no F3 stream** (patch `xnu/patches/0224-umi-adsp-diag-realtime.patch`,
+  boot `shim/out/umi-0224-f3rt.img`). DIAGMODE v1 {3, 36, version 1, sleep vote 1, real time 1} after the F3 mask: taken,
+  no data on LPASS:DATA. Linux sends DIAGMODE **v2** (with the diag id) when diag ids are in use, plus time sync, log and
+  event masks per range; not tried.
+  - The ADSP firmware's own strings (`strings adsp.b*`, 40k lines) are plain text, e.g. `AFEPortAprHandler.cpp:====PFT:
+    AFESvc: Executing APR cmd with opcode: %8lx`, so F3 would be readable once it streams. Also present:
+    `servreg_qmi_notifier_client.c: Wait for QMI server at instance ID %d` (the ADSP waits for remote servreg notifier
+    servers), `servreg_notif_worker_task(): received ack from root`, `PDR DISABLED` / `Proceeding with PDR`,
+    `fastrpc_uprocess.c ... audioPDR`. Worth following: which instance the ADSP waits for, and whether its audio PD
+    gates its services on it.
 - **2026-11-01 0223: BOTH CS35L41 AMPS CONFIGURED FROM iOS (Linux driver's writes replayed); they wait for a bit
   clock** (patch `xnu/patches/0223-umi-cs35l41-configure.patch`, boot `shim/out/umi-0223-ampinit.img` = 0222-amp's line
   + `sweetampstepms=200 sweetampplay=1`).
