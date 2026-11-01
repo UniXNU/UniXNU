@@ -4,11 +4,18 @@ import base64
 import concurrent.futures
 import hashlib
 import json
+import os
 from pathlib import Path
+import urllib.parse
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
 pins = json.loads((ROOT / 'scripts/data/adreno-inputs.json').read_text())
+
+
+# Anonymous GitHub API calls share a small per-address quota that hosted CI runners exhaust
+# (HTTP 403); a token in GITHUB_TOKEN or GH_TOKEN is sent to GitHub hosts only.
+TOKEN = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
 
 
 def fetch(item):
@@ -16,7 +23,10 @@ def fetch(item):
     if path.exists():
         data = path.read_bytes()
     else:
-        request = urllib.request.Request(url, headers={'User-Agent': 'sheng-offline-adreno-audit'})
+        headers = {'User-Agent': 'sheng-offline-adreno-audit'}
+        if TOKEN and urllib.parse.urlsplit(url).hostname in ('api.github.com', 'raw.githubusercontent.com'):
+            headers['Authorization'] = f'Bearer {TOKEN}'
+        request = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(request, timeout=30) as response:
             data = response.read()
         if blob:
