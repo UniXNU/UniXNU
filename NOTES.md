@@ -2,6 +2,21 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-01 0219: NO AUDIO-PD SERVICE ANSWERS ANYTHING** (patch `xnu/patches/0219-umi-adsp-service-probe.patch`, boot
+  `shim/out/umi-0219-probe.img`, 0215d's line). After core ready, one harmless command a second:
+  - core (svc 3, root PD) AVCS_CMD_GET_FWK_VERSION 0x1292c -> **answered** (0x1292d, 148 bytes, 9 services; note the
+    response header field 0x181 = an 8-word header);
+  - core AVCS_CMD_CREATE_LPASS_NPA_CLIENT 0x12985 {node 1 = sleep-island core driver, "SWEET"} -> no answer (it is only
+    for island transitions anyway);
+  - ASM (7) ASM_CMD_SHARED_MEM_UNMAP_REGIONS 0x10d94 {0}, ADM (8) ADM_CMD_SHARED_MEM_UNMAP_REGIONS 0x10324 {0}, AFE (4)
+    AFE_SERVICE_CMD_SHARED_MEM_UNMAP_REGIONS 0x100ec {0} -> **none answered** (each should return an APR error result);
+  - the AFE's LPASS core votes still answered (0x1b / 0x1c).
+  - So the audio PD (servreg UP, createstaticpd 0, module loading through our apps_std) does not process APR commands
+    for ASM, ADM or AFE; the vote path is evidently served elsewhere (LPASS resource manager). GET_STATE answered 1
+    within 1 s of the ADSP's start, before createstaticpd, so it says nothing about the audio PD.
+  - Open questions: does the audio PD wait for something from APPS before its APR services run (e.g. a PDR/servreg
+    indication ack, an audio-PD restart notification, or Android's ACDB/AVS start-up through q6core), or does its
+    APR need a separate route? Diagnostics would help: the PD's FARF/diag messages (none arrive over apps_std).
 - **2026-11-01 0218: AFE ANSWERS THE LPASS CORE VOTES, BUT NOT ITS PORT/SERVICE COMMANDS** (patch
   `xnu/patches/0218-umi-adsp-appsmem-votes.patch`; boots `shim/out/umi-0218{,b,c,d,e,f}-*.img`, 0215d's line).
   - apps_mem request_map64 (4 KiB, rflags 8) answered: low RAM 0xd4c00000 (1 MiB, 16 KiB steps), FastRPC mmap on

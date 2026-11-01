@@ -1,0 +1,99 @@
+From b6389bf8328888103da1b7d1da69e5d0e630632c Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 15:42:19 +0100
+Subject: [PATCH] umi: probe which ADSP services answer (core, ASM, ADM, AFE)
+
+After core ready, one harmless command a second: core GET_FWK_VERSION and
+CREATE_LPASS_NPA_CLIENT, then a SHARED_MEM_UNMAP of handle 0 to ASM, ADM
+and AFE (boot-arg sweetadspprobe=0 skips them). On the phone only the core's
+version query and the AFE's LPASS core votes are answered: no audio-PD
+service answers anything.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 50 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 49 insertions(+), 1 deletion(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 3731342..b242b8e 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -55,6 +55,7 @@ static int apr_core_state;                      /* 0 asking, 1 ready (versions a
+ static void afe_next(void);
+ static void afe_result(uint32_t opcode, uint32_t status);
+ static void afe_poll(uint32_t ms);
++static void svc_probe(uint32_t ms);
+ static void afe_vote_answer(uint32_t opcode, uint32_t status, uint32_t handle);
+ static void amp_start(void);
+ static bool adsp_fr_on(void);
+@@ -148,7 +149,7 @@ apr_rx(const uint8_t *m, uint32_t len)
+ 	default:
+ 		break;
+ 	}
+-	if (apr_logged++ < 16) {
++	if (apr_logged++ < 48) {
+ 		printf("SWEET ADSP: APR <- %u bytes, hdr %#x size %u from svc %u domain %u port %u to svc %u port %u, "
+ 		    "token %u opcode %#x: %#x %#x %#x %#x\n", len, f, size, m[4], m[5], m[6] | m[7] << 8, m[8],
+ 		    m[10] | m[11] << 8, token, opcode, p[0], p[1], p[2], p[3]);
+@@ -171,6 +172,7 @@ apr_poll(uint32_t now)
+ 		gl_open(GL_LCID_APR);
+ 	}
+ 	afe_poll(now);
++	svc_probe(now);
+ 	if (apr_core_state != 0 || !gl_ch[GL_LCID_APR - 1].acked || ms - apr_asked_ms < 1000) {
+ 		return;
+ 	}
+@@ -987,4 +989,50 @@ adsp_apps_mem(uint32_t method, const uint32_t *w, uint8_t *prim, struct fr_buf *
+ 	out[0].len = 16;
+ 	return 0;
+ }
++
++/*
++ * Which ADSP services answer at all (0218-0219: the AFE answers only its LPASS core votes)? Harmless commands,
++ * one a second after the core is ready, every answer logged by apr_rx: core framework version and an LPASS NPA
++ * client (downstream q6core.c / q6core.h), then an unmap of handle 0 to ASM (7), ADM (8) and AFE (4), which
++ * should each come back as an APR result with an error. Boot-arg sweetadspprobe=0 skips them.
++ */
++static void
++svc_probe(uint32_t ms)
++{
++	static unsigned next;
++	static uint32_t last;
++	uint32_t on = 1;
++	PE_parse_boot_argn(SL_ARG "probe", &on, sizeof(on));
++	if (!on || apr_core_state != 2 || next >= 5 || ms - last < 1000) {
++		return;
++	}
++	last = ms;
++	uint32_t zero = 0;
++	struct __attribute__((packed)) {
++		uint32_t node;
++		char name[16];
++	} npa = { 1, "SWEET" };                 /* AVCS_SLEEP_ISLAND_CORE_DRIVER_NODE_ID */
++	switch (next++) {
++	case 0:
++		printf("SWEET ADSP: probe -> core GET_FWK_VERSION\n");
++		apr_send(APR_SVC_CORE, 0x0001292c, NULL, 0);
++		break;
++	case 1:
++		printf("SWEET ADSP: probe -> core CREATE_LPASS_NPA_CLIENT\n");
++		apr_send(APR_SVC_CORE, 0x00012985, &npa, sizeof(npa));
++		break;
++	case 2:
++		printf("SWEET ADSP: probe -> ASM SHARED_MEM_UNMAP_REGIONS (handle 0)\n");
++		apr_send(7, 0x00010d94, &zero, 4);
++		break;
++	case 3:
++		printf("SWEET ADSP: probe -> ADM SHARED_MEM_UNMAP_REGIONS (handle 0)\n");
++		apr_send(8, 0x00010324, &zero, 4);
++		break;
++	case 4:
++		printf("SWEET ADSP: probe -> AFE SERVICE_CMD_SHARED_MEM_UNMAP_REGIONS (handle 0)\n");
++		apr_send(APR_SVC_AFE, 0x000100ec, &zero, 4);
++		break;
++	}
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+
