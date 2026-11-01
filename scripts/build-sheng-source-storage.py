@@ -127,12 +127,21 @@ def main():
                 verification['image_sha256'] != digest or verification['volume_uuid'] != identity or
                 verification['trusted_key_sha256'] != hashlib.sha256(key).hexdigest()):
             parser.error(f'{path.parent.name}: require complete verification of the actual {build_id} image')
-        data = path.read_bytes()
-        if len(data) < 544 or data[56:88].hex() != digest:
-            parser.error(f'{path}: manifest does not describe the selected image')
         # With the tables in userdata only the 544-byte signed header goes into the boot image;
         # NativeUfs reads "<window>.vroot" from the root image and vr_open checks it against the header.
-        manifests.append(data[:544] if tables_in_userdata else data)
+        # A policy directory may ship manifest.header.bin, the header without the block tables: every
+        # check below still runs on it, and the full tables stay a local input of the userdata image.
+        header = path.with_name('manifest.header.bin')
+        if tables_in_userdata and header.is_file():
+            data = header.read_bytes()
+            if len(data) != 544 or data[56:88].hex() != digest:
+                parser.error(f'{header}: policy header does not describe the selected image')
+            manifests.append(data)
+        else:
+            data = path.read_bytes()
+            if len(data) < 544 or data[56:88].hex() != digest:
+                parser.error(f'{path}: manifest does not describe the selected image')
+            manifests.append(data[:544] if tables_in_userdata else data)
     cursor = 32 + 16 * len(manifests)
     table = bytearray()
     for data in manifests:
