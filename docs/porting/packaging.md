@@ -52,6 +52,22 @@ Any other `unixnu` option (`--uefi`, `--kernelcache`, `--dtb`, `--out`, `-j`) is
 Local inputs that are not in a repository come from `unixnu.local.toml`.
 The platform seed (`--unique-chip-id HEX` or `UNIXNU_UNIQUE_CHIP_ID`) and the firmware checkout (`--uefi DIR` or `UNIXNU_UEFI`) are not stored in any repository; the firmware step passes `UNIXNU_UEFI` to the board's preflight scripts.
 
+## On GitHub
+
+The device repository carries `.github/workflows/package.yml`. It runs
+`scripts/package.sh` on a macOS runner, with the UniXNU and uefi-sheng
+checkouts beside the device repository, and offers `boot.img`, `payload.img`,
+`kernel.macho` and `package.manifest.json` as the run's artifacts.
+
+Run it in a fork of the device repository:
+
+1. Fork the device repository and set its secret `UNIXNU_UNIQUE_CHIP_ID` to the
+   platform seed of the device (8 hex digits). The seed is in no repository and
+   the images bake it, so they serve that device alone.
+2. Actions, package, Run workflow, and pick the OS profile.
+3. Download the artifacts, then delete the run (`gh run delete`). The artifacts
+   are boot images of one device and are not kept.
+
 ## board.toml keys
 
 ```toml

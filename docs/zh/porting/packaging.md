@@ -39,6 +39,22 @@ scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 其他 `unixnu` 选项（`--uefi`、`--kernelcache`、`--dtb`、`--out`、`-j`）原样传递。不在仓库中的本地输入来自 `unixnu.local.toml`。
 平台种子（`--unique-chip-id HEX` 或 `UNIXNU_UNIQUE_CHIP_ID`）和固件检出（`--uefi DIR` 或 `UNIXNU_UEFI`）不保存在任何仓库中；固件步骤把 `UNIXNU_UEFI` 传给板级的 preflight 脚本。
 
+## 在 GitHub 上
+
+设备仓库带有 `.github/workflows/package.yml`。它在 macOS runner 上运行
+`scripts/package.sh`，UniXNU 和 uefi-sheng 检出在设备仓库旁边，并把
+`boot.img`、`payload.img`、`kernel.macho` 和 `package.manifest.json` 作为
+运行的产物。
+
+在设备仓库的 fork 中运行：
+
+1. fork 设备仓库，把它的 secret `UNIXNU_UNIQUE_CHIP_ID` 设为设备的平台
+   种子（8 位十六进制）。种子不在任何仓库中，镜像会把它编入，只对这台
+   设备有效。
+2. 在 Actions 的 package 中 Run workflow，选择 OS 配置。
+3. 下载产物后删除该运行（`gh run delete`）。产物是一台设备的启动镜像，
+   不保留。
+
 ## board.toml 键
 
 ```toml

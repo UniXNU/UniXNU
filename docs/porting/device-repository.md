@@ -15,6 +15,7 @@ UniXNU-<device>/
   board.toml
   porting.toml
   .github/workflows/porting-record.yml
+  .github/workflows/package.yml
   feeds.toml
   configs/<device>_defconfig
   dts/<device>.dts
@@ -53,6 +54,7 @@ and update existing files in place. Review these groups:
 | `package/`, board code and build recipes | Selected components and board services have build recipes, startup integration and required OS ABI inputs |
 | `proprietary-files.txt`, firmware configuration | Required firmware sources and hashes, DSC/FDF integration, partition geometry and image inputs |
 | `porting.toml`, `.github/workflows/porting-record.yml` | Every selected component and dependency covered by an area; actual source, host and device results; record check enabled |
+| `.github/workflows/package.yml` | The packaging action of [the packaging script](/porting/packaging) |
 | `README.md`, `AGENTS.md` | Board scope, prerequisites, build commands and links to the common guides and device record |
 | `.gitignore`, `local.toml.example` | Local override file and generated output directories ignored; example paths documented |
 
