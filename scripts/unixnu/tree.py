@@ -35,7 +35,9 @@ def _copy_scripts(source, destination):
         target = destination / relative
         if target.is_symlink():
             target.unlink()
-        if target.exists() and target.stat().st_size == path.stat().st_size and target.stat().st_mtime >= path.stat().st_mtime:
+        # Content, not size and mtime: a pure move of code keeps the size, and a checkout can make
+        # the source look older than a stale tree copy.
+        if target.exists() and target.read_bytes() == path.read_bytes():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, target)
