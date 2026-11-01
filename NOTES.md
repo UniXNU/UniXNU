@@ -15,6 +15,14 @@
     audio stack (apr, q6core, q6afe, adsp-loader). Boot TWRP from RAM and read its dmesg / debugfs (apr, q6core,
     audio_notifier, adsp ssr) to see the working APPS<->ADSP start-up order and any command we never send. Other
     options: ADSP-side logs (diag / QDSS / FARF via adspmsgd), or a deliberate ADSP crash to read the SFR.
+  - **TWRP checked (2026-11-01, read-only, user OK'd):** TWRP's kernel (4.19.157-perf, Xiaomi build) has **no downstream
+    audio stack**: no apr / q6core / q6afe / adsp-loader symbols in /proc/kallsyms, no /sys/kernel/boot_adsp, ADSP
+    subsystem OFFLINING; only fastrpc probes ("service location enabled for avs/audio (audio_pdr_adsprpc)"; ION heap
+    "adsp" at 0xecc00000 + 0x800000 = Android's adsp_mem placement). The vendor partition has only 3 .ko (gspca, rmnet):
+    Xiaomi builds the audio techpack into the stock kernel. dmesg kept in `research/audio-umi/twrp/` (not in git).
+    -> To see the working start-up: the stock boot image's kernel (`~/ios-umi-backup/boot-read-2026-10-21.img`) with
+    TWRP's ramdisk, booted from RAM (not stock Android: it could try to wipe the unknown userdata), then
+    `echo 1 > /sys/kernel/boot_adsp/boot` and read the downstream apr/q6core/audio_notifier log.
 - **2026-11-01 0219: NO AUDIO-PD SERVICE ANSWERS ANYTHING** (patch `xnu/patches/0219-umi-adsp-service-probe.patch`, boot
   `shim/out/umi-0219-probe.img`, 0215d's line). After core ready, one harmless command a second:
   - core (svc 3, root PD) AVCS_CMD_GET_FWK_VERSION 0x1292c -> **answered** (0x1292d, 148 bytes, 9 services; note the
