@@ -24,9 +24,19 @@ source = "device:dts/board.dts"
 include_dirs = ["soc:dts"]
 
 [firmware]
-# Scripts that run before the firmware build, with UNIXNU_UEFI set to the firmware
-# checkout: build the firmware device tree the boot image carries, check the memory map.
-# preflight = ["scripts/check-example-firmware.py"]
+# Scripts that run before the firmware build, with UNIXNU_UEFI (the firmware checkout) and
+# UNIXNU_DEVICE (this repository) in the environment: fetch the official firmware archive, extract
+# the inputs, generate the package binaries, build the firmware device tree, check the memory map.
+# preflight = ["scripts/download-example-firmware.py", "scripts/extract-example-firmware.py --delete-archive", "scripts/check-example-firmware.py"]
+
+# The official fastboot archive the firmware inputs come from: downloaded with concurrent HTTP
+# ranges, streamed, only the named inputs retained, the archive itself deleted after extraction.
+# No extracted firmware lives in a repository.
+# ["firmware"."image"]
+# "url" = "https://cdn.example.com/vendor/device_images_1.0.0.tgz"
+# "sha256" = "0000000000000000000000000000000000000000000000000000000000000000"
+# "md5" = "00000000000000000000000000000000"
+# "bytes" = 0
 
 # Replace with this board's UEFI configuration and paths.
 config = "example"
