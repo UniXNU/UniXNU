@@ -1,0 +1,69 @@
+name: package
+
+# The example's copy of the packaging action (docs/porting/packaging.md). Replace the
+# firmware repository below with this board's; the device name appears in the artifact
+# paths. The platform seed comes from the repository secret UNIXNU_UNIQUE_CHIP_ID and is
+# baked into the images, so the run's artifacts belong to one device alone: download
+# them, then delete the run. Run it in a fork of the device repository.
+
+on:
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "OS profile of the images"
+        type: choice
+        options: ["17", "26", "27"]
+        default: "17"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    runs-on: macos-26
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: device
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: UniXNU
+          submodules: recursive
+      - uses: actions/checkout@v4
+        with:
+          repository: REPLACE/uefi-example   # this board's firmware checkout
+          path: uefi-example
+      - name: tools
+        run: brew install dtc llvm
+      - name: platform seed
+        env:
+          seed: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+        run: |
+          if ! [[ "$seed" =~ ^[0-9a-fA-F]{8}$ ]]; then
+            echo 'Set the repository secret UNIXNU_UNIQUE_CHIP_ID: the platform seed of the device, 8 hex digits.' >&2
+            exit 1
+          fi
+      - name: package
+        working-directory: device
+        env:
+          UNIXNU_UNIQUE_CHIP_ID: ${{ secrets.UNIXNU_UNIQUE_CHIP_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: scripts/package.sh --os "${{ inputs.os }}" --uefi ../uefi-example
+      - name: images
+        uses: actions/upload-artifact@v4
+        with:
+          name: images-${{ inputs.os }}
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            UniXNU/out/example/*/*/boot/boot.img
+            UniXNU/out/example/*/*/payload/payload.img
+            UniXNU/out/example/*/*/kernel/kernel.macho
+            UniXNU/out/example/*/*/package.manifest.json

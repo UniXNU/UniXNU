@@ -14,6 +14,8 @@ include = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
 
 [kernel]
 defconfig = "example_defconfig"
+
+# The packaging script selects the defconfig of each OS profile from [package.defconfig].
 config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config", "os:configs/ipados.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 
@@ -22,11 +24,20 @@ source = "device:dts/board.dts"
 include_dirs = ["soc:dts"]
 
 [firmware]
+# Scripts that run before the firmware build, with UNIXNU_UEFI set to the firmware
+# checkout: build the firmware device tree the boot image carries, check the memory map.
+# preflight = ["scripts/check-example-firmware.py"]
+
 # Replace with this board's UEFI configuration and paths.
 config = "example"
 dsc = "Platforms/Vendor/examplePkg/example.dsc"
 fd = "Build/examplePkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 packages = ["{uefi}", "{tree}/package", "{tree}/drivers/DarwinBoot", "{edk2}"]
+
+[bootimg]
+# The device tree of the boot image, relative to the build tree; a firmware preflight
+# script builds it (docs/porting/packaging.md).
+# dtb = "build/example/example.dtb"
 
 [firmware.defines]
 DEVICE_MODEL = "example"
@@ -37,6 +48,19 @@ size_mib = 192
 loader = "firmware"
 title = "UniXNU"
 kernel_args = ["-v", "serial=3"]
+
+[package]
+# The UniXNU checkout, relative to this repository: scripts/package.sh reads it.
+unixnu = "../UniXNU"
+
+[package.defconfig]
+"ipados-17.7.11-21H461" = "example_defconfig"
+# A second OS profile of the same branch: only the values that differ, merged over the
+# board, with remove listing the dotted keys the board sets and this profile does not.
+# [os_overrides."ipados-26.5.2-23F84".kernel]
+# config_fragments = ["arch:configs/common.config", "os:configs/ipados.config"]
+# [os_overrides."ipados-26.5.2-23F84"]
+# remove = ["payload.root_policies"]
 
 [payload.adt]
 # Supply the board's identity seed through --unique-chip-id.
