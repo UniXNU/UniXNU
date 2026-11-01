@@ -30,7 +30,8 @@ def build(ctx, modules, uefi, edk2, target='DEBUG'):
         log('firmware: initializing submodules of the Mu-Silicium checkout')
         run(['git', '-C', uefi, 'submodule', 'update', '--init', '--depth', '1', '--', *fw['submodules']])
     for script in [] if ctx.args.skip_preflight else fw.get('preflight', []):
-        run(['python3', ctx.tree / script], cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(uefi)), log_file=ctx.logs / 'firmware-preflight.log')
+        run(['python3', ctx.tree / script], cwd=ctx.tree,
+            env=dict(os.environ, UNIXNU_UEFI=str(uefi), UNIXNU_DEVICE=str(ctx.device)), log_file=ctx.logs / 'firmware-preflight.log')
     defines = {'FD_BASE': hex(base), 'FD_SIZE': hex(size), 'FD_BLOCKS': str(size // 0x1000)}
     defines.update({key: str(value) for key, value in fw.get('defines', {}).items()})
     fields = {'uefi': str(uefi), 'edk2': str(edk2), 'tree': str(ctx.tree)}
