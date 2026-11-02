@@ -6,7 +6,7 @@
 
 Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（120 Hz 面板，滑动约 54 fps）与电池读数；基于 UniXNU-pong
 
-Source record: [porting.toml](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/porting.toml), `c434bb62fb0bc4722570724fb77853f6033252a3`.
+Source record: [porting.toml](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/porting.toml), `b5fc720cf97f9f15c3a07997a19b380c59554c2c`.
 
 This page is generated from the device record.
 
@@ -69,8 +69,8 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [记录了实机硬件参数、全分区备份和原厂 UEFI 内存表对照。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-28-device-prep.md)
-- `source`: [记录了 zizhan 与 Pong 的硬件地址差异。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-battery.md)
+- `source`: [记录了实机硬件参数、全分区备份和原厂 UEFI 内存表对照。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-28-device-prep.md)
+- `source`: [记录了 zizhan 与 Pong 的硬件地址差异。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
 - `host`: [托管 runner 上解析四层配置、编译 dts/zizhan.dts、应用全部 13 个 XNU 补丁并链接出 CI 内核，产物 pong-macos-products 已上传。](https://github.com/qiumochen/UniXNU-zizhan/actions/runs/41304992346)
   Command: <code>GitHub Actions zizhan macOS build（macos-15-intel，Xcode 16.4，pong_ipados18_ci_defconfig）</code>. Revision: `28d9f4fe869293e7a384b18b800ceb8dd56c1244`.
 
@@ -116,7 +116,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [UEFI、DarwinBoot24 交接和 XNU 早期启动的上机记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-29-xnu-bringup.md)
+- `source`: [UEFI、DarwinBoot24 交接和 XNU 早期启动的上机记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
 
 ## CPU and interrupts {#cpu}
 
@@ -158,8 +158,8 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [8 核启动（k4），E/P 调度对比和 tsample 线程采样记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [X2 优先调度的测量和结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-120hz-and-cadence.md)
+- `source`: [8 核启动（k4），E/P 调度对比和 tsample 线程采样记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [X2 优先调度的测量和结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-120hz-and-cadence.md)
 
 ## Memory and DMA {#memory}
 
@@ -197,7 +197,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [k1 打印受管内存 9728 MiB。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-29-xnu-bringup.md)
+- `source`: [k1 打印受管内存 9728 MiB。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
 
 ## Storage and root {#storage}
 
@@ -240,7 +240,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [根文件系统方案、挂根死锁的根因分析和 0006 修复前后的对比。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [根文件系统方案、挂根死锁的根因分析和 0006 修复前后的对比。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
 
 ## Display {#display}
 
@@ -284,9 +284,9 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [内屏显示 iPadOS 主屏（u3）。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/evidence/2026-10-30-u3-ipados-homescreen.jpg)
-- `source`: [120 Hz 切换和帧率测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-120hz-and-cadence.md)
-- `source`: [DPU 翻页零拷贝三缓冲的实现和测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `source`: [内屏显示 iPadOS 主屏（u3）。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/2026-10-30-u3-ipados-homescreen.jpg)
+- `source`: [120 Hz 切换和帧率测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-120hz-and-cadence.md)
+- `source`: [DPU 翻页零拷贝三缓冲的实现和测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
 
 ## Input {#input}
 
@@ -328,8 +328,8 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [用触摸打开了「设置」。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/evidence/2026-10-30-t4-settings-by-touch.jpg)
-- `source`: [触摸驱动的轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [用触摸打开了「设置」。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/2026-10-30-t4-settings-by-touch.jpg)
+- `source`: [触摸驱动的轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
 
 ## GPU {#gpu}
 
@@ -358,6 +358,7 @@ Components: `PongPlatform24`.
 - GPU 渲染的主屏和动画已由用户照片确认。
 - 壁纸扩展 MercuryPosterEx 会和 backboardd 抢 GPU，基线 13 轮里有 5 轮整机 GPU 丢失；拒绝它之后 6/6 没有丢失，滑动帧率平均 54.5 fps。
 - 固定 900 MHz 不比 DCVS 快，GPU 频率不是瓶颈。
+- GPU 客户端因内存 ledger 被杀（SBRendererService 渲染电池页时）会在用户映射还在时释放 BO 页，内核 pmap\_assert\_free panic；PongAdrenoClient 的 dropViews 现在 unmap 并释放映射，NativeAdrenoMemory::release 在页还给 VM 前对每页 pmap\_disconnect（NativeAdrenoDisconnectPages）。
 
 ### Completion criteria
 
@@ -373,8 +374,8 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [GPU bring-up、GPU 丢失的诊断和拒绝壁纸扩展的对照实验。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [逐帧 GPU 提交时间线。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-31-frame-timeline.md)
+- `source`: [GPU bring-up、GPU 丢失的诊断和拒绝壁纸扩展的对照实验。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [逐帧 GPU 提交时间线。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-31-frame-timeline.md)
 
 ## Network {#network}
 
@@ -412,7 +413,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [记录了 Wi-Fi 芯片型号。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-28-device-prep.md)
+- `source`: [记录了 Wi-Fi 芯片型号。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-28-device-prep.md)
 
 ## Audio {#audio}
 
@@ -450,7 +451,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [记录了音频不启动的原因和空功放表。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-battery.md)
+- `source`: [记录了音频不启动的原因和空功放表。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
 
 ## Power {#power}
 
@@ -477,22 +478,26 @@ Components: `PongPlatform24`.
 ### Development findings
 
 - g206 的读数与 Android sysfs 一致：电量 100 %、4444 mV、充电 426 mA、34.40 °C、满充 3507 mAh、设计 4500 mAh、循环 907 次。
+- 电池服务类名改为 AppleSmartBattery：PerfPowerServices 的 PLBatteryAgent（hasAppleSmartBattery）和 powerd 的电池健康计算都按这个类名找电池；另外发布 Serial、BatteryData 和 MaximumCapacityPercent。「设置 › 电池 › 电池健康」读到的最大容量为 78 %（3483/4500 mAh）。
+- 设置里电池健康的转圈由 batteryDataUnavailable 决定：管理状态来自 thermalmonitord 的 com.apple.thermalmonitor.ageAwareMitigationState（本移植上从不发布），服务状态来自 powerd 电源字典里的 Battery Service State（缺失）。
+- USB 拔插时充电状态和电流方向（+300 mA / −520 mA）随之切换（v7）。
+- 电池认证：设置先问 MobileGestalt 的 D6/BMDrlb8V3WSiqL8gL+w，为真时要读电池下 AppleAuthCPRelay 的 isTrustedForUI；这块电池没有 Apple 认证芯片，ui\_compat18.c 在 UI 进程里答 false（不适用），不伪造“正品”。
 
 ### Completion criteria
 
-- 状态栏和「设置 › 电池」显示正确的电量，插拔充电器有变化
+- 状态栏和「设置 › 电池」显示正确的电量，插拔充电器有变化；「设置 › 电池」能打开，不卡住
 
 ### Current limits
 
-- 状态栏和设置里的显示还没有人工确认；没有休眠和唤醒。
+- 「电池健康」一直转圈（管理状态和服务状态缺失）；电池用量图表需要长时间使用才有数据；没有休眠和唤醒。
 
 ### Next action
 
-- 人工确认状态栏电池图标和插拔充电器的变化。
+- 让 thermalmonitord 发布 ageAwareMitigationState、让 powerd 写出 Battery Service State，不在设置里伪造“正常”。
 
 ### Evidence
 
-- `source`: [ADSP 启动阶段 1–13 全部通过，电池读数与 Android 一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-battery.md)
+- `source`: [ADSP 启动阶段 1–13 全部通过，电池读数与 Android 一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
 
 ## Image assembly {#packaging}
 
@@ -518,6 +523,10 @@ Components: `PongPlatform24`.
 
 - 干净的 xnu-11417.140.69 按 series 依次应用全部补丁后，与实际构建用的工作树逐文件一致。
 - 新版 Xcode 的 clang 多了三个警告，在 -Werror 下需要关掉；Pong 脚本原来只允许 Intel 主机，现在也允许 arm64 主机。
+- ADT 的 /chosen 必须有 unique-chip-id 和 chip-id：没有它们内核不发布 IOPlatformUUID，gethostuuid\(\) 永久阻塞（timed → locationd → contextstored → PowerUIAgent → 「设置 › 电池」卡死）；build-ipados18-bootimg-local.py 传软件种子（不是 Apple 硬件标识）。
+- fairplayd.A2 在本移植上启动即退出，launchd 握着 KeepAlive 端口，排队的请求永远没有回复；build-ipados18.py 的 EXCLUDED18 把它移出服务缓存。
+- DarwinBoot24 命令行上限 1020 字节：等于默认值的 pong\_ui\_software=0、pong\_software\_ui=0、pong\_ram\_banks=1 不再写入（约 −54 字节）。
+- ADT /product 的 udid-version 决定 MobileGestalt 怎么算 UniqueDeviceID：1 要 SerialNumber、ECID、WifiAddress、BluetoothAddress，Wi-Fi 关着时 WifiAddress 的回答让调用者等几秒（设置主线程卡在 -\[ISDefaults init\]，首屏 6.4 s）；有 /chosen 种子时改用 iPhone17,1 自己的 2（ChipID-ECID），首屏 1.2 s。
 
 ### Completion criteria
 
@@ -533,8 +542,8 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [构建链说明。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-29-xnu-bringup.md)
-- `host`: [Mac Studio（Apple silicon，Xcode 26.6.0）从全新的构建目录完整编译出 DEVELOPMENT\_ARM64\_PONG 内核，18321080 字节；zizhan 的 boot-arg 字符串（pong\_fts、pong\_panel\_hz、pong\_dpu\_flip 等）与上机使用的内核一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/evidence/host-build-zizhan_ipados18_gpu.txt)
+- `source`: [构建链说明。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
+- `host`: [Mac Studio（Apple silicon，Xcode 26.6.0）从全新的构建目录完整编译出 DEVELOPMENT\_ARM64\_PONG 内核，18321080 字节；zizhan 的 boot-arg 字符串（pong\_fts、pong\_panel\_hz、pong\_dpu\_flip 等）与上机使用的内核一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/host-build-zizhan_ipados18_gpu.txt)
   Command: <code>ZIZHAN_SRC=&lt;work dir&gt; ci_prep.sh &amp;&amp; DEFCONFIG=zizhan_ipados18_gpu_defconfig JOBS=10 ci_kernel.sh</code>. Revision: `1ec1190f4e3467a36a7a7402bc766dfdf688adf1`.
 
 ## Diagnostics {#diagnostics}
@@ -562,6 +571,8 @@ Components: `PongPlatform24`.
 
 - 整个流程不需要人按键。漏带 pong\_autoreset 的轮次（g152 系列）曾被误判为总线冻结。
 - 连续多轮后手机发热，DRAM 里的 ramoops 几乎每行都有位翻转；pong\_klog\_4k 写到 UFS 的副本没有这个问题。
+- 带 pong\_url=&lt;秒&gt; 的轮里，SpringBoard 打开 prefs:root=&lt;pong\_pane&gt;（H = 电池健康），settings\_compat18.c 在设置启动后 6/12/20/30 s 打印界面（标签、表格、cell 的 specifier id、转圈、SwiftUI 无障碍元素，非 ASCII 转义为 \\xHH），tools/zizhan/mac/settings-ui.py 解码；无人值守就能判断一个设置页的状态。
+- 手势采样器 gs\_all=2（patches/xnu-ipados18/0005）也记录等待中的线程，tools/zizhan/mac/gsym.py 符号化整条栈；用它沿同步 XPC 一路查到 timed 卡在 gethostuuid\(\)。
 
 ### Completion criteria
 
@@ -577,7 +588,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [免按键闭环的设计和轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [四条复位回路的修复。](https://github.com/qiumochen/UniXNU-zizhan/blob/c434bb62fb0bc4722570724fb77853f6033252a3/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `source`: [免按键闭环的设计和轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [四条复位回路的修复。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
 
 </div>

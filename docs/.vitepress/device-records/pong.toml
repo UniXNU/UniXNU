@@ -164,15 +164,15 @@ evidence = [{kind = "source", reference = "migration/format2/README.zh.md", resu
 id = "packaging"
 status = "implemented"
 components = ["PongPlatform24"]
-paths = ["scripts/build-ipados18*", "scripts/make-pong-adt-ipados18.py", "scripts/build-xnu-ipados18.sh", "patches/xnu-ipados18/**", "userland/build-ipados18.py"]
-inputs = ["Pong live Android DT、NothingOSS SM8475源码与匹配22H374 restore"]
-configuration = ["board.toml、pong_ipados18_defconfig 与对应板级配置"]
-procedure = ["Darwin24/XNU11417与22H374原始组件，格式2硬件输入与固定ABI。"]
-findings = ["services73使用匹配22H374的IOStorage/IOGPU导入；内核43834376字节，启动镜像102514688字节，构建完成。"]
-completion = ["在设备上观察该接口的实际工作结果并保存对应日志"]
-limits = ["Apple镜像、固件和ABI二进制均需本机准备。"]
-next_action = ["读取本轮启动日志并继续完成板级接口"]
-evidence = [{kind = "source", reference = "migration/ipados18/services73-smmu-audio.md", result = "内核、运行时与启动镜像已构建，产物留在本机；未安装、未启动。"}]
+paths = ["scripts/package.sh", "scripts/finalize-pong-adt.py", "scripts/build-pong-hardware-dtb.py", "scripts/install-unixnu-inputs.py", "kits/PongPlatform24/**", "os-profiles/**", "board.toml", ".github/workflows/package.yml", "scripts/build-ipados18*", "scripts/build-pong-profile-kernel.py", "scripts/make-pong-adt-ipados18.py", "scripts/build-xnu-ipados18.sh", "patches/xnu-ipados18/**"]
+inputs = ["UniXNU c96b299（release 与 templates/package.sh）、uefi-pong 固件树、匹配 22H374 restore、UNIXNU_UNIQUE_CHIP_ID 平台种子"]
+configuration = ["board.toml 的 [package]/[package.defconfig]/[bootimg]/[userdata]，os-profiles/ipados-18.7.10-22H374，configs/pong_ipados18_ci_defconfig"]
+procedure = ["scripts/package.sh --check 走 deps/preflight/patches；CI 的 package job 跑 scripts/package.sh --os … --skip-prelink，再跑 scripts/finalize-pong-adt.py：用本地同一份 make-pong-adt-ipados18.py 与同一组参数（12 GiB DRAM、4 GiB 窗口、单 CPU）重写 payload 里的 ADT，并重打 boot.img 与 PONGFAT1 包装的 boot.img.pong。"]
+findings = ["scripts/package.sh --check --no-deps 在 Linux 上通过：1 个补丁、pong_ipados18_defconfig、OS ipados-18.7.10-22H374。release 只跑 kernel/package/firmware/payload，不含 userdata；本板内核需要 MACHINE_CONFIGS=PONG，共享 kernel 步骤写死 BCM2837，因此由 kits/PongPlatform24 作为组件 recipe 编译；共享 kernel 步骤的 tree 已有真实 drivers/ 目录，设备 builder 另用一棵树并在编完后回填 mach.development.pong。bootimg 的 validate 只认 v0-v2 头，board 覆写 header_version = 0。本板固件只认 PONGFAT1 包装的 ramdisk，故规范产物 boot/boot.img 之外另出 boot.img.pong。userdata 不走 unixnu userdata：它写 SHNGROOT v2 且缺 Data 窗口，本板 RootLayout.h 只接受 v1 且强制 OS/SystemOS/Data 三窗口。"]
+completion = ["在 macOS runner 上跑通 package.yml 两个 job，并取得 boot.img、boot.img.pong、payload.img、kernel.macho、package.manifest.json 与 userdata 分片"]
+limits = ["CI 尚未在 macOS runner 上运行；真机未刷入。prelink slide 尚未在本板表达，流水线用 --skip-prelink。devicetree.generate() 要求单段 /memory，自定义 DT 属性不透传。"]
+next_action = ["在 fork 上手动触发 package.yml，带 ipsw_url，核对两处产物再上真机"]
+evidence = [{kind = "source", reference = "migration/format2/README.zh.md", result = "board.toml、os-profiles 与 PongPlatform24 kit 已按 docs/porting/packaging.md 组织；package.sh --check 通过，CI 未跑。"}]
 
 [[area]]
 id = "diagnostics"

@@ -1,0 +1,215 @@
+schema_version = 1
+
+[device]
+name = "merlinx"
+soc = "MT6768"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel probe that reaches M2 voltage and stops at the VSRAM pwrap read; Data persistence, userland display and GPU execution remain incomplete."
+
+[[area]]
+id = "configuration"
+status = "device-verified"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "DarwinBoot", "XnuPrelink"]
+paths = ["board.toml", "configs/**", "components.toml", ".github/**"]
+inputs = ["MT6768 board resources, PMIC keys, p33 boot partition and the iPadOS 17.7.11 21H461 restore profile."]
+configuration = ["board.toml selects merlinx_defconfig, the iPad7,1 restore profile, the p33 boot layout and the native eMMC root path."]
+procedure = ["Build the firmware, kernel, payload and boot image, then flash the image to p33 with fastboot."]
+findings = ["The bootloader rejects fastboot boot, so every test image is written to p33 with fastboot flash boot."]
+completion = ["Source pins resolve, the defconfig applies and the selected board tests boot from p33."]
+limits = ["Only the iPadOS 17.7.11 profile is configured. The final phone target needs a separate OS profile."]
+next_action = ["Keep the board keys and OS profile synchronized with the packaging manifest."]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Board name, SoC, OS profile, components and package defconfig are declared." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot <merlinx-boot.img>", revision = "237c204655577c1ed1c9536a4bdc890bb2eaf1cc", result = "The UEFI menu, kernel and payload start on the phone." },
+]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot", "XnuPrelink"]
+paths = ["dts/**", "scripts/make-merlinx-adt.py", "board.toml", "patches/xnu/**"]
+inputs = ["merlinx.dts, the firmware volume from uefi-merlinx and the boot image parameters for p33."]
+configuration = ["The boot image wraps the fixed BootShim, the 3 MiB firmware volume, the trimmed DTB and the payload ramdisk."]
+procedure = ["Build the firmware volume, generate the ADT sidecar and pack the p33 boot image."]
+findings = ["The BootShim self-overwrite is fixed by relocating the copy and clean block before loading the firmware volume."]
+completion = ["Firmware enters UniXNU, publishes the framebuffer and boots the payload from p33."]
+limits = ["The bootloader does not support fastboot boot. Recovery uses a stock boot image."]
+next_action = ["Record the firmware revision and the boot image hash for each hardware run."]
+evidence = [
+  { kind = "source", reference = "dts/merlinx.dts", result = "The device tree reserves the splash region and describes the board." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot <merlinx-boot.img>", revision = "237c204655577c1ed1c9536a4bdc890bb2eaf1cc", result = "UniXNU and DarwinBoot start from p33." },
+]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["configs/merlinx_defconfig", "patches/xnu/native-smp-secondary.patch", "patches/xnu/architectural-timer-entry.patch"]
+inputs = ["MT6768 CPU affinities, GIC and the ARM generic timer."]
+configuration = ["merlinx_defconfig enables ArmCpu, the architectural timer and the native SMP secondary path."]
+procedure = ["Build the kernel and inspect the CPU and interrupt initialization path on hardware."]
+findings = ["XNU reaches the scheduler and userland with the native timer entry."]
+completion = ["Every enabled CPU enters the scheduler and timer handling works on each CPU."]
+limits = ["GIC affinity and per-CPU interrupt coverage are not fully audited."]
+next_action = ["Record the per-CPU startup checkpoints and the GIC configuration."]
+evidence = [
+  { kind = "source", reference = "configs/merlinx_defconfig", result = "ArmCpu and the architectural timer are selected." },
+]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["scripts/make-merlinx-adt.py", "dts/merlinx.dts", "configs/merlinx_defconfig"]
+inputs = ["4 GiB DRAM, the owned memory window and the firmware framebuffer reservations."]
+configuration = ["The ADT generator receives DRAM size, owned memory size and CPU register values from board.toml."]
+procedure = ["Generate the ADT sidecar and boot the kernel with the reserved memory layout."]
+findings = ["The kernel window and owned memory handoff allow XNU entry and root mount."]
+completion = ["Every reserved region is described, and the kernel does not overlap firmware or framebuffer memory."]
+limits = ["DMA ownership and SMMU translation are not implemented for this board."]
+next_action = ["Audit the reserved-memory and DMA windows against the final device tree."]
+evidence = [
+  { kind = "source", reference = "scripts/make-merlinx-adt.py", result = "The generator encodes the DRAM and owned-memory values." },
+]
+
+[[area]]
+id = "storage"
+status = "device-verified"
+components = ["NativeEmmc", "RamBlock"]
+paths = ["drivers/NativeEmmc", "drivers/RamBlock", "patches/xnu/offline-owner-*", "configs/merlinx_defconfig", "data-seed.json"]
+inputs = ["The eMMC userdata partition, the OS and SystemOS APFS volumes and the local Data seed."]
+configuration = ["NativeEmmc publishes userdata and the OS and SystemOS volumes. The owner path mounts the SystemOS cache carrier and a packed Data seed."]
+procedure = ["Flash the boot image, start XNU and read the ROM/status output."]
+findings = ["NativeEmmc replaces the timed-out UEFI storage path. The kernel mounts SystemOS, executes initproc and reaches launchd, xpcproxy and SpringBoard. The macOS-generated Data seed mounts read-write and disables watchdogd through the launchd disabled plist."]
+completion = ["Root and SystemOS mount, initproc runs, Data is writable and the launchd service graph remains alive."]
+limits = ["Data is a bring-up seed. The NativeEmmc manifest backend and UFS persistence are stubbed, so the Data store is volatile and the full user data set is not present."]
+next_action = ["Verify writable /private/var across reboot, then replace the bring-up stubs and keep watchdogd disabled only for diagnostics."]
+evidence = [
+  { kind = "source", reference = "configs/merlinx_defconfig", result = "NativeEmmc, RamBlock and the owner Data path are selected." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot <merlinx-boot.img>", revision = "237c204655577c1ed1c9536a4bdc890bb2eaf1cc", result = "SystemOS mounts, initproc runs and launchd exec succeeds." },
+]
+
+[[area]]
+id = "display"
+status = "implemented"
+components = []
+paths = ["patches/xnu/offline-owner-systemos-mount.patch", "scripts/xnu-panic-screen.c", "configs/merlinx_defconfig"]
+inputs = ["The UEFI GOP framebuffer at 1080x2340 and the panning offset observed on the panel."]
+configuration = ["The kernel uses the retained GOP framebuffer for panic and boot-stage text. Userland display ownership is not configured."]
+procedure = ["Flash a diagnostic image and read the status lines from the panel."]
+findings = ["The GOP base, row stride and 32-bit format work. The kernel draws ROOT, VOL, CACHE, EXEC, LAUNCHD and Mali diagnostics. Userland reaches SpringBoard, but IOMFB_FDR_loader exits with status 1 and no scanout provider is published."]
+completion = ["The kernel console is visible and userland presentation and backlight control work."]
+limits = ["No userland display provider or renderer is implemented. IOMFB_FDR_loader fails before GPU display handoff. The scanout starts mid-panel."]
+next_action = ["Trace IOMFB_FDR_loader exit 1 and add the userland display and GPU scanout path after the service graph is stable."]
+evidence = [
+  { kind = "source", reference = "patches/xnu/offline-owner-systemos-mount.patch", result = "The GOP status lines and panic screen are linked into the kernel." },
+]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["package/**", "scripts/**", "dts/**"]
+inputs = ["PMIC keys, volume-up, volume-down and power routing."]
+configuration = ["The UEFI menu uses volume-down to scroll and volume-up or power to select. No userland input path is configured."]
+procedure = ["Measure key events in the UEFI menu and later in userland."]
+findings = ["The PMIC mask covers power and volume-up, so both keys select a menu entry."]
+completion = ["Touch or buttons produce stable HID events in userland."]
+limits = ["No userland touch or HID provider is implemented."]
+next_action = ["Define the input provider after the userland display path."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "implemented"
+components = ["MaliG52"]
+paths = ["components.toml", "drivers/MaliG52/**", "scripts/build-mali-g52.py", "scripts/make-merlinx-adt.py", "patches/xnu/native-mali-personality.patch", "board.toml", "configs/merlinx_defconfig"]
+inputs = ["Mali-G52 r1p0 at 0x13040000, MT6358 VGPU/VSRAM via pwrap WACS2, and the SPM, INFRACFG, topckgen and mfgcfg clock and power windows."]
+configuration = ["MaliG52 is selected by board.toml and components.toml. The kernel personality matches mediatek,mali. build-mali-g52.py is invoked with --m2-writes so the fixed-voltage, clock-source, four power-domain and clock-gate writes are compiled in. M3, M4 and M6 writes remain off. The IOKit glue, archive layout and build integration follow the official Adreno740 driver as the reference implementation; the Mali register, power and clock facts remain from MediaTek and panfrost sources."]
+procedure = ["Build the kernel, build a payload with the Mali diagnostic image, flash it to p33 and read the MALI status lines through the GOP framebuffer."]
+findings = ["The kernel matches the Mali provider and maps all six windows. GICD_PIDR2 reads 0x3b, proving the physical MMIO path. PMIC PSEQ_ID reads 0x0800, proving pwrap reads. The M2 marker reaches M2V, then V1 read VSRAM, and stops before V2, so the first pwrap VSRAM read blocks. GPU_ID has never been read and no GPU job has run. The Adreno740 driver is the integration and ABI reference, not a source of Mali register behavior."]
+completion = ["M2 completes, GPU_ID reads 0x70021000 with the expected feature and present masks, and a bounded GPU submission returns a completed fence."]
+limits = ["The M2 voltage read path is blocked at VSRAM. M3 reset, M4 MMU enable, M6 jobs and MaliMetal are not yet exercised. The current image has no panic screen because the local UEFI font input was unavailable."]
+next_action = ["Add pwrap read sub-markers inside readRail, compare the VSRAM path with the successful PSEQ_ID read, and consider reusing the M1 rail snapshot instead of re-reading it in setFixed()."]
+evidence = [
+  { kind = "source", reference = "drivers/MaliG52/xnu/NativeMaliGpuService.cpp", result = "The IOKit service matches the ADT Mali node, maps the GPU and power windows and exposes the diagnostic stages." },
+  { kind = "source", reference = "components.toml", result = "The MaliG52 component pins revision 2a422ae and the M2-enabled build recipe." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot out/merlinx-uefi-emmc-mali-vsteps.img", revision = "382ed687ee82860d3276cadd8cd889c7f98ffb0b", result = "The panel shows MALI MATCH, MALI M2P, M2V, then V1 read VSRAM and stops." },
+]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/**", "package/**", "scripts/**"]
+inputs = ["Wi-Fi and Bluetooth controllers and their firmware."]
+configuration = ["No network driver is selected."]
+procedure = ["Inventory the wireless hardware and firmware before implementing a driver."]
+findings = ["No network path exists in the current image."]
+completion = ["Scanning, association and sustained traffic pass with the selected firmware."]
+limits = ["Network support is outside the current bring-up scope."]
+next_action = ["Inventory the wireless hardware when userland services are stable."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["drivers/**", "package/**", "scripts/**"]
+inputs = ["Audio DSP, codec and speaker routing."]
+configuration = ["No audio driver is selected."]
+procedure = ["Inventory the audio DSP and codec before implementing a route."]
+findings = ["No audio path exists in the current image."]
+completion = ["A declared route carries audio through playback or capture."]
+limits = ["Audio support is outside the current bring-up scope."]
+next_action = ["Inventory the audio hardware after launchd services are stable."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "implemented"
+components = []
+paths = ["package/ShengPlatformPower.cpp", "scripts/build-merlinx-platform-power.py", "patches/xnu/sheng-platform-power.patch"]
+inputs = ["MT6768 PMIC, power keys and the platform power handoff."]
+configuration = ["The merlinx platform power archive and the sheng PMGR integration are linked into the kernel."]
+procedure = ["Build the platform power archive and boot the kernel from p33."]
+findings = ["The PMIC keys drive the UEFI menu and the kernel reaches launchd with the platform power path linked."]
+completion = ["Declared power controls and battery readings match the board and sleep/resume restores peripherals."]
+limits = ["Battery reporting and suspend/resume are not implemented."]
+next_action = ["Add battery reporting and a suspend/resume path when userland is stable."]
+evidence = [
+  { kind = "source", reference = "scripts/build-merlinx-platform-power.py", result = "The platform power archive is built for the kernel." },
+]
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["DarwinBoot", "XnuPrelink"]
+paths = ["scripts/package.sh", "scripts/make-merlinx-adt.py", "scripts/make-data-seed-*.py", "data-seed.json", "board.toml", "patches/**"]
+inputs = ["Kernel, firmware volume, DTB, payload and the packed Data seed."]
+configuration = ["board.toml declares the p33 boot size, package defconfig and payload inputs. scripts/package.sh is the fixed release entry point."]
+procedure = ["Run scripts/package.sh with the selected OS profile and local inputs, then flash the boot image to p33."]
+findings = ["Kernel and payload builds succeed with the packed Data seed. The validation image carries the seed and boot stages."]
+completion = ["The release command writes boot.img, payload.img and kernel.macho with a manifest that verifies."]
+limits = ["The current Data seed uses bring-up stubs and is not a production image. The package release has not replaced the manual build loop."]
+next_action = ["Run scripts/package.sh --check and record its manifest in this area."]
+evidence = [
+  { kind = "source", reference = "scripts/package.sh", result = "The fixed packaging entry point is present." },
+]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = ["patches/xnu/offline-owner-cache-*", "scripts/xnu-panic-screen.c", "docs/devices/merlinx.md"]
+inputs = ["Panel output, panic screen and the GOP status lines."]
+configuration = ["The kernel draws ROOT, VOL, CACHE, EXEC and LAUNCHD through the GOP framebuffer. The panic screen renders kernel panics on the panel."]
+procedure = ["Flash a diagnostic image to p33 and read the panel."]
+findings = ["The status lines identified the cache and launchd checkpoints without a UART. The Mali diagnostics add MATCH, START, RC, M2W, M2P, PMIC, GIC and staged M2 voltage markers. The launchd exit trace showed IOMFB_FDR_loader exit 1 while SpringBoard did not exit."]
+completion = ["Each claimed milestone has a panel checkpoint or a reproducible panic result."]
+limits = ["There is no UART and no userland log transport. The current Mali image omits the panic screen because the local UEFI font input was unavailable. Data I/O and userland display remain inferred from panel checkpoints."]
+next_action = ["Add pwrap read sub-markers for the VSRAM path and restore the panic screen in the next CI payload build."]
+evidence = [
+  { kind = "source", reference = "docs/devices/merlinx.md", result = "The device page records the panel checkpoints and their limits." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot <merlinx-boot.img>", revision = "237c204655577c1ed1c9536a4bdc890bb2eaf1cc", result = "The panel shows ROOT, VOL, CACHE, EXEC and LAUNCHD." },
+]
