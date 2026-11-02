@@ -37,6 +37,10 @@ lines = [l for l in result.stdout.splitlines() if l.startswith(('PASS', 'FAIL', 
 print('\n'.join(lines))
 if result.returncode or not any(l.startswith('PASS') for l in lines):
     sys.exit('native Metal frontend host check failed (exit %d); see %s' % (result.returncode, OUT / 'frontend_host.log'))
+priority_test = OUT / 'queue_priority_host'
+subprocess.run(['xcrun', 'clang++', '-std=c++17', '-Wall', '-Wextra', '-Werror',
+                KIT / 'bridge/queue_priority_host.cpp', '-o', priority_test], check=True)
+subprocess.run([priority_test], check=True)
 # Interface and single-sample behavior must preserve rendered pixels and queue completion.
 interfaces = OUT / 'interfaces_host'
 subprocess.run(['xcrun', 'clang++', *flags, KIT / 'NativeBridgeMetalFrontend.mm', KIT / 'bridge/interface_regressions_host.mm',
