@@ -68,14 +68,26 @@
     0231 "stops randomly"), prefill 3 periods, pad only after 200 ms idle, 1 s stats. User on 0231b: "no glitches".
   - Plug-in: 64 Ki-frame ring (the server hands over 16 Ki frames per cycle at first), a persistent writer that plays
     out the ring after StopIO, zero time stamps from elapsed time, DeviceIsRunning notifications, per-session stats.
-  - **Still: every sound (ringtones, a song) gets StopIO from the server after ~1.5-3 s.** Our side is healthy: ~48
+  - **Resolved by the unified log: the ~2 s stops were Settings' ringer-volume slider previews.** Every session in the
+    0231c boot is `Preferences(408)` in category `RingtonePreview`: SHSRingerControl setVolume steps every ~16 ms
+    (a finger on the slider), SpringBoard `activateRingerHUD: tone` (the pop-up the user saw; it comes with each ringer
+    volume change, not a fault), mediaserverd plays SSID 1107 `RingerSwitchIndication`, and ~2.5 s later Settings' own
+    AVPlayer sets rate 0 -> "AudioToolboxServerHandleInterruption Stop Now". iOS previews that slider briefly by design.
+    The route is right: VirtualAudio builds `d22_speaker_ringtone` over our Speaker (spp3 speaker protection runs
+    open-loop: "Closed loop checks failed ... SpClProps.size=0"), software volume, 48 kHz, 1024-frame buffers.
+    Next test: something that plays for long (a song, a video in Safari, a tapped ringtone in the Ringtone list).
+  - (Earlier reading: every sound gets StopIO from the server after ~1.5-3 s.) Our side is healthy: ~48
     kframes/s pushed and played, 0 left in the ring, zero time stamp calls every 21 ms (max gap 21 ms), 1024-frame I/O.
     The user also sees a "Do Not Disturb off" notice each time a sound starts. Suspects: speaker protection (the
     VirtualAudio binary has graph_configurations.plist and nospp_graph_configurations.plist; on iPhones the Speaker
     device's input carries the amp's I/V sense, ours is silence), or an interruption from elsewhere.
-  - Unified log pulled read-only to `research/logs/umi-unified-0231c.logarchive` (git-ignored, 404 MB: diagnostics +
-    uuidtext); macOS `log show` prints nothing ("partial or missing metadata", the phone's clock is at 1970): needs a
-    tracev3 parser to read mediaserverd's reasons. Fragments show VirtualAudio built "uid: Speaker; conn: 1; rout: 1".
+  - **Reading iOS's unified log on the Mac:** pull `/private/var/db/diagnostics` (version.plist, timesync/, the newest
+    Persist / Special / HighVolume tracev3) and all of `/private/var/db/uuidtext` read-only with tools/umi-files.py into
+    a `NAME.logarchive` folder (`research/logs/umi-unified-0231c.logarchive`, 404 MB, git-ignored), then write an
+    `Info.plist` with OSArchiveVersion 4 and Persist/Special/HighVolume/Live/TTL `OldestTimeRef` + `EndTimeRef`
+    ({ContinuousTime, UUID = boot UUID, WallTime ns}) taken from each tracev3 header (chunk 0x1000: continuous time at
+    +24, wall seconds at +32; sub-chunk 0x6102 = boot UUID). Without those time refs `/usr/bin/log show --archive`
+    prints nothing. With them: `log show --archive A --style compact --info --debug` = 1.5 M lines.
 - **🎉 2026-11-02 0229: iOS PLAYS ITS OWN SOUNDS FROM THE SPEAKER (user heard ringtones; "a bit glitchy")** (patch
   `xnu/patches/0229-umi-sweet-audio-node.patch`, HAL plug-in `phone/sweet-audio/`, boot `shim/out/umi-0230c-audio.img` =
   0228's line with `sweetadsptone` replaced by `sweetaudio=1`: `... sweetadsp=1 sweetadspdelay=200 sweetadsprpc=0
