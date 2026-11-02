@@ -39,3 +39,5 @@ python3 scripts/check-native-metal-frontend-host.py
 设备输入和打包方式见 [GPU 适配流程](/zh/porting/gpu)。
 
 帧诊断记录 GPU 与显示的明确关联，以及完成后的原始像素。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
+
+`sheng-wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。

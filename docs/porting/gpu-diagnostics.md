@@ -25,6 +25,8 @@ Each process numbers its Metal command buffers. Runtime IDs link these numbers t
 
 Display-fence reasons are: 0, no linked GPU fence provider; 1, target completed; 2, wait reached 250 milliseconds; 3, target pending; 4, query unavailable, retry scheduled. Reasons 2, 3 and 4 keep the current frame displayed. `query_reason` distinguishes an unpublished provider (0), lock contention (1), a successful query (2), an unavailable progress result (3), and the legacy interface (4).
 
+With `sheng-wallpaper-freeze=1`, event 60 (`wallpaper_freeze`) records phase, command, surface ID, frozen command, freeze time in microseconds, admitted count and parked count. Phases are 0 enabled, 1 admitted, 2 frozen after GPU completion, and 3 parked without runtime submission. Match the renderer PID to kernel submission events to check that new GPU work stops after the transition; work admitted earlier may still complete.
+
 ## Read and decode
 
 `read-sheng-log.py` extracts `diag/files/gpu.trace.bin` and `gpu.pixels.bin`, then writes `diag/gpu/events.jsonl`, `links.jsonl`, `summary.json` and pixel files. To decode an existing export:
