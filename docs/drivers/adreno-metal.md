@@ -45,4 +45,4 @@ Frame diagnostics retain allocation, command, completion and GPU/display timing.
 
 `sheng-wallpaper-freeze=1` isolates wallpaper rendering. A Poster renderer retains its first successfully drawn and stored IOSurface output of at least two million pixels, then parks later command buffers before runtime submission. Parked buffers remain committed and unscheduled; their owners and queue leases stay retained. Previously submitted work completes normally. PosterBoard, backboardd and other clients continue submitting. The mode defaults to off.
 
-Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel wait sampling and IPC reply ports correlate upstream waits; dispatch introspection also records task lifecycle when available.
+Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel sampling of the render, encode and completion threads correlates upstream waits.

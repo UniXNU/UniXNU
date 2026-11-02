@@ -1,6 +1,6 @@
 # GPU 帧诊断
 
-sheng 延迟采集覆盖内存分配、提交、完成处理、CPU 并发、GPU 执行和显示时间线。启动参数：
+sheng 延迟采集只记录七个帧延迟问题所需的证据：前台分配、后台预留、提交前延迟、释放与完成处理、后台并发与异常、GPU pass 耗时、显示更新空档。启动参数：
 
 ```text
 sheng-log=1 sheng-gpu-trace=1 sheng-gpu-perf=1 sheng-diag-export=240
@@ -14,51 +14,51 @@ sheng-log=1 sheng-gpu-trace=1 sheng-gpu-perf=1 sheng-diag-export=240
 | --- | --- |
 | 前台大块分配 | 内存池、申请量和可用量 KiB、backing 句柄、复用或新分配、页准备、设备锁耗时及调用栈。 |
 | 后台内存预留 | 相同的内存操作编号和池信息，区分前台与 room worker。 |
-| 提交前延迟 | command 创建与 commit、编码批次入队与执行、慢编码调用、runtime 转换、调度交接和 Vulkan 提交。 |
-| 释放及完成处理 | 延迟物理释放、资源和所有者析构、GPU 等待返回、状态处理、回调、保留资源释放和最终准备。 |
-| 后台并发及异常 | 进程 CPU 时间、各核占用、触摸区间、目标线程及服务对端调用栈、Mach 请求与回复、异常寄存器、镜像 UUID 和退出原因。 |
-| GPU 绘制耗时 | 每个 pass 的硬件耗时、尺寸、渲染模式、附件条件、着色器指标、提交与 fence，以及有效 A7XX 计数器区间。 |
-| 显示上游空档 | 验证、GPU 等待、flip、latch、retire 和 blank，与渲染线程及服务对端等待关联。 |
+| 提交前延迟 | command 创建与 commit、编码批次入队与执行、慢编码调用、runtime 转换、调度交接、Vulkan 提交，以及渲染服务编码线程每 4 ms 的采样。 |
+| 释放及完成处理 | 延迟物理释放、资源和所有者析构、GPU 等待返回、状态处理、回调、保留资源释放、最终准备，以及完成线程每 4 ms 的采样。 |
+| 后台并发及异常 | 进程 CPU 时间、各核占用、最忙线程、异常寄存器、镜像 UUID、退出原因、指定服务的崩溃报告，以及共享区 unnest 及其内核和用户态调用者。 |
+| GPU 绘制耗时 | 每个 pass 的硬件耗时、尺寸、渲染模式、附件（surface、尺寸、格式、load/store）、着色器指标、提交与完成、GPU 调频投票和有效 A7XX 计数器区间。 |
+| 显示更新空档 | 校验、GPU 等待、flip、latch、退役和 blank；渲染服务渲染线程和 SpringBoard 主线程每 4 ms 的采样；阻塞线程的等待对象和 Mach 对端。 |
 
-记录同时携带内核、Metal、Turnip 构建身份、进程名、运行配置、队列和环切换，以及采集覆盖计数。
+分析区间以触控上报时间为界。
 
 ## 采集策略
 
-GPU 跟踪排除纹理与 view 清单、颜色转换细节、像素样本和屏幕图像，保留 command、pass 和同步关联。重复的未完成显示查询只保留状态变化、100 毫秒心跳和省略次数，完成结果保留。runtime 的空闲休眠、唤醒及全局调度轮次在写入前过滤。
+内核 GPU 环只保存提交、完成、显示到达、显示 fence 和 latch、构建标识，以及渲染服务的渲染、编码、完成线程标识。其他进程不写入。渲染服务的其余记录写入自己的 `frames.trace`，不再每条记录一次系统调用。
 
-IPC 保留被跟踪的请求、匹配的接收和回复端口返回。未配对的接收只计数。跟踪表有固定容量且不阻塞；表满或回复端口存在歧义时增加覆盖计数。重复 IPC 流水和通用 IOKit、GPU 调用环不采集，命令提交耗时及分配专用驱动阶段保留。
+不采集 Mach 消息流、user client 调用环、连续物理内存环、逐触点触控记录、dispatch 跟踪、队列优先级、环切换、重启和卡顿行、其他进程的 pass 与管线记录、状态与遥测行、截图和像素样本。
 
-低于 250 微秒的快速资源释放记录省略，完成回调保留配对记录。CPU 占用、进程时间、慢编码调用和内核等待采样提供上下文，不运行独立的 2 毫秒渲染线程暂停采样器。
+短于 250 微秒的资源释放不记录。完成回调和所有者回调保留成对记录。
 
-LAT1 为异常、退出原因和进程身份保留独立的 32,768 个槽位，普通延迟事件使用 491,519 个槽位，另有一条汇总记录。高频普通事件不会覆盖异常区。汇总记录包含两区的产生量与保留量、未配对 IPC 和跟踪失败数，解码器先报告覆盖情况。
+LAT1 为异常、unnest、退出原因和进程身份保留 32,768 个槽位，普通延迟事件使用 491,519 个槽位，另有一条汇总记录。普通事件不能覆盖异常区。
 
 ## 导出内容
 
-导出器优先保留完整的 backboardd `frames.trace`，再安排 CPU、分配、触摸和内核时间线。相关服务及小组件进程各保留最多两份崩溃报告，报告总预算为 8 MiB。当前轮异常现场通过独立异常区保留。
-
-导出不包含着色器缓存清单和预热流水、框架文件、通用统一日志、截图及像素网格。周期文本槽只记录采集身份和时间，消息缓冲副本只保留异常、内存压力及相关服务诊断。未能容纳的文件列在 `diag-skipped.txt`。
+导出 `gpu.trace.bin`、`kernel.latency.bin`、`kernel.rings.txt`（swap 环、GPU 时间线、采样目标、进程名、scanout 等待）、`kernel.boalloc.bin`、`kernel.cpus.bin`、`kernel.ptime.bin`、`kernel.touch.bin`、`kernel.client.bin`、backboardd 的 `frames.trace`，以及每个指定服务或小组件进程最多两份崩溃报告，总计不超过 8 MiB。消息缓冲只保留异常、内存压力和指定服务的行。`diag-skipped.txt` 列出未放入的文件和 dasd 模型资源的查找结果。
 
 ## 读取与解码
 
-在 UniXNU-sheng 或解析后的 sheng 构建树执行：
+在 UniXNU-sheng 或 sheng 构建树中运行：
 
 ```sh
 fastboot boot /path/to/sheng-linux-log.img
 python3 scripts/read-sheng-log.py --wait 60 --out /path/to/logs
 ```
 
-读取器将设备送回 fastboot，并生成 `diag/gpu/events.jsonl`、command 与 fence 的明确关联、`diag/latency.jsonl`、延迟分析及前端记录。已有文件可单独解码：
+读取器让设备回到 fastboot，并写出 `diag/gpu/events.jsonl`、`diag/latency.jsonl`、分析结果、前端记录、触控区间，以及只含触控区间的 `*.touch.*` 文件。解码已保存的文件：
 
 ```sh
 python3 scripts/decode-gpu-trace.py RUN/diag/files
-python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl \
+  --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace \
+  --touch RUN/diag/files/kernel.touch.bin
 ```
 
-LAT1 使用 16 字节头和 72 字节记录。事件 34 汇总两个保留区；事件 33 将收到的回复关联到请求。GPU 显示等待记录携带省略的重复查询次数。前端文件保留完整 command 摘要、批次与提交阶段、内存决策和逐 pass 硬件时间。
+LAT1 为 16 字节头加 72 字节记录。事件 35 和 36 是 unnest 的范围、用户态寄存器和内核调用者；其用户态调用栈以相同编号的异常事件 8、9、12 给出。客户端采样记录在 state 第 12-13 位标出采样角色（1 渲染、2 编码、3 完成）。
 
-CPU 事件使用内核运行时间，GPU pass 使用硬件时钟。同一硬件时钟内可以计算耗时，绝对时间与 CPU 对齐需要校准。关联使用明确编号。触摸操作区间与匹配场景单独统计，静置和锁屏切换分别分析。
+CPU 事件使用内核 uptime。GPU pass 时间戳使用硬件时钟，可在该时钟内计算耗时，与 CPU 事件的绝对对齐需要校准。
 
-GPU DCVS 和诊断开启时，`sheng-gpu-perf=1` 采集 19 个 A7XX BR 计数器。原始值携带选择器回读、撕裂读取、复位和抢占有效性，解码器只对有效区间计算增量。计数器描述全局 GPU 区间，pass 时间线提供负载上下文。
+`sheng-gpu-perf=1` 启用 19 个 A7XX BR 计数器、GPU 调频和诊断。差值只使用有效区间。计数器描述全局 GPU 区间，pass 耗时提供负载上下文。
 
 ## 检查
 
@@ -66,5 +66,3 @@ GPU DCVS 和诊断开启时，`sheng-gpu-perf=1` 采集 19 个 A7XX BR 计数器
 python3 scripts/check-gpu-trace.py
 python3 scripts/check-native-adreno-scheduling.py
 ```
-
-主机检查覆盖传输前的事件筛选、重复查询合并、请求回复配对、采集覆盖、异常隔离、runtime 阶段筛选及解码格式。目标 ABI 检查在准备好的 sheng iPadOS 27 构建树中编译受影响的内核、显示和 Metal 组件。

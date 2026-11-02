@@ -1,6 +1,6 @@
 # GPU frame diagnostics
 
-The sheng latency capture records allocation, submission, completion, CPU contention, GPU execution and display timing. Enable it with:
+The sheng latency capture records only the evidence for seven frame-latency questions: foreground allocation, background reservation, submission delay, release and completion, concurrent services and faults, GPU pass cost, and upstream display gaps. Enable it with:
 
 ```text
 sheng-log=1 sheng-gpu-trace=1 sheng-gpu-perf=1 sheng-diag-export=240
@@ -14,29 +14,27 @@ The export runs once at the selected boot-log time. These switches do not schedu
 | --- | --- |
 | Foreground allocation | Pool, requested and available KiB, backing handle, reuse or allocation, page preparation, device-lock duration and caller stack. |
 | Background reservation | The same memory-operation IDs and pool fields, with foreground and room-worker roles. |
-| Submission delay | Command creation/commit, encoding batch enqueue/start/end, slow encoding operations, runtime lowering, scheduler handoff and Vulkan submission. |
-| Release and completion | Deferred physical release, resource/owner destruction, GPU wait return, completion state, handlers, retained objects and final preparation. |
-| Concurrent services and faults | Process CPU time, CPU occupancy, touch intervals, target/peer thread stacks, Mach requests/replies, exceptions, registers, image UUIDs and fatal exit reasons. |
-| GPU execution | Per-pass hardware duration, dimensions, render mode, attachment conditions, shader figures, submission/fence identities and valid A7XX counter intervals. |
-| Upstream display gaps | Validation, GPU wait, flip, latch, retirement and blanking, joined with render-thread and service-peer waits. |
+| Submission delay | Command creation/commit, encoding batch enqueue/start/end, slow encoding operations, runtime lowering, scheduler handoff, Vulkan submission, and 4 ms samples of the render server's encode thread. |
+| Release and completion | Deferred physical release, resource/owner destruction, GPU wait return, completion state, handlers, retained objects, final preparation, and 4 ms samples of the completion thread. |
+| Concurrent services and faults | Process CPU time, CPU occupancy, the busiest threads, exceptions, registers, image UUIDs, fatal exit reasons, crash reports of the named services, and shared-region unnests with their kernel and user callers. |
+| GPU execution | Per-pass hardware duration, dimensions, render mode, attachments (surface, size, format, load/store), shader figures, submission/retirement, GPU frequency votes and valid A7XX counter intervals. |
+| Upstream display gaps | Validation, GPU wait, flip, latch, retirement and blanking; 4 ms samples of the render server's render thread and SpringBoard's main thread; blocked-thread waits with their Mach peers. |
 
-Kernel/Metal/Turnip build identities, process names, runtime configuration, queue/ring transitions and record-coverage counts accompany these records.
+Touch report times bound the analysed intervals.
 
 ## Collection policy
 
-GPU tracing excludes texture/view inventories, colour-transfer sites, pixel samples and screen images. It retains command/pass identities and synchronization. Repeated pending display queries retain state changes, a 100 ms heartbeat and an omitted-query count; completion is retained. Idle runtime sleep/wake and scheduler-turn stages are excluded before recording.
+The kernel GPU ring holds submission, retirement, display arrival, display fence and latch, build identities and the render server's render, encode and completion thread identities. Other processes send nothing to it. Everything else of the render server goes to its own `frames.trace`, without a system call per record.
 
-IPC retains traced requests, their matching receives and replies on tracked reply ports. Unmatched receives are counted. The tracker is bounded and nonblocking; table saturation or ambiguous reply-port reuse increments its coverage counter. The duplicate IPC stream and general IOKit/GPU-call rings are not collected. Command submission timing and allocation-specific driver phases remain available.
+Mach message streams, user-client call rings, contiguous allocation rings, per-contact touch records, dispatch introspection, queue-priority, ring-switch, restart and stall rows, other processes' pass and pipeline notes, status and telemetry lines, screenshots and pixel samples are not collected.
 
-Fast resource release spans below 250 microseconds are omitted. Completion and owner callbacks retain their paired records. CPU occupancy, process CPU totals, slow encoding operations and blocked-thread sampling provide CPU context without suspending the render thread for a separate 2 ms profiler.
+Fast resource release spans below 250 microseconds are omitted. Completion and owner callbacks retain their paired records.
 
-LAT1 reserves 32,768 slots for faults, exit reasons and process identities, with 491,519 slots for ordinary latency events and one summary record. High-rate ordinary events cannot overwrite the fault lane. The summary reports issued/retained counts for both lanes, unmatched IPC and tracking failures. Decoders report coverage before attribution.
+LAT1 reserves 32,768 slots for faults, unnests, exit reasons and process identities, with 491,519 slots for ordinary latency events and one summary record. Ordinary events cannot overwrite the fault lane.
 
 ## Export contents
 
-The exporter prioritizes the complete backboardd `frames.trace`, then the CPU, allocation, touch and kernel timing evidence. It includes at most two crash reports per named service or widget process, within an 8 MiB crash-report budget. Exception records retain the current capture's fault state independently of these files.
-
-The export omits shader-cache inventories and priming journals, framework files, general unified logs, screenshots and pixel grids. The periodic text slot records capture identity and timing. Its message-buffer copy retains fault, memory-pressure and relevant service diagnostics. `diag-skipped.txt` identifies files that did not fit.
+The exporter writes `gpu.trace.bin`, `kernel.latency.bin`, `kernel.rings.txt` (swap ring, GPU timeline, sampler targets, process names, scanout waits), `kernel.boalloc.bin`, `kernel.cpus.bin`, `kernel.ptime.bin`, `kernel.touch.bin`, `kernel.client.bin`, the backboardd `frames.trace`, and at most two crash reports per named service or widget process within 8 MiB. Its message-buffer copy retains fault, memory-pressure and named-service lines. `diag-skipped.txt` lists files that did not fit and the lookup result of dasd's model resource.
 
 ## Read and decode
 
@@ -47,18 +45,20 @@ fastboot boot /path/to/sheng-linux-log.img
 python3 scripts/read-sheng-log.py --wait 60 --out /path/to/logs
 ```
 
-The reader returns the device to fastboot and writes `diag/gpu/events.jsonl`, explicit command/fence links, `diag/latency.jsonl`, a latency analysis and decoded frontend records. Decode saved files with:
+The reader returns the device to fastboot and writes `diag/gpu/events.jsonl`, `diag/latency.jsonl`, its analysis, the decoded frontend records, the touch windows and the `*.touch.*` outputs limited to them. Decode saved files with:
 
 ```sh
 python3 scripts/decode-gpu-trace.py RUN/diag/files
-python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl \
+  --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace \
+  --touch RUN/diag/files/kernel.touch.bin
 ```
 
-LAT1 is a 16-byte header followed by 72-byte records. Capture summary event 34 describes the separate retention lanes. Event 33 links a received reply to its request. GPU display-wait records include the number of repeated queries omitted. Frontend records retain complete command summaries, batch/commit phases, runtime memory decisions and per-pass hardware timings.
+LAT1 is a 16-byte header followed by 72-byte records. Events 35 and 36 are an unnest's range, user registers and kernel callers; its user stack follows as fault events 8, 9 and 12 with the same ID. Client sampler records carry the sampled role in state bits 12-13 (1 render, 2 encode, 3 completion).
 
-CPU events use kernel uptime. GPU pass timestamps use a hardware clock; their duration can be measured within that clock, while absolute alignment to CPU events requires calibration. Match identities explicitly. Compare touch-active intervals and matching scenes separately from idle and lock transitions.
+CPU events use kernel uptime. GPU pass timestamps use a hardware clock; their duration can be measured within that clock, while absolute alignment to CPU events requires calibration.
 
-`sheng-gpu-perf=1` enables the 19-counter A7XX BR capture with GPU DCVS and diagnostics. Raw values include selector readback, torn-read, reset and preemption validity. Derived deltas use valid intervals only. These counters describe global GPU intervals; pass timing supplies workload context.
+`sheng-gpu-perf=1` enables the 19-counter A7XX BR capture with GPU DCVS and diagnostics. Derived deltas use valid intervals only. These counters describe global GPU intervals; pass timing supplies workload context.
 
 ## Checks
 
@@ -66,5 +66,3 @@ CPU events use kernel uptime. GPU pass timestamps use a hardware clock; their du
 python3 scripts/check-gpu-trace.py
 python3 scripts/check-native-adreno-scheduling.py
 ```
-
-The host checks exercise event selection before transport, pending-query coalescing, request/reply tracking, capture coverage, fault isolation, compiler-stage filtering and decoder schemas. Build the affected kernel, display and Metal components from the prepared sheng iPadOS 27 tree for the target ABI.
