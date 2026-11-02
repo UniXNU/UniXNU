@@ -25,6 +25,8 @@ sheng-gpu-trace=1 sheng-gpu-pixels=1 sheng-diag-export=180
 
 显示 fence 的 `reason`：0 表示未链接 GPU fence 接口，1 表示目标完成，2 表示等待达到 250 毫秒，3 表示目标未完成，4 表示查询不可用并安排重试。2、3、4 均保留当前显示帧。`query_reason`：0 表示 GPU 尚未发布，1 表示锁忙，2 表示查询成功，3 表示完成状态不可用，4 表示旧查询接口。
 
+开启 `sheng-wallpaper-freeze=1` 时，事件 60（`wallpaper_freeze`）记录阶段、命令、surface ID、触发冻结的命令、冻结时间（微秒）、已放行数量和已拦下数量。阶段 0 表示启用，1 表示放行，2 表示 GPU 完成后冻结，3 表示拦下 runtime 提交。按壁纸 PID 对照内核提交事件，确认冻结后停止产生新的 GPU 工作；此前放行的工作仍可完成。
+
 ## 读取和解析
 
 `read-sheng-log.py` 提取 `diag/files/gpu.trace.bin` 和 `gpu.pixels.bin`，并生成 `diag/gpu/events.jsonl`、`links.jsonl`、`summary.json` 及像素文件。已有导出可以单独解析：
