@@ -56,3 +56,31 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27 --no-replay
 ```
 
 Run build commands from the prepared sheng iPadOS 27 tree with its toolchain and UEFI input. The host checks cover concurrent ring writes, wrap, pixel ownership and fragment ordering, ABI copies, malformed exports and handle reuse.
+
+## CPU latency records
+
+Events 61, 62 and 63 identify encoding batches, frontend command phases and named threads. Batch records retain enqueue time, queue depth, task count and start/end times. Command phases distinguish submit, surface flush, runtime commit, resource release and completed handlers. `frames.trace` types 14 and 15 retain the same phases; type 16 retains pass attachment load/store, sample count, format, size and IOSurface ID. Runtime stages 40 through 52 record pool, KiB, reuse, allocation, cache and physical release decisions. Stages 53 through 57 split completion processing into state collection, handlers, retained resources and final preparation. Memory operation IDs are separate from command-buffer IDs.
+
+`kernel.latency.bin` uses a 16-byte `LAT1` header with total, retained and dropped counts, followed by 72-byte records. Its 524,288 slots retain IPC send attempts and receive completions with the same kernel message cookie, user exception codes and PC/LR/SP, GPU frequency votes, and touch publications with contact IDs and coordinates in tenths of a pixel. Match IPC by cookie, destination and message ID within the retained window. A send attempt alone does not establish delivery. Accepted GPU levels are votes acknowledged by the governor; they are not a measured frequency counter.
+
+```sh
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl
+```
+
+Tracing starts after 50 display flips with diagnostic export enabled. Writers never wait for a trace slot. The exporter snapshots this ring before file collection and prioritizes crash reports over framework and unified-log files. Client samples mark a selected Metal render thread with state bit `0x1000`; the thread identity comes from event 63. Process CPU records refresh an `xpcproxy` name after exec. Compare continuous touch intervals and matching scenes separately from idle and lock transitions.
+
+## Detailed latency capture
+
+Frontend types 17 and 18 record encoding operations of at least 250 microseconds, closure release, individual completion handlers, buffer/texture destruction and owner deallocators. Each record carries operation, command, object or callback address, thread, source line, enqueue time and parent task identity. Type 19 and event 67 define operation labels. Event 64 carries the same timing through the kernel trace.
+
+IPC records include outgoing requests, destination task and port, and reply-port identity. Process records map task pointers to PIDs and names. The capture worker samples blocked threads of backboardd and SpringBoard every 100 ms and follows up to two Mach service peers. It scans up to 128 threads and emits up to six changed waiters per process and round. Unchanged waits have a one-second heartbeat. Records include user/kernel stacks, wait object, context switches, Mach peer and coverage counts. Dispatch introspection v2 adds enqueue, dequeue, completion, parent-task and queue-label records when that SPI is available. Its status identifies an absent symbol or unsupported layout.
+
+Mach exceptions retain PC/LR/SP/FP, FAR/ESR and all 29 general registers. A bounded 32-entry queue lets the capture worker read up to 32 frames, 128 stack bytes, shared-cache UUID and up to 64 image UUIDs. Records report read errors, truncation and capture delay. Fatal signal exits also retain reason namespace, code, process name and a 96-byte description. Exception registers describe the trap; worker stack reads have their own capture time.
+
+`sheng-gpu-perf=1`, with GPU DCVS and diagnostic export enabled, samples 19 A7XX BR counters on the governor worker every two ticks, approximately 32 ms. The plan covers GPU clocks, UCHE latency/read beats/stalls, texture-cache requests/misses, shader activity/instructions and colour read/write data. Selector readback, torn reads, counter resets and preemption epochs accompany raw values. The decoder derives deltas only across valid intervals. These are global BR intervals; command/pass timing supplies the workload context. Register and countable definitions are checked against the pinned Mesa XML.
+
+```sh
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace
+```
+
+The reader writes decoded records, an analysis JSON with IPC/task links, counter deltas and fault snapshots, and frontend detail records. The selected source-storage archive includes `BootLatencyTrace.c` and records its header hashes.
