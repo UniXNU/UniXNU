@@ -127,8 +127,10 @@
 | [Xiaomi Pad 5 \(3214791900-del\)](/zh/devices/nabu-3214791900-del) | SM8150 | 1 | 仓库链接 | [3214791900-del/unixnu-nabu-build](https://github.com/3214791900-del/unixnu-nabu-build) |
 | [Xiaomi Pad 5 \(lee-kenneth\)](/zh/devices/nabu-lee-kenneth) | SM8150 | 1 | 仓库链接 | [lee-kenneth/unixnu-nabu](https://github.com/lee-kenneth/unixnu-nabu) |
 | [Xiaomi Pad 5 \(zzc775\)](/zh/devices/nabu-zzc775) | SM8150 | 1 | 仓库链接 | [zzc775/unixnu-nabu](https://github.com/zzc775/unixnu-nabu) |
+| [Xiaomi Pad 5 \(zzweiqing\)](/zh/devices/nabu-zzweiqing) | SM8150 | 2 | 适配记录 | [zzweiqing/UniXNU-nabu](https://github.com/zzweiqing/UniXNU-nabu) |
 | [摩托罗拉 Moto Z2 Force（nash）](/zh/devices/nash) | MSM8998 | 1 | 设备说明 | [fcxuhaq3/UniXNU-nash](https://github.com/fcxuhaq3/UniXNU-nash) |
 | [一加 10 Pro 5G（negroni）](/zh/devices/negroni) | SM8450 | 1 | 设备说明 | [pawlickerr/UniXNU-negroni](https://github.com/pawlickerr/UniXNU-negroni) |
+| [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/zh/devices/nio) | SM8250 | 2 | 记录待补齐 | [18178786617/UniXNU-nio](https://github.com/18178786617/UniXNU-nio) |
 | [小米 13 Pro（nuwa）](/zh/devices/nuwa) | SM8550 | 1 | 设备说明 | [wh1stl3/UniXNU-nuwa](https://github.com/wh1stl3/UniXNU-nuwa) |
 | [Xiaomi 13 Pro \(nuwa\) \(Alex-Enix\)](/zh/devices/nuwa-alex-enix) | SM8550 | 1 | 仓库链接 | [Alex-Enix/nuwa-dev](https://github.com/Alex-Enix/nuwa-dev) |
 | [Xiaomi 13 Pro \(pubglite55\)](/zh/devices/nuwa-pubglite55) | SM8550 | 1 | 仓库链接 | [pubglite55/UniXNU-nuwa](https://github.com/pubglite55/UniXNU-nuwa) |
@@ -136,6 +138,7 @@
 | [中兴努比亚 Z60 Ultra（nx721j）](/zh/devices/nx721j) | Pineapple | 1 | 设备说明 | [SangLuoCN/UniXNU-Nubia-Z60U](https://github.com/SangLuoCN/UniXNU-Nubia-Z60U) |
 | [努比亚红魔 8 Pro / 8 Pro+（nx729j）](/zh/devices/nx729j) | SM8550 | 1 | 设备说明 | [2713385115/UniXNU-nx729j](https://github.com/2713385115/UniXNU-nx729j) |
 | [nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ \(NX769J\)](/zh/devices/nx769j) | SM8650 | 2 | 适配记录 | [Asultop/UniXNU-NX769J](https://github.com/Asultop/UniXNU-NX769J) |
+| [Xiaomi Mi MIX 4 \(odin, Snapdragon 888+ / SM8350\)](/zh/devices/odin) | SM8350 | 2 | 适配记录 | [qine233/UniXNU-odin](https://github.com/qine233/UniXNU-odin) |
 | [AYN Odin 3 \(Dragonwing Q8, SM8750\), 16 GiB](/zh/devices/odin3) | SM8750 | 2 | 适配记录 | [darkplace/UniXNU-Odin3](https://github.com/darkplace/UniXNU-Odin3) |
 | [一加 13T（oneplus13t）](/zh/devices/oneplus13t) | SM8750 | 2 | 适配记录 | [IssacL04/UniXNU-Pagani_SM8750](https://github.com/IssacL04/UniXNU-Pagani_SM8750) |
 | [Orange Pi 5 \(Rockchip RK3588S\)](/zh/devices/orangepi5) | RK3588 | 2 | 适配记录 | [Ken-u/UniXNU-orangepi5](https://github.com/Ken-u/UniXNU-orangepi5) |
@@ -176,8 +179,10 @@
 | [Xiaomi MIX Flip \(ehunshuaige\)](/zh/devices/ruyi-ehunshuaige) | SM8650 | 1 | 仓库链接 | [ehunshuaige/UniXNU-ruyi](https://github.com/ehunshuaige/UniXNU-ruyi) |
 | [小米 6（sagit）](/zh/devices/sagit) | MSM8998 | 1 | 设备说明 | [dmnakzkahziamnk-a11y/UniXNU-sagit](https://github.com/dmnakzkahziamnk-a11y/UniXNU-sagit) |
 | [Xiaomi Pad 6S Pro \(16Crow\)](/zh/devices/sheng-16crow) | SM8550 | 1 | 仓库链接 | [16Crow/UniXNU-sheng](https://github.com/16Crow/UniXNU-sheng) |
+| [Xiaomi Pad 6S Pro \(airalex002\)](/zh/devices/sheng-airalex002) | SM8550 | 2 | 适配记录 | [airalex002/UniXNU-sheng](https://github.com/airalex002/UniXNU-sheng) |
 | [Xiaomi Pad 6S Pro \(alghiffaryfa19\)](/zh/devices/sheng-alghiffaryfa19) | SM8550 | 1 | 仓库链接 | [alghiffaryfa19/UniXNU-sheng](https://github.com/alghiffaryfa19/UniXNU-sheng) |
 | [Xiaomi Pad 6S Pro \(bai805\)](/zh/devices/sheng-bai805) | SM8550 | 2 | 适配记录 | [bai805/UniXNU-sheng](https://github.com/bai805/UniXNU-sheng) |
+| [Xiaomi Pad 6S Pro \(chenjin1494\)](/zh/devices/sheng-chenjin1494) | SM8550 | 2 | 适配记录 | [chenjin1494/UniXNU-sheng](https://github.com/chenjin1494/UniXNU-sheng) |
 | [Xiaomi Pad 6S Pro \(FFT-infra\)](/zh/devices/sheng-fft-infra) | SM8550 | 2 | 适配记录 | [FFT-infra/UniXNU-alioth-sheng-template](https://github.com/FFT-infra/UniXNU-alioth-sheng-template) |
 | [Xiaomi Pad 6S Pro \(ht94911\)](/zh/devices/sheng-ht94911) | SM8550 | 2 | 适配记录 | [ht94911/UniXNU-sheng](https://github.com/ht94911/UniXNU-sheng) |
 | [Xiaomi Pad 6S Pro \(hxzbaka\)](/zh/devices/sheng-hxzbaka) | SM8550 | 2 | 适配记录 | [hxzbaka/UniXNU-sheng](https://github.com/hxzbaka/UniXNU-sheng) |

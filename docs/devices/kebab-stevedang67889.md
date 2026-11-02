@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds with the 407db1a source fixes and is reproducible. The BSD kebab\_ufs driver is linked \(kebab\_ufs\_rootdev\) with the /kebab-ufs ADT node and rd=ufsroot0 ufsroot=userdata rootrw=0 documented, but root discovery is not reached on hardware: the kernel stops before bsd\_init with the last line 'Unable to find vm tag ?+z for btlog'. The GIC handler is installed and the first PPI-27 IRQ fires, but the virtual timer never repeats; the same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point. The blocker is the periodic timer/early allocator path, not the UFS driver.
+OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds through a temporary mirror because Actions on the fork are disabled. The active interrupt path is now GFander's source-level GICv3 design: HAS\_GIC\_V3 in the board header, Group-1 setup in pe\_fiq.c and the Group-1 dispatch in sleh\_irq \(patches/xnu/10063-kebab-gic-vtimer.patch\); CI builds succeed. The source-GIC hardware images currently show only colour bars and no text, so the console/panic transport is unresolved. The BSD kebab\_ufs driver is linked \(kebab\_ufs\_rootdev\) with the /kebab-ufs ADT node and rd=ufsroot0 ufsroot=userdata rootrw=0; a binary-GIC ufsprobe2 image that marks IOFindBSDRoot -&gt; kebab\_ufs\_rootdev is built but not flashed. UFS root is not confirmed yet.
 
-Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/porting.toml), `2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554`.
+Source record: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/porting.toml), `a49e6bb0d15b50779f8cd28599158378c4cb70ff`.
 
 This page is generated from the device record.
 
@@ -76,8 +76,8 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/board.toml)
-- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/porting.toml)
+- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/board.toml)
+- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/porting.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -128,7 +128,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/darwin-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## CPU and interrupts {#cpu}
@@ -184,9 +184,9 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>flash the reset-probe image and observe the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/scripts/patch-xnu-log-probe.py)
+- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/scripts/patch-xnu-log-probe.py)
 
 ## Memory and DMA {#memory}
 
@@ -233,7 +233,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>flash the entry-probe image and read the DarwinBoot physical base line</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Storage and root {#storage}
@@ -262,9 +262,9 @@ Components: `ArmDTPlatform`.
 ### Development findings
 
 - The BSD UFS driver compiles and links; kebab\_ufs\_rootdev is present in the kernel image and the ADT carries the absolute controller window.
-- It is not reached on hardware yet: the kernel stops before bsd\_init with the last line 'Unable to find vm tag ?+z for btlog'; bsd\_init, IOFindBSDRoot and KEBAB UFS markers never appear.
-- The GIC stub installs its handler and the first PPI-27 timer IRQ fires \(magenta/cyan bands\), but no second tick follows; re-arming CNTV\_TVAL/CNTV\_CTL after rtclock\_intr and a run that skips rtclock\_intr both stay static.
-- The same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point, so the immediate blocker is the periodic timer/early allocator path rather than the UFS driver source.
+- GFander's source-level GICv3 path \(HAS\_GIC\_V3, pe\_fiq Group-1 setup, sleh\_irq Group-1 dispatch\) is ported as patches/xnu/10063-kebab-gic-vtimer.patch and builds in CI.
+- The source-GIC hardware images srcgic5/srcgic6 show only cyan/blue/magenta bars and no text; the standalone framebuffer logger maps PE\_state.video and hooks \_kprintf, so this is a console/panic transport gap, not the old binary-stub scratch dependency.
+- The binary-GIC ufsprobe2 image marks the IOFindBSDRoot -&gt; kebab\_ufs\_rootdev call with a green band; it is built but not flashed, so no hardware UFS result exists yet.
 
 ### Completion criteria
 
@@ -276,12 +276,12 @@ Components: `ArmDTPlatform`.
 
 ### Next action
 
-- Fix the PPI-27 periodic timer or route another timer source so the early allocator can progress, then re-test rd=ufsroot0.
+- Get a console \(UART or a direct marker\) on the source-GIC kernel; then flash ufsprobe2 to confirm IOFindBSDRoot -&gt; kebab\_ufs\_rootdev, and retest rd=ufsroot0.
 
 ### Evidence
 
-- `source`: [Adds bsd/dev/kebab\_ufs.c, the bsd/conf/files entry and the rd=ufsroot0 hook in IOFindBSDRoot.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/patches/xnu/kebab-ufs-10063.patch)
-- `device`: [Early kernel log appears, but the last line is the btlog vm-tag warning and no bsd\_init/IOFindBSDRoot/KEBAB UFS marker appears.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `source`: [Adds bsd/dev/kebab\_ufs.c, the bsd/conf/files entry and the rd=ufsroot0 hook in IOFindBSDRoot.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/patches/xnu/kebab-ufs-10063.patch)
+- `device`: [Early kernel log appears, but the last line is the btlog vm-tag warning and no bsd\_init/IOFindBSDRoot/KEBAB UFS marker appears.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>flash the old-fw kernel with GIC/FB/bring-up and rd=ufsroot0</code>. Revision: `fab2f0f31aa13fa3a86579611c5df8b5e93c174a`.
 
 ## Display {#display}
@@ -325,7 +325,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>boot the firmware and read the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## Input {#input}
@@ -363,7 +363,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>boot the firmware and press volume and power</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## GPU {#gpu}
@@ -562,9 +562,9 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/probe-final-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/scripts/pack-payload-mbr.py)
+- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/scripts/pack-payload-mbr.py)
 
 ## Diagnostics {#diagnostics}
 
@@ -643,7 +643,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/2e32df35dc1469c2ab49e0d8bff1ca0cc4e6e554/docs/bring-up.md)
+- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/a49e6bb0d15b50779f8cd28599158378c4cb70ff/docs/bring-up.md)
   Command: <code>flash each bisect image and photograph the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 </div>
