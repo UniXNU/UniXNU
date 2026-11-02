@@ -46,7 +46,7 @@ interfaces = OUT / 'interfaces_host'
 subprocess.run(['xcrun', 'clang++', *flags, KIT / 'NativeBridgeMetalFrontend.mm', KIT / 'bridge/interface_regressions_host.mm',
                 ROOT / 'build/adreno-metal-bridge/host/libadreno_metal_bridge.a', '-framework', 'Foundation', '-framework', 'Metal',
                 '-framework', 'IOSurface', '-o', interfaces], check=True)
-for mode in ['normal', 'single']:
+for mode in ['normal', 'single', 'default']:
     with tempfile.TemporaryDirectory(prefix='interfaces-' + mode + '-', dir=OUT) as directory:
         command = [str(interfaces), loader, directory, mode]
         run = subprocess.run(command, capture_output=True, text=True, timeout=120)
