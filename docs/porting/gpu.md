@@ -15,9 +15,9 @@ examples.
 
 | Implementation | Source | What to read and implement |
 | --- | --- | --- |
-| Power and firmware | [NativeAdrenoGmuPlatform.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoGmuPlatform.h#L15), [build-adreno740-kits.py](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/scripts/build-adreno740-kits.py) | `NativeAdrenoGmuPlatform::bind/services`, mapped windows, timers and firmware inputs |
-| Submission and memory | [NativeAdrenoClient.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoClient.h#L14), [NativeAdrenoVm.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoVm.h) | `NativeAdrenoTransport`, BO lifetime, GPU mappings and completion |
-| OS/frontend interface | [NativeOfflineAccelerator.cpp](https://github.com/UniXNU/AdrenoMetal/blob/454ff2ce83766ce7b3e0f355e83f1d72907708b3/NativeOfflineAccelerator.cpp), [OfflineMetalWire.h](https://github.com/UniXNU/AdrenoMetal/blob/454ff2ce83766ce7b3e0f355e83f1d72907708b3/OfflineMetalWire.h) | Accelerator publication and request structures used by the matching frontend |
+| Power and firmware | [NativeAdrenoGmuPlatform.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoGmuPlatform.h#L15), [build-adreno740-kits.py](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/scripts/build-adreno740-kits.py) | `NativeAdrenoGmuPlatform::bind/services`, mapped windows, timers and firmware inputs |
+| Submission and memory | [NativeAdrenoClient.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoClient.h#L14), [NativeAdrenoVm.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoVm.h) | `NativeAdrenoTransport`, BO lifetime, GPU mappings and completion |
+| OS/frontend interface | [NativeOfflineAccelerator.cpp](https://github.com/UniXNU/AdrenoMetal/blob/816022307852de7e1741ac05ae9111982318763f/NativeOfflineAccelerator.cpp), [OfflineMetalWire.h](https://github.com/UniXNU/AdrenoMetal/blob/816022307852de7e1741ac05ae9111982318763f/OfflineMetalWire.h) | Accelerator publication and request structures used by the matching frontend |
 
 ## 1. Match the GPU generation and OS ABI
 
@@ -97,51 +97,57 @@ caches before CPU readback. On fence timeout, stop the queue and confirm DMA has
 before releasing the BO and mapping. Report the failed request, handle and fence
 to distinguish allocation, mapping and execution failures.
 
+### Scheduling and memory reuse {#scheduling}
+
+sheng defaults to `sheng-gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
+
+Runtime scheduling and completion threads use interactive QoS on iOS as well as macOS. The encoding thread adopts the render thread's scheduling policy and priority when that reference has a fixed policy.
+
+Unused owned image backing serves later pooled and dedicated images. The room worker takes a suitable spare before allocating another block. Spares age after ten seconds and are reclaimed on allocation failure or memory pressure. Plain unused backing can be released by the room worker; imported memory and owner callbacks keep their release ordering.
+
 ### Render mode with an 8-bit BGRA framebuffer {#render-mode}
 
-With `sheng-fb-bgra=1` the plugin sets `TU_DEBUG=sysmem,nocb`: every pass renders in system memory. Tile memory holds a colour
-in the byte order its render target writes, so a GMEM load or store must move the bytes with the identity swap on the memory
-side; the recorded Mesa patch `turnip-gmem-mutable-swap.patch` does that for resolve, 2D and 3D stores and 3D loads. With it
-the lock screen matched the RGhA picture to 99.5 % in tile memory, but the GPU time per command buffer was no better than in
-system memory (17.8 ms mean, 56.1 ms at p95, against 17.1 and 52.1) and one home screen frame still came out with red and blue
-exchanged, so system memory stays the default. `sheng-tu-debug=` overrides it for experiments.
+With `sheng-fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an unbacked, lazily allocated transient attachment use GMEM when the render-pass constraints allow it. Other passes keep the system-memory policy. The recorded `turnip-transient-attachments-in-gmem.patch` applies this choice before the SYSMEM override, so memoryless attachments can remain in tile memory.
+
+`turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `sheng-tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
+
+Metal clients use one sample by default. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves the requested sample count; texture types, pipeline counts and resolve handling follow that policy.
 
 ### Find where a slow frame goes {#frame-path}
 
-Split a slow frame into the time each layer holds it before changing anything. Every segment below is
-measured on the host uptime clock; the GPU's always-on counter is mapped to it by a fitted line.
+Enable [frame diagnostics](/porting/gpu-diagnostics) and join the same command, allocation, fence and display request across stages. CPU events use uptime; align GPU timestamps through clock calibration.
 
-| Segment | Where it is measured |
+| Segment | Evidence |
 | --- | --- |
-| Commit to scheduler | Runtime stage records (commit, prepared, handed, taken). |
-| Scheduler to submit | Runtime stage records, with the reason a batch was held. |
-| Submit to GPU start | Driver job timeline: the jobs ahead in the ring, by process. |
-| GPU start to end | CP start and end stamps per job; Turnip stamps per render pass. |
-| GPU end to handler | Driver retire time, the completion waiter, the completed handler. |
+| Creation to commit | Caller work, texture allocation and page preparation. |
+| Commit to encoding | Batch enqueue/start/end and slow encoding operations. |
+| Encoding to runtime commit | Surface flush and runtime handoff phases. |
+| Runtime commit to submission | Prepared/handed/taken stages, held-batch reasons and kernel submission. |
+| Submission to GPU completion | Queue/ring timeline, CP timestamps and per-pass hardware duration. |
+| Completion to handlers | State collection, frontend cleanup, handlers, retained-resource release and gate preparation. |
+| Display update | Validation, fence wait, flip, latch, retirement and blanking. |
 
-Measured on sheng with iPadOS 27 (widget page, Settings, Safari):
-
-- Driver lock waits stay under 7 ms. A render pass takes 0.5 ms of GPU time at the median, a full-screen pass 1.1 ms.
-- Most slow frames wait in the ring behind other processes' jobs: a poster extension submitted jobs of about 77 ms each,
-  and the ring runs jobs in order with no priority.
-- The runtime threads that bring a command buffer to its handlers ran at the default QoS: the class was set on macOS only.
-- Blocks of 94 to 112 MiB took 281 to 340 ms to wire when Settings and Safari opened.
+Compare matching touch-active scenes separately from static desktop and lock transitions. Record cache build identity and priming progress, event-retention ranges and omitted counts. Global GPU counters describe their sampled interval; per-pass timing identifies the work.
 
 ## 4. Build and stage Metal
 
-Run these commands from the resolved target tree after preparing the matching
-SDK, compiler dependencies and ABI inputs:
+Build from the resolved target tree with its SDK, compiler dependencies and ABI inputs. For iOS/iPadOS 17:
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios
-python3 scripts/build-adreno-metal-plugin.py
-python3 scripts/add-gpu-plugin-data.py --publish /path/to/base.dbr /path/to/gpu.dbr
+python3 scripts/build-adreno-metal-plugin.py --target ios
+python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-The staging command uses macOS image tools and writes a copy of the Data seed.
-Use that output as `--data-ramdisk` when building the payload, then rebuild the
-boot image. For selected app processes, the staging command also accepts
-`--clients NAME,...`. The runtime plugin name is `NativeAdrenoMetal`.
+For iOS/iPadOS 27:
+
+```sh
+python3 scripts/build-turnip-darwin.py --target ios27
+python3 scripts/build-adreno-metal-plugin.py --target ios27
+ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
+```
+
+Pass the addon and its matching owner trust bundle to the payload with `--gpu-addon` and `--owner-trust-cache`, and enable the board's addon loader (`sheng-gpu-addon=1` on sheng). Keep the existing Data seed so its persistent data and caches retain their identity. See [packaging](/porting/packaging). The runtime plugin name is `NativeAdrenoMetal`.
 
 Check the selected OS profile's sandbox, user-client and trust-cache integration.
 The Metal bridge never returns a nil encoder: a pass it cannot encode gets an
@@ -158,7 +164,7 @@ separate timing observations.
 
 ### Warm the shader caches {#shader-warmup}
 
-A pipeline compiles from Apple's AIR the first time something asks for it, which stalls frames. Warm the caches ahead so the desktop finds them. Two inputs do this, and both use the same mechanism for every OS profile (iOS/iPadOS 17 `--target ios`, 27 `--target ios27`); only the library list differs, because it names the libraries of that OS image.
+A pipeline compiles from Apple's AIR the first time something asks for it, which stalls frames. Warm the caches ahead so the desktop finds them. Use `--target ios` for iOS/iPadOS 17 and `--target ios27` for 27. Supply the library list and cache pack for that OS image and compiler build.
 
 1. **Priming list.** Write the absolute path of every `.metallib` of the OS image, one per line, as the render server sees it (`/System/Library/...`). Keep it in `build/prime-list.txt`; `build-adreno-metal-plugin.py` embeds it in the plugin as the `__DATA,__primelist` section, and `make-gpu-addon.py --prime-list FILE` ships it as `addons/NativeAdrenoMetal.primelist`. With a list the render server does not scan directories: its sandbox hides most of them.
 2. **Pipeline pack.** Boot an image built with `make-gpu-addon.py --cache-export`; the plugin writes its cache directory to the board log. Read the run with `scripts/read-sheng-log.py`, merge one or more exports with `scripts/make-m2vpack.py OUT EXPORT_DIR...` (later directories win) and ship the result with `make-gpu-addon.py --pipeline-pack OUT`. The plugin imports the pack into the cache directory before the runtime opens it.
@@ -170,9 +176,9 @@ How priming runs:
 - It waits while the desktop animates: more than 8 command buffers in 250 ms is busy, and the idle desktop at 120 Hz submits about 6. After an animation it waits 2 s of quiet, and it never waits longer than 10 s, so one pipeline still compiles on a desktop that never settles.
 - Progress lives in the cache directory: `prime-done` (finished libraries), `prime-fn` (finished functions of libraries not finished yet), `prime-current` (the function being compiled), `prime-bad` (functions that ended the process; a start that finds `prime-current` moves it there) and `prime.log`. A restart resumes inside a library with thousands of functions.
 - Each finished entry carries the build id: the runtime's translator build plus the Turnip library's `LC_UUID`. A runtime or Turnip rebuild primes every library again; a plugin rebuild alone keeps the work.
-- The PR row of the board log shows what the thread does (compiling, waiting, opening a library), libraries done of the list, pipelines made and the highest submit rate a wait saw.
+- Read `prime-done`, `prime-fn` and `prime.log` to check completed libraries and functions. The focused latency export omits these files; collect them separately when verifying priming.
 
-**Expected result:** the PR row reaches all libraries of the list, and a second boot shows no new pipeline compiles for the same scenes. Record the list size, the build id and the cold and warm frame timings.
+**Expected result:** completed entries cover the library list for the current build, and a second boot reuses the same scene pipelines. Record the list size, the build id and the cold and warm frame timings.
 
 ## Next step
 
