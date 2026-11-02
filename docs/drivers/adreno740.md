@@ -1,142 +1,36 @@
 # Adreno740
 
-Start with the [adaptation procedure](/porting/gpu) for board inputs, source changes, build integration and verification order.
-
-Adreno740 implements the A740 kernel GPU interface used by SM8550. It manages command submission, memory, fences, and GPU initialization. The SoC profile supplies shared GPU, GMU, and SMMU operations. Each board supplies signed firmware, power policy, reserved-memory adjustments, and display integration.
-
-The recorded hardware target is sheng. Its stack uses 4 KiB SMMU translation, GMU firmware, a CP ring, fences, and GPU compositing into scanout.
+Adreno740 implements the A740 kernel GPU interface on SM8550. It owns GPU memory mappings, command submission, fences and CP/GMU initialization. The board supplies firmware, power votes and display integration. See the [GPU adaptation procedure](/porting/gpu).
 
 ## Runtime path
 
-```mermaid
-flowchart LR
-  A[iPadOS app] --> B[QuartzCore and RenderBox]
-  B --> C[AdrenoMetal plugin]
-  C --> D[metal2vulkan]
-  D --> E[Turnip]
-  E --> F[NIR and IR3]
-  F --> G[Darwin KMD]
-  G --> H[Adreno740]
-  H --> I[GMU, CP, SMMU and ring]
-  I --> J[Adreno 740]
-  J --> K[GPU composite to scanout]
-  K --> L[GopFramebuffer]
-```
+Metal → AdrenoMetal → metal2vulkan → Turnip → Darwin KMD → Adreno740 → A740.
 
-1. AdrenoMetal publishes a Metal device through the system `MTLAddDevice` path. The published mode returns the device to backboardd, and listed processes receive their own device. It owns the Metal objects, encoders, IOSurfaces, events, fences and pipeline archives.
-2. metal2vulkan translates AIR to SPIR-V and supplies pipeline descriptors, binding plans and function constants.
-3. Turnip compiles SPIR-V through NIR to A740 IR3. Its Darwin KMD talks to the Adreno740 user client.
-4. Adreno740 owns BOs, GPU addresses, the submission ring, fences and SMMU contexts. The GMU brings the GPU out of reset and applies power votes. The CP executes the IBs.
-5. The plugin composites the finished frame into scanout pages. GopFramebuffer offers and retires the swap.
+Each client has an address space and queue range. The GPU uses 4 KiB SMMU pages. Owned buffers use system memory; imported pages retain their owners. Allocation capacity follows available memory. Mapping handles are indexed, and unmap invalidates the affected translations.
 
-The runtime compiler chain is Metal, AIR, SPIR-V, NIR, IR3. AirNir is an offline direct AIR to NIR to IR3 compiler.
+## Scheduling
 
-## Publish to the render server
-
-`scripts/add-gpu-plugin-data.py` stages the plugin into a copy of the packed Data seed.
-
-| Option | Effect |
+| Requested priority | Ring in mode 2 |
 | --- | --- |
-| `--publish` | Writes `NativeAdrenoMetal.publish`. backboardd returns the native device to the original discovery, and CARenderServer composites the system UI through it. |
-| `--clients NAME,...` | Writes `NativeAdrenoMetal.clients`. Each listed process gets its own device and driver connection. Up to two also get a 256 MiB GPU window and their own shader cache. `*` lists every process. |
+| High (0), normal-high (4), real-time (5) | 0 |
+| Normal (1), low (2), background (3), unspecified | 1 |
 
-The published device turns off backboardd's deep and compressed framebuffers. Patch `zzw-native-adreno-sandbox-grant` lets the accelerator service name the render server in `NativeSandboxGrantProcess`, so its user-client open passes the sandbox check.
+The task's GPU role selects its foreground or background request. Ring 0 takes precedence; ring 1 gets service when ring 0 is idle or its oldest job has waited 250 ms. An aging grant gives ring 1 a 2 ms service interval, preventing immediate switch oscillation. Switch completion immediately reevaluates queued high-priority work. Scanout observes the completed prefix across both rings. A queue stays on its existing ring until its outstanding prefix completes, preserving FIFO across priority changes. IB handles identify command storage and do not infer resource dependencies. Turnip's client queues share one kernel FIFO; unresolved syncs wait for producer submission.
 
-Adreno740 serves one user-client core per connection. The render server gets a 1 GiB window at `0x20000000`, and up to two listed clients get 256 MiB each with their own queue range and teardown.
+Each ring tracks its queued context and page table. The CP records the executed table after `CP_SMMU_TABLE_UPDATE`, and preemption restores that snapshot. Context switching saves GMEM, runs the performance-counter SRAM postamble and holds the GMU keepalive vote until the incoming WPTR is restored. Read pointers come from each ring's own shadow. Active jobs retain their ring identity when the fence-history table wraps.
 
-## Components
+sheng defaults to `sheng-gpu-preempt=2`. Mode 1 sends only low/background requests to ring 1; mode 0 uses one ring. CPU-only page-table switching also uses ring 0. The switch watchdog is 1 s. A failed switch disables further preemption and recovery replays pending work on ring 0; diagnostics retain the failure.
 
-| Component | Role |
-| --- | --- |
-| `drivers/AdrenoMetal` | Metal frontend, metal2vulkan, command encoding, IOSurface and scanout client |
-| `drivers/Adreno740` | GPU service, GMU/CP startup, user client, BO, VM, ring, submit and fence |
-| `drivers/GopFramebuffer` | Swap offer, validation, retirement and scanout hand-off |
-| `kits/AdrenoFirmware` | GMU HFI, startup, power votes and SQE firmware data |
-| `kits/AdrenoPM4` | A740 PM4 state, constants, VPC and rasterizer packets |
-| `kits/ArmSmmu4K` | Native 4 KiB tables, context, streams, live mappings and TLB maintenance |
-| `kits/AirNir` | Offline AIR to NIR to IR3 compiler |
+## Build and verification
 
-## State
-
-| Step | Result |
-| --- | --- |
-| GMU cold start and HFI | works |
-| GPU context and CP commands | works |
-| Native 4 KiB SMMU context | active |
-| Metal device discovery | works |
-| GPU frame copy into scanout | works, pixel-identical |
-| Render server compositing | works |
-| Per-process Metal devices | works |
-| GPU-composited desktop | works |
-
-The GPU path covers discovery, command encoding, pipeline archives, IOSurface imports, fences, compositing and scanout. The render server and listed clients use the native device.
-
-## Memory and TLB
-
-| Item | Behavior |
-| --- | --- |
-| Objects per client | Limited by memory, found through a handle index |
-| Owned BOs | System memory, as Metal resources: pageable memory with no kernel mapping, wired by `prepare()`. The VM zero-fills the pages and sets the write-combined attribute in one batch, and restores it on free. Client views map the BO's own descriptor. No fixed pool. Mapped without the alias check against existing ranges |
-| Imported memory | Mapped without that check when every mapped import shares its cache class and none of its pages is in a BO of this driver (a page bitmap over DRAM); otherwise fully checked |
-| Unmap | Up to 512 pages invalidated one by one, larger unmaps by ASID |
-| Submission | No TLB invalidation; a stalled fence still invalidates |
-| Boot log rows | `[vm map]`, `[vm unmap]`, `[vm kinds]`, `[bo memory]` |
-
-## Shader compilation
-
-The driver compiles the original UI shaders on the device:
-
-1. `default.metallib` carries AIR plus Apple GPU machine code. The AIR feeds the translation path.
-2. metal2vulkan translates AIR to SPIR-V, then Turnip compiles IR3 at pipeline creation.
-3. A cold boot compiles every UI variant it reaches. int-148: 77 pipelines, about 43 s, cache hit 0. int-150: 103 Metal pipelines, 40.1 s total, 1.40 s max; 94 Vulkan pipelines, 23.3 s.
-4. Patch `0004` specializes the QuartzCore uber shaders and folds constant loads before inlining. Patch `0005` keeps recent module decodes and device-profile fingerprints. The pipeline journal records each render pipeline creation.
-
-Implemented mitigations:
-
-| Mitigation | Effect |
-| --- | --- |
-| NDEBUG release build | Removes per-pass Mesa assertions and NIR validation. |
-| metal2vulkan patch `0004` | Specializes and prunes QuartzCore uber shaders before Vulkan compilation. |
-| metal2vulkan patch `0005` | Keeps recent module decodes and device-profile fingerprints. |
-| Priming cache | Caches runtime startup entry-point work. |
-| `m2vpack` export and import | Reuses earlier compiled pipeline caches; the export is incremental. |
-| Turnip builtin pack | Embeds clear, blit and empty shader variants. |
-| Pipeline journal | Records per-pipeline CPU and system time, page faults and context switches. |
-
-The cache chain covers runtime startup and the UI variants an earlier boot exported. A new UI variant compiles once, then enters the exported cache.
-
-## Build
+From the resolved sheng iPadOS 27 tree, with `UNIXNU_XNU_ARCH=arm64e` and `UNIXNU_IOS_VERSION=27.0`:
 
 ```sh
-python3 scripts/build-turnip-darwin.py --target ios
-python3 scripts/build-adreno-metal-plugin.py
-python3 scripts/add-gpu-plugin-data.py --publish --clients <name,...> <seed>.dbr <output>.dbr
+python3 scripts/build-arm-driver.py Adreno740
+python3 scripts/build-adreno740-kits.py
+python3 scripts/check-native-adreno-scheduling.py
 ```
 
-The staging script output is the Data seed for `unixnu build payload --data-ramdisk`.
+The host scheduling check runs the real ring, preemption and submit code over software register peers with address and undefined-behavior sanitizers. It checks packets, GMEM and keepalive sequencing, timeout handling, page-table snapshots, priority routing, FIFO and fence-history rollover. Hardware qualification requires concurrent clients, repeated ring switches, correct pixels and frame-pacing measurements.
 
-Host checks:
-
-```sh
-python3 scripts/check-native-metal-frontend-host.py
-python3 scripts/check-turnip-darwin-host.py
-python3 scripts/check-smmu4k-live.py
-python3 scripts/check-turnip-pipeline-cache-host.py
-python3 scripts/check-priming-cache-host.py --output build/priming-cache/run
-python3 scripts/probe-turnip-internal-compiler-host.py --qualification <old> --output <new>
-```
-
-The device repository adds the original-input checks:
-
-```sh
-python3 scripts/build-adreno-compiler-host.py --probe
-python3 scripts/build-turnip-ios-compiler-peer.py
-python3 scripts/check-turnip-ios-compiler-cache.py
-python3 scripts/check-quartzcore-turnip-cache-host.py
-```
-
-## Related
-
-- [Xiaomi Pad 6S Pro (sheng)](/devices/sheng)
-- [XNU drivers](/drivers/xnu-drivers)
-- [Four-kilobyte pages](/xnu/four-k-page-tables)
+See [AdrenoMetal](/drivers/adreno-metal) for Metal interfaces, caches and plugin staging.

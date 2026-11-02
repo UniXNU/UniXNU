@@ -1,37 +1,39 @@
 # AdrenoMetal
 
-Start with the [adaptation procedure](/porting/gpu) for board inputs, source changes, build integration and verification order.
+AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR through metal2vulkan, compiles SPIR-V with Turnip, and submits work to [Adreno740](/drivers/adreno740). Firmware, power votes and display integration come from the board.
 
-AdrenoMetal provides the Metal frontend through metal2vulkan and Turnip. It
-publishes a device through `MTLAddDevice`, translates AIR, and submits work to
-the kernel GPU interface.
+## Rendering and interfaces
 
-| Field | Value |
+| Area | Behavior |
 | --- | --- |
-| Repository | [UniXNU/AdrenoMetal](https://github.com/UniXNU/AdrenoMetal) |
-| Implementation | A740/SM8550 graphics stack and the selected OS ABI |
-| Dependencies | Adreno740, Turnip, metal2vulkan, IOGPUFamily and IOSurface interfaces |
-| Board inputs | Firmware, power policy, memory layout, display integration |
-| Verified device | sheng |
-| Runtime plugin | `NativeAdrenoMetal` |
+| Poster MSAA | Poster processes use one sample for textures, pipelines and render passes. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. Other processes retain their requested sample counts. `NATIVE_METAL_SINGLE_SAMPLE=0/1` overrides this policy. |
+| Heap resources | Buffer and texture `makeAliasable` release their heap ranges. |
+| Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
+| Copies and raster state | Blits cover the requested mip and slice ranges. Viewport and scissor setters forward every entry, up to 16. |
+| Compressed input | A zero-length no-copy compressed texture infers its DroidVM layout size and retains the owner's deallocator through use. |
+| Functions | Function constant dictionaries expose names, indices and types. Function and compute-pipeline completion selectors report results. `specializedName` is the exported name; source lookup retains the original definition. |
+| Constant tables | Dynamically indexed constant tables larger than 4 KiB use shared constant storage. Constant pointer casts and GEP expressions retain their offsets. |
+| Memory accounting | Device allocation totals include pooled, dedicated and imported backing. Texture sizes come from their backing allocation. The recommended working set is RAM / 4, capped at 2 GiB. |
+| Queue capacity | `newCommandQueueWithMaxCommandBufferCount:` uses the runtime's outstanding-buffer limit. Uncommitted destruction releases a slot; completion releases it after handlers return. |
 
-sheng runs the GPU-composited desktop. Exported pipeline caches are reused across
-boots. The render server primes every Metal library of the OS image while the
-desktop is idle: the payload carries the list (`NativeAdrenoMetal.primelist`) and
-a copy of the cryptex QuartzCore library, which the render server's sandbox
-cannot reach. The idle desktop submits about 6 command buffers per 250 ms at
-120 Hz, so priming waits only above 8. The PR log row shows its progress; all
-162 libraries are primed on sheng. With the list present the render server does
-not scan directories, and each library is read only while the display is quiet.
-The lists, the pipeline pack and the resume rules are in [Warm the shader caches](/porting/gpu#shader-warmup).
+A render pass that fails encoding returns an encoder and reports a command-buffer error. This supports callers that cache encoder methods.
 
-A render pass that cannot be encoded still returns an encoder, and its command
-buffer is refused: RenderBox caches encoder methods and cannot take nil. The first problem of each process is written to the driver's
-per-process text line from the thread that hit it.
+## Cache and priority
+
+Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
+
+Logical Metal queues share one Vulkan queue and kernel queue per process. The frontend forwards the most urgent **current** request among live queues. Lowering or destroying a queue removes its boost. Getters report each queue's own request; setters report backend acceptance. The kernel chooses foreground or background priority from the task's GPU role. Priority policy does not use process names.
+
+## Build and checks
+
+From the resolved sheng iPadOS 27 tree:
 
 ```sh
-python3 scripts/build-turnip-darwin.py --target ios
-python3 scripts/build-adreno-metal-plugin.py
+python3 scripts/build-turnip-darwin.py --target ios27
+python3 scripts/build-adreno-metal-plugin.py --target ios27
+python3 scripts/check-native-metal-frontend-host.py
 ```
 
-See [Adreno740](/drivers/adreno740) for the runtime path, staging commands, and checks.
+The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. Host checks cover rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Hardware qualification covers frame pacing and preemption under concurrent clients.
+
+See the [GPU adaptation procedure](/porting/gpu) for staging and board inputs.
