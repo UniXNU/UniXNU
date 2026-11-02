@@ -30,6 +30,11 @@
     "title_zh": "Xiaomi Redmi K40 (alioth, M2012K11AC) (songchiyu)"
   },
   {
+    "name": "alioth-taishang1024",
+    "title": "Xiaomi Redmi K40 (alioth, M2012K11AC) (Taishang1024)",
+    "title_zh": "Xiaomi Redmi K40 (alioth, M2012K11AC) (Taishang1024)"
+  },
+  {
     "name": "alioth-yang232138",
     "title": "Xiaomi Redmi K40 (alioth, M2012K11AC) (yang232138)",
     "title_zh": "Xiaomi Redmi K40 (alioth, M2012K11AC) (yang232138)"
@@ -88,6 +93,11 @@
     "name": "cepheus-c0der88",
     "title": "Xiaomi Mi 9 (c0der88)",
     "title_zh": "Xiaomi Mi 9 (c0der88)"
+  },
+  {
+    "name": "cepheus-didazhiqian",
+    "title": "Xiaomi Mi 9 (cepheus) (didazhiqian)",
+    "title_zh": "Xiaomi Mi 9 (cepheus) (didazhiqian)"
   },
   {
     "name": "cepheus-yangqi0408",
@@ -445,6 +455,11 @@
     "title_zh": "realme GT8 Pro (lafa) RMX5200: UniXNU bring-up"
   },
   {
+    "name": "lavender",
+    "title": "Xiaomi Redmi Note 7 (eMMC, 4 GB DRAM, 1080x2340 panel)",
+    "title_zh": "Xiaomi Redmi Note 7 (eMMC, 4 GB DRAM, 1080x2340 panel)"
+  },
+  {
     "name": "lemonades",
     "title": "OnePlus 9R (lemonades)",
     "title_zh": "一加 9R（lemonades）"
@@ -635,6 +650,11 @@
     "title_zh": "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J)"
   },
   {
+    "name": "odin3",
+    "title": "AYN Odin 3 (Dragonwing Q8, SM8750), 16 GiB",
+    "title_zh": "AYN Odin 3 (Dragonwing Q8, SM8750), 16 GiB"
+  },
+  {
     "name": "oneplus13t",
     "title": "OnePlus 13T (oneplus13t)",
     "title_zh": "一加 13T（oneplus13t）"
@@ -748,6 +768,11 @@
     "name": "pong",
     "title": "Nothing Phone (2) (pong)",
     "title_zh": "Nothing Phone (2)（pong）"
+  },
+  {
+    "name": "pong-agxmx666",
+    "title": "Nothing Phone (2): UniXNU UEFI bring-up (AGXMX666)",
+    "title_zh": "Nothing Phone (2): UniXNU UEFI bring-up (AGXMX666)"
   },
   {
     "name": "pong-hxzbaka",
@@ -878,6 +903,11 @@
     "name": "sheng-lilinnan",
     "title": "Xiaomi Pad 6S Pro (lilinnan)",
     "title_zh": "Xiaomi Pad 6S Pro (lilinnan)"
+  },
+  {
+    "name": "sheng-lithosss",
+    "title": "Xiaomi Pad 6S Pro (Lithosss)",
+    "title_zh": "Xiaomi Pad 6S Pro (Lithosss)"
   },
   {
     "name": "sheng-macos",
@@ -1078,6 +1108,11 @@
     "name": "vermeer-yyx2025",
     "title": "Redmi K70 (yyx2025)",
     "title_zh": "Redmi K70 (yyx2025)"
+  },
+  {
+    "name": "vili",
+    "title": "Xiaomi 11T Pro (vili, 2107113SG), SM8350 / Snapdragon 888",
+    "title_zh": "Xiaomi 11T Pro (vili, 2107113SG), SM8350 / Snapdragon 888"
   },
   {
     "name": "wayne",

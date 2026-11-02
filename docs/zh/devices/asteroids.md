@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UFS userdata partition, with shared SM7635 support and board-owned storage, GPU, input and power integration. Bring-up runs as numbered staged tests; their results are in docs/asteroids-gpu-gen8.md and docs/asteroids-touch.md of rootstockos/iosonandng.
 
-源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/porting.toml), `dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f`.
+源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/porting.toml), `279598b9867be6175aaaff0a63867d9234f276e1`.
 
 本页按设备记录自动生成。
 
@@ -75,7 +75,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -115,7 +115,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
 
 ## CPU 与中断 {#cpu}
 
@@ -159,7 +159,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/CpuFreqProbe.cpp)
 
 ## 内存与 DMA {#memory}
 
@@ -198,7 +198,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/dts/asteroids.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -240,7 +240,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 显示 {#display}
@@ -305,7 +305,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## 输入 {#input}
@@ -352,7 +352,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -462,6 +462,9 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T85 \(2026-11-01, AdrenoMetal 6e83314, UniXNU 8446ded\): v and the readback are gone; letter y writes the CPU's bytes of the first 48 distinct small sources a frame samples \(then every 25th up to 96\) at their commit to m2v/gpu/dump-&lt;pid&gt;-&lt;n&gt;-f&lt;format&gt;-&lt;w&gt;x&lt;h&gt;-r&lt;rows&gt;-&lt;s\|b&gt;.bin; local/tools/dumps.py turns them into PNGs. Blocks in the dumps put the cause in whatever writes those bytes under the 64-byte answer.
 - T85y \(2026-11-01, pdbaqy\): 106 dumps of the render server's sampled sources \(icons 58x58 and 128x128 RGBA8, A8 text such as the date, RG8 64x64 masks\) are clean in memory. With T83x \(the GPU reads them as written\) the render server's sources are not where the blocks come from. The T79 photos put the blocks in the wallpaper's blurred flower shadows, drawn by the poster in its own process, which the boot letters \(render server only\) never reached. The watch's hashing at completion still read unmapped client memory: backboardd SIGSEGV with x or y on.
 - T86 \(2026-11-01, AdrenoMetal 39bb4ec, UniXNU 405641e\): the bridge answers 64 for linear alignment in backboardd only, the runtime's 16 in every other process. package/AsteroidsMetalPlugin.mm: boot letter z skips shader priming. Every new runtime or Turnip build primes all libraries again \(T81k: 34 of 155, 927 pipelines\) from 90 s after the device opens, during animations; a backboardd restarted after a crash ran at 120 Hz \(user, T80l and T85y\). Planned boots pdbaq \(blocks?\) and pdbaqz \(smooth from the start?\).
+- T86d \(2026-11-01, pdbaq\): blocks still in the wallpaper's flower shadows, no backboardd crash, L inp 62/5. The first boot was refused \(Load Error\) for every image: slot a was unbootable with its retry count spent, as nothing marks our boots successful; fastboot set\_active a reset it \(retry count 7\).
+- T80o \(2026-11-01, pdbaqol, add-on 28: the runtime's 16 in every process\): no blocks. So the blocks are drawn live by the render server's 64-byte answer, not saved in a wallpaper render, and not drawn by another process. MobileSlideShow's sig 6 abort happens here too, so it is not the answer's.
+- T87 \(2026-11-01, AdrenoMetal 541a19a, UniXNU 3fc28a6\): letters put one answer back to the runtime's in the render server: A the format-free alignments, B minimumLinearTextureAlignmentForPixelFormat:, C requiredLinearTextureBytesPerRowForDescriptor:; with l each distinct question and answer goes to m2v/gpu/answers-&lt;pid&gt;.txt. Planned boots pdbaqlA, pdbaqlB, pdbaqlC.
 
 ### 完成条件
 
@@ -477,7 +480,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -518,7 +521,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## 网络 {#network}
@@ -612,7 +615,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -657,7 +660,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 镜像组装 {#packaging}
@@ -697,7 +700,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -750,6 +753,6 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/dbddb091c6ec9dc5db15413a1fc770d9b47e8b7f/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/BootProgress.c)
 
 </div>
