@@ -29,26 +29,16 @@
 #define ONESEND_FRAME_LENGTH  (ONESEND_HEADER_LENGTH + ONESEND_BLOCK_LENGTH + ONESEND_CRC_LENGTH)
 #define NO_LOG_STALL_MS     3000
 
-#define SPEED_BAR_GAP          24
-#define SPEED_BAR_MAX_HEIGHT   40
-#define SPEED_BAR_SEGMENTS     5
 #define SPEED_GEAR_COUNT       5
 #define SPEED_GEAR_INITIAL     2
 
 STATIC EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mBackground = { 0x0F, 0x0C, 0x0B, 0 };
-STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mSpeedColors[SPEED_BAR_SEGMENTS] = {
-  { 0xFF, 0xFF, 0xFF, 0 },  // pure white
-  { 0xFF, 0x8C, 0x1F, 0 },  // bright blue
-  { 0x5E, 0xC5, 0x22, 0 },  // vivid green
-  { 0x0A, 0xD6, 0xFF, 0 },  // bright yellow
-  { 0x30, 0x3B, 0xFF, 0 }   // warning red
-};
 STATIC CONST UINTN  mGearIntervals[SPEED_GEAR_COUNT] = {
   5000,  // gear 0: slowest
   2000,
   1000,  // gear 2: initial
-  500,
-  250    // gear 4: fastest
+  700,
+  500    // gear 4: fastest; faster pages cannot be scanned anyway
 };
 
 STATIC
@@ -77,70 +67,6 @@ FillBuffer (
 
   for (Index = 0; Index < Count; Index++) {
     Buffer[Index] = Color;
-  }
-}
-
-STATIC
-VOID
-DrawSpeedBar (
-  IN EFI_GRAPHICS_OUTPUT_BLT_PIXEL  *Buffer,
-  IN UINTN                          Stride,
-  IN UINT32                         Height,
-  IN UINT32                         X,
-  IN UINT32                         Width,
-  IN UINT32                         Baseline,
-  IN UINTN                          Level
-  )
-{
-  UINT32                          SegmentWidth;
-  UINT32                          Rem;
-  UINT32                          SegmentX;
-  UINT32                          SegmentHeight;
-  UINT32                          Top;
-  UINT32                          Row;
-  UINT32                          Col;
-  UINTN                           Segment;
-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL   Color;
-
-  if ((Baseline > Height) || (SPEED_BAR_MAX_HEIGHT > Baseline)) {
-    return;
-  }
-
-  SegmentWidth = Width / SPEED_BAR_SEGMENTS;
-  if (SegmentWidth == 0) {
-    return;
-  }
-
-  if (Level > SPEED_BAR_SEGMENTS) {
-    Level = SPEED_BAR_SEGMENTS;
-  }
-  if (Level == 0) {
-    return;
-  }
-
-  Rem       = Width % SPEED_BAR_SEGMENTS;
-  SegmentX  = X;
-  for (Segment = 0; Segment < SPEED_BAR_SEGMENTS; Segment++) {
-    SegmentWidth  = Width / SPEED_BAR_SEGMENTS;
-    if (Segment < Rem) {
-      SegmentWidth++;
-    }
-
-    SegmentHeight = SPEED_BAR_MAX_HEIGHT * (Segment + 1) / SPEED_BAR_SEGMENTS;
-    Top           = Baseline - SegmentHeight;
-    if ((Segment + 1) > Level) {
-      SegmentX += SegmentWidth;
-      continue;
-    }
-
-    Color = mSpeedColors[Segment];
-    for (Row = 0; Row < SegmentHeight; Row++) {
-      for (Col = 0; Col < SegmentWidth; Col++) {
-        Buffer[(Top + Row) * Stride + SegmentX + Col] = Color;
-      }
-    }
-
-    SegmentX += SegmentWidth;
   }
 }
 
@@ -306,7 +232,6 @@ DrawPage (
   IN UINTN                          PageCount,
   IN UINT32                         SessionId,
   IN UINT32                         PayloadChecksum,
-  IN UINTN                          SpeedLevel,
   IN UNIXNU_MENU_PLUGIN_PROTOCOL    *This,
   IN UNIXNU_MENU_PLUGIN_DRAW_STATUS DrawStatus
   )
@@ -320,7 +245,6 @@ DrawPage (
   UINTN                          Stride;
   UINT32                         X;
   UINT32                         Y;
-  UINT32                         Baseline;
 
   Stride = Content->Width;
   FillBuffer (BackBuffer, (UINTN)Content->Width * Content->Height, mBackground);
@@ -361,21 +285,6 @@ DrawPage (
     }
 
     FreePool (Bitmap);
-
-    Baseline = Y + (UINT32)RegionSize + SPEED_BAR_GAP + SPEED_BAR_MAX_HEIGHT;
-    if (Baseline > Content->Height) {
-      Baseline = Content->Height;
-    }
-
-    DrawSpeedBar (
-      BackBuffer,
-      Stride,
-      Content->Height,
-      X,
-      (UINT32)RegionSize,
-      Baseline,
-      SpeedLevel
-      );
 
     UnicodeSPrint (
       StatusLine,
@@ -486,6 +395,8 @@ AdvancedLogRun (
   UINTN         Page;
   UINTN         PageCount;
   UINTN         Gear;
+  BOOLEAN       ExitViewer;
+  CHAR16        KeyLine[64];
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  *BackBuffer;
 
   if ((Gop == NULL) || (Content == NULL) || (Content->Width == 0) || (Content->Height == 0)) {
@@ -544,49 +455,64 @@ AdvancedLogRun (
     Events[EventCount++] = gST->ConIn->WaitForKey;
   }
 
-  DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, Gear + 1, This, DrawStatus);
+  DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, This, DrawStatus);
   for ( ; ;) {
-    Status = gBS->WaitForEvent (EventCount, Events, &Signaled);
+    ExitViewer = FALSE;
+    Status     = gBS->WaitForEvent (EventCount, Events, &Signaled);
     if (EFI_ERROR (Status)) {
+      break;
+    }
+
+    //
+    // Drain every queued key before anything else, whichever event woke us:
+    // at the fast gears the periodic timer fires while a full page redraw is
+    // still running, so a timer-first branch would starve the keypad and the
+    // power key would seem dead.
+    //
+    if (gST->ConIn != NULL) {
+      while (!EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {
+        if ((Key.UnicodeChar == CHAR_CARRIAGE_RETURN) ||
+            (Key.UnicodeChar == CHAR_LINEFEED) ||
+            (Key.ScanCode == SCAN_ESC))
+        {
+          ExitViewer = TRUE;
+          break;
+        }
+
+        if ((Key.ScanCode == SCAN_UP) || (Key.UnicodeChar == L'k')) {
+          if (Gear < SPEED_GEAR_COUNT - 1) {
+            Gear++;
+            gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (mGearIntervals[Gear]));
+          }
+        } else if ((Key.ScanCode == SCAN_DOWN) || (Key.UnicodeChar == L'j')) {
+          if (Gear > 0) {
+            Gear--;
+            gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (mGearIntervals[Gear]));
+          }
+        }
+      }
+    }
+
+    if (ExitViewer) {
       break;
     }
 
     if (Signaled == 0) {
       Page = (Page + 1) % PageCount;
-      DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, Gear + 1, This, DrawStatus);
-      continue;
     }
 
-    if (gST->ConIn == NULL) {
-      continue;
+    UnicodeSPrint (
+      KeyLine,
+      sizeof (KeyLine),
+      L"speed %u/%u   power or Enter: exit",
+      (UINT32)Gear + 1,
+      (UINT32)SPEED_GEAR_COUNT
+      );
+    if (DrawStatus != NULL) {
+      DrawStatus (This, 1, KeyLine);
     }
 
-    if (EFI_ERROR (gST->ConIn->ReadKeyStroke (gST->ConIn, &Key))) {
-      continue;
-    }
-
-    if ((Key.UnicodeChar == CHAR_CARRIAGE_RETURN) ||
-        (Key.UnicodeChar == CHAR_LINEFEED) ||
-        (Key.ScanCode == SCAN_ESC))
-    {
-      break;
-    }
-
-    if ((Key.ScanCode == SCAN_UP) || (Key.UnicodeChar == L'k')) {
-      if (Gear < SPEED_GEAR_COUNT - 1) {
-        Gear++;
-        gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (mGearIntervals[Gear]));
-      }
-
-      DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, Gear + 1, This, DrawStatus);
-    } else if ((Key.ScanCode == SCAN_DOWN) || (Key.UnicodeChar == L'j')) {
-      if (Gear > 0) {
-        Gear--;
-        gBS->SetTimer (Timer, TimerPeriodic, EFI_TIMER_PERIOD_MILLISECONDS (mGearIntervals[Gear]));
-      }
-
-      DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, Gear + 1, This, DrawStatus);
-    }
+    DrawPage (Gop, Content, BackBuffer, Payload, PayloadLen, Page, PageCount, SessionId, PayloadChecksum, This, DrawStatus);
   }
 
   gBS->SetTimer (Timer, TimerCancel, 0);

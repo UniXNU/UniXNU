@@ -11,7 +11,7 @@
 
 #include "Internal.h"
 
-#define PIXEL(r, g, b)  { (b), (g), (r), 0 }
+#define PIXEL(r, g, b)  { (b), (g), (r), 0xFF }
 
 STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mBackground  = PIXEL (0x0B, 0x0C, 0x0F);
 STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mText        = PIXEL (0xF2, 0xF3, 0xF5);
@@ -492,7 +492,7 @@ DrawFramePortrait (
   Pitch          = Ui->CardHeight + Ui->Scale * 3;
   Ui->RowHeight  = Pitch;
   ListBottom     = Ui->FooterTop - Fch * 2;
-  Top            = Ui->Height / 20;
+  Top            = Ui->Height / 12;
 
   //
   // Cards first, from the bottom up; the header (without the logo) gets what
@@ -502,6 +502,7 @@ DrawFramePortrait (
   HeaderH = PortraitHeader (Ui, Config, FALSE, 0, 0);
   MaxRows = (ListBottom > Top + HeaderH + Ch) ? (ListBottom - Top - HeaderH - Ch) / Pitch : 0;
   Ui->VisibleRows = MIN (Config->EntryCount, MAX (MaxRows, (UINTN)1));
+  Ui->ScrollFirst = 0;
   Ui->MenuTop     = ListBottom - Ui->VisibleRows * Pitch + Ui->Scale * 3;
 
   //
@@ -576,7 +577,7 @@ DrawEntryPortrait (
   Fch   = UNIXNU_GLYPH_HEIGHT * Fs;
   Pad   = Ch / 2;
   X     = Ui->Margin;
-  Y     = Ui->MenuTop + Index * Ui->RowHeight;
+  Y     = Ui->MenuTop + (Index - Ui->ScrollFirst) * Ui->RowHeight;
   Width = Ui->Width - 2 * Ui->Margin;
   Bg    = Selected ? mAccent : mRow;
 
@@ -722,6 +723,7 @@ UniXNUUiDrawFrame (
     TextPrintAt (Ui, 1, EFI_DARKGRAY | EFI_BACKGROUND_BLACK, Config->SourceLabel);
     Ui->MenuTop     = 3;
     Ui->VisibleRows = MIN (Config->EntryCount, Ui->TextRows > 8 ? Ui->TextRows - 8 : 1);
+    Ui->ScrollFirst = 0;
     Ui->FooterTop   = Ui->TextRows - STATUS_LINES - 2;
     if (Config->Error[0] != '\0') {
       UnicodeSPrint (Line, sizeof (Line), L"config error: %a", Config->Error);
@@ -799,6 +801,7 @@ UniXNUUiDrawFrame (
   Ui->ContentBottom = Ui->FooterTop;
   MaxRows       = (Ui->FooterTop > Y + Ui->RowHeight) ? (Ui->FooterTop - Y) / Ui->RowHeight : 1;
   Ui->VisibleRows = MIN (Config->EntryCount, MaxRows);
+  Ui->ScrollFirst = 0;
 
   if (Config->Error[0] != '\0') {
     UnicodeSPrint (Line, sizeof (Line), L"config error: %a", Config->Error);
@@ -830,7 +833,7 @@ UniXNUUiDrawEntry (
   CONST CHAR16                   *Tag;
   CHAR16                         Line[160];
 
-  if (Index >= Ui->VisibleRows) {
+  if ((Index < Ui->ScrollFirst) || (Index >= Ui->ScrollFirst + Ui->VisibleRows)) {
     return;
   }
 
@@ -839,7 +842,7 @@ UniXNUUiDrawEntry (
     UnicodeSPrint (Line, sizeof (Line), L" %c %u. %s  [%s]", Selected ? L'>' : L' ', (UINT32)Index + 1, Entry->Title, TypeTag (Entry));
     TextPrintAt (
       Ui,
-      Ui->MenuTop + Index,
+      Ui->MenuTop + (Index - Ui->ScrollFirst),
       Selected ? (EFI_WHITE | EFI_BACKGROUND_RED) : (EFI_LIGHTGRAY | EFI_BACKGROUND_BLACK),
       Line
       );
@@ -857,7 +860,7 @@ UniXNUUiDrawEntry (
 
   Cw  = UNIXNU_GLYPH_WIDTH * Ui->Scale;
   Ch  = UNIXNU_GLYPH_HEIGHT * Ui->Scale;
-  Y   = Ui->MenuTop + Index * Ui->RowHeight;
+  Y   = Ui->MenuTop + (Index - Ui->ScrollFirst) * Ui->RowHeight;
   Pad = (Ui->RowHeight - Ch) / 2;
   Bg  = Selected ? mAccent : mRow;
   Tag = TypeTag (Entry);

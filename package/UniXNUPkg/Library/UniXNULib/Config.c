@@ -39,6 +39,7 @@ STATIC CONST CHAR8  mBuiltinConfig[] =
   "rotate = 2\n"
   "[ui]\n"
   "title = \"UniXNU\"\n"
+  "scale = 4\n"
   "[[entry]]\n"
   "id = \"exit\"\n"
   "title = \"Return to firmware\"\n"
