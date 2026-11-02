@@ -35,4 +35,4 @@ The host scheduling check runs the real ring, preemption and submit code over so
 
 See [AdrenoMetal](/drivers/adreno-metal) for Metal interfaces, caches and plugin staging.
 
-Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).
+Frame diagnostics retain allocation, command, completion and GPU/display timing. Pixel capture is disabled. See [GPU frame diagnostics](/porting/gpu-diagnostics).
