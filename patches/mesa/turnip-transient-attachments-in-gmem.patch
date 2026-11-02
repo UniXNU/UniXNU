@@ -1,0 +1,39 @@
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -1388,10 +1388,10 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+                      tu_autotune::rp_ctx_t *rp_ctx,
+                      tu_autotune::rp_key_opt rp_key)
+ {
+-   if (TU_DEBUG(SYSMEM)) {
+-      cmd->state.rp.gmem_disable_reason = "TU_DEBUG(SYSMEM)";
+-      return true;
+-   }
++   /* TU_DEBUG(SYSMEM) still lets a pass with a transient attachment (below) render in GMEM: in system memory such a pass wrote and
++    * read every transient attachment in DRAM (a 3048x2032 pass with RGBA16F and R32F transients took 9-12 ms of GPU time) and
++    * backed it for good. */
++   const bool forced_sysmem = TU_DEBUG(SYSMEM);
+ 
+    /* can't fit attachments into gmem */
+    if (!cmd->state.tiling->possible) {
+@@ -1444,7 +1444,7 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+       return true;
+    }
+ 
+-   if (TU_DEBUG(GMEM)) {
++   if (TU_DEBUG(GMEM) && !forced_sysmem) {
+       cmd->state.rp.gmem_disable_reason = "TU_DEBUG(GMEM)";
+       return false;
+    }
+@@ -1466,6 +1466,11 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+          return false;
+    }
+ 
++   if (forced_sysmem) {
++      cmd->state.rp.gmem_disable_reason = "TU_DEBUG(SYSMEM)";
++      return true;
++   }
++
+    tu_autotune::render_mode optimal_mode =
+       cmd->device->autotune->get_optimal_mode(cmd, rp_ctx, rp_key);
+    bool use_sysmem = optimal_mode == tu_autotune::render_mode::SYSMEM;
