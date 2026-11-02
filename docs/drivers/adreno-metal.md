@@ -6,7 +6,7 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 
 | Area | Behavior |
 | --- | --- |
-| Poster MSAA | Poster processes use one sample for textures, pipelines and render passes. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. Other processes retain their requested sample counts. `NATIVE_METAL_SINGLE_SAMPLE=0/1` overrides this policy. |
+| MSAA policy | All clients use one sample for textures, pipelines and render passes by default. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves a process's requested sample counts; `1` forces single-sample rendering. |
 | Heap resources | Buffer and texture `makeAliasable` release their heap ranges. |
 | Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
 | Copies and raster state | Blits cover the requested mip and slice ranges. Viewport and scissor setters forward every entry, up to 16. |
