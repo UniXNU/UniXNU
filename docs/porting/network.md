@@ -117,5 +117,6 @@ sheng joins WPA2-Personal networks, gets an address by DHCP and loads web pages.
 
 ## Next step
 
-Continue with [DSP, audio and power](/porting/power), or return to the
+Continue with [baseband and cellular](/porting/baseband) on devices with a modem,
+or [DSP, audio and power](/porting/power). Return to the
 [driver checklist](/porting/drivers).
