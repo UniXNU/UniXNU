@@ -61,6 +61,27 @@
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
+- **🎉 2026-11-02 0229: iOS PLAYS ITS OWN SOUNDS FROM THE SPEAKER (user heard ringtones; "a bit glitchy")** (patch
+  `xnu/patches/0229-umi-sweet-audio-node.patch`, HAL plug-in `phone/sweet-audio/`, boot `shim/out/umi-0230c-audio.img` =
+  0228's line with `sweetadsptone` replaced by `sweetaudio=1`: `... sweetadsp=1 sweetadspdelay=200 sweetadsprpc=0
+  sweetadspprobe=0 sweetamp=1 sweetampstepms=200 sweetaudio=1`).
+  - Kernel `/dev/sweet-audio` (0666, made when the stream runs ~200 s after boot): write() S16LE stereo 48 kHz into
+    20 ms periods of the 0xd3800000 buffer, max 8 periods (160 ms) ahead, never blocks (EAGAIN / ENXIO); the GLINK
+    loop sends ASM writes and frees on WRITE_DONE; ioctls 'A' 1 gain Q16, 2 stats, 3 log line. Both amps stay on.
+  - `SweetAudio.driver` (our own AudioServerPlugIn, SDK header, ad-hoc ldid; `phone/sweet-audio/build.sh [install]`)
+    in `/System/Library/Audio/Plug-Ins/HAL/`: **the four iPhone devices VirtualAudio knows by UID must all exist**
+    or it never routes (one "Speaker" alone: enumerated, no client, no StartIO): "Speaker" 2 ch out (-> node) + 2 ch
+    silent in + volume (-48..0 dB), "Hawking" 1 ch in, "Actuator" 1 ch out (dropped), "Codec" 1 ch in + data source
+    'imic'; all 16-bit signed 48 kHz, zero time stamp period 16384, clock mach_absolute_time. I/O thread -> lock-free
+    ring -> writer thread every 5 ms. Its bring-up trace goes to the kernel log as `SWEET AUDIO HAL:` (property
+    queries once each, clients, StartIO/StopIO): mediaserverd (user mobile) cannot write /private/var/sweet.
+  - **Phone state changed (user-approved):** SweetAudio.driver installed; **Apple's VirtualAudio.plugin copied back**
+    from `/Library/Audio/Plug-Ins/HAL.disabled/` to `/Library/Audio/Plug-Ins/HAL/` (the HAL.disabled copy stays as the
+    backup); with our devices present mediaserverd no longer crash-loops (one start, pid 28).
+  - Seen: at load VirtualAudio adds clients to Speaker / Codec / Hawking, sets 'sact' on the streams, volume 100 %,
+    one StartIO/StopIO; each ringtone tap = client add, StartIO, writes ("first write, 65536 bytes", "playing"), StopIO.
+  - Next: glitches: the node pads a half period after only 40 ms without data and keeps only 160 ms queued (raise both),
+    CPU load; then the ADSP start time (200 s), the receiver/earpiece amp as the second channel, microphones.
 - **🎉 2026-11-02 0228: THE SPEAKER PLAYS FROM iOS (user heard the 1 kHz test tone)** (patch
   `xnu/patches/0228-umi-speaker-sd1-tone-heard.patch`, boot `shim/out/umi-0229d-sd1.img` = 0215d's line without
   `sweetsample` + `sweetadsprpc=0 sweetadspprobe=0 sweetamp=1 sweetampstepms=200 sweetampplay=1 sweetadsptone=1
