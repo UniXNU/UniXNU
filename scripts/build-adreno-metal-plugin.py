@@ -6,6 +6,7 @@ Output (ignored, never committed): build/adreno-metal-plugin/NativeAdrenoMetal.b
 trust.json with its CDHash. The bundle is staged into the Data seed by add-gpu-plugin-data.py and trusted through an extra
 owner trust module (make-owner-trust-bundle.py); neither changes the original trust modules, AMFI or any Apple signature."""
 import argparse
+import hashlib
 import json
 import plistlib
 import re
@@ -29,8 +30,21 @@ bundle.mkdir(parents=True)
 sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
 base = ['xcrun', 'clang', '-target', 'arm64e-apple-ios27.0' if IOS27 else 'arm64-apple-ios17.0', '-isysroot', sdk, '-O2', '-g', '-Wall', '-Wextra', '-Werror',
         '-fstack-protector-strong']
+source_hash = hashlib.sha256()
+for path in sorted((ROOT / 'drivers/AdrenoMetal').rglob('*')):
+    if path.is_file() and '.git' not in path.parts and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
+        source_hash.update(str(path.relative_to(ROOT / 'drivers/AdrenoMetal')).encode())
+        source_hash.update(path.read_bytes())
+metal_build_id = source_hash.hexdigest()
+base += ['-DNATIVE_METAL_BUILD_ID="' + metal_build_id + '"']
+(bundle / 'gpu-build.json').write_text(json.dumps({'metal_source_sha256': metal_build_id, 'target': args.target}, indent=2)+'\n')
 VULKAN_INCLUDE = ROOT / '.cache/mesa-work/include'
 TURNIP = ROOT / ('build/mesa-tu-ios27' if IOS27 else 'build/mesa-tu-ios') / 'src/freedreno/vulkan/libvulkan_freedreno.dylib'
+turnip_profile = TURNIP.parents[3] / 'builtin-build-profile.json'
+if turnip_profile.is_file():
+    manifest = json.loads((bundle / 'gpu-build.json').read_text())
+    manifest['turnip'] = json.loads(turnip_profile.read_text())
+    (bundle / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 if not TURNIP.is_file():
     raise SystemExit('Build Turnip first: python3 scripts/build-turnip-darwin.py --target ' + ('ios27' if IOS27 else 'ios'))
 subprocess.run(['python3', ROOT / 'scripts/gen-turnip-smoke-shaders.py'], check=True)
