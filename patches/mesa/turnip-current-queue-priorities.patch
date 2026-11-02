@@ -1,0 +1,79 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -218,9 +218,7 @@
+    dw.inflight_count = 0;
+    dw.last_fence = 0;
+ 
+-   /* The GPU priority this process's Metal queues asked for, to the driver (NativeAdrenoMethodSetPriority): the plugin sets
+-    * METAL2VULKAN_QUEUE_PRIORITY=high when the render server opens its device (Metal's MTLGPUPriorityHigh, its foreground queue),
+-    * and the driver serves that process's work on the high ring. A process that sets nothing keeps the middle of the range. */
++   /* Normal until Metal queues publish their current requests. An explicit environment override is also accepted. */
+    {
+       const char *want = getenv("METAL2VULKAN_QUEUE_PRIORITY");
+       NativeAdrenoAbiPriority priority = {.foreground = 1, .background = 3};
+@@ -246,23 +244,22 @@
+ extern "C" __attribute__((visibility("default"))) bool
+ tu_darwin_set_priority(uint32_t foreground, uint32_t background)
+ {
+-   if (!dw_priority_known)
++   if ((foreground != UINT32_MAX && (foreground > 5 || foreground == 3)) ||
++       (background != UINT32_MAX && background > 5))
+       return false;
+-   /* A process's queues share one hardware queue here, so the most urgent request of any of its queues stands: a queue asking for less
+-    * than another queue of the same process (the render server's raised queue, the runtime's default) must not lower it. Urgency, least
+-    * to most: 3 disabled, 2 low, 1 normal, 0 high, 4 normal-high, 5 real-time. */
+-   static const uint8_t urgency[6] = {3, 2, 1, 0, 4, 5};
+-   NativeAdrenoAbiPriority priority = dw_priority;
+-   if (foreground != 0xffffffffu && foreground <= 5 && urgency[foreground] >= urgency[priority.foreground])
+-      priority.foreground = foreground;
+-   if (background != 0xffffffffu && background <= 5 && urgency[background] >= urgency[priority.background])
+-      priority.background = background;
+-   if (priority.foreground == dw_priority.foreground && priority.background == dw_priority.background)
+-      return true;   /* nothing more urgent than what the driver already has */
+-   if (dw_call(NativeAdrenoMethodSetPriority, &priority, sizeof(priority), NULL, 0) != KERN_SUCCESS)
+-      return false;
+-   dw_priority = priority;
+-   return true;
++   pthread_mutex_lock(&dw.lock);
++   bool accepted = false;
++   if (dw_priority_known && dw.open) {
++      NativeAdrenoAbiPriority priority = dw_priority;
++      if (foreground != UINT32_MAX) priority.foreground = foreground;
++      if (background != UINT32_MAX) priority.background = background;
++      /* The frontend aggregates current live queues; lowering releases an old boost. */
++      accepted = (priority.foreground == dw_priority.foreground && priority.background == dw_priority.background) ||
++         dw_call(NativeAdrenoMethodSetPriority, &priority, sizeof(priority), NULL, 0) == KERN_SUCCESS;
++      if (accepted) dw_priority = priority;
++   }
++   pthread_mutex_unlock(&dw.lock);
++   return accepted;
+ }
+ 
+ /* A note for the kernel's log (NativeAdrenoMethodNote), from the host frontend: kind 1 a render pass, 2 a pipeline made or refused. The
+@@ -346,7 +343,8 @@
+ static int
+ darwin_submitqueue_new(struct tu_device *dev, struct tu_queue *queue)
+ {
+-   /* The kernel client has queue 0 from open(); every submission rides the one shared ring. */
++   /* All Vulkan queues in this client use kernel queue 0. The kernel preserves its FIFO
++    * across ring/priority changes, so already-submitted sync dependencies remain ordered. */
+    queue->msm_queue_id = 0;
+    return 0;
+ }
+@@ -1451,11 +1449,10 @@
+    struct tu_darwin_queue_submit *submit = (struct tu_darwin_queue_submit *)_submit;
+    struct tu_device *dev = queue->device;
+ 
+-   /* Every client submits to the kernel's one ring, which runs jobs in order, and each job's prologue flushes and invalidates the GPU
+-    * caches and waits for idle (NativeAdrenoRing::emitPrologue) before its buffers run. A wait on a sync already resolved to a ring
+-    * fence is therefore met by the ring itself, as msm_gem_submit() skips fences of the submitting ring's own context: the CPU does
+-    * not wait for that work to complete. A sync not yet resolved (wait-before-signal) is waited for until it is submitted, never for
+-    * its completion. */
++   /* Syncs belong to this client, whose Vulkan queues all use kernel queue 0.
++    * That queue stays on one ring until its outstanding prefix completes, including
++    * when its priority changes. A resolved fence therefore precedes this submission.
++    * Wait-before-signal still waits until the producer has submitted. */
+    struct tu_darwin_submit_rec rec = {};
+    rec.ns = tu_trace_clock_ns();
+    for (uint32_t i = 0; i < wait_count; i++) {

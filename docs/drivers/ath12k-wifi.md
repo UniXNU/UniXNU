@@ -40,9 +40,23 @@ this device-tree condition.
 
 The 27 payload defaults include `sheng-wifi=5`. After changing the DTS,
 rebuild the payload and boot image, then inspect the ADT inside the image.
-Host checks confirm the node satisfies the startup condition; starting
-wifid, enabling the Settings switch and scanning still require a device
-test. Remove `sheng-autoreset` from a manual test image's boot arguments.
+Settings on sheng can toggle Wi-Fi and list SSIDs. Manual test images
+should omit `sheng-autoreset`.
+
+WifiNet supports both 592-byte legacy and 656-byte 24A446 association
+requests and validates credentials before authentication. Manual WPA2
+association and DHCP have device confirmation.
+
+Power-off and disconnect publish link-down notifications and hide stale
+connection state. Repeated joins preserve completion; switching networks
+waits for teardown before queuing a new join. Authentication queries report
+WPA2 personal as 0x10. Host regression with AddressSanitizer and
+UndefinedBehaviorSanitizer, the kernel/payload build and packed-image
+checks pass. The current image awaits device validation of joining,
+network switching, the Wi-Fi icon and password-sheet dismissal.
+
+Throughput is low and remains under investigation. Use `log-wifi=1` for
+join diagnostics and `sheng-wifi-aj=0` to disable driver auto-join.
 
 ### Facts
 
