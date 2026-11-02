@@ -37,3 +37,5 @@ python3 scripts/check-native-metal-frontend-host.py
 The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. Host checks cover rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Hardware qualification covers frame pacing and preemption under concurrent clients.
 
 See the [GPU adaptation procedure](/porting/gpu) for staging and board inputs.
+
+Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).

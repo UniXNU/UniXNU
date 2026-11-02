@@ -17,3 +17,5 @@
 ```
 
 [组件目录](/zh/reference/components)
+
+帧诊断记录 GPU 与显示的明确关联，以及完成后的原始像素。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。

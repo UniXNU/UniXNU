@@ -34,3 +34,5 @@ python3 scripts/check-native-adreno-scheduling.py
 The host scheduling check runs the real ring, preemption and submit code over software register peers with address and undefined-behavior sanitizers. It checks packets, GMEM and keepalive sequencing, timeout handling, page-table snapshots, priority routing, FIFO and fence-history rollover. Hardware qualification requires concurrent clients, repeated ring switches, correct pixels and frame-pacing measurements.
 
 See [AdrenoMetal](/drivers/adreno-metal) for Metal interfaces, caches and plugin staging.
+
+Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).

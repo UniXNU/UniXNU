@@ -37,3 +37,5 @@ python3 scripts/check-native-metal-frontend-host.py
 正常构建应用记录在仓库中的翻译器、Turnip 补丁，并开启 Mesa 磁盘 shader cache。主机检查覆盖渲染像素、resolve、资源回收、swizzle、复制、回调、队列容量及优先级汇总。上机验证项目是并发客户端下的帧间隔和抢占行为。
 
 设备输入和打包方式见 [GPU 适配流程](/zh/porting/gpu)。
+
+帧诊断记录 GPU 与显示的明确关联，以及完成后的原始像素。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
