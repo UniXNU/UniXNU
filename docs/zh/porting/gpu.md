@@ -87,7 +87,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 调度与内存复用 {#scheduling}
 
-sheng 默认使用 `sheng-gpu-preempt=2`。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#scheduling)。
+sheng 默认使用 `sheng-gpu-preempt=2`。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
 
 运行时调度与完成线程在 iOS、macOS 上都使用交互 QoS。渲染线程采用固定调度策略时，编码线程继承它的策略与优先级。
 
