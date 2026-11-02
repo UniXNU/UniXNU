@@ -13,9 +13,9 @@
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
-| 电源与固件 | [NativeAdrenoGmuPlatform.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoGmuPlatform.h#L15), [build-adreno740-kits.py](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/scripts/build-adreno740-kits.py) | `NativeAdrenoGmuPlatform::bind/services`、映射窗口、计时器和固件输入 |
-| 提交与内存 | [NativeAdrenoClient.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoClient.h#L14), [NativeAdrenoVm.h](https://github.com/UniXNU/Adreno740/blob/4e0314df8ad29d52f6fa3f9383a540adcd618b87/NativeAdrenoVm.h) | `NativeAdrenoTransport`、BO 生命周期、GPU 映射和完成 |
-| OS/前端接口 | [NativeOfflineAccelerator.cpp](https://github.com/UniXNU/AdrenoMetal/blob/454ff2ce83766ce7b3e0f355e83f1d72907708b3/NativeOfflineAccelerator.cpp), [OfflineMetalWire.h](https://github.com/UniXNU/AdrenoMetal/blob/454ff2ce83766ce7b3e0f355e83f1d72907708b3/OfflineMetalWire.h) | 加速器发布及配套前端使用的请求结构 |
+| 电源与固件 | [NativeAdrenoGmuPlatform.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoGmuPlatform.h#L15), [build-adreno740-kits.py](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/scripts/build-adreno740-kits.py) | `NativeAdrenoGmuPlatform::bind/services`、映射窗口、计时器和固件输入 |
+| 提交与内存 | [NativeAdrenoClient.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoClient.h#L14), [NativeAdrenoVm.h](https://github.com/UniXNU/Adreno740/blob/1030485546ef7ebb9abbfb7c17fbca93cca40971/NativeAdrenoVm.h) | `NativeAdrenoTransport`、BO 生命周期、GPU 映射和完成 |
+| OS/前端接口 | [NativeOfflineAccelerator.cpp](https://github.com/UniXNU/AdrenoMetal/blob/816022307852de7e1741ac05ae9111982318763f/NativeOfflineAccelerator.cpp), [OfflineMetalWire.h](https://github.com/UniXNU/AdrenoMetal/blob/816022307852de7e1741ac05ae9111982318763f/OfflineMetalWire.h) | 加速器发布及配套前端使用的请求结构 |
 
 ## 1. 匹配 GPU 代际与 OS ABI
 
@@ -85,46 +85,57 @@ sheng 配方把这些 kit、ArmSmmu4K 和板级投票链接到 `libAdreno740.a`�
 CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 DMA 已停止，再释放 BO 和映射。
 在错误返回中保留失败的请求类型、句柄和 fence，便于定位分配、映射或执行阶段。
 
+### 调度与内存复用 {#scheduling}
+
+sheng 默认使用 `sheng-gpu-preempt=2`。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#scheduling)。
+
+运行时调度与完成线程在 iOS、macOS 上都使用交互 QoS。渲染线程采用固定调度策略时，编码线程继承它的策略与优先级。
+
+空闲自有图像 backing 可供后续池内分配和专用图像复用。room worker 先取合适的 spare，再申请新块。spare 在十秒后老化，也在分配失败或内存压力下回收。无使用者的普通 backing 可交给 room worker 释放；导入内存和所有者回调保持原有释放顺序。
+
 ### 8 位 BGRA 帧缓冲的渲染模式 {#render-mode}
 
-`sheng-fb-bgra=1` 时插件设置 `TU_DEBUG=sysmem,nocb`，所有 pass 在系统内存中渲染。tile 内存里的颜色已是渲染目标写出的字节序，
-GMEM 的加载和存储在内存侧必须用恒等 swap 搬运字节；记录的 Mesa 补丁 `turnip-gmem-mutable-swap.patch` 对 resolve、2D 与 3D 存储、
-3D 加载做了这一处理。打补丁后锁屏在 tile 内存下与 RGhA 画面一致度为 99.5 %，但每个命令缓冲区的 GPU 时间并不优于系统内存
-（均值 17.8 ms、p95 56.1 ms，系统内存为 17.1 与 52.1），主屏仍有一帧红蓝互换，因此默认保持系统内存。
-`sheng-tu-debug=` 可用于实验覆盖。
+`sheng-fb-bgra=1` 默认设置 `TU_DEBUG=sysmem,nocb`。带有尚未分配 backing 的 lazy transient 附件时，pass 在满足分块渲染条件后使用 GMEM；其余 pass 保持系统内存策略。`turnip-transient-attachments-in-gmem.patch` 在 SYSMEM 覆盖前作出此选择，让 memoryless 附件留在 tile 内存。
+
+`turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`sheng-tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
+
+Metal 客户端默认使用单采样。`NATIVE_METAL_SINGLE_SAMPLE=0` 保留请求的采样数；纹理类型、pipeline 采样数和 resolve 处理遵循该策略。
 
 ### 定位慢帧的耗时 {#frame-path}
 
-修改之前，先把慢帧拆成各层占用的时间。下面每一段都用主机的 uptime 时钟测量；GPU 的 always-on 计数器通过拟合直线换算到同一时钟。
+开启[帧诊断](/zh/porting/gpu-diagnostics)，用同一命令、分配、fence 和显示请求关联各阶段。CPU 事件使用 uptime；GPU 时间戳通过时钟校准后对齐。
 
-| 段 | 测量位置 |
+| 阶段 | 证据 |
 | --- | --- |
-| 提交到调度器 | 运行时阶段记录（commit、prepared、handed、taken）。 |
-| 调度器到提交 | 运行时阶段记录，以及批次被扣住的原因。 |
-| 提交到 GPU 开始 | 驱动任务时间线：按进程统计排在前面的任务。 |
-| GPU 开始到结束 | 每个任务的 CP 起止时间戳；Turnip 每个 render pass 的时间戳。 |
-| GPU 结束到回调 | 驱动的 retire 时间、完成等待线程、completed 回调。 |
+| 创建到 commit | 调用方工作、纹理分配与内存页准备。 |
+| commit 到编码 | 批次入队、开始、结束与慢编码调用。 |
+| 编码到运行时 commit | surface 刷新与运行时交接阶段。 |
+| 运行时 commit 到提交 | prepared、handed、taken、批次等待原因和内核提交。 |
+| 提交到 GPU 完成 | 队列与环时间线、CP 时间戳、逐 pass 硬件耗时。 |
+| 完成到回调 | 状态收集、前端清理、回调、保留资源释放和 gate 准备。 |
+| 显示更新 | validation、fence 等待、flip、latch、退役和 blank。 |
 
-sheng 上 iPadOS 27 的测量结果（小组件页、设置、Safari）：
-
-- 驱动锁的等待都在 7 ms 以下。render pass 的 GPU 时间中位数 0.5 ms，全屏 pass 1.1 ms。
-- 多数慢帧在 GPU 队列里排在其他进程的任务后面：一个海报扩展提交的任务每个约 77 ms，而队列按顺序执行，不分优先级。
-- 运行时中把命令缓冲区送到回调的线程使用默认 QoS：设置 QoS 的代码只在 macOS 上生效。
-- 打开设置和 Safari 时，94 到 112 MiB 的内存块锁定需要 281 到 340 ms。
+对比相同触摸操作场景，将静止桌面和锁屏切换单列。记录缓存构建标识与预热进度、事件保留时段和省略数量。全局 GPU 计数器描述采样区间，逐 pass 计时确定对应工作。
 
 ## 4. 构建并加入 Metal
 
-准备匹配的 SDK、编译器依赖和 ABI 输入后，在目标构建树执行：
+在准备好 SDK、编译器依赖和 ABI 输入的目标构建树中运行。iOS/iPadOS 17：
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios
-python3 scripts/build-adreno-metal-plugin.py
-python3 scripts/add-gpu-plugin-data.py --publish /path/to/base.dbr /path/to/gpu.dbr
+python3 scripts/build-adreno-metal-plugin.py --target ios
+python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-加入插件的命令使用 macOS 镜像工具，生成 Data seed 副本。
-构建 payload 时将输出传给 `--data-ramdisk`，再重建启动镜像。
-如需指定应用进程，还可传入 `--clients NAME,...`。运行时插件名为 `NativeAdrenoMetal`。
+iOS/iPadOS 27：
+
+```sh
+python3 scripts/build-turnip-darwin.py --target ios27
+python3 scripts/build-adreno-metal-plugin.py --target ios27
+ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
+```
+
+通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（sheng 使用 `sheng-gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
 
 核对所选 OS profile 的 sandbox、user-client 和 trust-cache 集成。
 Metal 桥接层从不返回 nil encoder：无法编码的 pass 会得到一个命令缓冲区被拒绝的
@@ -149,9 +160,9 @@ pipeline 在第一次被请求时才从 Apple 的 AIR 编译，会让画面卡�
 - 桌面有动画时等待：250 ms 内超过 8 个命令缓冲区算忙，120 Hz 空闲桌面约提交 6 个。动画结束后再静默 2 s，每次等待最多 10 s，所以桌面一直不安静时仍每 10 s 编译一个 pipeline。
 - 进度保存在缓存目录：`prime-done`（已完成的库）、`prime-fn`（未完成库里已完成的函数）、`prime-current`（正在编译的函数）、`prime-bad`（曾使进程结束的函数；启动时发现 `prime-current` 就移入这里）和 `prime.log`。重启后可在有数千个函数的库内部继续。
 - 每个已完成条目带构建标识：运行时转换器的构建加 Turnip 库的 `LC_UUID`。重建运行时或 Turnip 会让所有库重新预编译，只重建插件则保留已完成的工作。
-- 板级日志的 PR 行显示线程在做什么（编译、等待、打开库）、列表中已完成的库数、已生成的 pipeline 数，以及一次等待内见到的最高提交速率。
+- 从 `prime-done`、`prime-fn` 和 `prime.log` 检查已完成的库与函数。精简帧延迟包不包含这些文件，验证预热时单独读取。
 
-**预期结果：** PR 行达到列表中的全部库，第二次启动时相同场景不再出现新的 pipeline 编译。记录列表规模、构建标识以及冷启动和热启动的帧时间。
+**预期结果：** 当前构建的完成条目覆盖库列表，第二次启动复用相同场景的 pipeline。记录列表规模、构建标识以及冷启动和热启动的帧时间。
 
 ## 下一步
 

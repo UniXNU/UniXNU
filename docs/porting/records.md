@@ -28,6 +28,7 @@ completion criteria, current limits, next action, and evidence.
 | Input | Bus, sensor protocol, pins, interrupts, firmware, contact IDs and coordinate mapping |
 | GPU | GPU/GMU generation, firmware, votes, SMMU, submission, fences, frontend ABI and presentation |
 | Network | Bus, firmware, interrupts, DMA, OS interface, association and packet transfer |
+| Cellular | Modem firmware and EFS/NV, QRTR/QMI, SIM identity, network registration, IPA/QMAP, data sessions and reset; use `not-applicable` on boards without a modem |
 | Audio | DSP, codec, clocks, firmware services, routes and playback/capture |
 | Power | Regulators, clocks, battery units, firmware ownership and supported transitions |
 | Image assembly | XNU and IPSW versions, ABI inputs, patch order, ADT, payload and boot-image format |
