@@ -19,6 +19,13 @@
     (libzstd1 1.5.5), /usr/lib/libiosexec.1.dylib (libiosexec1 1.3.1, libzstd links it). All new paths, nothing
     replaced. Pushed with `tools/umi-push-tree.sh` (mkdir / rm + put / link, every file read back and compared).
   - Result: IconState.plist lists `org.coolstar.SileoStore`; log `exec Sileo`, IOSurfaces, AKS calls, no crash.
+  - **2026-11-02: Procursus repo added, Sileo lists its packages (user: "Packages shown")** (normal boot
+    `shim/out/umi-0230-normal.img` = 0230's line without `sweetlsreset=1`). New on the phone (file server, root):
+    /private/etc/apt/sources.list.d/sileo.sources (deb822: `URIs: https://apt.procurs.us/`, `Suites:
+    iphoneos-arm64/1800`, `Components: main`, the rootful iphoneos-arm repo), /private/var/lib/apt (755) with
+    lists, lists/partial and sileolists at 777 (Sileo runs as mobile; tighten once dpkg/apt own them). After the
+    refresh both list dirs were still empty, so Sileo kept the index somewhere else (not in Caches either). Installing
+    still needs stage 2 (apt-get, dpkg-deb, a shell for giveMeRoot).
   - **Next stages:** (2) Procursus rootful bootstrap (thousands of files: a bulk TAR verb in the file server or
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
