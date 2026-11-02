@@ -45,4 +45,4 @@ python3 scripts/check-native-metal-frontend-host.py
 
 `sheng-wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
 
-细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核等待采样及 IPC 回复端口关联上游等待；可用的 dispatch introspection 接口另存任务生命周期。
+细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。
