@@ -388,3 +388,5 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [故障排查](/zh/reference/troubleshooting)
 - [QEMU 测试](/zh/reference/qemu)
 - [sheng 设备页](/zh/devices/sheng)
+
+sheng 的 panic 显示器在本轮内核清零的 BSS 中记录首次 panic。热重启可以保留显存内容，旧画面不影响新一轮显示和导出 panic。2,048 字节 panic 文本缓冲区的最后一个字节用于记录该状态。
