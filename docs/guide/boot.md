@@ -114,7 +114,7 @@ If firmware stalls before the menu, capture the last output, reset into the boot
 A macOS port needs an OS profile matching its XNU version, kernelcache, prelink
 roots, private driver ABIs, trust caches and root layout. Qualify those inputs
 with [kernel preparation](/guide/build-kernel) and [prelink](/concepts/prelink).
-The supplied `ipados-17.7.11-21H461` profile describes its named iPadOS build.
+The supplied profiles describe their named iOS or iPadOS builds.
 
 Select the completed OS profile in `board.os_profile`, inspect `status --json`,
 then repeat the build and bring-up sequence. Record macOS results against that

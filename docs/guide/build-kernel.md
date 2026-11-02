@@ -61,7 +61,7 @@ ARM64_PLKSEG_ADDR=0xfffffff004004000
 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 ```
 
-`BCM2837` is the XNU machine configuration that carries the 4 KiB page layout. The kernel still targets iOS 17 so the prelink ABI matches the iPadOS kernelcache.
+`BCM2837` is the XNU machine configuration that carries the 4 KiB page layout. The arm64 kernel targets iOS 17 so the prelink ABI matches the iOS 16 or iPadOS 17 kernelcache; both arm64 targets use the same arm64 patch series.
 
 ## Defconfig flags
 

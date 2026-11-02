@@ -17,7 +17,7 @@ same script text. A board changes `board.toml`, never the script.
    only source. A device repository copies it unchanged. The one board value it
    reads itself is `[package] unixnu`, the path of the UniXNU checkout.
 4. **The build target is a parameter.** One branch serves every OS profile.
-   `--os 17|26|27|PROFILE` selects the profile for the run. The values that differ
+   `--os 17|27|PROFILE` selects the profile for the run. The values that differ
    per profile sit in `board.toml` under `[os_overrides."<profile>"]`; there is no
    branch and no second copy of a driver, patch or optimization per target.
 5. **Sources are pinned.** `deps` fetches only the revisions that `feeds.toml`,
@@ -39,7 +39,7 @@ same script text. A board changes `board.toml`, never the script.
 ## Interface
 
 ```sh
-scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu options]
+scripts/package.sh [--os 17|27|PROFILE] [--no-deps] [--check] [unixnu options]
 ```
 
 | Option | Meaning |
