@@ -34,3 +34,5 @@ python3 scripts/check-native-adreno-scheduling.py
 主机调度检查使用软件寄存器模型运行实际 ring、preemption 和 submit 代码，并开启地址及未定义行为检查。覆盖命令包、GMEM、keepalive 顺序、超时、页表快照、优先级分环、FIFO 和 fence 历史表绕回。上机验证项目包括并发客户端、反复切环、像素正确性和帧间隔。
 
 Metal 接口、缓存和插件打包见 [AdrenoMetal](/zh/drivers/adreno-metal)。
+
+帧诊断记录 GPU 与显示的明确关联，以及完成后的原始像素。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。

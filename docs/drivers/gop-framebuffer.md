@@ -17,3 +17,5 @@ The catalog records implementation scope, hardware and OS requirements, board de
 ```
 
 [Component catalog](/reference/components)
+
+Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).
