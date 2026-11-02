@@ -145,4 +145,4 @@ python3 scripts/porting-record.py check --device ../UniXNU-sheng
 
 [Adapt display and brightness](/porting/display) after the root path is ready. The [driver checklist](/porting/drivers) covers the remaining subsystems.
 
-For the iPadOS 26 source-build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
+For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.

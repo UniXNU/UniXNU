@@ -8,7 +8,7 @@
 1. **一条命令。** `scripts/package.sh` 按下列固定步骤运行，写出产物和清单。第一个失败的步骤会终止运行并指出步骤名。
 2. **配置来自 TOML。** 脚本和 `unixnu release` 中不出现设备名、路径、尺寸、内核参数或版本。取值读自 `board.toml`（以及它选择的配置文件和 feeds）。缺少的值先加进 `board.toml`。
 3. **脚本是固定的。** UniXNU 仓库的 `templates/package.sh` 是唯一来源，设备仓库原样复制。脚本自己读取的板级值只有 `[package] unixnu`，即 UniXNU 检出的路径。
-4. **构建目标是参数。** 单一分支服务所有 OS 配置。`--os 17|26|27|PROFILE` 为本次运行选择配置。随配置不同的取值写在 `board.toml` 的 `[os_overrides."<profile>"]` 下；不按目标建分支，也不为第二个目标另存驱动、补丁或优化。
+4. **构建目标是参数。** 单一分支服务所有 OS 配置。`--os 17|27|PROFILE` 为本次运行选择配置。随配置不同的取值写在 `board.toml` 的 `[os_overrides."<profile>"]` 下；不按目标建分支，也不为第二个目标另存驱动、补丁或优化。
 5. **源码已固定。** `deps` 只获取 `feeds.toml`、`.gitmodules` 和 `unixnu.lock` 指定的版本。
 
 ## 步骤
@@ -27,7 +27,7 @@
 ## 接口
 
 ```sh
-scripts/package.sh [--os 17|26|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
+scripts/package.sh [--os 17|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 ```
 
 | 选项 | 含义 |

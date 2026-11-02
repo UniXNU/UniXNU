@@ -1,7 +1,9 @@
 # 源码与补丁
 
-所选 OS 配置固定 XNU 和 ABI 输入。iPadOS 17.7.11 配置使用 `xnu-10063.141.1`、
+所选 OS 配置固定 XNU 和 ABI 输入。arm64 的 iPadOS 17.7.11 配置使用 `xnu-10063.141.1`、
 Darwin 23.6.0、`xnu-10063.121.3` 的 DriverKit 头文件和 `xnu-8796.101.5` 的 TrustCache 头文件。
+iOS 16 与 iPadOS 17 都是 arm64 目标，共用 `profiles/arch/arm64` 中的 arm64 补丁系列；
+iOS 与 iPadOS 27 使用 `profiles/arch/arm64e` 中的 arm64e 补丁系列。
 
 `feeds.toml` 提供 libplatform、libdispatch、AvailabilityVersions、libpthread、
 corecrypto、IOStorageFamily 和 edk2。格式 2 中 OS 配置显式指定的 XNU 版本优先于源码 lock。

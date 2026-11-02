@@ -58,7 +58,7 @@ ARM64_PLKSEG_ADDR=0xfffffff004004000
 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 ```
 
-`BCM2837` 携带 4 KiB 页布局。内核仍以 iOS 17 为目标，以匹配 iPadOS kernelcache 的预链接 ABI。
+`BCM2837` 携带 4 KiB 页布局。arm64 内核以 iOS 17 为目标，以匹配 iOS 16 或 iPadOS 17 kernelcache 的预链接 ABI；两个 arm64 目标使用同一套 arm64 补丁系列。
 
 ## defconfig 开关
 

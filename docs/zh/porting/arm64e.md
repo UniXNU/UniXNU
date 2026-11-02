@@ -1,10 +1,10 @@
 # arm64e OS 配置
 
 **仅适用于受支持的设备。** 只有满足全部[要求](#requirements)并列入[受支持设备](#supported-devices)的设备才能使用本方法。
-其他设备使用 arm64 配置 `ipados-17.7.11-21H461` 和常规[移植步骤](/zh/porting/steps)。
+其他设备使用 arm64 配置（iOS 16 或 iPadOS 17，例如 `ipados-17.7.11-21H461`）和常规[移植步骤](/zh/porting/steps)。两个 arm64 目标共用 `profiles/arch/arm64` 中的 arm64 补丁系列。
 
 arm64e 需要原生 PAC 硬件：CPU 实现指针认证，且虚拟机监控程序不阻止使用，见下面的[要求](#requirements)。
-没有 PAC 的设备继续使用 arm64，iPadOS 18 是最后支持 arm64 的版本；iPadOS 26 及以后只提供 arm64e。
+没有 PAC 的设备继续使用 arm64：iOS 与 iPadOS 18 是最后支持 arm64 的版本，iOS 与 iPadOS 27 只提供 arm64e。
 arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache 中的原版 arm64e kext。
 
 新移植应选择 CPU 带 PAC 的设备，并优先使用 iOS 或 iPadOS 27 配置：其驱动、补丁和构建配方处于持续维护中。
@@ -29,7 +29,6 @@ arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache �
 | 设备 | SoC | OS 配置 | 状态 |
 | --- | --- | --- | --- |
 | sheng | SM8550 | `ipados-27.0.1-24A446` | 开发中 |
-| sheng | SM8550 | `ipados-26.5.2-23F84` | 保留为其早期 arm64e 配置 |
 
 ## 配置结构
 
@@ -37,7 +36,6 @@ arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache �
 | --- | --- |
 | `profiles/arch/arm64e` | arm64e 编译配置、PAC 密钥管理和 XNU 补丁系列 |
 | `profiles/os/ipados-27.0.1-24A446` | XNU `12377.121.6` 加 Darwin 26 调用、iPadOS 27.0.1 IPSW 固定版本、预链接根组件和 OS 补丁 |
-| `profiles/os/ipados-26.5.2-23F84` | 先前的 arm64e 配置，同一 XNU 修订与各自的 IPSW 固定版本 |
 
 OS 配置用 `[os] arch = "arm64e"` 选择架构。没有该项的配置使用 `profiles/arch/arm64`。
 两种架构使用相同的组件，arm64e 构建把它们编译为 arm64e。
@@ -58,7 +56,7 @@ ARMv8.3 的 EL0 和 EL1 共用同一组密钥寄存器。当前配置每次启�
 ## CPU 特性
 
 XNU 只通过 `hw.optional` sysctl 和 commpage 能力字公布 CPU 实际具备的特性。
-SM8550 没有 SME。iPadOS 26.5.2 的 dyld cache 在以 SME 命名的函数中包含 SME 代码。
+SM8550 没有 SME。
 
 ## 操作步骤
 
@@ -68,15 +66,8 @@ SM8550 没有 SME。iPadOS 26.5.2 的 dyld cache 在以 SME 命名的函数中�
 4. 按[构建](/zh/building)依次构建内核、package、固件、payload、userdata 和启动镜像。
 5. 按[启动验证顺序](/zh/porting/bring-up)记录每个检查点。
 
-## 事实与待确认问题
+## 事实
 
-事实：
-
-- iPad17,1 至 iPad17,4 的 iPadOS 26.5.2 kernelcache 报告 `xnu-12377.122.8`，最接近的公开源码是 `xnu-12377.121.6`。
 - 公开的 `xnu-12377.121.6` 源码在 `osfmk/arm/pmap` 中保留非 SPTM 的 pmap。
 - arm64e 内核使用 `BCM2837` 机器配置和非 SPTM 的 pmap 编译，并关闭 Apple CPU 计数器。
-- iPadOS 26.5.2 的 kernelcache 是 `MH_FILESET`，符号表已删除。kext 代码直接跳转到内核，所以 iPadOS 17 的 prelink 步骤不适用。
-
-待确认：
-
-- dyld cache 中的 SME 函数可能在运行时按公布的 CPU 特性选择，尚未确认。
+- iPadOS 27 的 kernelcache 是 `MH_FILESET`，符号表已删除。kext 代码直接跳转到内核，所以 arm64 的 prelink 步骤不适用。

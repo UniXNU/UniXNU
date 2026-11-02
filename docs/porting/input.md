@@ -101,4 +101,4 @@ including held and simultaneous buttons, with bounded interrupt activity.
 Rebuild through [Building](/building), record touch and buttons separately, then
 continue with [GPU adaptation](/porting/gpu).
 
-For the iPadOS 26 source-build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
+For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.

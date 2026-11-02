@@ -18,4 +18,4 @@ sheng 触控、按键与 IOHIDFamily 的集成。
 
 [组件目录](/zh/reference/components)
 
-iPadOS 26 的源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
+arm64e 的公开源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
