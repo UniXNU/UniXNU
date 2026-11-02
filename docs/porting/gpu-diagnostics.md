@@ -23,6 +23,8 @@ The export runs once at the selected number of seconds of boot-log time. With tr
 
 Each process numbers its Metal command buffers. Runtime IDs link these numbers to Vulkan command buffers; Turnip links those buffers to kernel fences. IOSurface IDs link producers and consumers across processes. The kernel import records link their mappings to display memory. Shared-event handles currently remain process-local; unsupported cross-process handle requests have their own event.
 
+Display-fence reasons are: 0, no linked GPU fence provider; 1, target completed; 2, wait reached 250 milliseconds; 3, target pending; 4, query unavailable, retry scheduled. Reasons 2, 3 and 4 keep the current frame displayed. `query_reason` distinguishes an unpublished provider (0), lock contention (1), a successful query (2), an unavailable progress result (3), and the legacy interface (4).
+
 ## Read and decode
 
 `read-sheng-log.py` extracts `diag/files/gpu.trace.bin` and `gpu.pixels.bin`, then writes `diag/gpu/events.jsonl`, `links.jsonl`, `summary.json` and pixel files. To decode an existing export:

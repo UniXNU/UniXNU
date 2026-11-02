@@ -23,6 +23,8 @@ sheng-gpu-trace=1 sheng-gpu-pixels=1 sheng-diag-export=180
 
 每个进程为 Metal command buffer 编号。runtime ID 将其关联到 Vulkan command buffer，Turnip 再关联到内核 fence。跨进程使用 IOSurface ID；内核导入记录将它关联到显示内存。Shared event handle 当前仅在进程内使用，跨进程 handle 请求失败会单独记录。
 
+显示 fence 的 `reason`：0 表示未链接 GPU fence 接口，1 表示目标完成，2 表示等待达到 250 毫秒，3 表示目标未完成，4 表示查询不可用并安排重试。2、3、4 均保留当前显示帧。`query_reason`：0 表示 GPU 尚未发布，1 表示锁忙，2 表示查询成功，3 表示完成状态不可用，4 表示旧查询接口。
+
 ## 读取和解析
 
 `read-sheng-log.py` 提取 `diag/files/gpu.trace.bin` 和 `gpu.pixels.bin`，并生成 `diag/gpu/events.jsonl`、`links.jsonl`、`summary.json` 及像素文件。已有导出可以单独解析：
