@@ -337,7 +337,8 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
     mappings += [('TrustCache', bytes(16))] if trust else []
     mappings += [('GpuAddon', bytes(16))] if addon else []
     mappings += [('RootPolicies', bytes(16))] if root_policies else []
-    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties')])]
+    manifest = typed_properties(platform.get('manifest_properties', {}))
+    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties', manifest)])]
     cpus = next((entry for entry in root.children if entry.name == 'cpus'), None)
     if cpus is None:
         raise Error('Hardware DTS requires /cpus')
