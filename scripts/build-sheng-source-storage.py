@@ -231,7 +231,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         objects.append(output)
         inputs[str(source)] = build.sha(source)
     if latency:
-        for name in ('BootLatencyStore.h','BootLatencyUnwind.h','BootLatencyTrace.h','BootLatencyIpc.h','BootLatencyFiles.h'):
+        for name in ('BootLatencyStore.h','BootLatencyUnwind.h','BootLatencyTrace.h','BootLatencyFiles.h'):
             inputs[str(latency.with_name(name))] = build.sha(latency.with_name(name))
     archive = out / 'libShengSourceStorage.a'
     archive.unlink(missing_ok=True)
