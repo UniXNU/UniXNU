@@ -37,6 +37,20 @@ lines = [l for l in result.stdout.splitlines() if l.startswith(('PASS', 'FAIL', 
 print('\n'.join(lines))
 if result.returncode or not any(l.startswith('PASS') for l in lines):
     sys.exit('native Metal frontend host check failed (exit %d); see %s' % (result.returncode, OUT / 'frontend_host.log'))
+# Interface and single-sample behavior must preserve rendered pixels and queue completion.
+interfaces = OUT / 'interfaces_host'
+subprocess.run(['xcrun', 'clang++', *flags, KIT / 'NativeBridgeMetalFrontend.mm', KIT / 'bridge/interface_regressions_host.mm',
+                ROOT / 'build/adreno-metal-bridge/host/libadreno_metal_bridge.a', '-framework', 'Foundation', '-framework', 'Metal',
+                '-framework', 'IOSurface', '-o', interfaces], check=True)
+for mode in ['normal', 'single']:
+    with tempfile.TemporaryDirectory(prefix='interfaces-' + mode + '-', dir=OUT) as directory:
+        command = [str(interfaces), loader, directory, mode]
+        run = subprocess.run(command, capture_output=True, text=True, timeout=120)
+        log = OUT / ('interfaces-' + mode + '.log')
+        log.write_text(run.stdout + run.stderr)
+        if run.returncode or not any(line.startswith('PASS:') for line in run.stdout.splitlines()):
+            sys.exit('Metal interfaces %s failed; see %s' % (mode, log))
+        print(run.stdout, end='')
 # Qualify compatible original UI descriptors, actual repeated blur pixels and
 # independent cold archive versus driver-cache provisioning.
 if QUARTZCORE.is_file():
