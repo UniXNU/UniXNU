@@ -57,7 +57,8 @@
     "patches/mesa/turnip-render-mode-for-attachment-memory.patch",
     "patches/mesa/turnip-gmem-mutable-swap.patch",
     "patches/mesa/turnip-current-queue-priorities.patch",
-    "patches/mesa/turnip-frame-diagnostics.patch"
+    "patches/mesa/turnip-frame-diagnostics.patch",
+    "patches/mesa/turnip-transient-attachments-in-gmem.patch"
   ],
   "integer_fma_reference": {
     "repository": "https://github.com/ucb-bar/berkeley-softfloat-3",
