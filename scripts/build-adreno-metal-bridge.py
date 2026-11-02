@@ -71,7 +71,8 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0025-specialized-links-shared-constants-and-allocation-size.patch',
     '0026-frame-diagnostic-links.patch',
     '0027-bounded-image-reuse-and-retired-release.patch',
-    '0028-guard-memory-release-test-worker.patch']]
+    '0028-guard-memory-release-test-worker.patch',
+    '0029-latency-stage-selection.patch']]
 
 
 def git_tree(*steps):

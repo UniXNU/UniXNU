@@ -1,7 +1,7 @@
 diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h
 --- /dev/null
 +++ b/src/freedreno/vulkan/tu_frame_diagnostic.h
-@@ -0,0 +1,15 @@
+@@ -0,0 +1,16 @@
 +/* SPDX-License-Identifier: MIT */
 +#pragma once
 +#include <stdint.h>
@@ -10,7 +10,8 @@ diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/t
 +extern "C" bool tu_darwin_frame_diagnostic(uint32_t,const void *,uint32_t);
 +static inline void tu_frame_event(uint32_t event,uint64_t a=0,uint64_t b=0,uint64_t c=0,uint64_t d=0,uint64_t e=0,uint64_t f=0,uint64_t g=0,uint64_t h=0,uint64_t i=0,uint64_t j=0,uint64_t k=0,uint64_t l=0) {
 +   static const bool on=getenv("SHENG_GPU_TRACE")!=nullptr;
-+   if(!on)return;
++   if(!on || (event!=36 && event!=38 && event!=42 && event!=43 && event!=50))return;
++   /* Colour-transfer sites are outside frame-latency capture. */
 +   struct {uint64_t seq,us;uint32_t event,pid;uint64_t v[12];} rec={0,0,event,0,{a,b,c,d,e,f,g,h,i,j,k,l}};
 +   (void)tu_darwin_frame_diagnostic(0x7102,&rec,sizeof(rec));
 +}
