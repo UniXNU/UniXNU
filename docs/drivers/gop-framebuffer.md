@@ -20,6 +20,6 @@ The catalog records implementation scope, hardware and OS requirements, board de
 
 [Component catalog](/reference/components)
 
-Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).
+Frame diagnostics retain allocation, command, completion and GPU/display timing. Pixel capture is disabled. See [GPU frame diagnostics](/porting/gpu-diagnostics).
 
 Frame diagnostics read physical addresses from prepared direct-display slots. Validation reports zero until mapping, and the flip records the mapped address. Diagnostic observers do not prepare descriptors or query their physical segments.

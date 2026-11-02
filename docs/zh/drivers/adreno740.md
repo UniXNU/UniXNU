@@ -35,4 +35,4 @@ python3 scripts/check-native-adreno-scheduling.py
 
 Metal 接口、缓存和插件打包见 [AdrenoMetal](/zh/drivers/adreno-metal)。
 
-帧诊断记录 GPU 与显示的明确关联，以及完成后的原始像素。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
+帧诊断保留分配、命令、完成处理及 GPU、显示时间线，像素抓取关闭。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
