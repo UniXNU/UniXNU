@@ -204,6 +204,10 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         sources.append(device_source('BootWatchdogPolicy.c'))
         # The diagnostic file export (sheng-diag-export): the unified log, crash reports and a screenshot, read through the VFS.
         sources.append(device_source('BootDiagExport.c'))
+    latency = next((directory / 'BootLatencyTrace.c' for directory in package_dirs
+                    if (directory / 'BootLatencyTrace.c').is_file()), None)
+    if latency:
+        sources.append(latency)
     objects, inputs = [], {}
     objcopy = shutil.which('llvm-objcopy') or '/opt/homebrew/opt/llvm/bin/llvm-objcopy'
     for source in sources:
@@ -226,6 +230,9 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
             output = late
         objects.append(output)
         inputs[str(source)] = build.sha(source)
+    if latency:
+        for name in ('BootLatencyStore.h','BootLatencyUnwind.h','BootLatencyTrace.h'):
+            inputs[str(latency.with_name(name))] = build.sha(latency.with_name(name))
     archive = out / 'libShengSourceStorage.a'
     archive.unlink(missing_ok=True)
     subprocess.run(['xcrun', 'ar', 'rcs', archive, *objects], check=True)

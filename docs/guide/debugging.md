@@ -389,3 +389,5 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [Troubleshooting](/reference/troubleshooting)
 - [QEMU testing](/reference/qemu)
 - [sheng device page](/devices/sheng)
+
+The sheng panic renderer keeps its first-panic claim in the current kernel’s zeroed BSS. A warm reboot can retain framebuffer pixels; those pixels do not determine whether the new boot may display and export its panic. The final byte of the 2,048-byte panic text buffer is reserved for the claim.
