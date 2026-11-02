@@ -71,7 +71,7 @@ python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out 
 
 ## 细分延迟记录
 
-前端类型 17、18 记录至少 250 微秒的编码操作、闭包释放、逐个完成回调、缓冲区和纹理析构，以及外部所有者释放回调。记录包含操作编号、command、对象或回调地址、线程、源码行号、入队时间和父任务编号。类型 19 和事件 67 定义操作名称，事件 64 将对应计时送入内核 trace。
+前端类型 17、18 记录至少 250 微秒的编码操作、闭包释放、逐个完成回调、各类 Metal 资源析构，以及外部所有者释放回调。析构覆盖缓冲区、纹理、函数、库、管线、sampler、状态、event、fence、encoder、command buffer、队列、heap 和 binary archive。记录包含操作编号、command、对象或回调地址、线程、源码行号、入队时间和父任务编号。类型 19 和事件 67 定义操作名称，事件 64 将对应计时送入内核 trace。
 
 IPC 日志包含发出的请求、目标 task 和端口，以及回复端口。进程记录将 task 指针对应到 PID 和名称。采样线程每 100 ms 扫描 backboardd、SpringBoard 的阻塞线程，并跟随最多两个 Mach 服务对端。每轮每进程最多扫描 128 个线程、输出六个发生变化的等待者；未变化的等待每秒保留一次。记录用户态及内核栈、等待对象、上下文切换数、Mach 对端和采样覆盖计数。可用的 dispatch introspection v2 接口补充入队、取出、完成、父任务和队列名称；状态记录区分符号缺失和布局不支持。
 
