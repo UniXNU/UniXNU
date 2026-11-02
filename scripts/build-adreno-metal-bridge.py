@@ -65,7 +65,9 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0023-quality-of-service-on-ios.patch',
     # The host's diagnostics switch (SHENG_DIAG, from the boot argument sheng-diag=1): without it the stage ring and the allocation sites
     # keep nothing. The stage ring also marks the steps inside a batch's submission (SubmitStep: placed, gathered, vkQueueSubmit, changes).
-    '0024-diagnostics-switch-and-submit-steps.patch']]
+    '0024-diagnostics-switch-and-submit-steps.patch',
+    # Preserve specialized link names and source definitions; share large indexed constants and expose Vulkan allocation sizes.
+    '0025-specialized-links-shared-constants-and-allocation-size.patch']]
 
 
 def git_tree(*steps):
