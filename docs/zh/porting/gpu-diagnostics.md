@@ -56,3 +56,31 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27 --no-replay
 ```
 
 构建命令在已准备好的 sheng iPadOS 27 目录运行，使用该目标的工具链与 UEFI 输入。主机检查覆盖并发写入、环回绕、像素所有权与分片顺序、ABI 副本、损坏导出和句柄复用。
+
+## CPU 延迟记录
+
+事件 61、62、63 分别关联编码批次、前端命令阶段和线程。批次日志保留入队时间、队列深度、任务数及开始和结束时间；命令阶段区分 submit、surface 刷新、runtime commit、资源释放及完成回调。`frames.trace` 的类型 14、15 持久保存这些阶段，类型 16 保存 pass 附件的 load/store、采样数、格式、尺寸及 IOSurface ID。runtime 阶段 40 至 52 记录内存池、KiB 数、复用、分配、缓存和实际释放；阶段 53 至 57 区分完成状态收集、回调、持有资源释放及最后的准备工作。内存操作编号与 command buffer 编号独立。
+
+`kernel.latency.bin` 以 16 字节 `LAT1` 头记录总数、保留数和丢弃数，后接 72 字节记录。524,288 个槽位保存带相同内核消息 cookie 的 IPC 发送尝试和接收完成、用户异常码及 PC/LR/SP、GPU 调频投票、触摸报告中的接触点编号和 0.1 像素坐标。在保留的时间窗内按 cookie、接收方和消息 ID 配对；仅有发送尝试不能证明已送达。GPU 的 accepted level 表示调频请求获接受，不是硬件频率实测值。
+
+```sh
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl
+```
+
+启用诊断导出后，记录在显示完成 50 次换帧后开始。写入不等待槽位锁。导出先冻结此环，再收集文件，并优先保留崩溃报告。客户端采样通过事件 63 识别 Metal 渲染线程，选中时设置状态位 `0x1000`；进程 CPU 表在 exec 后刷新 `xpcproxy` 名称。性能比较按连续触摸和相同场景分别计算，静止及锁屏切换单列。
+
+## 细分延迟记录
+
+前端类型 17、18 记录至少 250 微秒的编码操作、闭包释放、逐个完成回调、缓冲区和纹理析构，以及外部所有者释放回调。记录包含操作编号、command、对象或回调地址、线程、源码行号、入队时间和父任务编号。类型 19 和事件 67 定义操作名称，事件 64 将对应计时送入内核 trace。
+
+IPC 日志包含发出的请求、目标 task 和端口，以及回复端口。进程记录将 task 指针对应到 PID 和名称。采样线程每 100 ms 扫描 backboardd、SpringBoard 的阻塞线程，并跟随最多两个 Mach 服务对端。每轮每进程最多扫描 128 个线程、输出六个发生变化的等待者；未变化的等待每秒保留一次。记录用户态及内核栈、等待对象、上下文切换数、Mach 对端和采样覆盖计数。可用的 dispatch introspection v2 接口补充入队、取出、完成、父任务和队列名称；状态记录区分符号缺失和布局不支持。
+
+Mach 异常保存 PC/LR/SP/FP、FAR/ESR 及 29 个通用寄存器。32 项有界队列交给采样线程读取最多 32 层调用栈、128 字节栈内容、shared cache UUID 和最多 64 个映像 UUID，同时记录读取错误、截断及采集延迟。致命信号退出另存退出原因 namespace、code、进程名和最多 96 字节的原因描述。寄存器对应异常现场，异步读取的栈另有采集时间。
+
+启用 GPU DCVS 和诊断导出后，`sheng-gpu-perf=1` 在现有调频线程上每两个周期采集 19 个 A7XX BR 计数器，间隔约 32 ms。记录覆盖 GPU 时钟、UCHE 延迟及读取量、纹理缓存请求和未命中、shader 活动及指令、颜色读写数据，并附选择器回读、读取不稳定、计数重置和抢占 epoch。解码器只对有效区间计算差值。这些计数对应全局 BR 区间，具体负载由 command 和 pass 计时关联。寄存器和计数项与固定版本 Mesa XML 核对。
+
+```sh
+python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out RUN/latency.jsonl --frames RUN/diag/files/private/var/mobile/Library/Caches/com.apple.backboardd/m2v/frames.trace
+```
+
+读取脚本输出解码记录、包含 IPC 和任务关联、计数器差值、异常快照的分析 JSON，以及前端细分计时。正常 source-storage 归档包含 `BootLatencyTrace.c`，并记录相关头文件的 hash。

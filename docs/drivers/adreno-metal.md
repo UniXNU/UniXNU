@@ -18,6 +18,9 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 
 A render pass that fails encoding returns an encoder and reports a command-buffer error. This supports callers that cache encoder methods.
 
+
+Unused owned image backing is reused by pooled and dedicated images. Extra spares share a 256 MiB budget per device and expire after ten seconds. Plain backing of at least 256 KiB is retired on the existing room worker, with a 128 MiB queue limit. An allocation failure releases queued backing before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
+
 ## Cache and priority
 
 Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
@@ -41,3 +44,5 @@ See the [GPU adaptation procedure](/porting/gpu) for staging and board inputs.
 Frame diagnostics record explicit GPU/display links and completed raw pixel samples. See [GPU frame diagnostics](/porting/gpu-diagnostics).
 
 `sheng-wallpaper-freeze=1` isolates wallpaper rendering. A Poster renderer retains its first successfully drawn and stored IOSurface output of at least two million pixels, then parks later command buffers before runtime submission. Parked buffers remain committed and unscheduled; their owners and queue leases stay retained. Previously submitted work completes normally. PosterBoard, backboardd and other clients continue submitting. The mode defaults to off.
+
+Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel wait sampling and IPC reply ports correlate upstream waits; dispatch introspection also records task lifecycle when available.
