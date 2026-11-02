@@ -11,7 +11,9 @@
  * all 16-bit signed PCM at 48 kHz. The Speaker's output goes to the kernel's /dev/sweet-audio (bsd/dev/sweet_adsp.c),
  * which feeds the ADSP's ASM stream -> TERT_MI2S_RX -> the CS35L41 amps. The I/O thread never waits on the kernel:
  * it copies into a lock-free ring that a writer thread drains into the node every 5 ms (the node takes at most 160 ms
- * ahead and never blocks). The device clock is mach_absolute_time at 48000 frames per second.
+ * ahead and never blocks). The writer starts with the first StartIO and stays: at StopIO the server has usually
+ * handed over more than the kernel took (0231b cut the ends of sounds by stopping it there); it closes the node after
+ * 2 s with nothing to write. The device clock is mach_absolute_time at 48000 frames per second.
  *
  * The device set follows what the HackiOS / iOSPlus10 plug-ins describe for the D22 identity; this code is written
  * for this port. A bring-up trace of every property the server asks goes to the kernel log through the node.
@@ -30,13 +32,14 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <dispatch/dispatch.h>
 
 #define SA_NODE                 "/dev/sweet-audio"
 #define SA_SET_GAIN             _IOW('A', 1, int32_t)
 #define SA_LOG_IOCTL            _IOW('A', 3, char[120])
 #define SA_RATE                 48000.0
 #define SA_PERIOD               16384u          /* zero time stamp period, frames */
-#define SA_RING                 16384u          /* frames, ~341 ms */
+#define SA_RING                 65536u          /* frames, 1.37 s: more than one 16384-frame I/O cycle + the kernel queue */
 #define SA_WRITER_NS            5000000ull
 #define SA_DB_MIN               (-48.0f)
 
@@ -109,13 +112,22 @@ static UInt32 sa_io_clients[SA_NDEVS];
 static Float64 sa_host_ticks_per_frame;
 static UInt64 sa_anchor_host[SA_NDEVS], sa_seed[SA_NDEVS], sa_ts_count[SA_NDEVS];
 static Float32 sa_volume = 1.0f;                /* scalar 0..1 */
+static UInt64 sa_zts_calls, sa_zts_last, sa_zts_maxgap, sa_io_calls;   /* Speaker, per session (trace) */
 
 /* single-producer (I/O thread) single-consumer (writer) ring of S16 stereo frames */
 static uint32_t sa_ring[SA_RING];
-static _Atomic uint64_t sa_head, sa_tail;
+static _Atomic uint64_t sa_head, sa_tail, sa_dropped, sa_pushed;
 static _Atomic bool sa_run;
 static pthread_t sa_writer;
 static int sa_fd = -1;
+
+static UInt64 sa_load_host;
+
+static unsigned
+sa_ms(void)
+{
+	return (unsigned)((Float64)(mach_absolute_time() - sa_load_host) / (sa_host_ticks_per_frame * 48.0));
+}
 
 static unsigned
 sa_dev_index(AudioObjectID dev)
@@ -234,8 +246,22 @@ static void *
 sa_writer_main(void *arg)
 {
 	(void)arg;
-	uint64_t last_open = 0;
-	while (atomic_load(&sa_run)) {
+	uint64_t last_open = 0, last_data = mach_absolute_time();
+	uint64_t two_s = (uint64_t)(2.0 * sa_host_ticks_per_frame * SA_RATE);
+	for (;;) {
+		bool pending = atomic_load_explicit(&sa_head, memory_order_acquire) !=
+		    atomic_load_explicit(&sa_tail, memory_order_relaxed);
+		if (pending || atomic_load(&sa_run)) {
+			last_data = mach_absolute_time();
+		} else if (sa_fd >= 0 && mach_absolute_time() - last_data > two_s) {
+			close(sa_fd);           /* idle: let the node go until the next sound */
+			sa_fd = -1;
+		}
+		if (sa_fd < 0 && !pending) {
+			struct timespec idle = { 0, (long)SA_WRITER_NS };
+			nanosleep(&idle, NULL);
+			continue;
+		}
 		if (sa_fd < 0) {
 			uint64_t now = mach_absolute_time();
 			if (last_open == 0 || now - last_open > (uint64_t)(2.0 * sa_host_ticks_per_frame * SA_RATE)) {
@@ -271,10 +297,6 @@ sa_writer_main(void *arg)
 		struct timespec ts = { 0, (long)SA_WRITER_NS };
 		nanosleep(&ts, NULL);
 	}
-	if (sa_fd >= 0) {
-		close(sa_fd);
-		sa_fd = -1;
-	}
 	return NULL;
 }
 
@@ -284,11 +306,16 @@ sa_push(const uint32_t *in, UInt32 frames)
 {
 	uint64_t head = atomic_load_explicit(&sa_head, memory_order_relaxed);
 	uint64_t tail = atomic_load_explicit(&sa_tail, memory_order_acquire);
-	for (UInt32 i = 0; i < frames && head - tail < SA_RING; i++) {
+	UInt32 i;
+	for (i = 0; i < frames && head - tail < SA_RING; i++) {
 		sa_ring[head % SA_RING] = in[i];
 		head++;
 	}
 	atomic_store_explicit(&sa_head, head, memory_order_release);
+	atomic_fetch_add_explicit(&sa_pushed, i, memory_order_relaxed);
+	if (i < frames) {
+		atomic_fetch_add_explicit(&sa_dropped, frames - i, memory_order_relaxed);
+	}
 }
 
 /* ---- the interface ---- */
@@ -406,6 +433,7 @@ sa_Initialize(AudioServerPlugInDriverRef drv, AudioServerPlugInHostRef host)
 	mach_timebase_info_data_t tb;
 	mach_timebase_info(&tb);
 	sa_host_ticks_per_frame = (1e9 / SA_RATE) * (Float64)tb.denom / (Float64)tb.numer;
+	sa_load_host = mach_absolute_time();
 	for (unsigned i = 0; i < SA_NDEVS; i++) {
 		sa_seed[i] = 1;
 	}
@@ -786,6 +814,19 @@ sa_SetPropertyData(AudioServerPlugInDriverRef drv, AudioObjectID obj, pid_t pid,
 
 /* ---- I/O ---- */
 
+static void
+sa_running_changed(AudioObjectID dev)
+{
+	if (sa_host != NULL) {
+		/* off the I/O start / stop path: the server may call back into us */
+		dispatch_async(dispatch_get_global_queue(QOS_CLASS_DEFAULT, 0), ^{
+			AudioObjectPropertyAddress a = { kAudioDevicePropertyDeviceIsRunning,
+				                         kAudioObjectPropertyScopeGlobal, kAudioObjectPropertyElementMain };
+			sa_host->PropertiesChanged(sa_host, dev, 1, &a);
+		});
+	}
+}
+
 static OSStatus
 sa_StartIO(AudioServerPlugInDriverRef drv, AudioObjectID dev, UInt32 client)
 {
@@ -794,20 +835,26 @@ sa_StartIO(AudioServerPlugInDriverRef drv, AudioObjectID dev, UInt32 client)
 		return kAudioHardwareBadObjectError;
 	}
 	unsigned i = sa_dev_index(dev);
-	sa_trace("StartIO dev %u client %u", dev, client);
+	sa_trace("t=%u ms: StartIO dev %u client %u", sa_ms(), dev, client);
 	pthread_mutex_lock(&sa_lock);
 	if (sa_io_clients[i]++ == 0) {
 		sa_anchor_host[i] = mach_absolute_time();
 		sa_ts_count[i] = 0;
 		sa_seed[i]++;
 		if (dev == kObjSpeaker) {
+			static bool writer_started;
 			atomic_store(&sa_run, true);
-			if (pthread_create(&sa_writer, NULL, sa_writer_main, NULL) != 0) {
-				atomic_store(&sa_run, false);
+			if (!writer_started && pthread_create(&sa_writer, NULL, sa_writer_main, NULL) == 0) {
+				pthread_detach(sa_writer);
+				writer_started = true;  /* stays: StopIO must not drop the ring's tail */
 			}
 		}
 	}
+	bool first = sa_io_clients[i] == 1;
 	pthread_mutex_unlock(&sa_lock);
+	if (first) {
+		sa_running_changed(dev);
+	}
 	return kAudioHardwareNoError;
 }
 
@@ -819,15 +866,26 @@ sa_StopIO(AudioServerPlugInDriverRef drv, AudioObjectID dev, UInt32 client)
 		return kAudioHardwareBadObjectError;
 	}
 	unsigned i = sa_dev_index(dev);
-	sa_trace("StopIO dev %u client %u", dev, client);
+	sa_trace("t=%u ms: StopIO dev %u client %u: %llu frames pushed, %llu still in the ring, %llu dropped", sa_ms(),
+	    dev, client, (unsigned long long)atomic_load(&sa_pushed),
+	    (unsigned long long)(atomic_load(&sa_head) - atomic_load(&sa_tail)), (unsigned long long)atomic_load(&sa_dropped));
+	if (dev == kObjSpeaker) {
+		sa_trace("  this session: %llu zero time stamp calls (longest gap %u ms), %llu writes", sa_zts_calls,
+		    (unsigned)((Float64)sa_zts_maxgap / (sa_host_ticks_per_frame * 48.0)), sa_io_calls);
+		sa_zts_calls = sa_zts_maxgap = sa_zts_last = sa_io_calls = 0;
+	}
 	pthread_mutex_lock(&sa_lock);
-	if (sa_io_clients[i] > 0 && --sa_io_clients[i] == 0 && dev == kObjSpeaker && atomic_load(&sa_run)) {
-		atomic_store(&sa_run, false);
-		pthread_mutex_unlock(&sa_lock);
-		pthread_join(sa_writer, NULL);
-		return kAudioHardwareNoError;
+	bool last = false;
+	if (sa_io_clients[i] > 0 && --sa_io_clients[i] == 0) {
+		last = true;
+		if (dev == kObjSpeaker) {
+			atomic_store(&sa_run, false);   /* the writer drains what is left, then idles */
+		}
 	}
 	pthread_mutex_unlock(&sa_lock);
+	if (last) {
+		sa_running_changed(dev);
+	}
 	return kAudioHardwareNoError;
 }
 
@@ -838,10 +896,20 @@ sa_GetZeroTimeStamp(AudioServerPlugInDriverRef drv, AudioObjectID dev, UInt32 cl
 	(void)drv; (void)client;
 	unsigned i = sa_dev_index(dev);
 	UInt64 now = mach_absolute_time();
+	if (dev == kObjSpeaker) {
+		if (sa_zts_last != 0 && now - sa_zts_last > sa_zts_maxgap) {
+			sa_zts_maxgap = now - sa_zts_last;
+		}
+		sa_zts_last = now;
+		sa_zts_calls++;
+	}
 	Float64 ticks_per_period = sa_host_ticks_per_frame * SA_PERIOD;
-	UInt64 next = sa_anchor_host[i] + (UInt64)((Float64)(sa_ts_count[i] + 1) * ticks_per_period);
-	if (now >= next) {
-		sa_ts_count[i]++;
+	/*
+	 * The latest period boundary at or before now, straight from the elapsed time (0231c advanced one period per
+	 * call, so with calls further apart than 341 ms the clock fell behind and the server stopped I/O after ~2 s).
+	 */
+	if (now > sa_anchor_host[i]) {
+		sa_ts_count[i] = (UInt64)((Float64)(now - sa_anchor_host[i]) / ticks_per_period);
 	}
 	*sample = (Float64)(sa_ts_count[i] * SA_PERIOD);
 	*host = sa_anchor_host[i] + (UInt64)((Float64)sa_ts_count[i] * ticks_per_period);
@@ -880,6 +948,7 @@ sa_DoIOOperation(AudioServerPlugInDriverRef drv, AudioObjectID dev, AudioObjectI
 		return kAudioHardwareNoError;
 	}
 	if (op == kAudioServerPlugInIOOperationWriteMix && stream == kObjSpeakerOut) {
+		sa_io_calls++;
 		sa_push((const uint32_t *)main, frames);
 	} else if (op == kAudioServerPlugInIOOperationReadInput && input) {
 		memset(main, 0, (size_t)frames * 2 * ch);       /* no microphones yet */

@@ -61,6 +61,21 @@
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
+- **2026-11-02 0230: no more glitches; iOS stops each sound after ~2 s (open)** (patch
+  `xnu/patches/0230-umi-sweet-audio-queue.patch`, boot `shim/out/umi-0231c-audio.img`, plug-in from `phone/sweet-audio/`
+  installed).
+  - Kernel: 480 ms queue, max 8 ASM buffers in flight (24 -> ASM write result 0x12 ENEEDMORE and a jammed queue: the
+    0231 "stops randomly"), prefill 3 periods, pad only after 200 ms idle, 1 s stats. User on 0231b: "no glitches".
+  - Plug-in: 64 Ki-frame ring (the server hands over 16 Ki frames per cycle at first), a persistent writer that plays
+    out the ring after StopIO, zero time stamps from elapsed time, DeviceIsRunning notifications, per-session stats.
+  - **Still: every sound (ringtones, a song) gets StopIO from the server after ~1.5-3 s.** Our side is healthy: ~48
+    kframes/s pushed and played, 0 left in the ring, zero time stamp calls every 21 ms (max gap 21 ms), 1024-frame I/O.
+    The user also sees a "Do Not Disturb off" notice each time a sound starts. Suspects: speaker protection (the
+    VirtualAudio binary has graph_configurations.plist and nospp_graph_configurations.plist; on iPhones the Speaker
+    device's input carries the amp's I/V sense, ours is silence), or an interruption from elsewhere.
+  - Unified log pulled read-only to `research/logs/umi-unified-0231c.logarchive` (git-ignored, 404 MB: diagnostics +
+    uuidtext); macOS `log show` prints nothing ("partial or missing metadata", the phone's clock is at 1970): needs a
+    tracev3 parser to read mediaserverd's reasons. Fragments show VirtualAudio built "uid: Speaker; conn: 1; rout: 1".
 - **🎉 2026-11-02 0229: iOS PLAYS ITS OWN SOUNDS FROM THE SPEAKER (user heard ringtones; "a bit glitchy")** (patch
   `xnu/patches/0229-umi-sweet-audio-node.patch`, HAL plug-in `phone/sweet-audio/`, boot `shim/out/umi-0230c-audio.img` =
   0228's line with `sweetadsptone` replaced by `sweetaudio=1`: `... sweetadsp=1 sweetadspdelay=200 sweetadsprpc=0
