@@ -26,7 +26,36 @@
     lists, lists/partial and sileolists at 777 (Sileo runs as mobile; tighten once dpkg/apt own them). After the
     refresh both list dirs were still empty, so Sileo kept the index somewhere else (not in Caches either). Installing
     still needs stage 2 (apt-get, dpkg-deb, a shell for giveMeRoot).
-  - **Next stages:** (2) Procursus rootful bootstrap (thousands of files: a bulk TAR verb in the file server or
+  - **🎉 2026-11-02: PROCURSUS BOOTSTRAP IN, SILEO INSTALLS PACKAGES (user: nano "Installed")** (boot
+    `shim/out/umi-0230-normal.img`).
+    - Bootstrap: Procursus rootful `bootstraps/iphoneos-arm64/1700/bootstrap-iphoneos-arm.tar.zst` (20.6 MB,
+      SHA-256 8913a49e..., GPG signature checked against Procursus' key C59F3798...1B0E from ProcursusTeam/Procursus
+      `build_misc/keyrings/procursus/memo.gpg`; there is no rootful 1800 bootstrap, palera1n rootful also starts
+      from 1700). 4000 entries (3602 files, 397 dirs, 149 links, 105 MB), dpkg database in /Library/dpkg
+      (/var/lib/dpkg -> /Library/dpkg). Only 5 paths already existed: Apple's /usr/bin/ltop and
+      /usr/libexec/dirs_cleaner were KEPT (bootstrap copies skipped), libiosexec / libzstd (ours from 0230) replaced.
+      Modes from the tarball, not from macOS tar (non-root extraction drops setuid / sticky: sudo, su, login,
+      passwd, chpass, newgrp, quota, shshd 4755; /var/lib/ex 1777). Pushed in ~13 min by a one-process pusher
+      (RM, PUT with mode, CHMOD, GET + compare, resumable log; scratchpad bs-push.py), 0 failures.
+    - Not copied: prep_bootstrap.sh (no way to run a shell from outside). Its useful parts done on the Mac instead:
+      dpkg status entries that /usr/libexec/firmware writes (firmware 16.7.16, cy+os.ios 16.7.16, cy+cpu.arm64,
+      cy+model.iphone 10.3, cy+kernel.darwin 22.6.0, cy+lib.corefoundation 1971.0, info/firmware.ver) and an
+      org.coolstar.sileo entry (+ .list / postinst / prerm). Skipped: pwd_mkdb, chsh, terminal password (iOS's
+      default master.passwd stays), /etc/shells.
+    - Sources: the bootstrap's procursus.sources set to `Suites: iphoneos-arm64/1800`; the 0230 sileo.sources
+      removed (same repo twice).
+    - **apt refused everything until libkrw0 had a plugin:** the bootstrap's status has libkrw0 (Depends
+      libkrw0-plugin), normally supplied by the jailbreak tool. Added Procursus' libkrw0-tfp0 1.1.1-2
+      (/usr/lib/libkrw/libkrw-tfp0.dylib + status / .list / .md5sums; old status kept as
+      /Library/dpkg/status.sweet-orig). Sileo's flow for reference: it fetches indexes into /var/lib/apt/lists,
+      writes the queued packages' entries to /var/lib/apt/sileolists, downloads the debs, then giveMeRoot runs
+      `apt-get install --no-download -f -oDir::State::lists=sileolists/` (so one broken installed package
+      blocks every install).
+    - Result: giveMeRoot's setuid works on this kernel; log shows exec apt-get / dpkg / dpkg-deb, /usr/bin/nano
+      present, nano 7.2 + libmagic1 5.45 installed in dpkg status.
+    - Leftovers: /var/lib/apt/lists and lists/partial are still 777 from 0230 (dpkg/apt are root now; can go back
+      to 755). **Wi-Fi bug seen while testing (user): once Wi-Fi drops it never reconnects until a reboot.**
+  - **Stages 2-4 done 2026-11-02 (entry above).** Original plan: (2) Procursus rootful bootstrap (thousands of files: a bulk TAR verb in the file server or
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
