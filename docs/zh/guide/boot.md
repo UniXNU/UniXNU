@@ -111,7 +111,7 @@ fastboot reboot bootloader
 
 macOS 移植需要匹配其 XNU 版本、kernelcache、预链接 roots、私有驱动 ABI、trust cache 和根卷布局的 OS profile。
 按[内核准备](/zh/guide/build-kernel)与[预链接](/zh/concepts/prelink)确认这些输入。
-仓库提供的 `ipados-17.7.11-21H461` profile 描述名称所示的 iPadOS 构建。
+仓库提供的 profile 描述各自名称所示的 iOS 或 iPadOS 构建。
 
 将完成的 OS profile 设为 `board.os_profile`，检查 `status --json`，再重复构建和启动验证流程。
 macOS 结果须关联该 profile 与目标设备。

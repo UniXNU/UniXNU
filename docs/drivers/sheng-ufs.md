@@ -29,4 +29,4 @@ The sheng device repository supplies ShengUfs as a submodule. Follow the
 [UFS porting guide](/porting/ufs) and maintain controller, clock, PHY, SMMU,
 DMA, partition and completion details in the [storage record](/devices/sheng#storage).
 
-For the iPadOS 26 source-build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
+For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.

@@ -1,8 +1,10 @@
 # Source and patches
 
-The selected OS profile pins XNU and its ABI inputs. The iPadOS 17.7.11 profile
+The selected OS profile pins XNU and its ABI inputs. The arm64 iPadOS 17.7.11 profile
 uses `xnu-10063.141.1`, Darwin 23.6.0, DriverKit headers from `xnu-10063.121.3`,
-and TrustCache headers from `xnu-8796.101.5`.
+and TrustCache headers from `xnu-8796.101.5`. The iOS 16 and iPadOS 17 targets are
+both arm64 and share the arm64 patch series in `profiles/arch/arm64`; the iOS and
+iPadOS 27 targets use the arm64e series in `profiles/arch/arm64e`.
 
 `feeds.toml` supplies libplatform, libdispatch, AvailabilityVersions, libpthread,
 corecrypto, IOStorageFamily, and edk2. The format 2 OS profile's explicit XNU

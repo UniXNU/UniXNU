@@ -131,4 +131,4 @@ python3 scripts/porting-record.py check --device ../UniXNU-sheng
 
 根卷路径就绪后[适配显示与亮度](/zh/porting/display)，其他子系统见[驱动清单](/zh/porting/drivers)。
 
-iPadOS 26 的源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
+arm64e 的公开源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。

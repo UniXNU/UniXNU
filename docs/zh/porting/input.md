@@ -82,4 +82,4 @@ rg -n 'native_touch_|ReportDescriptor' drivers/ShengHidInput/NativeHidInput.cpp
 
 按[构建指南](/zh/building)重建，分别记录触控与按键结果，再进入 [GPU 适配](/zh/porting/gpu)。
 
-iPadOS 26 的源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
+arm64e 的公开源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
