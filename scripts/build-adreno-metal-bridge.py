@@ -72,7 +72,10 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0026-frame-diagnostic-links.patch',
     '0027-bounded-image-reuse-and-retired-release.patch',
     '0028-guard-memory-release-test-worker.patch',
-    '0029-latency-stage-selection.patch']]
+    '0029-latency-stage-selection.patch',
+    # Spare image blocks have no byte limit (they age, go when a block cannot be made and on memory pressure), and the room keeper takes
+    # a spare block before it makes a new one: the limit freed spares the render server made again within seconds, each a fresh wiring.
+    '0030-spare-image-blocks-give-room.patch']]
 
 
 def git_tree(*steps):
