@@ -60,6 +60,7 @@ for mode in ['normal', 'single', 'default']:
 if QUARTZCORE.is_file():
     subprocess.run([sys.executable, ROOT / 'scripts/check-quartzcore-blur-host.py'], check=True,
                    env=dict(os.environ, NMB_HOST_LOADER=loader), timeout=660)
+subprocess.run([sys.executable, ROOT / 'scripts/check-wallpaper-freeze-host.py', '--reuse-bridge'], check=True)
 # A nil resource in a blit call fails the command buffer; it must not raise (an exception escaping the plugin's worker thread aborted SpringBoard).
 nilargs = OUT / 'nil_args_host'
 subprocess.run(['xcrun', 'clang++', *flags, KIT / 'NativeBridgeMetalFrontend.mm', KIT / 'bridge/nil_args_host.mm',
