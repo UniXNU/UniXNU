@@ -1535,10 +1535,10 @@ record_state = "available"
 [[device]]
 name = "muyu"
 repository = "yehua123-oos/UniXNU-muyu"
-title = "Xiaomi Pad 7 Pro"
-title_zh = "Xiaomi Pad 7 Pro"
+title = "Xiaomi Pad 7 Pro (muyu)"
+title_zh = "小米平板 7 Pro（muyu）"
 format = 1
-legacy_page = "link"
+legacy_page = "preserve"
 repository_id = 1439813079
 revision = "efdd4d62b528c7b14bf116a66ce83fd0878e51b9"
 board = "muyu"
