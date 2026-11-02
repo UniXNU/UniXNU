@@ -40,7 +40,8 @@ for a function outside the board's scope. Use `planned` for unfinished work.
 ## Record format
 
 Copy `examples/device/porting.toml`. Its device name, SoC and OS profile must
-match `board.toml`. Each `[[area]]` contains:
+match `board.toml`. The record itself uses format 1, so its `schema_version`
+stays `1` while `board.toml` uses `schema_version = 2`. Each `[[area]]` contains:
 
 | Field | Content |
 | --- | --- |

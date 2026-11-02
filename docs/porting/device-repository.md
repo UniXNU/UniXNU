@@ -47,7 +47,8 @@ and update existing files in place. Review these groups:
 
 | Files | Required result |
 | --- | --- |
-| `board.toml`, `porting.toml` | Format 2 board configuration; matching device name, SoC and OS profile; completed hardware inputs; `board.example` absent or false |
+| `board.toml` | Format 2 board configuration; matching device name, SoC and OS profile; completed hardware inputs; `board.example` absent or false |
+| `porting.toml` | Format 1 device record, so `schema_version` stays `1`; device name, SoC and OS profile match `board.toml` |
 | `feeds.toml`, `unixnu.lock`, `.gitmodules` when used | Reviewed source URLs and commits for the SoC, components and submodules; local overrides recorded separately |
 | `configs/`, `patches/xnu/series` | Existing defconfig selected by `kernel.defconfig`; complete ordered configuration and patch lists; every referenced file present |
 | `dts/` | Board DTS selected by `device_tree.source`, with the chosen SoC include, board resources and reservations |
