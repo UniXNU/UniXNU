@@ -59,7 +59,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27 --no-replay
 
 ## CPU 延迟记录
 
-事件 61、62、63 分别关联编码批次、前端命令阶段和线程。批次日志保留入队时间、队列深度、任务数及开始和结束时间；命令阶段区分 submit、surface 刷新、runtime commit、资源释放及完成回调。`frames.trace` 的类型 14、15 持久保存这些阶段，类型 16 保存 pass 附件的 load/store、采样数、格式、尺寸及 IOSurface ID。runtime 阶段 40 至 52 记录内存池、KiB 数、复用、分配、缓存和实际释放；阶段 53 至 57 区分完成状态收集、回调、持有资源释放及最后的准备工作。内存操作编号与 command buffer 编号独立。
+事件 61、62、63 分别关联编码批次、前端命令阶段和线程。批次日志保留入队时间、队列深度、任务数及开始和结束时间；命令阶段区分 submit、surface 刷新、runtime commit、资源释放及完成回调。`frames.trace` 的类型 14、15 持久保存这些阶段，类型 16 保存 pass 附件的 load/store、采样数、格式、尺寸及 IOSurface ID。runtime 阶段 40 至 52 记录内存池、KiB 数、复用、分配、缓存和实际释放；阶段 53 至 57 区分完成状态收集、回调、持有资源释放及最后的准备工作。内存操作编号与 command buffer 编号独立。类型 22 保存内存及完成阶段的完整 32 位参数，包括内存大小和 handle 的高低部分。
 
 `kernel.latency.bin` 以 16 字节 `LAT1` 头记录总数、保留数和丢弃数，后接 72 字节记录。524,288 个槽位保存带相同内核消息 cookie 的 IPC 发送尝试和接收完成、用户异常码及 PC/LR/SP、GPU 调频投票、触摸报告中的接触点编号和 0.1 像素坐标。在保留的时间窗内按 cookie、接收方和消息 ID 配对；仅有发送尝试不能证明已送达。GPU 的 accepted level 表示调频请求获接受，不是硬件频率实测值。
 
