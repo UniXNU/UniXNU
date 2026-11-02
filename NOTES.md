@@ -36,7 +36,9 @@
       /usr/libexec/dirs_cleaner were KEPT (bootstrap copies skipped), libiosexec / libzstd (ours from 0230) replaced.
       Modes from the tarball, not from macOS tar (non-root extraction drops setuid / sticky: sudo, su, login,
       passwd, chpass, newgrp, quota, shshd 4755; /var/lib/ex 1777). Pushed in ~13 min by a one-process pusher
-      (RM, PUT with mode, CHMOD, GET + compare, resumable log; scratchpad bs-push.py), 0 failures.
+      (RM, PUT with mode, CHMOD, GET + compare, resumable log; now `tools/umi-push-staged.py`), 0 failures. The whole tree (bootstrap + Sileo + libkrw0-tfp0 + dpkg
+      entries, final state) is rebuilt by `tools/umi-jailbreak-stage.sh OUT` (pinned SHA-256s; dry run matched the
+      pushed status byte for byte and every bootstrap file / link).
     - Not copied: prep_bootstrap.sh (no way to run a shell from outside). Its useful parts done on the Mac instead:
       dpkg status entries that /usr/libexec/firmware writes (firmware 16.7.16, cy+os.ios 16.7.16, cy+cpu.arm64,
       cy+model.iphone 10.3, cy+kernel.darwin 22.6.0, cy+lib.corefoundation 1971.0, info/firmware.ver) and an
