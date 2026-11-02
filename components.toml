@@ -510,3 +510,23 @@ runtime_identifiers = ["ShengPreflight"]
 build_stage = "firmware"
 build = []
 outputs = []
+
+[[component]]
+id = "QcomBaseband"
+repository_id = 1443386546
+kind = "driver"
+function = "Qualcomm baseband IOKit bridge, QMUX/QRTR and IPA v4.2"
+scope = "modem"
+repository = "https://github.com/UniXNU/QcomBaseband.git"
+revision = "ca1d7998706f8738c2cf49d4e1e5b73e316fd2b0"
+path = "drivers/QcomBaseband"
+hardware = ["Qualcomm QMI over QRTR", "SC7180 IPA v4.2 reference"]
+os_abi = ["ipados-17.7.11-21H461 AppleBaseband IOUserClient"]
+board_dependencies = ["modem power and firmware boot", "GLINK/QRTR transport and rmtfs", "DMA and EFS/NV storage", "cellular ADT and firmware packaging"]
+verified_devices = []
+dependencies = []
+source_files = ["baseband/coachz_baseband.cpp", "baseband/QcomBaseband.h", "ipa/coachz_ipa_kernel.h", "platform/coachz/coachz_modem.c"]
+runtime_identifiers = ["AppleBaseband", "AppleBasebandPCIControl", "AppleBasebandPCIInterface", "AppleIPAppender", "AppleBasebandPCIMAVPDPManager", "coachz_baseband_configure", "coachz_modem_configure"]
+build_stage = "kernel"
+build = ["build-qcom-baseband.py"]
+outputs = ["build/qcom-baseband/libQcomBaseband.a"]

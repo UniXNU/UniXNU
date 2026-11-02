@@ -55,3 +55,6 @@
 [submodule "kits/VerifiedRoot"]
 	path = kits/VerifiedRoot
 	url = https://github.com/UniXNU/VerifiedRoot.git
+[submodule "drivers/QcomBaseband"]
+	path = drivers/QcomBaseband
+	url = https://github.com/UniXNU/QcomBaseband.git
