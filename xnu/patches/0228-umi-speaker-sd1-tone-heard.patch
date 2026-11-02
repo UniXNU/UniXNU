@@ -1,0 +1,93 @@
+From 2d20cc11ba266b7bda82be3320b73d7b2c9ff7b9 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 2 Nov 2026 20:11:14 +0100
+Subject: [PATCH] umi: speaker data on TERT MI2S SD1 (gpio 137): the ADSP test
+ tone is heard
+
+The base kona DT gives tertiary MI2S rx-lines <1> (SD0, gpio 134), but the
+CS35L41s take their data on SD1 (gpio 137, function mi2s2_data1): with SD1
+the 1 kHz test tone (sweetadsptone=1) plays from the bottom speaker. SD1 is
+now the default (sweetadspsd=1 for SD0). The tone can also come from the
+FastRPC pool (sweetadsptonepool=1), but the ADSP refuses an ASM map with
+sid bits 3 (status 1); the audio stream 0x1801 is the right one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 34 ++++++++++++++++++++++++++--------
+ 1 file changed, 26 insertions(+), 8 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 7566142..a093589 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -307,14 +307,25 @@ afe_next(void)
+ 		tlmm_set(TLMM_WEST, 133, 1, 0, 3, false, false);
+ 		tlmm_set(TLMM_WEST, 134, 1, 0, 3, false, false);
+ 		tlmm_set(TLMM_WEST, 135, 1, 0, 3, false, false);
+-		volatile uint32_t *r = tlmm_pin(TLMM_WEST, 133);
+-		printf("SWEET ADSP: TLMM gpio 133-135 -> mi2s2 (cfg %#x)\n", r ? r[0] : 0);
++		/*
++		 * The amps' data line is SD1 on gpio 137 (function 3, mi2s2_data1): heard in 0229d. The base kona DT says
++		 * rx-lines <1> (SD0, gpio 134), so the umi overlay must change it; SD0 played silence. sweetadspsd=1: SD0.
++		 */
++		uint32_t sd = 2;
++		PE_parse_boot_argn(SL_ARG "sd", &sd, sizeof(sd));
++		if (sd == 2) {
++			tlmm_set(TLMM_WEST, 137, 3, 0, 3, false, false);
++		}
++		volatile uint32_t *r = tlmm_pin(TLMM_WEST, 133), *r134 = tlmm_pin(TLMM_WEST, 134);
++		volatile uint32_t *r135 = tlmm_pin(TLMM_WEST, 135), *r137 = tlmm_pin(TLMM_WEST, 137);
++		printf("SWEET ADSP: TLMM mi2s2 cfg: 133 %#x 134 %#x 135 %#x 137 %#x; data on SD%u\n", r ? r[0] : 0,
++		    r134 ? r134[0] : 0, r135 ? r135[0] : 0, r137 ? r137[0] : 0, sd == 2 ? 1u : 0u);
+ 		/* struct afe_port_cmd_set_param_v2 { u16 port, u16 payload_size, lsw, msw, handle } + param data + i2s cfg */
+ 		uint16_t port[2] = { AFE_PORT_TERT_MI2S_RX, 12 + 20 };
+ 		uint32_t pd[3] = { AFE_MODULE_AUDIO_DEV_INTERFACE, AFE_PARAM_ID_I2S_CONFIG, 20 };
+ 		/* afe_param_id_i2s_cfg: version 1, bit_width, channel_mode SD0, mono_stereo STEREO, ws_src INTERNAL, rate, format */
+ 		uint32_t ver = 1, rate = AFE_RATE;
+-		uint16_t w[4] = { AFE_BITS, 1, 1, 1 };
++		uint16_t w[4] = { AFE_BITS, (uint16_t)(sd == 2 ? 2 : 1) /* AFE_PORT_I2S_SD0 / SD1 */, 1, 1 };
+ 		memcpy(m, port, 4);
+ 		memcpy(m + 16, pd, 12);
+ 		memcpy(m + 28, &ver, 4);
+@@ -459,9 +470,9 @@ afe_result(uint32_t opcode, uint32_t status)
+  * fades (0229: 480 Hz at 1000 for 0.6 s played through the ADSP but was not heard). Boot-arg
+  * sweetadsptone=1 (default off).
+  */
+-#define TONE_PA                 0xd3800000u
+ #define TONE_SIZE               0x40000u
+-#define TONE_SID_BITS           1u
++/* sweetadsptonepool=1: the FastRPC pool instead (0xd3100000 via stream 0x1803, proven by FastRPC; unused with rpc=0) */
++static uint32_t TONE_PA = 0xd3800000u, TONE_SID_BITS = 1u;
+ #define TONE_SESSION_PORT       0x0101
+ #define TONE_FRAMES             48000u          /* 1 s at 48 kHz */
+ #define TONE_BUFS               4u
+@@ -580,7 +591,13 @@ static void
+ tone_begin(void)
+ {
+ 	extern bool sweet_smmu_route_sid(uint32_t sid);
+-	bool routed = sweet_smmu_route_sid(0x1801);
++	uint32_t pool = 0;
++	PE_parse_boot_argn(SL_ARG "tonepool", &pool, sizeof(pool));
++	if (pool) {
++		TONE_PA = 0xd3100000u;
++		TONE_SID_BITS = 3u;
++	}
++	bool routed = sweet_smmu_route_sid(0x1800 | TONE_SID_BITS);
+ 	vm_offset_t va = sweet_dsp_io_map(TONE_PA, TONE_SIZE);
+ 	if (va == 0) {
+ 		tone_fail("buffer map", 0);
+@@ -600,8 +617,9 @@ tone_begin(void)
+ 		pcm[n] = (uint32_t)s16 | ((uint32_t)s16 << 16);     /* L = R */
+ 	}
+ 	__asm__ volatile ("dsb sy" ::: "memory");
+-	printf("SWEET ADSP: TONE: %u frames at %#x, SMMU sid 0x1801 %s\n", TONE_FRAMES, TONE_PA,
+-	    routed ? "routed" : "NOT routed");
++	printf("SWEET ADSP: TONE: %u frames at %#x, SMMU sid %#x %s; words 10-13 read back %#x %#x %#x %#x\n",
++	    TONE_FRAMES, TONE_PA, 0x1800 | TONE_SID_BITS, routed ? "routed" : "NOT routed", pcm[10], pcm[11], pcm[12],
++	    pcm[13]);
+ 	tone_state = 1;
+ 	tone_step();
+ }
+-- 
+2.54.0 (Apple Git-157)
+

@@ -17,6 +17,11 @@ cmdline='debug=0xc serial=3 cpus=8 keepsyms=1 -enable_kprintf_spam -noprogress r
 cmdline+=' unentitled_ios_sim_launch=1 ignition_level=1 wdt_test=no_user_checkin ufsrw=1 rootrw=1'
 cmdline+=' launchd_unsecure_cache=1 wdt=-1 sweetfb_noconsole=1 sweetfb_hz=30 sweetfb_direct=1'
 cmdline+=" ${*:-sweetusb=0}"
+# shim/loader.c BOOT_LINE_LENGTH 608 (XNU's limit): a longer line loses its last arguments silently
+if [ ${#cmdline} -gt 607 ]; then
+	echo "boot-args are ${#cmdline} characters, the limit is 607: drop some" >&2
+	exit 1
+fi
 
 mkdir -p shim/out
 python3 tools/mkadt.py shim/out/umi.adt --highmem --board umi

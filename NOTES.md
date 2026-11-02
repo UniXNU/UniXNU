@@ -61,6 +61,22 @@
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
+- **🎉 2026-11-02 0228: THE SPEAKER PLAYS FROM iOS (user heard the 1 kHz test tone)** (patch
+  `xnu/patches/0228-umi-speaker-sd1-tone-heard.patch`, boot `shim/out/umi-0229d-sd1.img` = 0215d's line without
+  `sweetsample` + `sweetadsprpc=0 sweetadspprobe=0 sweetamp=1 sweetampstepms=200 sweetampplay=1 sweetadsptone=1
+  sweetadspsd=2`).
+  - **The CS35L41s take their data on tertiary MI2S SD1 = gpio 137 (function 3, mi2s2_data1)**, not SD0 / gpio 134 as
+    the base kona DT says (`qcom,msm-mi2s-rx-lines = <1>`): the umi dtbo overlay must change it (not pulled). AFE I2S
+    config channel_mode 2 (AFE_PORT_I2S_SD1). SD1 is the kernel default now (`sweetadspsd=1` = SD0). TLMM read-back
+    133/134/135 0xc4, 137 0xcc.
+  - How it was found: with SD0 the ADSP rendered the whole tone (its F3 log counts 100 frames of 10 ms, write-dones
+    0.8 s apart), the amps were powered, PLL-locked, DAC source ASPRX1, 0 dB: so the samples left on a pin the amps
+    do not listen to.
+  - Also learnt: the ADSP refuses ASM_CMD_SHARED_MEM_MAP_REGIONS with sid bits 3 (FastRPC's stream, status 1): ASM
+    buffers must come through 0x1801 (bits 1). **Boot-args are cut at 607 characters** (shim BOOT_LINE_LENGTH 608): a
+    boot lost `sweetadsptonepool=1` that way; `tools/umi-boot-image.sh` now refuses longer lines.
+  - The tone stays opt-in (`sweetadsptone=1`), as do `sweetamp` / `sweetampplay`. Next: a `/dev` audio node that feeds
+    this ASM stream, then an AudioServerPlugIn (our own code; design as HackiOS, MIT) so iOS's own sounds play.
 - **2026-11-01 0227: test tone through the ADSP, not heard yet; paused** (patch `xnu/patches/0227-umi-adsp-test-tone.patch`,
   boots `shim/out/umi-0229-tone.img`, `umi-0229b-tone1k.img` = 0228b's line with `sweetadspprobe=0 sweetadsptone=1`).
   **The tone is opt-in (`sweetadsptone=1`, default off), as are `sweetamp` / `sweetampplay`: normal boots play nothing.**
