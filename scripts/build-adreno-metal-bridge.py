@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PIN = json.loads((ROOT / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())['translator']['commit']
@@ -99,13 +100,24 @@ out.mkdir(parents=True, exist_ok=True)
 llvm_as = next((p for p in ['/opt/homebrew/opt/llvm/bin/llvm-as', shutil.which('llvm-as') or ''] if p and Path(p).exists()), None)
 if not llvm_as:
     raise SystemExit('llvm-as (LLVM 21 or newer) is required to assemble the fixture')
+def assemble_fixture(source, target):
+    # Preserve an unchanged include_bytes input so a frontend relink keeps its Rust archive.
+    with tempfile.NamedTemporaryFile(dir=target.parent, suffix='.air', delete=False) as stream:
+        temporary = Path(stream.name)
+    try:
+        subprocess.run([llvm_as, '-o', temporary, source], check=True)
+        if not target.is_file() or temporary.read_bytes() != target.read_bytes():
+            os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
+
 air = out / 'runtime_examples.air'
-subprocess.run([llvm_as, '-o', air, SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll'], check=True)
+assemble_fixture(SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll', air)
 fc_air = out / 'function_constant.air'
-subprocess.run([llvm_as, '-o', fc_air, SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll'], check=True)
+assemble_fixture(SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll', fc_air)
 # The GPU scanout's half-float conversion kernel (GpuScanoutPresenter.h), hand-written AIR.
 scanout_air = out / 'scanout_convert.air'
-subprocess.run([llvm_as, '-o', scanout_air, ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll'], check=True)
+assemble_fixture(ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll', scanout_air)
 manifest = out / 'Cargo.toml'
 manifest.write_text('\n'.join([
     '[package]', 'name = "adreno-metal-bridge"', 'version = "0.1.0"', 'edition = "2024"', 'rust-version = "1.98"', '[workspace]',
