@@ -28,7 +28,8 @@ jobs:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: |
-          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]] ||
+             ! git -C device cat-file -e "${BASE}^{commit}" 2>/dev/null; then
             BASE="refs/remotes/origin/$DEFAULT_BRANCH"
           fi
           python3 tools/scripts/porting-record.py check --device device --base "$BASE"
