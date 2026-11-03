@@ -131,7 +131,7 @@ Compare matching touch-active scenes separately from static desktop and lock tra
 
 ## 4. Build and stage Metal
 
-Build from the resolved target tree with its SDK, compiler dependencies and ABI inputs. For iOS/iPadOS 17:
+Build from the resolved target tree with its SDK, compiler dependencies and ABI inputs. For iOS 17:
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios
@@ -139,7 +139,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios
 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-For iOS/iPadOS 27:
+For iOS 27:
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios27
@@ -164,7 +164,7 @@ separate timing observations.
 
 ### Warm the shader caches {#shader-warmup}
 
-A pipeline compiles from Apple's AIR the first time something asks for it, which stalls frames. Warm the caches ahead so the desktop finds them. Use `--target ios` for iOS/iPadOS 17 and `--target ios27` for 27. Supply the library list and cache pack for that OS image and compiler build.
+A pipeline compiles from Apple's AIR the first time something asks for it, which stalls frames. Warm the caches ahead so the desktop finds them. Use `--target ios` for iOS 17 and `--target ios27` for 27. Supply the library list and cache pack for that OS image and compiler build.
 
 1. **Priming list.** Write the absolute path of every `.metallib` of the OS image, one per line, as the render server sees it (`/System/Library/...`). Keep it in `build/prime-list.txt`; `build-adreno-metal-plugin.py` embeds it in the plugin as the `__DATA,__primelist` section, and `make-gpu-addon.py --prime-list FILE` ships it as `addons/NativeAdrenoMetal.primelist`. With a list the render server does not scan directories: its sandbox hides most of them.
 2. **Pipeline pack.** Boot an image built with `make-gpu-addon.py --cache-export`; the plugin writes its cache directory to the board log. Read the run with `scripts/read-sheng-log.py`, merge one or more exports with `scripts/make-m2vpack.py OUT EXPORT_DIR...` (later directories win) and ship the result with `make-gpu-addon.py --pipeline-pack OUT`. The plugin imports the pack into the cache directory before the runtime opens it.
