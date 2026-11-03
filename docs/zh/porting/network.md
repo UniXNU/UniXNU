@@ -99,4 +99,4 @@ sheng 能加入 WPA2-Personal 网络，通过 DHCP 获得地址并加载网页�
 
 ## 下一步
 
-继续 [DSP、音频和电源](/zh/porting/power)，或返回[驱动清单](/zh/porting/drivers)。
+有基带的设备继续[基带与移动网络](/zh/porting/baseband)，其余设备继续 [DSP、音频和电源](/zh/porting/power)。也可返回[驱动清单](/zh/porting/drivers)。
