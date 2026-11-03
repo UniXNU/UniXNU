@@ -38,7 +38,8 @@
     (CBManagerStatePoweredOn). 245 HCI commands from iOS in 4 min (LE scan 0x200b/0x200c, Create Connection
     0x401, ...; vendor 0xfce2/0xfce9 answered by the kernel); an SDP record for a remote AVRCP device. Only 5
     bluetoothd execs in total (4 before the radio was up at ~30 s), 4 BlueTool: the 9 s respawn loop is gone.
-  - Not checked yet: Settings > Bluetooth (scan list, pairing), turning Bluetooth off/on, audio.
+  - User: **Settings > Bluetooth lists devices** (scan works). Not checked yet: pairing, turning Bluetooth off/on,
+    audio (A2DP).
 - **2026-11-03 0236 boot (no kernel change): sweetbt=6: the radio stays up for iOS; bluetoothd now calls BlueTool**
   (boot `shim/out/umi-0236-bt6.img` = 0233b's line + `sweetbt=6`, kernel fe5ecbb + the uncommitted sched WIP, 23:46).
   Firmware as in 0235d, then `bluetoothd's vendor, erroneous-data-reporting and 0x204a commands answered here`,
