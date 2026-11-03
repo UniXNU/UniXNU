@@ -172,6 +172,23 @@ class Ipsw:
 
     def disk_image(self, component):
         """A component as a plain disk image: extracted, then decrypted when the IPSW ships it as AEA."""
+        # AEA inputs may have been removed after decryption. Validate the plain
+        # image and both recorded identities before downloading the archive again.
+        name = self.member(component)
+        if name.endswith('.aea'):
+            archive = self.cache / Path(name).name
+            plain = archive.with_suffix('')
+            record = plain.with_suffix(plain.suffix + '.json')
+            origin = archive.with_suffix(archive.suffix + '.json')
+            if plain.is_file() and record.is_file() and origin.is_file():
+                data, source = json.loads(record.read_text()), json.loads(origin.read_text())
+                pin = self.config.get('sha256', {}).get(archive.name)
+                if source.get('member') == name and data.get('member') == name \
+                        and data.get('aea_sha256') == source.get('sha256') \
+                        and (pin is None or pin == source.get('sha256')) \
+                        and data.get('size') == plain.stat().st_size \
+                        and sha256_file(plain) == data.get('sha256'):
+                    return plain
         path = self.extract(component)
         if path.suffix != '.aea':
             return path
