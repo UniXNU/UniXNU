@@ -55,7 +55,7 @@ The platform seed (`--unique-chip-id HEX` or `UNIXNU_UNIQUE_CHIP_ID`) and the fi
 ## On GitHub
 
 The device repository carries `.github/workflows/package.yml`. It runs
-`scripts/package.sh` on a macOS runner, with the UniXNU and uefi-sheng
+`scripts/package.sh` on a macOS runner, with the UniXNU and device UEFI
 checkouts beside the device repository, and offers `boot.img`, `payload.img`,
 `kernel.macho` and `package.manifest.json` as the run's artifacts.
 
@@ -125,7 +125,7 @@ Booting the artifacts is a separate step with its own record.
 
 [Build and boot](/building), [Device repository](/porting/device-repository)
 
-## Runtime inputs for sheng iPadOS 27
+## Runtime inputs for iOS 27
 
 The payload's `runtime` table enables preparation before kernel compilation.
 Apple static/System/App trust modules come from the selected IPSW unchanged. Turnip,
@@ -144,7 +144,7 @@ For a **first installation**, `scripts/package.sh --os 27 --init-data` creates a
 APFS seed from the IPSW's initial `private/var`, uses the board's `data_gib` and
 Setup preferences, and binds the new UUID into the kernel configuration. This
 writes host build files only; it does not erase or flash a device. Keep the seed
-at `out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr` for every later
+at `out/<device>/<os_profile>/<config>/runtime/data.dbr` for every later
 build of that installation. Its content identity, not just its UUID, identifies
 the persistent Data store. Regenerating it cannot preserve an older installation.
 

@@ -28,7 +28,7 @@ to `kernel.macho`. DarwinBoot reads it from the payload entry directory.
 
 ```toml
 [device_tree]
-source = "device:dts/sheng.dts"
+source = "device:dts/myboard.dts"
 include_dirs = ["soc:dts"]
 ```
 
@@ -43,8 +43,8 @@ The board DTS includes its SoC DTSI:
 /include/ "sm8550.dtsi"
 
 / {
-    model = "Xiaomi Pad 6S Pro";
-    compatible = "xiaomi,sheng", "qcom,sm8550";
+    model = "Example SM8550 device";
+    compatible = "vendor,myboard", "qcom,sm8550";
 };
 ```
 
@@ -100,9 +100,17 @@ platform identity, root matching, and payload memory-map placeholders.
 
 ## Standalone conversion
 
+Set the device and SoC source paths. Export `UNIXNU_UNIQUE_CHIP_ID` with the
+target platform seed and select the OS profile before conversion:
+
 ```sh
-dtc -I dts -O dtb -i ../UniXNU-sm8550-common/dts   -o /tmp/sheng.dtb ../UniXNU-sheng/dts/sheng.dts
-python3 scripts/make-adt.py --dtb /tmp/sheng.dtb   --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml   --board ../UniXNU-sheng/board.toml --unique-chip-id <hex>   --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
+DEVICE_DIR=/path/to/device
+SOC_DTS=/path/to/soc/dts
+dtc -I dts -O dtb -i "$SOC_DTS" -o /tmp/board.dtb "$DEVICE_DIR/dts/myboard.dts"
+python3 scripts/make-adt.py --dtb /tmp/board.dtb \
+  --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml \
+  --board "$DEVICE_DIR/board.toml" --unique-chip-id "$UNIXNU_UNIQUE_CHIP_ID" \
+  --data-ramdisk --trust-cache --output /tmp/kernel.macho.adt
 ```
 
 The command selects memory-map placeholders for the supplied payload inputs.

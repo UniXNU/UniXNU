@@ -20,7 +20,7 @@ map below. For each selected implementation, write down:
 Use the target DTS, firmware and driver sources for hardware values. Record their
 file and revision beside the configuration. Keep SoC operations in shared support,
 board wiring/policy in the device repository and OS ABI bindings in the selected
-OS integration. The sheng sources linked in these guides are implementation examples.
+OS integration. The device sources linked in these guides are implementation examples.
 
 From the main checkout, resolve the target:
 

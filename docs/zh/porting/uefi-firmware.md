@@ -39,7 +39,7 @@ HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
 FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
 ```
 
-负载使用分区表时还需加入 `PartitionDxe`。FAT 驱动需要平台提供 Unicode collation 服务。sheng 的 `Include/DXE.inc` 包含这些依赖。
+负载使用分区表时还需加入 `PartitionDxe`。FAT 驱动需要平台提供 Unicode collation 服务。参考固件的 `Include/DXE.inc` 包含这些依赖。
 
 `UniXNURamDiskDxe` 供使用 Mu-Silicium FDT 交接的设备共用，源码位于 UniXNU 的 `package/UniXNUPkg/Driver/UniXNURamDiskDxe/`。板级内存保留区和内存补充由固件平台维护。
 

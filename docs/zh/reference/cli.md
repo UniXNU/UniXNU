@@ -124,6 +124,9 @@ unixnu release [--os VERSION] [--no-deps] [--check]
 | `--dtb FILE` | bootimg 的编译设备树 |
 | `--ramdisk FILE\|none` | bootimg 的 ramdisk |
 | `-o FILE`、`--output FILE` | 启动镜像输出 |
+| `--stock FILE` | vendor_boot 使用的原厂镜像 |
+| `--ramdisk-addr ADDR` | vendor_boot 的 ramdisk 装载地址 |
+| `--verify-against` | 用原厂 ramdisk 重新打包并要求逐字节一致 |
 
 ## 环境变量
 

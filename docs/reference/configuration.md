@@ -46,7 +46,7 @@ Supported path keys are `device`, `out`, `uefi`, `edk2`, `kernelcache`, `kernel`
 | `components` | `include` | Canonical component IDs; dependencies are resolved in build order |
 | `kernel` | `config_fragments` | Ordered profile-relative configuration files |
 | `kernel` | `patch_series` | Ordered profile-relative series files |
-| `device_tree` | `source` | DTS entry point, such as `device:dts/sheng.dts` |
+| `device_tree` | `source` | DTS entry point, such as `device:dts/myboard.dts` |
 | `device_tree` | `include_dirs` | DTS include paths, such as `soc:dts` |
 
 Layers apply as ARM64, SoC, OS, device. Tables merge by key; arrays replace.
@@ -141,6 +141,7 @@ The selected defconfig applies after `config_fragments`. File prefixes are
 | `tags_offset` | integer | Tags offset |
 | `pagesize` | integer | Image page size |
 | `header_version` | integer | Android boot image header version |
+| `kernel_compression` | string | `gzip` (default) or `none`; selects how the kernel is stored in the boot image |
 
 ### [[bootimg.dtb_node]]
 

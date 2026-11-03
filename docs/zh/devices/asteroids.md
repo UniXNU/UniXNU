@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UFS userdata partition, with shared SM7635 support and board-owned storage, GPU, input and power integration. Bring-up runs as numbered staged tests; their results are in docs/asteroids-gpu-gen8.md and docs/asteroids-touch.md of rootstockos/iosonandng.
 
-源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/porting.toml), `279598b9867be6175aaaff0a63867d9234f276e1`.
+源记录: [porting.toml](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/porting.toml), `b812d7c9953a1cf14080d5bd05a5d63743efeeb7`.
 
 本页按设备记录自动生成。
 
@@ -75,7 +75,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -115,7 +115,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/board.toml)
 
 ## CPU 与中断 {#cpu}
 
@@ -159,7 +159,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/package/CpuFreqProbe.cpp)
 
 ## 内存与 DMA {#memory}
 
@@ -198,7 +198,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/dts/asteroids.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -240,7 +240,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 显示 {#display}
@@ -290,6 +290,10 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T76 \(2026-10-30\): the board classes here register through OSKextRegisterBoardClasses \(zzyg-board-class-registration.patch\), under the kext lock, in place of preModLoad/postModLoad alone, which deadlocked T75f's boot \(storage area\).
 - T76's first kernel build \(run 41109301209\) failed: XNU has no kOSReturnNoMemory; OSKextRegisterBoardClasses and its callers use kOSKextReturnNoMemory \(libkern/OSKextLib.h\), and the helper has a prototype before its definition.
 - T76's second kernel build \(run 41111730079\) failed in ShengPlatformPower.cpp: BoardClasses.h had been included after the file's last \#include, which there sits inside the ShengPlatformPower class; every probe now includes it after its first \#include.
+- T89 \(2026-11-02\): BootLog.c prints the microphone's \[mic port\] row \(native\_mic\_port, audio area\) after \[mic regs\]; BootLogStandins.c gives it a weak stand-in.
+- T93 \(2026-11-02\): BootLog.c prints \[mic codec\] \(native\_mic\_codec, audio area\) after \[mic port\]; BootLogStandins.c gives it a weak stand-in.
+- T94 \(2026-11-02\): \[mic codec\] prints whenever \[mic port\] does.
+- T95 \(2026-11-02\): BootLog.c prints \[mic page\] \(native\_mic\_page, audio area\) after \[mic codec\]; BootLogStandins.c gives it a weak stand-in.
 
 ### 完成条件
 
@@ -305,7 +309,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## 输入 {#input}
@@ -352,7 +356,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -465,6 +469,10 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T86d \(2026-11-01, pdbaq\): blocks still in the wallpaper's flower shadows, no backboardd crash, L inp 62/5. The first boot was refused \(Load Error\) for every image: slot a was unbootable with its retry count spent, as nothing marks our boots successful; fastboot set\_active a reset it \(retry count 7\).
 - T80o \(2026-11-01, pdbaqol, add-on 28: the runtime's 16 in every process\): no blocks. So the blocks are drawn live by the render server's 64-byte answer, not saved in a wallpaper render, and not drawn by another process. MobileSlideShow's sig 6 abort happens here too, so it is not the answer's.
 - T87 \(2026-11-01, AdrenoMetal 541a19a, UniXNU 3fc28a6\): letters put one answer back to the runtime's in the render server: A the format-free alignments, B minimumLinearTextureAlignmentForPixelFormat:, C requiredLinearTextureBytesPerRowForDescriptor:; with l each distinct question and answer goes to m2v/gpu/answers-&lt;pid&gt;.txt. Planned boots pdbaqlA, pdbaqlB, pdbaqlC.
+- T87a \(2026-11-02, pdbaqlA\): no blocks, not 120 Hz and far better than 15 fps \(user\). answers-&lt;pid&gt;.txt: the render server asks only deviceLinearTextureAlignmentBytes, linearTextureAlignmentBytes and deviceLinearReadOnlyTextureAlignmentBytes, once each; never minimumLinearTextureAlignmentForPixelFormat: or requiredLinearTextureBytesPerRowForDescriptor:. So A is T80o again: L inp 538/19, refused for pitch 246, 29509 copies. The blocks and the copies T79 removed come from the same answer. T87az \(A plus z, no shader priming\) booted for the post-crash 120 Hz question.
+- T88 \(2026-11-02, AdrenoMetal eedebfa, UniXNU d0443d7\): the bridge answers the runtime's 16 again. UniXNU patches/mesa/turnip-narrow-linear-rows.patch: the A8xx texture descriptor states a linear row pitch in bits \(TEX\_LINE\_OFFSET\), and only render targets and the 2D engine \(A2D pitch shr 6\) step rows at 64 bytes, so an explicit DRM\_FORMAT\_MOD\_LINEAR image that is never an attachment or storage image takes rows at any multiple of 16 bytes and of its texel \(descriptor alignment field clamped to 0\); transfers touching one are skipped. Core Animation's sampled textures then bind in place at 16-byte rows without the copies. Planned boot pdbaql: no blocks, smooth, and pitch refusals near 0.
+- T87az \(2026-11-02, pdbaqlAz\): priming off \(PR libs 0/0\), maybe slightly smoother than T87a \(user: possibly placebo\), L inp 224/8, 127 pitch refusals, 20738 copies: priming is not the main cost.
+- GPU work shelved \(2026-11-02, AdrenoMetal 7e19eb9, UniXNU eb5bf59\): the user calls T87a's state good enough. Default: the runtime's 16-byte linear answer \(no blocks, faster than T78 but not T79's 120 Hz\). Not built or booted: T88 \(turnip-narrow-linear-rows.patch, UniXNU d0443d7\) and its CI run were dropped untested. Removed: letters A, B, C, the y source dump \(its watch read unmapped client memory and crashed backboardd\) and z \(no priming, no clear gain\). Open: what in the render server the 64-byte answer draws as blocks \(its sampled sources are clean in memory and on the GPU\); why a backboardd restarted after a crash runs at 120 Hz; MobileSlideShow sig 6 in every run since T79, T80o included.
 
 ### 完成条件
 
@@ -480,7 +488,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -521,7 +529,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## 网络 {#network}
@@ -599,6 +607,26 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T51: the 20-second capture came back complete \(2000 of 2000 periods\) but silent: peak 33 in the first second, exactly 0 in the next 19. The mic path delivers no codec data.
 - T76 \(2026-10-30\): the board classes here register through OSKextRegisterBoardClasses \(zzyg-board-class-registration.patch\), under the kext lock, in place of preModLoad/postModLoad alone, which deadlocked T75f's boot \(storage area\).
 - T76's second kernel build \(run 41111730079\) failed in ShengPlatformPower.cpp: BoardClasses.h had been included after the file's last \#include, which there sits inside the ShengPlatformPower class; every probe now includes it after its first \#include.
+- T89 \(2026-11-02\): T51's capture was digital zero after its first second, the decimator fed nothing. The probe took AMIC1 through TX SMIC MUX0 into DEC0 \(DMA channel mask 1\); the vendor's handset-mic path \(mixer\_paths\_volcano\_qrd.xml amic\_1\_3\) takes AMIC1 through TX SMIC MUX1 = SWR\_MIC0 into DEC1 and AMIC3 through SMIC MUX2 = SWR\_MIC4 into DEC2, both on TX\_AIF1\_CAP, and its default sets TX SMIC MUX0 to ZERO; the vendor TX macro passes the decimator mask as the codec DMA channel mask \(tx\_macro\_get\_channel\_map\). The VA macro's SoundWire mic clock setup for a VA-hosted master \(bolero 2.1: VA\_TOP\_CSR\_SWR\_MIC\_CTL0-2 = 0xCC\) is already in the probe. asteroids-mic-dec=&lt;n&gt; \(default 1\) picks the decimator \(mux 0x100 + 8n, path 0x400 + 0x80n\) and the capture asks for mask 1 &lt;&lt; n; \[mic port\] reads back the decimator's muxes and path, the codec's data port 1 \(PortCtrl, ChannelEn in both banks, IntStat, PrepareStatus\) and SCP\_FrameCtrl in both banks, and the master's port 1 control, 300 ms into the capture. Boot: asteroids-mic=7 asteroids-mic-capture-s=20.
+- T89mic \(2026-11-02, asteroids-mic=7 asteroids-mic-capture-s=20, kernel run 41445466871\): still digital zero after the first second \(peaks 32 then 0 for 19 s, from 22.7 s; the user made noise and silence in turns\). \[mic port\]: dec 1 with mask 0x2, TX muxes SWR\_MIC0 / SWR\_MIC and the path enabled and unmuted \(0x24\), the codec's port 1 channel 1 enabled in both banks, the master's port 1 likewise \(0x1000101\), but the codec's SCP\_FrameCtrl 0 in both banks: it frames at the default 48 rows by 2 columns while the master frames at 50 by 16 \(0x101c 0xf\). Commands ride in column 0 and work; the data port does not line up.
+- T90 \(2026-11-02\): after the port setup the probe writes the master's bank 1 frame \(0x105c\) like bank 0 and broadcasts SCP\_FrameCtrl\_B1 = the same shape \(device 15\), mainline's sdw\_bank\_switch with qcom\_swrm\_pre\_bank\_switch, so the codec and the master switch to bank 1 at 50 rows by 16 columns together. asteroids-mic-frame=0 skips it. \[mic port\] then reads SCP\_FrameCtrl bank 1 as 0xf.
+- T90mic \(2026-11-02, capture 30 s from 43.1 s\): unchanged: peaks 33 then 0, the codec's SCP\_FrameCtrl still 0 in both banks and the master's MCP\_STATUS \(0x104c\) 0, bank 0. The broadcast never landed: mainline \(qcom\_swrm\_cmd\_fifo\_wr\_cmd\) sends a broadcast with command id 0xf \(SWR\_BROADCAST\_CMD\_ID\), and the probe's swrWrite gave it an ordinary id. The first T90mic boot ended in fastboot, not recovery, and was not pulled.
+- T91 \(2026-11-02\): swrWrite uses id 0xf for device 15 and waits 10 ms after the bank switch; \[mic port\] \[6\] is the master's MCP\_STATUS \(bit 0 the bank in use\) in place of its port control 2.
+- T92 \(2026-11-02, static review against the vendor master refs/nulldebris-modules swr-mstr-ctrl.c, the Volcano audio DT and sheng's working WCD938x capture\): the probe never prepared the codec's port: sheng writes DP1\_PrepareCtrl \(0x105\) before ChannelEn, and T90's DP1\_PrepareStatus read 0. T92 writes 0x105 = 1 and polls PrepareStatus for up to 10 ms before enabling the channel. Same as sheng and kept: codec HCtrl 0xff, master HCTRL 0xf0, sample interval 1. Sheng frames at 50 by 16 without a bank switch and records, so the T90/T91 bank switch is kept but may not be needed \(asteroids-mic-frame=0\). The vendor master computes a TX port's interval as 2 x bus clock / channel rate - 1 with offset1 and lane from the codec driver's table \(not in the local trees\); the Volcano VA master maps ADC1 to port 1 channel 1 \(SWRM\_TX1\_CH1\) and sets mipi-sdw-block-packing-mode 1. T91's kernel build was cancelled for T92.
+- T92mic \(2026-11-02\): still digital zero \(peaks 32 then 0, from 34.1 s\). The master is now on bank 1 \(MCP\_STATUS 1\), so the 0xf broadcast lands at the master; the codec's SCP\_FrameCtrl and DP1\_PrepareStatus still read 0.
+- Static review \(2026-11-02\), LKML WCD9378 v2 \(lkml.iu.edu/2607.3/09185.html, tested on the Fairphone 6, SM7635\): ADC1 leaves on codec port 1 channel BIT\(0\) to master port 1 channel BIT\(0\) \(no ChMap register, software only\); the TX ports are SDW\_DPN\_SIMPLE with simple\_ch\_prep\_sm, so no prepare is needed and PrepareStatus 0 is expected \(T92's 0x105 write is harmless\); bps 1; lane\_control\_support; clock\_reg\_supported \(the core programs SCP bus-clock base/scale; without it capture is dead, per the cover letter\): the probe already writes 0x4d = 1 \(19.2 MHz\) and 0x62/0x72 = 2 \(/2\), matching a 9.6 MHz bus \(master clock divider 0 on the 9.6 MHz macro clock\). The driver writes no raw 0xe0/0xf0; the probe's 0x01 there came with the first bring-up \(b0a33bf\) without a source. Mainline sm8550 TX SoundWire \(sm8550.dtsi swr2\): the ADC ports run sample interval 1, offset1 0, on lanes 1 and 2; only the DMIC ports \(interval 3, offset1 1\) use lane 0, which also carries the command column; sheng records on lane 2. The probe ran ADC1 at interval 1 on lane 0 with offset1 1. T92l1 / T92l2: the T92 kernel with asteroids-mic-port=0x10001 / 0x20001 \(interval 1, offset 0, lane 1 / 2\).
+- T92l1 \(2026-11-02, asteroids-mic-port=0x10001\): still digital zero \(peaks 32 then 0 from 33.2 s; the run lasted 605 s and ended in fastboot\). The master's port 1 took interval 1 at offset 0 \(0x1000001\). A 150 Hz high-pass decimator turns a constant bit stream into exactly 0 after a short transient \(the first second's peak of 32 in every run\), so the decimator runs and its SWR\_MIC input is constant.
+- Static review, second pass \(2026-11-02\): the lpass-cdc TX and VA macros \(refs/nulldebris-modules lpass-cdc-tx-macro.c, -va-macro.c\) need nothing the probe lacks for a SWR\_MIC decimator on a VA-hosted master: the VA SWR\_MIC\_CTL0-2 = 0xcc \(done\), TX\_TOP\_CSR\_SWR\_CTRL only cleared at power-down, the amic TX hold clear is the codec's ANA\_TX\_CH2 HPF init bit \(done\). The LKML driver's codec writes match: io\_init \(TXFE\_DIV bypass, TX support clock, PDM watchdog, SM0-2 micbias selects\), SmartMIC0 usage 0x05 \(ADC\_LP\), IT11\_MICB 0x05 \(WCD9378\_MICB\_USAGE\_2P75V for the board's 2750 mV micbias 1\), PS0 request. Left: the lane \(T92l2 next\), offset, the probe's unsourced 0xe0/0xf0 write, and the T90 bank switch.
+- T92l2 \(2026-11-02, asteroids-mic-port=0x20001, lane 2 as sheng\): still digital zero \(peaks 32 then 0 from 33.2 s; again via fastboot, then recovery on its own\). Third review pass, lpass-cdc TX decimator power-up: CFG0 bit 7 clear for an analog SWR mic \(0x50 here\), DEC mode ADC\_DEFAULT \(no mixer path sets TX DEC MODE\), 150 Hz high-pass so no gate sequence, clock enable 0x20 and rate 4 \(48 kHz\) in PATH\_CTL, TX SWR\_INPUT is a plain input pin, and the TX macro never touches its SWR\_CONTROL \(only the VA macro does\). The macro side matches the vendor driver throughout; the constant input is on the codec or bus side.
+- Stock modules \(2026-11-02\): recovery's kernel loads only gpr and spf\_core \(no sound card\), so vendor\_dlkm\_a was read out of super read-only \(dd of sectors 18504096 + 162696 from the LP metadata; local/stock/vendor\_dlkm\_a.img, ext4\) for the stock wcd9378\_dlkm.ko, swr\_ctrl\_dlkm.ko, lpass\_cdc\_\*\_dlkm.ko and machine\_dlkm.ko \(no source\). The Volcano codec node \(volcano-audio-overlay.dtsi wcd9378-codec\) maps ADC1 to codec port index 0, mask 0x1, SWRM\_TX1\_CH1, and qcom,swr-tx-port-params gives &lt;offset1 lane&gt; for four use cases of four ports: use case 0 \(9.6 MHz bus\) port 1 = OFFSET1\_VAL1 LANE0, the probe's original values; use case 1 \(4.8 MHz\) port 1 = VAL0 LANE1.
+- Sample interval: the vendor master takes 2 x bus clock / channel rate - 1, and Qualcomm's WCD937x-family drivers give an ADC port 4.8 MHz in ADC\_LP and 9.6 MHz in NORMAL/HIFI; the LKML WCD9378 driver uses NORMAL on a 9.6 MHz bus with mainline's interval 1. The probe ran ADC\_LP \(SmartMIC usage 0x05, as the vendor's TX0 MODE ADC\_LP\) with interval 1, the NORMAL timing. T92s3: the T92 kernel with asteroids-mic-port=0x103 \(interval 3, offset 1, lane 0\): LP with LP timing on use case 0.
+- T92s3 \(2026-11-02, asteroids-mic-port=0x103\): still digital zero \(peaks 32 then 0 from 33.9 s\); the master took interval 3 \(0x1000103\). Every port timing tried \(interval 1 and 3, offsets 0 and 1, lanes 0-2\) gives the same constant input, so the codec most likely sends nothing.
+- T93 \(2026-11-02\): \[mic codec\] reads the codec's state 300 ms into the capture: TX sequencer 0 status \(SEQ\_TX0\_STAT\), SmartMIC0 FUNC\_STAT, PDE11 actual and requested power state, IT11 usage and micbias, SYS\_USAGE\_CTRL, TX\_NEW\_CH12\_MUX, ANA\_TX\_CH1/CH2, CDC\_ANA\_TX\_CLK\_CTL, CDC\_AMIC\_CTL, TXFE\_DIV\_CTL, PDM\_WD\_CTL0, SM0\_MB\_SEL and MB\_PULLUP\_EN. asteroids-mic-usage=&lt;n&gt; \(default 0x05 ADC\_LP\) sets the SmartMIC0 usage, so NORMAL \(0x03\) can run with interval 1. The probe's 0xe0/0xf0 write stays: per the user it came from the Nothing kernel or measurements in recovery. Boots: T93lp \(usage 5, port 0x103\) and T93n \(usage 3, port 0x101\).
+- T93n \(2026-11-02, NORMAL usage 3, interval 1, offset 1, lane 0\): still digital zero \(peaks 31 then 0 from 32.6 s\), and no \[mic codec\] row: it printed only when its first two words were nonzero, and a failed read gives 0xff, so every paged codec read returned 0, the usage register written 3 a moment before among them. The probe's PS0 check \(ACT\_PS 0\) since T47 therefore proves nothing.
+- T94 \(2026-11-02\): wcdPage writes SCP\_AddrPage1/2 before every paged access instead of caching them \(asteroids-mic-pagecache=1 restores the cache\): if the codec drops its page registers, every later paged access, writes included \(micbias, usage, PS0 request\), lands on page 0, which would leave the ADC off. \[mic codec\] now prints whenever \[mic port\] does.
+- T94n \(2026-11-02\): still digital zero \(peaks 30 then 0 from 33.3 s\), and \[mic codec\] read 0 in every byte with the page registers written before each access. The \[mic\] row's /10 is the device id's high word \(DT reg &lt;0x10 0x01170223&gt;\), not a paged read, and efuse=0 is a paged read: no paged codec read has returned data since T47, so the codec's paged writes \(io\_init, class load, micbias, usage, PS0 request\) may never have landed either, which would leave its ADC off. The Qualcomm paging patch the LKML WCD9378 series depends on \(soundwire: qcom: add SCP address paging support, 999f80904763, lkml.iu.edu/2607.1/13485.html\) programs SCP\_AddrPage1/2 and sets bit 15 of the wire address, as the probe does.
+- T95 \(2026-11-02\): \[mic page\]: SCP\_AddrPage1/2 read back after setting them for ANA\_TX\_CH1 \(beside the values written\), the raw read FIFO word of that paged read, the master's interrupt status \(0x200\) before and after it, DEV\_VER \(0x40100070\) through paging, ANA\_TX\_CH1, the unpaged SCP\_DevId\_0 and the failed reads.
+- T95's first kernel build \(run 41485458782\) failed: the \[mic page\] block declared failed a second time in micPortSnapshot; it counts in pageFailed now.
 
 ### 完成条件
 
@@ -615,7 +643,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -660,7 +688,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 镜像组装 {#packaging}
@@ -700,7 +728,7 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -738,6 +766,10 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 - T64: \[gpu uc\] rows: the GPU probe's stage \(0x108 passed, 0x10e missed\), its kernel-client test counters \(rounds, steps, first error and its step, burst, system BOs, opens\) and the test's result lines.
 - T65: \[bo pool\] in the boot log shows the GPU BO pool next to \[bo memory\]: MiB and chunks reserved, the reservation's and write-combine's IOReturn, BOs it served, BOs sent to system memory for lack of room, MiB in use and peak.
 - T73 \(2026-10-30\): until the root is mounted, the UFS log shows \[late probe\] \(bsd\_autoconf's probe step, key events and CPU clock stages\) and \[kernel threads\]: every kernel thread that keeps its stack while it waits, with name, state, wait event and unslid return addresses \(boot\_kthread\_blocked\_rows\), '\*' for bsd\_autoconf's thread.
+- T89 \(2026-11-02\): the boot log adds \[mic port\] \(native\_mic\_port: the microphone decimator, the codec's and the master's data port 1 while the capture runs; audio area\).
+- T93 \(2026-11-02\): the boot log adds \[mic codec\] \(native\_mic\_codec: the WCD9378's TX sequencer, SmartMIC0 status and power state, usage, gains, clocks and micbias while the capture runs; audio area\).
+- T94 \(2026-11-02\): \[mic codec\] prints whenever \[mic port\] does, zeros included.
+- T95 \(2026-11-02\): the boot log adds \[mic page\] \(native\_mic\_page: whether the WCD9378's paged registers answer; audio area\).
 
 ### 完成条件
 
@@ -753,6 +785,6 @@ Nothing Phone \(3a\) runs the unchanged iPad7,1 iPadOS 17.7.11 image from its UF
 
 ### 证据
 
-- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/279598b9867be6175aaaff0a63867d9234f276e1/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/rootstockos/UniXNU-asteroids/blob/b812d7c9953a1cf14080d5bd05a5d63743efeeb7/package/BootProgress.c)
 
 </div>

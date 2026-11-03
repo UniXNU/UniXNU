@@ -96,7 +96,7 @@ Each `CONFIG_XNU_<NAME>` line becomes `XNU_<NAME>` in the kernel build environme
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 archives = [
   "build-software-aes-bindings.py",
   "build-libpthread-kernel.py",

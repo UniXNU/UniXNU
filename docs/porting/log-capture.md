@@ -157,7 +157,7 @@ must use the same block units and byte ranges.
    reason and reset interface. Record the bootloader and recovery commands used
    by the manual cycle.
 
-The [sheng implementation](https://github.com/UniXNU/UniXNU-sheng) supplies a
+The [reference implementation](https://github.com/UniXNU/UniXNU-sheng) supplies a
 Linux reader, a reserved `userdata` region and a fastboot return path. Its source
 layout is a reference for `package/BootLog.c`, `BootReset.c`,
 `BootResetCore.h`, `package/linux-log/` and `scripts/read-sheng-log.py`. Its PMIC
@@ -167,7 +167,7 @@ that board record.
 **Result:** one reader environment, one matching decoder, an identified storage
 range and a tested route back to bootloader or recovery.
 
-For the sheng iPadOS 27 native source path, enable sheng-log=1 boot-ui-trace=1
+For the reference iOS 27 native source path, enable `sheng-log=1 boot-ui-trace=1`
 when diagnosing a user-space stall. The source storage archive includes
 BootProcessWorker.c, which captures process stacks separately from the log
 writer so a user-page fault cannot stop log persistence. Add

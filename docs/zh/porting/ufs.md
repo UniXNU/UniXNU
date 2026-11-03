@@ -3,7 +3,7 @@
 先阅读设备 `porting.toml` 的存储部分和[组件目录](/zh/reference/components)。
 官方实现为 [ShengUfs](/zh/drivers/sheng-ufs)，运行时类名为 `NativeUfs`。
 
-ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口解析和 sheng
+ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口解析和板级
 持久存储策略。每个目标需要检查其硬件常量和板级策略。
 
 实现后按[驱动接入步骤](/zh/porting/drivers#build-integration)连接初始化调用、归档配方和 OS ABI，
@@ -12,7 +12,7 @@ ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口�
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口�
 板级连接和策略放在设备仓库。按[设备树绑定](/zh/porting/device-tree)描述寄存器宽度、
 父节点 address cells、`ranges`、中断 provider 和 IOMMU 引用。
 
-sheng 的 SoC DTSI 导出控制器 `0x01d84000/0x3000` 和 PHY `0x01d80000/0x2000`。
+SM8550 参考 DTSI 导出控制器 `0x01d84000/0x3000` 和 PHY `0x01d80000/0x2000`。
 GCC `0x00100000` 和 stream `0x60` 的 apps-SMMU 操作位于 ShengUfs。当前驱动通过
 C++ 常量和操作访问这些资源。资源改为 DTS 属性时，还需要修改读取方并检查生成的 ADT 值。
 
@@ -76,14 +76,14 @@ PHY、复位、时钟和电源序列。
 - 根卷读取、持久 Data 写入和复位处理分别定义完成条件。每次写入验证记录分配范围和恢复方法。
 - 接管 apps SMMU 的驱动也负责其他设备需要的 stage 1 窗口。ShengUfs 为显示 bank
   （`sheng-dpu-scanout`）和 WiFi 端点（`sheng-wifi=2` 或更大）各建立一个，默认都关闭。
-  音频流保持直通：给它们使用转换 context 会让 sheng 复位。
+  音频流保持直通：给它们使用转换 context 会让参考板型复位。
 
-[sheng 存储记录](/zh/devices/sheng#storage)提供板级参数、实现引用和当前范围。
+[参考存储记录](/zh/devices/sheng#storage)提供板级参数、实现引用和当前范围。
 
 ## 配置
 
 在完整 `[components] include` 数组中选择匹配的存储组件，在 `[kernel] archives`
-的适当位置加入构建项。数组会替换继承值。sheng 使用以下配置：
+的适当位置加入构建项。数组会替换继承值。参考配置如下：
 
 ```toml
 # 完整设备选择中的条目：
@@ -91,15 +91,13 @@ PHY、复位、时钟和电源序列。
 # [kernel] archives: "component:ShengUfs"
 
 [userdata]
-first_lba = 3094592
-last_lba = 64007162
-lba_bytes = 4096
+# 按目标 GPT 设置 first_lba、last_lba 和 lba_bytes。
 
 [payload.adt]
-root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+# 按所选 APFS 卷设置 root_match_volume_uuid。
 ```
 
-这些值描述 sheng。其他设备的分区参数取自该设备 GPT，根卷 UUID 取自所选卷。
+目标分区参数取自本机 GPT，根卷 UUID 取自所选卷。
 保留其他必需的 `payload.adt` 字段。所选 defconfig 启用 `CONFIG_XNU_NATIVE_UFS=y`，
 该运行时的完整内核参数数组加入 `native-ufs-root=1`。
 
@@ -121,10 +119,10 @@ root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
 [完成等级](/zh/porting/records#completion-levels)。
 
 ```sh
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
-./unixnu status --json -D ../UniXNU-sheng
-./unixnu build kernel -D ../UniXNU-sheng
-python3 scripts/porting-record.py check --device ../UniXNU-sheng
+./unixnu defconfig myboard_defconfig -D /path/to/device
+./unixnu status --json -D /path/to/device
+./unixnu build kernel -D /path/to/device
+python3 scripts/porting-record.py check --device /path/to/device
 ```
 
 ## 下一步

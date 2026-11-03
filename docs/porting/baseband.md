@@ -2,7 +2,7 @@
 
 Wi-Fi-only tablets without a cellular modem can skip this page. Set the cellular area of `porting.toml` to `not-applicable` and give the hardware reason in `limits`.
 
-The example is [QcomBaseband](/drivers/qcom-baseband), written by **HoshinoYumeka ([@chiba233](https://github.com/chiba233))**. It connects iPadOS's ABM, BBUpdater and CommCenter to a Qualcomm modem. Its Coachz example targets SC7180, IPA v4.2 and iPadOS 17 (21H461).
+The example is [QcomBaseband](/drivers/qcom-baseband), written by **HoshinoYumeka ([@chiba233](https://github.com/chiba233))**. It connects iOS's ABM, BBUpdater and CommCenter to a Qualcomm modem. Its Coachz example targets SC7180, IPA v4.2 and iOS 17 (21H461).
 
 Start after [platform memory and DMA](/porting/platform). Identify the modem, its control transport, data engine, firmware, SIM connection and EFS/NV storage.
 
@@ -12,12 +12,12 @@ Start after [platform memory and DMA](/porting/platform). Identify the modem, it
 | --- | --- | --- |
 | SoC and board | Power, clocks, reserved memory, modem firmware boot, interrupts, DMA and EFS/NV access | MBA/MPSS, SMEM/SMP2P, GLINK/QRTR and rmtfs |
 | Control bridge | QMUX framing, QMI client allocation, service discovery and reply routing | `baseband/coachz_bb_qmux.h` |
-| iPadOS interface | Baseband services, channels, asynchronous reads/writes and boot exchange | `baseband/coachz_baseband.cpp`, `coachz_bb_channels.h`, `coachz_bb_sahara.h` |
+| iOS interface | Baseband services, channels, asynchronous reads/writes and boot exchange | `baseband/coachz_baseband.cpp`, `coachz_bb_channels.h`, `coachz_bb_sahara.h` |
 | Data path | IPA/GSI, QMAP muxes and OS network-interface delivery | `ipa/` and `platform/coachz/coachz_modem.c` |
 
 Source is in [UniXNU/QcomBaseband](https://github.com/UniXNU/QcomBaseband). Keep the board's register addresses, DMA layout and firmware policy in its device or SoC repository.
 
-SC7180 carries QMI over GLINK/QRTR. The bridge presents the Apple PCIe baseband class names to iPadOS over that transport. A modem reached through PCIe/MHI needs its corresponding board transport.
+SC7180 carries QMI over GLINK/QRTR. The bridge presents the Apple PCIe baseband class names to iOS over that transport. A modem reached through PCIe/MHI needs its corresponding board transport.
 
 ## 2. Boot the modem and establish QMI {#modem-startup}
 
@@ -30,7 +30,7 @@ Record firmware sources, hashes and packaging paths in `proprietary-files.txt`. 
 
 **Result:** the modem runs, its QMI services respond, and IPA initialization completes.
 
-## 3. Connect the iPadOS bridge {#ios-bridge}
+## 3. Connect the iOS bridge {#ios-bridge}
 
 Read `baseband/QcomBaseband.h` and the [Coachz integration](https://github.com/UniXNU/QcomBaseband/blob/main/platform/coachz/README.md).
 
@@ -51,7 +51,9 @@ A modem's `kOnline` state means its radio is online. Check NAS registration, the
 
 The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear after SIM reinsertion. DPM/WDA setup and WDS/QOS bindings succeed. Cold-boot SIM state, carrier settings, EFS write persistence and a working `pdp_ip` data session remain open.
 
-`coachz_bb_esim.h` discovers real eUICC slots, adds UIM capability fields and carries VINYL Tape through ISD-R logical-channel APDUs. It handles request/result segmentation, timeouts and restoration of the original slot mapping. The host model currently fails card-status indication and legacy GetCsn cases. Device eSIM provisioning remains unverified.
+`coachz_bb_esim.h` discovers real eUICC slots and carries VINYL Tape through ISD-R logical-channel APDUs. Preserve capability TLV `0x21` in card-status replies and indications. Legacy GetCsn returns `0x204` to complete native driver initialization; EID/capability requests read TLV `0x01`, and Tape results use an 11-byte header.
+
+Challenge, authentication and download preparation retain the owning client's channel. Terminal operations, errors, disconnect and 180 seconds of inactivity close it and restore the original slot mapping. Recovery queries return an empty record set. The host models pass. Coachz shows eSIM in Settings with an incomplete page; profile provisioning remains unverified. Test cellular traffic with a SIM that has an active data plan.
 
 ## 5. Build and record {#build}
 

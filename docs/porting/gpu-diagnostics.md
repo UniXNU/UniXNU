@@ -1,6 +1,6 @@
 # GPU frame diagnostics
 
-The sheng latency capture records only the evidence for seven frame-latency questions: foreground allocation, background reservation, submission delay, release and completion, concurrent services and faults, GPU pass cost, and upstream display gaps. Enable it with:
+The reference latency capture records only the evidence for seven frame-latency questions: foreground allocation, background reservation, submission delay, release and completion, concurrent services and faults, GPU pass cost, and upstream display gaps. Enable it with:
 
 ```text
 sheng-log=1 sheng-gpu-trace=1 sheng-gpu-perf=1 sheng-diag-export=240
@@ -38,10 +38,10 @@ The exporter writes `gpu.trace.bin`, `kernel.latency.bin`, `kernel.rings.txt` (s
 
 ## Read and decode
 
-Run from UniXNU-sheng or the resolved sheng build tree:
+Run from the reference device repository or its resolved build tree:
 
 ```sh
-fastboot boot /path/to/sheng-linux-log.img
+fastboot boot /path/to/linux-log.img
 python3 scripts/read-sheng-log.py --wait 60 --out /path/to/logs
 ```
 

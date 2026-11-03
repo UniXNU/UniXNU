@@ -1,6 +1,6 @@
 # GPU 帧诊断
 
-sheng 延迟采集只记录七个帧延迟问题所需的证据：前台分配、后台预留、提交前延迟、释放与完成处理、后台并发与异常、GPU pass 耗时、显示更新空档。启动参数：
+参考延迟采集只记录七个帧延迟问题所需的证据：前台分配、后台预留、提交前延迟、释放与完成处理、后台并发与异常、GPU pass 耗时、显示更新空档。启动参数：
 
 ```text
 sheng-log=1 sheng-gpu-trace=1 sheng-gpu-perf=1 sheng-diag-export=240
@@ -38,10 +38,10 @@ LAT1 为异常、unnest、退出原因和进程身份保留 32,768 个槽位，�
 
 ## 读取与解码
 
-在 UniXNU-sheng 或 sheng 构建树中运行：
+在参考设备仓库或其目标构建树中运行：
 
 ```sh
-fastboot boot /path/to/sheng-linux-log.img
+fastboot boot /path/to/linux-log.img
 python3 scripts/read-sheng-log.py --wait 60 --out /path/to/logs
 ```
 

@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -36,23 +36,22 @@ Read [GopFramebuffer](/drivers/gop-framebuffer) and its `NativeLegacyDisplay.cpp
 `NativeGOPPresenter.cpp` and `NativeGOPWire.h`. It consumes `PE_current_console`
 and integrates with the selected MobileFramebuffer and IOSurface ABI.
 
-In the [sheng package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package),
+In the [reference board package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package),
 inspect `LegacyDisplayProbe.cpp` and `DisplayTimingProbe.cpp`. The device's
 `scripts/build-gop-legacy-display.py` qualifies ABI methods against a prelinked
 candidate before producing the late display archive. Supply the matching
 candidate and audit inputs listed in [build inputs](/porting/migration#build-inputs).
 
 1. Select GopFramebuffer and the display archive recipe, preserving its dependencies.
-2. Enable the recipe's kernel configuration and initialization caller. sheng uses
+2. Enable the recipe's kernel configuration and initialization caller. The reference uses
    `CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y` and its `offline-legacy-*` arguments.
 3. Check pixel layout, row stride, allocation size and cache handling in CPU
    presentation. Confirm that a known frame reaches the display.
 4. Check swap completion and IOSurface lifetime before enabling
    [GPU presentation](/porting/gpu).
-5. Adapt timing reads to the target display controller. sheng's `sheng-dpu=1`
+5. Adapt timing reads to the target display controller. The reference probe, `sheng-dpu=1`,
    samples the SM8550 DPU and dual-DSI counters through `DisplayTimingProbe.cpp`.
-   Set refresh policy from the observed panel mode. `sheng-vsync=120` is sheng's
-   requested timing value.
+   Set refresh policy from the observed panel mode. The reference requests 120 Hz with `sheng-vsync=120`.
 
 For the `NativeGOPWire.h` path, query mode/geometry first and validate each
 present buffer's size and stride. In GPU handoff, track the pending frame by
@@ -74,14 +73,14 @@ wait chains before treating a stationary logo as a framebuffer transfer failure.
 ### Read the display pipes {#dpu-pipes}
 
 Before changing what the display fetches, read how firmware left it.
-`DisplayTimingProbe.cpp` does this on sheng:
+The reference `DisplayTimingProbe.cpp` exposes these stages:
 
 | Argument | Reads |
 | --- | --- |
 | `sheng-dpu=2` | VIG 0 and 1 source, size, format and fetch settings; CTL 0 state; the tear check of both interfaces; the display streams in the apps SMMU |
 | `sheng-dpu=3` | Also rewrites each pipe's current address and times the CTL flush latch |
 
-On sheng both VIG pipes fetch one 32-bit physical address, the right pipe from
+In this reference, both VIG pipes fetch one 32-bit physical address, the right pipe from
 its own source x, and a flush latches within 5.4 ms without a start because the
 panel refreshes by itself. The display context bank starts with translation off.
 
@@ -113,7 +112,7 @@ behind the OS-facing brightness service.
 ## 4. Adapt and enable brightness
 
 1. Update the board's engine mappings, clock votes and interrupt routing.
-   sheng's GENI path adopts firmware-loaded engine code and timing; verify that
+   The reference GENI path adopts firmware-loaded engine code and timing; verify that
    handoff or implement the target's initialization sequence.
 2. Implement the target controller's level encoding, write and readback. Match
    the number of controllers and update order to the panel's wiring.
@@ -123,13 +122,13 @@ behind the OS-facing brightness service.
    requests on the work loop and inspect failures before enabling fades.
 4. Match `IODisplayParameters` brightness limits and `backlight-control` to the
    selected OS ABI. The service accepts brightness and `FadePeriod` properties.
-5. Build the service and its registration wrapper. sheng's display recipe does
+5. Build the service and its registration wrapper. The reference display recipe does
    both; `sheng-backlight=1` enables its probe.
 
 From the resolved target tree, locate these integration points:
 
 ```sh
-rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/sheng/AppleARMBacklight.cpp
+rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/*/AppleARMBacklight.cpp
 rg -n 'backlight|GeniI2c' scripts/build-gop-legacy-display.py
 ```
 
@@ -138,7 +137,7 @@ boot image through [Building](/building).
 
 **Expected result:** minimum, middle and maximum settings produce corresponding
 readback and visible levels; fades complete; timeout counters remain stable.
-On sheng, `native_backlight_stats` records publication, requests, readback,
+The reference `native_backlight_stats` records publication, requests, readback,
 interrupts and failures. Verify UI brightness changes as a separate step from
 raw controller writes.
 

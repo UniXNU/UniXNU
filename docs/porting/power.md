@@ -29,7 +29,7 @@ Choose the transport before selecting the reference code.
 | [ShengAdsp.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/ShengAdsp.h#L15) | `ShengAdspClient`, channel registration and queued sends |
 | [LegacyDisplayProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/LegacyDisplayProbe.cpp#L493) | Initialization order for DSP and its consumers |
 
-The sheng files illustrate a Qualcomm GLINK integration. For that interface:
+The linked files illustrate a Qualcomm GLINK integration. For that interface:
 
 1. Adapt firmware authentication, reserved memory and power votes to the target.
    Establish the mailbox and ready/crash notification paths before opening a channel.
@@ -125,9 +125,9 @@ A capture route adds a codec and a SoundWire link to the stream steps above.
 6. **Publish the input.** Expose an input stream only after a direct capture of a
    known sound succeeds.
 
-The sheng route, from [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/main/package/AudioProbe.cpp):
+The reference route, from [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/main/package/AudioProbe.cpp):
 
-| Stage | sheng value |
+| Stage | Reference value |
 | --- | --- |
 | Codec | WCD938x, reset gpio108, supply ldob15, SoundWire device 1 on the TX master (0x6d30000) |
 | Analog | AMIC3, micbias 3, ADC2 |

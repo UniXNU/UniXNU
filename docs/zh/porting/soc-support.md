@@ -130,6 +130,6 @@ include_dirs = ["soc:dts"]
 选择前阅读这些文件和根目录 `AGENTS.md`，在设备 feed 中固定仓库版本，并包含其 DTSI。
 
 Adreno740 和 AdrenoMetal 覆盖 A740/SM8550 接口。每块板型提供自己的固件、电源、
-保留内存和显示输入。[sheng 记录](/zh/devices/sheng)包含该设备的 GPU 实机结果；
+保留内存和显示输入。[参考设备记录](/zh/devices/sheng)包含该设备的 GPU 实机结果；
 其设备配置还选择了相应 UFS、触控和 HID 实现。复用时检查这些组件的板级依赖。
 已有移植按[迁移指南](/zh/porting/migration)操作。
