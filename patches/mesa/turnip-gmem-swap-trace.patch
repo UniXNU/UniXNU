@@ -1,0 +1,201 @@
+diff --git a/src/freedreno/vulkan/tu_clear_blit.cc b/src/freedreno/vulkan/tu_clear_blit.cc
+--- a/src/freedreno/vulkan/tu_clear_blit.cc
++++ b/src/freedreno/vulkan/tu_clear_blit.cc
+@@ -14,6 +14,7 @@
+ #include "util/format_rgb9e5.h"
+ #include "util/format_srgb.h"
+ #include "util/half_float.h"
++#include "util/simple_mtx.h"
+ 
+ #include "common/freedreno_gpu_event.h"
+ #include "common/freedreno_lrz.h"
+@@ -211,14 +212,58 @@ format_to_ifmt(enum pipe_format format)
+  * it with the identity swap. Per site (tu_gmem_side_stats): [0] transfers, [1] of them with a swap other than WZYX on the tile
+  * side, [2] with MUTABLEEN, [3] of a linear image in memory. [1] is the counter that must stay zero for linear images.
+  */
+-static uint64_t tu_gmem_side_counts[4][4];
++static uint64_t tu_gmem_side_counts[6][4];
++
++/* The GMEM swap trace (tu_swap_trace_on): one event 37 per distinct transfer (site, image, format, linearity, MUTABLEEN, tile side
++ * swap, the view's swap and mutability, and the memory side's own registers: RB_MRT_BUF_INFO for a 3D transfer,
++ * RB_A2D_DEST_BUFFER_INFO for a 2D one, RB_RESOLVE_SYSTEM_BUFFER_INFO for a blit event), sent again at each power of two of its
++ * count, so a frame's thousands of transfers fit the kernel's ring. */
++struct tu_swap_trace_slot {uint64_t key[3];uint64_t count;};
++static struct tu_swap_trace_slot tu_swap_trace_slots[256];
++static simple_mtx_t tu_swap_trace_lock = SIMPLE_MTX_INITIALIZER;
++
++static uint64_t
++tu_swap_trace_count(const uint64_t key[3])
++{
++   const uint64_t hash = (key[0] * 0x9e3779b97f4a7c15ull) ^ (key[1] * 0xc2b2ae3d27d4eb4full) ^ key[2];
++   uint64_t count = 0;
++   simple_mtx_lock(&tu_swap_trace_lock);
++   for (unsigned probe = 0; probe < 256; probe++) {
++      struct tu_swap_trace_slot *slot = &tu_swap_trace_slots[(hash + probe) % 256];
++      if (!slot->count || !memcmp(slot->key, key, sizeof(slot->key))) {
++         memcpy(slot->key, key, sizeof(slot->key));
++         count = ++slot->count;
++         break;
++      }
++   }
++   simple_mtx_unlock(&tu_swap_trace_lock);
++   return count;   /* 0: the table is full, nothing is sent */
++}
++
++static bool
++tu_swap_trace_due(uint64_t count)
++{
++   return count && !(count & (count - 1));
++}
+ 
+ void
+ tu_note_gmem_side(struct tu_cmd_buffer *cmd, const struct tu_image_view *iview, unsigned site, bool linear, bool mutableen, unsigned swap)
+ {
+-   tu_frame_event(37,(uintptr_t)cmd,site,(uintptr_t)iview,(uintptr_t)iview->image,iview->vk.format,linear,mutableen,swap,iview->view.color_swap,iview->view.is_mutable);
++   if (tu_swap_trace_on()) {
++      const uint32_t memory_side = site == 2 ? iview->view.RB_A2D_DEST_BUFFER_INFO :
++                                   site >= 4 ? iview->view.RB_RESOLVE_SYSTEM_BUFFER_INFO : iview->view.RB_MRT_BUF_INFO;
++      const uint64_t key[3] = {(uint64_t)site | (uint64_t)iview->vk.format << 8 | (uint64_t)linear << 40 | (uint64_t)mutableen << 41 |
++                                  (uint64_t)iview->view.is_mutable << 42 | (uint64_t)(swap & 0xff) << 48 |
++                                  (uint64_t)iview->view.color_swap << 56,
++                               (uintptr_t)iview->image, memory_side};
++      const uint64_t count = tu_swap_trace_count(key);
++      if (tu_swap_trace_due(count))
++         tu_frame_event(37,count,site,(uintptr_t)iview->image,iview->vk.format,linear,mutableen,swap,iview->view.color_swap,
++                        iview->view.is_mutable,iview->view.RB_MRT_BUF_INFO,iview->view.RB_A2D_DEST_BUFFER_INFO,
++                        iview->view.RB_RESOLVE_SYSTEM_BUFFER_INFO);
++   }
+    p_atomic_inc(&tu_gmem_side_counts[site][0]);
+-   if (swap != WZYX)
++   if (swap != WZYX && swap != 0xff)
+       p_atomic_inc(&tu_gmem_side_counts[site][1]);
+    if (mutableen)
+       p_atomic_inc(&tu_gmem_side_counts[site][2]);
+@@ -5572,6 +5617,8 @@ tu_emit_blit(struct tu_cmd_buffer *cmd,
+ {
+    assert(blit_event_type != BLIT_EVENT_CLEAR);
+    uint32_t clear_mask = 0;
++   tu_note_gmem_side(cmd, iview, blit_event_type == BLIT_EVENT_LOAD ? 4 : 5,
++                     iview->image->layout[0].tile_mode == TILE6_LINEAR, false, 0xff);
+ 
+    /* BLIT_EVENT_STORE_AND_CLEAR would presumably swallow the
+     * BLIT_EVENT_CLEAR at the start of a renderpass, and be more efficient.
+diff --git a/src/freedreno/vulkan/tu_clear_blit.h b/src/freedreno/vulkan/tu_clear_blit.h
+--- a/src/freedreno/vulkan/tu_clear_blit.h
++++ b/src/freedreno/vulkan/tu_clear_blit.h
+@@ -104,7 +104,8 @@ bool
+ tu_attachment_unpadded(struct tu_cmd_buffer *cmd, const struct tu_image_view *iview);
+ 
+ /* Telemetry of the tile-memory side of GMEM loads and stores (tu_gmem_side_stats): site 0 a 3D store's source, 1 a 3D load's source,
+- * 2 a 2D store's source, 3 an input attachment read from tile memory.
++ * 2 a 2D store's source, 3 an input attachment read from tile memory, 4 an event blit load, 5 an event blit store (swap 0xff: the
++ * blit event's own tile side).
+  */
+ void
+ tu_note_gmem_side(struct tu_cmd_buffer *cmd, const struct tu_image_view *iview, unsigned site, bool linear, bool mutableen, unsigned swap);
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -1391,7 +1391,8 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+    /* TU_DEBUG(SYSMEM) still lets a pass with a transient attachment (below) render in GMEM: in system memory such a pass wrote and
+     * read every transient attachment in DRAM (a 3048x2032 pass with RGBA16F and R32F transients took 9-12 ms of GPU time) and
+     * backed it for good. */
+-   const bool forced_sysmem = TU_DEBUG(SYSMEM);
++   const char sheng_mode = tu_sheng_render_mode();
++   const bool forced_sysmem = sheng_mode == 'g' ? false : sheng_mode == 's' ? true : TU_DEBUG(SYSMEM);
+ 
+    /* can't fit attachments into gmem */
+    if (!cmd->state.tiling->possible) {
+@@ -1444,7 +1445,7 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+       return true;
+    }
+ 
+-   if (TU_DEBUG(GMEM) && !forced_sysmem) {
++   if ((TU_DEBUG(GMEM) || sheng_mode == 'g') && !forced_sysmem) {
+       cmd->state.rp.gmem_disable_reason = "TU_DEBUG(GMEM)";
+       return false;
+    }
+@@ -1459,7 +1460,10 @@ use_sysmem_rendering(struct tu_cmd_buffer *cmd,
+     * GMEM rendering, where it lives in tile memory alone, while SYSMEM rendering makes its memory for good
+     * (tu_allocate_transient_attachments). The autotuner's choice, SYSMEM by default for passes of few draws, is a matter of bandwidth,
+     * which does not weigh the memory: a 3048x2032 RGBA16F attachment is 48 MiB. */
+-   for (unsigned i = 0; i < cmd->state.pass->attachment_count; i++) {
++   /* sheng-tum=s (tu_sheng_render_mode) renders even those passes in system memory, backing their transient attachments at the
++    * pass: the colour reference for the GMEM swap trace. */
++   const bool strict_sysmem = sheng_mode == 's';
++   for (unsigned i = 0; !(forced_sysmem && strict_sysmem) && i < cmd->state.pass->attachment_count; i++) {
+       const struct tu_image_view *iview = cmd->state.attachments[i];
+       if (iview && !(iview->image->vk.create_flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT) && iview->image->mem &&
+           iview->image->mem->lazy && !iview->image->mem->bo)
+@@ -4209,10 +4213,24 @@ tu_note_pass(struct tu_cmd_buffer *cmd, bool sysmem, unsigned slot, uint64_t kpx
+    const uint32_t seq = p_atomic_inc_return(&tu_pass_seq);
+    rec.seq = seq;
+    tu_pass_ring[seq % 512] = rec;
+-   tu_frame_event(36,(uintptr_t)cmd,seq,rec.mode,rec.width,rec.height,rec.colors,rec.samples,rec.flags,rec.format,rec.swap,rec.draws,rec.ns);
+-   for(uint32_t a=0;a<cmd->state.pass->attachment_count;++a)if(cmd->state.attachments[a]) {
+-      const auto *iv=cmd->state.attachments[a];const auto *att=&cmd->state.pass->attachments[a];
+-      tu_frame_event(44,(uintptr_t)cmd,seq,a,(uintptr_t)iv,(uintptr_t)iv->image,iv->vk.format,iv->view.color_swap,iv->view.is_mutable,iv->image->layout[0].tile_mode,att->load,att->store,att->samples);
++   /* The GMEM swap trace (tu_swap_trace_on): the first 3000 passes and the first 1000 passes of 3000 px or wider, in order, each with
++    * its attachments (event 44: index, mode, image, format, swap, mutability, tile mode, load | store << 1 | unpadded << 2, samples,
++    * RB_MRT_BUF_INFO), so frames of both render modes line up with the screenshots. */
++   static uint32_t traced_passes, traced_wide;
++   if (tu_swap_trace_on()) {
++      const bool wide = rec.width >= 3000;
++      const bool due = p_atomic_inc_return(&traced_passes) <= 3000 || (wide && p_atomic_inc_return(&traced_wide) <= 1000);
++      if (due) {
++         tu_frame_event(36,(uintptr_t)cmd,seq,rec.mode,rec.width,rec.height,rec.colors,rec.samples,rec.flags,rec.format,rec.swap,rec.draws,rec.ns);
++         for (uint32_t a = 0; a < cmd->state.pass->attachment_count; ++a) if (cmd->state.attachments[a]) {
++            const auto *iv = cmd->state.attachments[a];
++            const auto *att = &cmd->state.pass->attachments[a];
++            tu_frame_event(44,seq,a,rec.mode,(uintptr_t)iv->image,iv->vk.format,iv->view.color_swap,iv->view.is_mutable,
++                           iv->image->layout[0].tile_mode,
++                           (att->load ? 1 : 0) | (att->store ? 2 : 0) | (tu_attachment_unpadded(cmd, iv) ? 4 : 0),
++                           att->samples,iv->view.RB_MRT_BUF_INFO,0);
++         }
++      }
+    }
+    return seq;
+ }
+diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h
+--- a/src/freedreno/vulkan/tu_frame_diagnostic.h
++++ b/src/freedreno/vulkan/tu_frame_diagnostic.h
+@@ -2,15 +2,36 @@
+ #pragma once
+ #include <stdint.h>
+ #include <stdlib.h>
++#include <string.h>
+ #ifdef __APPLE__
+ extern "C" bool tu_darwin_frame_diagnostic(uint32_t,const void *,uint32_t);
++/* The GMEM swap trace (SHENG_GPU_TRACE, in the render server only): render passes (36), their attachments (44) and the transfers
++ * between tile memory and memory (37) reach the kernel's GPU trace. Every other Turnip event stays off. */
++static inline bool tu_swap_trace_on() {
++   static const bool on=getenv("SHENG_GPU_TRACE")!=nullptr && !strcmp(getprogname(),"backboardd");
++   return on;
++}
+ static inline void tu_frame_event(uint32_t event,uint64_t a=0,uint64_t b=0,uint64_t c=0,uint64_t d=0,uint64_t e=0,uint64_t f=0,uint64_t g=0,uint64_t h=0,uint64_t i=0,uint64_t j=0,uint64_t k=0,uint64_t l=0) {
+-   static const bool on=getenv("SHENG_GPU_TRACE")!=nullptr;
+-   if(!on || event)return;
+-   /* Pass and submission records stay in this process's rings (frames.trace); none reach the kernel ring. */
++   if(!tu_swap_trace_on() || (event!=36 && event!=37 && event!=44))return;
++   /* Other pass and submission records stay in this process's rings (frames.trace). */
+    struct {uint64_t seq,us;uint32_t event,pid;uint64_t v[12];} rec={0,0,event,0,{a,b,c,d,e,f,g,h,i,j,k,l}};
+    (void)tu_darwin_frame_diagnostic(0x7102,&rec,sizeof(rec));
+ }
++/* Boot-arg sheng-tum=g renders every pass that can in GMEM, sheng-tum=s every pass in system memory (transient attachments too):
++ * the colour runs of the GMEM swap check, set by the boot so their command lines stay short. 0 when absent. */
++#include <sys/sysctl.h>
++static inline char tu_sheng_render_mode() {
++   static char mode = 1;
++   if (mode == 1) {
++      char args[1100] = {};
++      size_t size = sizeof args - 1;
++      const char *at = sysctlbyname("kern.bootargs", args, &size, nullptr, 0) == 0 ? strstr(args, "sheng-tum=") : nullptr;
++      mode = at && (at[10] == 'g' || at[10] == 's') ? at[10] : 0;
++   }
++   return mode;
++}
+ #else
++static inline char tu_sheng_render_mode() {return 0;}
++static inline bool tu_swap_trace_on() {return false;}
+ static inline void tu_frame_event(uint32_t,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0,uint64_t=0) {}
+ #endif
