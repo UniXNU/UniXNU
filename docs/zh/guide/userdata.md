@@ -65,7 +65,7 @@ ADT 生成器写入 `/chosen/root-matching`，包含 `IOProviderClass = IOMedia`
 ./unixnu build payload --data-ramdisk data.img
 ```
 
-sheng 的持久存储布局可使用 macOS 工具调整 seed 大小：
+在 macOS 上按目标持久存储布局调整 seed 大小：
 
 ```sh
 python3 scripts/seed-data-grow.py --gib 8 /path/to/data.dbr /path/to/data-grow.dbr

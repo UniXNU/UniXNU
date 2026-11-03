@@ -5,7 +5,7 @@ Start with the storage section of the device's `porting.toml` and the
 [ShengUfs](/drivers/sheng-ufs), with runtime class `NativeUfs`.
 
 ShengUfs combines SM8550 controller access, firmware adoption, SMMU handling,
-GPT/window parsing and sheng persistence policy. Its hardware constants and
+GPT/window parsing and board persistence policy. Its hardware constants and
 board policy require review for each target.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect
@@ -14,7 +14,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -52,7 +52,7 @@ policy in the device repository. Describe register widths, parent address cells,
 `ranges`, interrupt providers and IOMMU references using the
 [device-tree bindings](/porting/device-tree).
 
-For sheng, the SoC DTSI exports host `0x01d84000/0x3000` and PHY
+The SM8550 reference DTSI exports host `0x01d84000/0x3000` and PHY
 `0x01d80000/0x2000`. GCC at `0x00100000` and apps-SMMU handling for stream
 `0x60` are implemented in ShengUfs. The current driver reads those resources
 through its C++ constants and operations. Converting a resource to a DTS property
@@ -86,16 +86,16 @@ clock and power sequence implemented and recorded.
 - The driver that takes over the apps SMMU also owns any stage 1 window another
   device needs. ShengUfs sets one up for the display bank (`sheng-dpu-scanout`)
   and one for the WiFi endpoint (`sheng-wifi=2` or more); both are off by default.
-  Audio streams stay in pass-through: a translating context for them resets sheng.
+  Audio streams stay in pass-through: a translating context resets the reference board.
 
-The [sheng storage record](/devices/sheng#storage) supplies board values,
+The [reference storage record](/devices/sheng#storage) supplies board values,
 implementation references and current limits.
 
 ## Configuration
 
 Select the matching storage component in the complete `[components] include`
 array. Add its recipe at the required position in `[kernel] archives`. Arrays
-replace inherited arrays. The sheng selection includes:
+replace inherited arrays. A reference selection includes:
 
 ```toml
 # Entries within the complete device selections:
@@ -111,8 +111,8 @@ lba_bytes = 4096
 root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
 ```
 
-These values describe sheng. Obtain another board's geometry from its GPT and
-its root UUID from the selected volume. Preserve other required `payload.adt`
+Obtain the target geometry from its GPT and the root UUID from the selected volume.
+The values above are examples. Preserve other required `payload.adt`
 fields. Enable `CONFIG_XNU_NATIVE_UFS=y` in the selected defconfig and include
 `native-ufs-root=1` in the complete kernel argument array for this runtime.
 

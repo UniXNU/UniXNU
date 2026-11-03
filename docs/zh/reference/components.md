@@ -38,8 +38,7 @@ UniXNU 根目录的 `components.toml` 记录维护中的组件。配置通过 `[
 | `outputs` | 目标树中的输出路径 |
 | `runtime_identifiers` | 源文件名、类名、bundle/plugin ID、符号和协议 |
 
-实现范围和硬件验证分别记录。Adreno740 实现 SM8550 使用的 A740 GPU 接口，sheng
-是已有硬件验证记录的设备。AdrenoMetal 通过 metal2vulkan 和 Turnip 提供 Metal
+实现范围和硬件验证分别记录。Adreno740 实现 SM8550 使用的 A740 GPU 接口。AdrenoMetal 通过 metal2vulkan 和 Turnip 提供 Metal
 前端，依赖内核接口和 OS ABI。
 
 ## 选择

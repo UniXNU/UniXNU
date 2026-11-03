@@ -9,7 +9,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -45,7 +45,7 @@
 Novatek 处理核心使用 40 × 60 矩阵。修改固件或处理核心时核对几何尺寸和边界。
 固件提取由设备的 `scripts/gen-touch-firmware.py` 与私有文件清单管理。
 
-sheng 的 `sheng-touch=1`、`2`、`3`、`4` 分别选择资源检查、时钟/引脚、控制器识别和固件/扫描。
+参考探针参数 `sheng-touch=1`、`2`、`3`、`4` 分别选择资源检查、时钟/引脚、控制器识别和固件/扫描。
 先适配该阶段使用的硬件参数，再启用相应阶段。
 
 **预期结果：** 得到显示坐标系中的一致接触帧，包含抬起事件。
@@ -54,10 +54,10 @@ HID 层通过序列计数器读取 `native_touch_*`；替换生产方时保留�
 ## 3. 发布 HID 报告
 
 使用选定 kernelcache 确认 IOHIDFamily 方法和对象布局。
-sheng 归档配方使用预链接候选内核与 ABI 记录，见[构建输入](/zh/porting/migration#build-inputs)。
+参考归档配方使用预链接候选内核与 ABI 记录，见[构建输入](/zh/porting/migration#build-inputs)。
 按传感器适配报告描述符、逻辑坐标范围和接触数量上限。
 
-在完整组件列表选择传感器、传输和 HID 组件。sheng 显示配方链接传感器与总线对象，
+在完整组件列表选择传感器、传输和 HID 组件。参考显示配方链接传感器与总线对象，
 HID 配方绑定 OS 接口；`sheng-touch-hid=1` 启用触控发布路径。在目标构建树检查：
 
 ```sh
@@ -73,7 +73,7 @@ rg -n 'native_touch_|ReportDescriptor' drivers/ShengHidInput/NativeHidInput.cpp
 
 映射目标 GPIO 或 PMIC 输入、极性、所有权、中断路由和应答操作。
 仅访问当前执行环境拥有的 PMIC 外设。SPMI 控制器变化时适配 `BootResetCore.h` 辅助接口。
-将按下/释放状态接入 HID consumer 报告。sheng 使用 report 2 的 Power、Volume Increment
+将按下/释放状态接入 HID consumer 报告。参考实现使用 report 2 的 Power、Volume Increment
 和 Volume Decrement 位，参数 `sheng-buttons=1` 启用该路径。
 
 **预期结果：** 每次按下和释放产生正确报告，包括长按和同时按键，中断活动保持有界。

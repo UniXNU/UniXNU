@@ -125,11 +125,11 @@
 4. 根据写入器文件头和快照格式适配主机解码器。自动发现无法确定唯一串口或 ADB 设备时，显式指定目标。
 5. 为选定的读取器实现返回路径。使用板型的重启原因和复位接口，记录手动测试使用的 bootloader 与 recovery 命令。
 
-[sheng 实现](https://github.com/UniXNU/UniXNU-sheng)提供 Linux 读取器、`userdata` 预留区域和返回 fastboot 的路径。可参考其中的 `package/BootLog.c`、`BootReset.c`、`BootResetCore.h`、`package/linux-log/` 和 `scripts/read-sheng-log.py`。其中的 PMIC 地址、watchdog 调用、存储预留和 Linux 镜像输入属于该板型的适配记录。
+[参考实现](https://github.com/UniXNU/UniXNU-sheng)提供 Linux 读取器、`userdata` 预留区域和返回 fastboot 的路径。可参考其中的 `package/BootLog.c`、`BootReset.c`、`BootResetCore.h`、`package/linux-log/` 和 `scripts/read-sheng-log.py`。其中的 PMIC 地址、watchdog 调用、存储预留和 Linux 镜像输入属于该板型的适配记录。
 
 **结果：** 一个读取器环境、一致的解码器格式、明确的存储范围，以及已经验证的 bootloader 或 recovery 返回路径。
 
-sheng 的 iPadOS 27 原生源码路径使用 sheng-log=1 boot-ui-trace=1 抓取用户态停滞时的进程栈。
+参考 iOS 27 原生源码路径使用 `sheng-log=1 boot-ui-trace=1` 抓取用户态停滞时的进程栈。
 源码存储归档包含 BootProcessWorker.c，由独立线程采样，避免读取用户页时的缺页等待阻塞持久化日志。
 加入 boot-ui-focus3=chronod 可在 backboardd、SpringBoard 之外保留 chronod 的栈。
 arm64e 采样器先去除返回地址的 PAC，再检查和编码地址；栈区域为空本身不能证明进程停止运行。

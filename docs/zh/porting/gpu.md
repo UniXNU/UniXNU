@@ -9,7 +9,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -29,12 +29,12 @@ Adreno740 实现 A740 内核接口。AdrenoMetal 使用该接口、Turnip、meta
 ## 2. 适配电源和固件输入
 
 阅读 [SM8550 平台源码](https://github.com/UniXNU/UniXNU-sm8550-common/tree/main/kits)
-和 [sheng package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package)。
+和 [参考板级 package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package)。
 `Sm8550Platform` 提供共享 GMU 操作和 command database 处理，
 `ShengGmuVotes.c` 与 `ShengGmuVotesSource.h` 提供板级 OPP 和带宽策略。
 根据目标电源和 command database 适配这些输入。
 
-sheng 的 `scripts/build-adreno740-kits.py` 嵌入以下本地输入：
+参考配方 `scripts/build-adreno740-kits.py` 嵌入以下本地输入：
 
 | 固件 | 用途 |
 | --- | --- |
@@ -57,7 +57,7 @@ sheng 的 `scripts/build-adreno740-kits.py` 嵌入以下本地输入：
 5. 验证客户端退出、映射生命周期和 fence 失败处理。
 
 使用 AdrenoFirmware 的固件/HFI 操作和 AdrenoPM4 支持的命令包编码。
-sheng 配方把这些 kit、ArmSmmu4K 和板级投票链接到 `libAdreno740.a`，再通过
+参考配方把这些 kit、ArmSmmu4K 和板级投票链接到 `libAdreno740.a`，再通过
 `build-adreno740-accelerator.py` 构建 accelerator。创建目标配方时保留该顺序。
 
 **预期结果：** 命令完成、fence 推进、已知图像正确。GPU 结果与桌面呈现结果分别记录。
@@ -87,7 +87,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 调度与内存复用 {#scheduling}
 
-sheng 默认使用 `sheng-gpu-preempt=2`。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
+参考实现用 `sheng-gpu-preempt=2` 启用模式 2。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
 
 运行时调度与完成线程在 iOS、macOS 上都使用交互 QoS。渲染线程采用固定调度策略时，编码线程继承它的策略与优先级。
 
@@ -135,7 +135,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（sheng 使用 `sheng-gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
+通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（参考实现使用 `sheng-gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
 
 核对所选 OS profile 的 sandbox、user-client 和 trust-cache 集成。
 Metal 桥接层从不返回 nil encoder：无法编码的 pass 会得到一个命令缓冲区被拒绝的

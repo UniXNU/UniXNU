@@ -5,7 +5,7 @@
 `--fileset-reference FILE` 可以提供带符号的对照内核。唯一的代码匹配可提供符号名，
 最终地址仍从实际编译的原生内核获取。映射记录中会保存对照文件的哈希。
 
-sheng 的 iPadOS 27 构建在预链接前运行
+iOS 27 参考构建在预链接前运行
 `build-fileset-release-reference.py --tree . --lto`。该对照内核需要启用
 LTO；非 LTO 对照会丢失原生 kext 所需的匹配，包括 corecrypto 启动时对
 `kprintf` 的调用。启用 `--allow-missing` 时，打包可以成功，但该调用会在
@@ -62,7 +62,7 @@ XnuPrelink 将构建的 XNU 内核绑定到所选原始 kext，并写出预链�
 组件目录记录实现范围、硬件与 OS 要求、板级依赖、源码版本、构建阶段、输出和运行时标识符。所选配置按依赖顺序运行构建命令。
 
 ```sh
-./unixnu build prelink -D ../UniXNU-sheng
+./unixnu build prelink -D /path/to/device
 ```
 
 [组件目录](/zh/reference/components)

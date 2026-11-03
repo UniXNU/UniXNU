@@ -2,15 +2,15 @@
 
 Start with the [adaptation procedure](/porting/platform) for board inputs, source changes, build integration and verification order.
 
-UEFI preflight checks for sheng. Validates the firmware volume, memory map and boot inputs before a build.
+Board-specific UEFI preflight checks. Validates the firmware volume, memory map and boot inputs before a build.
 
 | Repository | Maintainer | Scope |
 | --- | --- | --- |
-| [ShengPreflight](https://github.com/UniXNU/ShengPreflight) | [UniXNU](https://github.com/UniXNU) | UEFI preflight checks for sheng. Validates the firmware volume, memory map and boot inputs before a build. |
+| [ShengPreflight](https://github.com/UniXNU/ShengPreflight) | [UniXNU](https://github.com/UniXNU) | Board-specific UEFI preflight checks. Validates the firmware volume, memory map and boot inputs before a build. |
 
 ## State
 
-sheng only.
+Checks target the reference board's firmware volume and memory layout.
 
 ## Build
 
