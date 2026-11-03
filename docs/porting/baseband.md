@@ -41,6 +41,8 @@ Read `baseband/QcomBaseband.h` and the [Coachz integration](https://github.com/U
 5. Package and mount the Apple firmware where ABM and BBUpdater look for it. The reference's SAHARA endpoint consumes that boot exchange while the Qualcomm modem continues running its own firmware.
 6. Publish the PDP manager services required by CommCenter. Check ABM boot completion, QMUX clients, SIM status, modem identity and Settings > Cellular separately.
 
+The bridge queues up to 1,024 frames per channel for ABM. Each channel logs queue depth and message headers for its first 32 dropped frames. Check queue drops during cold boot and registration.
+
 **Result:** CommCenter communicates with the actual modem and reads its SIM and identity.
 
 ## 4. Connect cellular data {#data-path}
@@ -49,7 +51,7 @@ A modem's `kOnline` state means its radio is online. Check NAS registration, the
 
 `coachz_bb_data.h` opens the IPA hardware port with DPM and configures WDA raw IP/QMAPv4 before the first WDS client binds. It translates WDS/QOS endpoint fields from Apple PCIe `{3, 4}` to embedded `{4, 1}` and supplies the endpoint for mux-only requests. Bind the WDS session to a QMAP mux, then start a data call. Connect the returned address, routes, DNS and MTU to `pdp_ip`. Route each QMAP mux to the corresponding interface, and pair DMA completion with buffer ownership. Exercise transmit, receive, disconnect, flight mode and modem reset. eSIM needs its UIM/APDU and VINYL flow in addition to the physical-SIM path.
 
-The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear after SIM reinsertion. DPM/WDA setup and WDS/QOS bindings succeed. Cold-boot SIM state, carrier settings, EFS write persistence and a working `pdp_ip` data session remain open.
+The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear directly after a cold boot. DPM/WDA setup and WDS/QOS bindings succeed. Carrier-bundle and APN selection remain incomplete, so CommCenter does not start a data call. EFS write persistence and a working `pdp_ip` data session remain open.
 
 `coachz_bb_esim.h` discovers real eUICC slots and carries VINYL Tape through ISD-R logical-channel APDUs. Preserve capability TLV `0x21` in card-status replies and indications. Legacy GetCsn returns `0x204` to complete native driver initialization; EID/capability requests read TLV `0x01`, and Tape results use an 11-byte header.
 
