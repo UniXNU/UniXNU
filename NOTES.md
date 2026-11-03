@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 0238: CPU FREQUENCY SCALING: an EPSS governor; the clocks follow the load** (patch
+  `xnu/patches/0238-umi-cpufreq-governor.patch`, kernel 084245e; boot `shim/out/umi-0238-cpufreq.img` = 0236b's line
+  without `sweetbtdelay=1` (0237's default), + `sweettop=10` (605 chars), 00:53).
+  - `bsd/dev/sweet_cpufreq.c`, adapted from ios-apollo (same SM8250; xnu 0095/0098/0153/0160, MIT, notice in the
+    file): EPSS cpufreq-hw at 0x18591000 + 0x1000 per cluster (silver cpu0-3, gold 4-6, prime 7), level table at 0x100,
+    request at 0x320, running multiplier at 0x020. Every 16 ms each core's idle time (recount, `sweet_cpu_sample()` in
+    machine_routines.c) -> the busiest core's need x1.5, the top at 75 % busy; up at once, down after 64 ms. TSENS0
+    caps gold/prime over 75 C (`sweetthermal`), silver at 80 C. A touch: every cluster at its cap for 250 ms
+    (`sweetboost`, hook in sweet_touch.c). `SWEET CPUFREQ: 10 s: ...` every 10 s (`sweetcpustats`). `sweetcpufreq=0` =
+    measure only (bootloader clocks), `sweetcpugov=0` = every cluster at its top. No boot-arg needed.
+  - Boot: governor up 15 s after UFS. During the boot (600-700 % of one core) all three hit the 75 C cap (capped at
+    1708 / 1574-1670 / 2073 MHz). Settled idle (TOP 65-116 % of one core): silver avg 560-780 MHz (now 288), gold
+    1160-1440 (now 710), prime 940-1100 (now 844), 10-35 level changes per cluster per 10 s; hottest core 57-60 C, GPU
+    54-56 C. No panic.
+  - The early `SWEET CPUFREQ:` lines (level tables, the bootloader's level, busy-loop timing) come before the UDP log
+    starts: not seen. This kernel also carries the uncommitted ios-s9 fast-core scheduler (`sweetfast`, default 0xf0,
+    sched_prim.c), so the lower idle CPU load is not this patch's alone.
+  - Staged next: DDR voting with the load (apollo 0153), CPU budget for runaway background processes (apollo 0160), a
+    `sweetcpufreq=0` boot for an idle-temperature baseline.
+
 - **2026-11-03 0233: `sweettop=N`, a CPU top in the kernel log; first idle numbers; ios-s9's CPU fixes mapped** (patch
   `xnu/patches/0233-umi-sweettop.patch`, boot `shim/out/umi-0234-top.img` = 0233b's line + `sweettop=10`).
   - Every N s: `TOP --- round K: all processes X% of one core` and the 12 busiest `TOP name[pid] Y%` (user + system

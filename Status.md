@@ -12,7 +12,7 @@
 | Feature | Notes | Status |
 |---|---|---|
 | 🥾 Boot | Stock bootloader → `fastboot boot` of our shim → XNU | ✅ |
-| 🧠 CPU | All 8 cores; no frequency scaling yet (boot clocks) | ⚠️ |
+| 🧠 CPU | All 8 cores; clocks follow the load (EPSS governor, 75 °C limit) | ✅ |
 | 💾 UFS | Own host driver, HFS+ root in `userdata`, read/write | ✅ |
 | 🖥️ Display | 1080×2340 AMOLED, presented as the iPhone X panel | ✅ |
 | 🔆 Brightness | Slider, Control Center, auto-brightness, Night Shift | ✅ |
@@ -102,7 +102,7 @@
 | Feature | Notes | Status |
 |---|---|---|
 | 🧩 SMP | 4× A55, 3× A77, 1× A77 prime via PSCI | ✅ |
-| 📈 Frequency scaling | No cpufreq / DCVS (OSM / CPRh) driver: cores stay at their boot clock | ❌ |
+| 📈 Frequency scaling | EPSS governor (kernel 0238): load-following per cluster, thermal cap at 75 °C, touch boost; idle at 288 / 710 / 844 MHz | ✅ |
 | 🔥 Idle CPU load | High; the fixes [ios-s9](https://github.com/syncmodz/ios-s9) describes are still to check here (see below) | ⚠️ |
 | 🎯 Thread placement | Render / UI threads can land on the slow cores | ❌ |
 
@@ -120,7 +120,7 @@
   * Off / on in Control Center and Settings: it comes back, but slowly (bluetoothd: "stack is busy")
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
-* **CPU frequency scaling**: a cpufreq / DCVS driver
+* **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
 * **CPU load**, the fixes ios-s9 describes (`xnu/patches/0092`-`0094` there, idle CPU 460 % → ~50 %), to check and
   redo here: the securityd retry storm; `BTAudioHALPlugin.driver` polling a daemon that is not running; render / UI
   threads on the slow cores and the touch polling thread on the fast ones; ad daemons; `driverkitd` killed and
