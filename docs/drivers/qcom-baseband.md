@@ -8,6 +8,6 @@ The component provides QMUX/QRTR and QMI CTL, a SAHARA endpoint, AppleBaseband I
 
 `baseband/QcomBaseband.h` defines the transport hooks. `scripts/build-qcom-baseband.py` builds the bridge archive from the selected XNU compile records; `--coachz` adds the SC7180 IPA adapter. Output: `build/qcom-baseband/libQcomBaseband.a`.
 
-The Coachz example reaches ABM startup and SIM recognition. ICCID, network registration, `pdp_ip` delivery and eSIM remain unfinished. Wi-Fi-only devices can skip this component.
+The Coachz example displays IMEI/ICCID and registers a valid SIM on LTE roaming with CS/PS attached. Operator and signal bars appear after SIM reinsertion; data-port bindings succeed. `pdp_ip` delivery and a working cellular data session remain unfinished. The eSIM Tape/UIM bridge has failing host-model cases for card-status indications and legacy GetCsn; device provisioning remains unverified. Wi-Fi-only devices can skip this component.
 
 [Component catalog](/reference/components)
