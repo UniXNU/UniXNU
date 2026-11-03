@@ -23,7 +23,7 @@
 | ⚡ Wireless charge | | ❌ |
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
-| 🦷 Bluetooth | | ❌ |
+| 🦷 Bluetooth | QCA6390 over UART (921600 baud): scan, connect and pair in Settings, Control Center button, off / on (slow); see the tests below | ⚠️ |
 | 📶 Cellular Data | | ❌ |
 | 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
@@ -113,7 +113,13 @@
 
 * **Sensors**: accelerometer, gyroscope, magnetometer, proximity, barometer through the SLPI; True Tone color channels
 * **Camera**: the camera stack (CAMSS / ISP / sensors) and the flash
-* **Bluetooth**: the QCA6390's Bluetooth half (UART / HCI), then bluetoothd
+* **Bluetooth: still to test** (working since 2026-11-04, kernel 0234-0237 + `/usr/local/lib/libsweet-bt.dylib`):
+  * Pairing kept after a reboot (apollo needed a file system sync for it, their xnu 0144)
+  * Music to headphones (A2DP): smooth or stuttering at 921600 baud
+  * Calls / microphone over Bluetooth (HFP) and headphone buttons (AVRCP)
+  * Off / on in Control Center and Settings: it comes back, but slowly (bluetoothd: "stack is busy")
+  * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
+  * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling**: a cpufreq / DCVS driver
 * **CPU load**, the fixes ios-s9 describes (`xnu/patches/0092`-`0094` there, idle CPU 460 % → ~50 %), to check and
   redo here: the securityd retry storm; `BTAudioHALPlugin.driver` polling a daemon that is not running; render / UI
