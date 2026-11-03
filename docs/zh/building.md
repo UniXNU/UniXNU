@@ -10,19 +10,22 @@
 
 阅读[前置条件](/zh/guide/requirements)，从[设备列表](/zh/devices/)选择移植。
 新设备先按[移植流程](/zh/porting/steps)操作。获取设备和 UEFI 仓库及其 submodule。
-例如 sheng 使用：
+设置目标移植的仓库地址与 defconfig：
 
 ```sh
+DEVICE_REPOSITORY=https://github.com/your-org/UniXNU-myboard
+UEFI_REPOSITORY=https://github.com/your-org/uefi-myboard
+DEFCONFIG=myboard_defconfig
 git clone --recurse-submodules https://github.com/UniXNU/UniXNU
-git clone --recurse-submodules https://github.com/UniXNU/UniXNU-sheng
-git clone --recurse-submodules https://github.com/UniXNU/uefi-sheng
+git clone --recurse-submodules "$DEVICE_REPOSITORY" UniXNU-device
+git clone --recurse-submodules "$UEFI_REPOSITORY" uefi-device
 cd UniXNU
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
+./unixnu defconfig "$DEFCONFIG" -D ../UniXNU-device
 ./unixnu fetch
 ./unixnu status --json
 ```
 
-替换为目标仓库和 defconfig 名称。`status` 显示最终 profile、版本、补丁顺序和输出目录。
+`status` 显示最终 profile、版本、补丁顺序和输出目录。
 `-D` 记录在 `out/state.json`，后续命令均在 UniXNU 主仓库执行。
 
 **预期结果：** 设备/配置选择正确，源码路径已解析。
@@ -35,7 +38,7 @@ cp unixnu.example.toml unixnu.local.toml
 
 按[本地构建配置](/zh/reference/configuration#local-build-inputs)填写设备和 UEFI 路径、
 固件 DTB、平台身份及所需 kernelcache、trust-cache 和 Data seed。
-遵循设备输入清单；[sheng 构建输入](/zh/porting/migration#build-inputs)列出其 SDK、固件和 ABI 要求。
+按设备输入清单与[构建输入检查表](/zh/porting/migration#build-inputs)准备 SDK、固件和 ABI 输入。
 
 ```sh
 ./unixnu ipsw info

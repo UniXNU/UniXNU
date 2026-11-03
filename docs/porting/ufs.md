@@ -103,17 +103,14 @@ replace inherited arrays. A reference selection includes:
 # [kernel] archives: "component:ShengUfs"
 
 [userdata]
-first_lba = 3094592
-last_lba = 64007162
-lba_bytes = 4096
+# Set first_lba, last_lba and lba_bytes from the target GPT.
 
 [payload.adt]
-root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+# Set root_match_volume_uuid from the selected APFS volume.
 ```
 
 Obtain the target geometry from its GPT and the root UUID from the selected volume.
-The values above are examples. Preserve other required `payload.adt`
-fields. Enable `CONFIG_XNU_NATIVE_UFS=y` in the selected defconfig and include
+Preserve other required `payload.adt` fields. Enable `CONFIG_XNU_NATIVE_UFS=y` in the selected defconfig and include
 `native-ufs-root=1` in the complete kernel argument array for this runtime.
 
 The component source is pinned in the device repository. Shared build tools
@@ -135,10 +132,10 @@ Update the storage record at each milestone. Keep source, host and device
 results at their corresponding [completion levels](/porting/records#completion-levels).
 
 ```sh
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
-./unixnu status --json -D ../UniXNU-sheng
-./unixnu build kernel -D ../UniXNU-sheng
-python3 scripts/porting-record.py check --device ../UniXNU-sheng
+./unixnu defconfig myboard_defconfig -D /path/to/device
+./unixnu status --json -D /path/to/device
+./unixnu build kernel -D /path/to/device
+python3 scripts/porting-record.py check --device /path/to/device
 ```
 
 ## Next step

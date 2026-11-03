@@ -91,15 +91,13 @@ PHY、复位、时钟和电源序列。
 # [kernel] archives: "component:ShengUfs"
 
 [userdata]
-first_lba = 3094592
-last_lba = 64007162
-lba_bytes = 4096
+# 按目标 GPT 设置 first_lba、last_lba 和 lba_bytes。
 
 [payload.adt]
-root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
+# 按所选 APFS 卷设置 root_match_volume_uuid。
 ```
 
-示例数值用于说明格式。目标分区参数取自本机 GPT，根卷 UUID 取自所选卷。
+目标分区参数取自本机 GPT，根卷 UUID 取自所选卷。
 保留其他必需的 `payload.adt` 字段。所选 defconfig 启用 `CONFIG_XNU_NATIVE_UFS=y`，
 该运行时的完整内核参数数组加入 `native-ufs-root=1`。
 
@@ -121,10 +119,10 @@ root_match_volume_uuid = "04769D26-2CA0-4825-B443-E2E5F88300F2"
 [完成等级](/zh/porting/records#completion-levels)。
 
 ```sh
-./unixnu defconfig sheng_defconfig -D ../UniXNU-sheng
-./unixnu status --json -D ../UniXNU-sheng
-./unixnu build kernel -D ../UniXNU-sheng
-python3 scripts/porting-record.py check --device ../UniXNU-sheng
+./unixnu defconfig myboard_defconfig -D /path/to/device
+./unixnu status --json -D /path/to/device
+./unixnu build kernel -D /path/to/device
+python3 scripts/porting-record.py check --device /path/to/device
 ```
 
 ## 下一步

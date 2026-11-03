@@ -57,7 +57,7 @@ selection in full; dependencies are added by the resolver. Inspect the resolved
 selection, source revisions, local overrides, and build order:
 
 ```sh
-./unixnu status --json -D ../UniXNU-sheng
+./unixnu status --json -D /path/to/device
 ```
 
 Search this catalog, the [component pages](/drivers/repositories), the README,

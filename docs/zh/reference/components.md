@@ -54,7 +54,7 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 选择、源码版本、本地覆盖和构建顺序：
 
 ```sh
-./unixnu status --json -D ../UniXNU-sheng
+./unixnu status --json -D /path/to/device
 ```
 
 实现能力前，搜索组件目录、[组件页面](/zh/drivers/repositories)、README 和源码，
