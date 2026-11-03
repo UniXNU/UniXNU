@@ -182,7 +182,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
     c = json.loads((obj / 'osfmk/DEVELOPMENT/startup.o.json').read_text().strip().rstrip(','))
     # BSD sources (sys/proc.h, the system calls) take kern_exec's flags.
     bsd = json.loads((obj / 'bsd/DEVELOPMENT/kern_exec.o.json').read_text().strip().rstrip(','))
-    bsd_sources = {'BootWatchdogPolicy.c', 'BootDiagExport.c'}
+    bsd_sources = {'BootWatchdogPolicy.c', 'BootDiagExport.c', 'WifiFirmware.c'}
     includes = ['-I', str(out / 'headers/include'), '-I', str(ROOT / 'kits/VerifiedRoot/include'),
                 '-I', str(ROOT / 'drivers/VirtioMmioBlock'), '-I', str(tree / '.cache/xnu-work/osfmk')]
     flags = ['-DNATIVE_UFS_SOURCE_API=1', '-DNATIVE_VERIFIED_BLOCK=1',
@@ -204,6 +204,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         sources.append(device_source('BootWatchdogPolicy.c'))
         # The diagnostic file export (sheng-diag-export): the unified log, crash reports and a screenshot, read through the VFS.
         sources.append(device_source('BootDiagExport.c'))
+        sources.append(device_source('WifiFirmware.c'))
     latency = next((directory / 'BootLatencyTrace.c' for directory in package_dirs
                     if (directory / 'BootLatencyTrace.c').is_file()), None)
     if latency:
