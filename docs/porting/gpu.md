@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -34,12 +34,12 @@ RAM reservations and scanout layout. Check them against the selected firmware.
 ## 2. Adapt power and firmware inputs
 
 Read the [SM8550 platform sources](https://github.com/UniXNU/UniXNU-sm8550-common/tree/main/kits)
-and the [sheng package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package).
+and the [reference board package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package).
 `Sm8550Platform` supplies shared GMU operations and command-database handling.
 `ShengGmuVotes.c` and `ShengGmuVotesSource.h` supply the board's OPP and bandwidth
 policy. Port those inputs to the target's rails and command database.
 
-The sheng recipe `scripts/build-adreno740-kits.py` embeds these local inputs:
+The reference recipe `scripts/build-adreno740-kits.py` embeds these local inputs:
 
 | Firmware | Purpose |
 | --- | --- |
@@ -65,7 +65,7 @@ Confirm GMU startup and HFI response before submitting commands.
 5. Verify client teardown, mapping lifetime and fence failures.
 
 Use `AdrenoFirmware` for firmware/HFI operations and `AdrenoPM4` for supported
-packet encoding. The sheng recipe links these kits, ArmSmmu4K and board votes
+packet encoding. The reference recipe links these kits, ArmSmmu4K and board votes
 into `libAdreno740.a`, then builds the accelerator through
 `build-adreno740-accelerator.py`. Preserve that order when creating the target recipe.
 
@@ -99,7 +99,7 @@ to distinguish allocation, mapping and execution failures.
 
 ### Scheduling and memory reuse {#scheduling}
 
-sheng defaults to `sheng-gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
+The reference enables mode 2 with `sheng-gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
 
 Runtime scheduling and completion threads use interactive QoS on iOS as well as macOS. The encoding thread adopts the render thread's scheduling policy and priority when that reference has a fixed policy.
 
@@ -147,7 +147,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-Pass the addon and its matching owner trust bundle to the payload with `--gpu-addon` and `--owner-trust-cache`, and enable the board's addon loader (`sheng-gpu-addon=1` on sheng). Keep the existing Data seed so its persistent data and caches retain their identity. See [packaging](/porting/packaging). The runtime plugin name is `NativeAdrenoMetal`.
+Pass the addon and its matching owner trust bundle to the payload with `--gpu-addon` and `--owner-trust-cache`, and enable the board's addon loader (`sheng-gpu-addon=1` in the reference). Keep the existing Data seed so its persistent data and caches retain their identity. See [packaging](/porting/packaging). The runtime plugin name is `NativeAdrenoMetal`.
 
 Check the selected OS profile's sandbox, user-client and trust-cache integration.
 The Metal bridge never returns a nil encoder: a pass it cannot encode gets an

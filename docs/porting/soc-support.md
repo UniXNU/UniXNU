@@ -145,7 +145,7 @@ operations and XNU patch series. Read those files and its root `AGENTS.md` befor
 selecting it. Pin the repository in the device's feed and include its DTSI.
 
 Adreno740 and AdrenoMetal cover A740/SM8550 interfaces. Each board supplies
-firmware, power, reserved-memory and display inputs. The [sheng record](/devices/sheng)
+firmware, power, reserved-memory and display inputs. The [reference device record](/devices/sheng)
 contains its GPU hardware results; its device profile also selects its UFS,
 touch and HID implementations. Check those components' board dependencies when
 reusing them. Use the [migration guide](/porting/migration) for an existing port.

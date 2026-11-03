@@ -156,7 +156,7 @@ Keep the source filenames, runtime classes, bundle IDs, plugin filenames,
 exported symbols, and protocol IDs recorded in `runtime_identifiers`.
 
 Adreno740 provides the A740 kernel GPU interface. AdrenoMetal provides the Metal
-frontend. Their metadata records A740/SM8550 scope and sheng verification.
+frontend. Their metadata records A740/SM8550 scope and per-device verification.
 The board supplies firmware, power policy, memory adjustments, and display
 integration.
 
@@ -218,7 +218,7 @@ Complete these edits before running the resolver:
 4. Compare the inherited archive plan with the port's required archive builders.
    When setting `kernel.archives`, include the full ordered plan. Use
    `component:<ID>` for catalog recipes and bare script names for auxiliary builders.
-   The [sheng board file](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)
+   The [reference board file](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)
    shows an explicit plan containing both.
 5. Keep the board's firmware paths, partition layout, boot image settings and
    payload policy. Put OS properties in the selected OS profile and board-specific
@@ -327,9 +327,9 @@ For `panic_screen = true`, the firmware checkout supplies
 `FrameBufferSerialPortLib/Font.h`; the main UniXNU checkout supplies the entry
 probe and renderer. See [panic screen inputs](/guide/debugging#panic-screen).
 
-### sheng build inputs {#build-inputs}
+### Build inputs {#build-inputs}
 
-The sheng archive and image steps require:
+Prepare the inputs used by the selected archive and image recipes:
 
 - A full Xcode installation with the iPhoneOS SDK.
 - `storage-abi/interface-audit.json` and its matching storage ABI inputs.
@@ -339,8 +339,8 @@ The sheng archive and image steps require:
 - `.cache/mesa-work`, built Turnip, and metal2vulkan inputs for the Metal plugin.
 - The selected IPSW members, platform seed, trust-cache bundle, Data seed, and firmware DTB.
 
-For another device, follow its selected recipes and the subsystem guides linked
-from [driver adaptation](/porting/drivers) to prepare matching inputs.
+Use the selected recipes and the subsystem guides linked from
+[driver adaptation](/porting/drivers) to identify the required inputs.
 
 **Result:** firmware integration and local input paths are complete. Record
 missing inputs with the build step that needs them.
@@ -451,13 +451,11 @@ Its shared source is
 its OS profile is `profiles/os/ipados-17.7.11-21H461/`, and its firmware is
 [uefi-sheng](https://github.com/UniXNU/uefi-sheng).
 
-For existing sheng checkouts, set `DEVICE=sheng`,
-`DEVICE_DIR=../UniXNU-sheng` and `DEFCONFIG=sheng_defconfig`, then follow
-steps 6 through 9 with the [sheng inputs](#build-inputs). The output directory
-is `out/sheng/ipados-17.7.11-21H461/sheng/`. Its component selection includes
-Adreno740 and AdrenoMetal together with the board's storage, input, display
-and image components. The [device page](/devices/sheng) records its scope and
-verification results.
+Set `DEVICE`, `DEVICE_DIR` and `DEFCONFIG` from the selected device repository,
+then follow steps 6 through 9 with the [build inputs](#build-inputs).
+Outputs use `out/<device>/<os_profile>/<config>/`. The selected profile supplies
+the GPU, storage, input, display and image components. Record results in the
+device's `porting.toml`.
 
 ## Next steps
 
@@ -476,12 +474,12 @@ does not publish these families. The public macOS pins are source inputs, not
 proof of compatibility with the stripped iOS or iPadOS binaries.
 
 From UniXNU, with a prepared kernel tree, clean source checkouts at the profile
-pins and extracted Novatek firmware in the device cache, run:
+pins and extracted Novatek firmware in the device cache, run the reference builder:
 
 ```sh
 python3 scripts/build-sheng-source-drivers.py \
-  --tree out/sheng/ipados-27.0.1-24A446/sheng_ipados27/tree \
-  --device ../UniXNU-sheng \
+  --tree /path/to/resolved/tree \
+  --device /path/to/device \
   --storage-source out/driver-sources/IOStorageFamily \
   --hid-source out/driver-sources/IOHIDFamily \
   --with-storage-family

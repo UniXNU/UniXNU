@@ -93,7 +93,7 @@ DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 archives = [
   "build-software-aes-bindings.py",
   "build-libpthread-kernel.py",

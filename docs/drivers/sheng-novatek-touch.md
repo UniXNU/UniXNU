@@ -142,4 +142,4 @@ The writer increments the sequence before and after the update, so the reader de
 
 - [XNU drivers](/drivers/xnu-drivers)
 - [Device tree matching](/drivers/device-tree-matching)
-- [sheng device page](/devices/sheng)
+- [Reference device record](/devices/sheng)

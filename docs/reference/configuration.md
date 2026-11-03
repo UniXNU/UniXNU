@@ -46,7 +46,7 @@ Supported path keys are `device`, `out`, `uefi`, `edk2`, `kernelcache`, `kernel`
 | `components` | `include` | Canonical component IDs; dependencies are resolved in build order |
 | `kernel` | `config_fragments` | Ordered profile-relative configuration files |
 | `kernel` | `patch_series` | Ordered profile-relative series files |
-| `device_tree` | `source` | DTS entry point, such as `device:dts/sheng.dts` |
+| `device_tree` | `source` | DTS entry point, such as `device:dts/myboard.dts` |
 | `device_tree` | `include_dirs` | DTS include paths, such as `soc:dts` |
 
 Layers apply as ARM64, SoC, OS, device. Tables merge by key; arrays replace.

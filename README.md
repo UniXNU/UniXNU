@@ -25,7 +25,7 @@ An independent project to run iOS and macOS on non-Apple ARM64 hardware through 
 
 UniXNU provides shared build tools, ARM64 support, OS profiles and reusable components for ports across SoCs and devices. SoC repositories supply common platform support, and device repositories supply board configuration and hardware integration.
 
-**🎉 News:** Adreno740 and AdrenoMetal provide GPU acceleration on sheng. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/adreno740).
+**🎉 News:** Adreno740 and AdrenoMetal implement GPU acceleration for A740/SM8550. See the [Adreno 740 driver documentation](https://unixnu.com/drivers/adreno740).
 
 Documentation: [unixnu.com](https://unixnu.com). Start with [Port a device](https://unixnu.com/porting/) or [Build and boot](https://unixnu.com/building).
 
