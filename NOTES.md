@@ -18,6 +18,17 @@
     present, cheap here, removal waits for the user's OK; `com.apple.driverkitd` = present but not respawning here.
   - ios-s9's patches are kept for reference in git-ignored `research/ios-s9/` (with their LICENSE).
 
+- **🎉 2026-11-03 0235: BLUETOOTH CHIP UP: the QCA6390 runs its firmware and the radio hears devices** (patch
+  `xnu/patches/0235-umi-rpmh-duplicates-bt-rails.patch`, kernel fe5ecbb; boot `shim/out/umi-0235d-bt5.img` = 0233b's
+  line + `sweetbt=5`, 23:37). All five Bluetooth rails voted (`ACTIVE vote complete`), then: `THE CHIP ANSWERS from its
+  ROM: HCI 0x9, manufacturer 29, subversion 0xd2b`; UART to 921600; `QCA product 0x10, ROM 0x200, SoC 0x400a0200`;
+  patch 188564 bytes (776 segments) + NVM 5733 (24) taken; `THE FIRMWARE RUNS: HCI 0xb, LMP 0xb, subversion 0x27ec`;
+  the ADT's address set; `THE RADIO HEARS: 15 LE advertisements, 2 classic devices`; BT_EN low again (step 5 only).
+  - Wi-Fi's own votes (smpa6/smpf2/smpa4/smpa5/smpc8) now return 0 too; PCIe stage 8 result 0. The join afterwards
+    (`join (a name of 18 bytes, open) -> 2`) failed exactly the same in 0235c before the change: not from 0235.
+  - Kernel scheduler WIP (osfmk/kern/sched_prim.c, ios-s9 fast cores) was in these images' kernel, uncommitted.
+  - Next: sweetbt=6 (radio stays up, H4 control `com.sweet.bluetooth`, IOService "bluetooth"), then the bluetoothd side
+    (below).
 - **2026-11-03 0234: Bluetooth stage A: the kernel reads the BT firmware; the chip not powered yet** (patch
   `xnu/patches/0234-umi-bluetooth-qca6390.patch`, kernel 3c5be0e; boot `shim/out/umi-0235-bt5.img` = 0233b's line
   + `sweetbt=5`). Goal: bluetoothd (respawns every ~9 s, 34 execs in 5 min) finds a controller.
@@ -45,7 +56,7 @@
     BT rails include smpf2 (digital, 950 mV), ours did not; ldoa16 was blocked by the vreg whitelist (errno 22).
     Uncommitted fix in the kernel tree: rh_lookup_type accepts same-address duplicates; sweet_rpmh_bt_power() votes
     smpa6 950, smpf2 950, smpa5 1900, smpc8 1350, ldoa16 3025 (voltage + enable). Side effect: Wi-Fi's votes now go
-    out too (stock voltages). Image `shim/out/umi-0235d-bt5.img`, not booted yet.
+    out too (stock voltages). Image `shim/out/umi-0235d-bt5.img`: works (entry above).
   - Next: boot 0235d (expect `THE CHIP ANSWERS from its ROM`, firmware, scan results; check Wi-Fi still joins); then sweetbt=6; then the
     bluetoothd side, as apollo: env BT_HCI_TRANSPORT=H4:POSIX:com.sweet.bluetooth,115200 + BT_BAUDRATE (launchd
     can't set it -> a library inserted by the kernel: needs kern.exec_inject, research/exec-inject-wip.diff) and a
