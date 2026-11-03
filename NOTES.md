@@ -77,7 +77,10 @@
     open-loop: "Closed loop checks failed ... SpClProps.size=0"), software volume, 48 kHz, 1024-frame buffers.
     Next test: something that plays for long (a song, a video in Safari, a tapped ringtone in the Ringtone list).
   - **2026-11-03 (boot 0231c again): a ringtone tapped in Settings > Sounds & Haptics > Ringtone plays its full
-    length (user).** The "1 s and a glitch" report of that boot was again the ringer slider (SHSRingerControl steps,
+    length (user: "Seaside plays fully for sure", "Opening" unsure).** Lead for "Opening": newer tones carry a haptic
+    track (the log shows `Track ID 2 hapt` for a ringtone asset), which iOS plays on the "Actuator" device; ours
+    accepts and discards it (no StartIO / I/O seen on dev 7 yet). Check the log of an "Opening" play for Actuator
+    StartIO and errors. The "1 s and a glitch" report of that boot was again the ringer slider (SHSRingerControl steps,
     activateRingerHUD, Settings' own timeControlStatus=0 ~2 s after the finger lifts). No Music or Safari audio session
     appears in the unified log at all (clients: SpringBoard MediaPlayback, Preferences RingtonePreview): media apps
     never reached the audio system; video also needs the missing hardware decoder (VideoToolbox / AVD).
