@@ -8,6 +8,6 @@
 
 `baseband/QcomBaseband.h` 定义传输挂钩。`scripts/build-qcom-baseband.py` 使用所选 XNU 的编译记录构建桥接归档；`--coachz` 加入 SC7180 IPA 接线。输出为 `build/qcom-baseband/libQcomBaseband.a`。
 
-Coachz 示例能显示 IMEI、ICCID，有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着；重新插拔 SIM 后显示运营商和信号格，数据口绑定已成功。`pdp_ip` 收发和可用的蜂窝数据会话仍待完成。eSIM Tape/UIM 桥的卡状态指示和旧版 GetCsn 主机用例仍未通过，实机开通仍待验证。没有蜂窝基带的设备可跳过此组件。
+Coachz 示例能显示 IMEI、ICCID，有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着；重新插拔 SIM 后显示运营商和信号格，数据口绑定已成功。`pdp_ip` 收发和可用的蜂窝数据会话仍待完成。eSIM Tape/UIM 桥在卡状态变化后保留能力字段，回应旧版初始化，并在下载准备期间保持逻辑通道。主机模型已通过。Coachz 设置中已出现 eSIM，页面显示仍需完善，profile 开通仍待实机验证。没有蜂窝基带的设备可跳过此组件。
 
 [组件目录](/zh/reference/components)
