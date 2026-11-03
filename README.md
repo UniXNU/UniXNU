@@ -192,3 +192,9 @@ More in [`NOTES.md`](NOTES.md) and [`docs/UMI.md`](docs/UMI.md).
 ## Credits
 
 Built on Apple's open-source releases (xnu, IOHIDFamily, libpthread, hfs), [BearSSL](https://bearssl.org), [blacktop/darwin-xnu-build](https://github.com/blacktop/darwin-xnu-build), [ipsw](https://github.com/blacktop/ipsw), Qualcomm/Xiaomi's published Linux kernel sources and mainline Linux (msm DRM/DSI, ath11k, MHI, freedreno) for the hardware details, [Mesa](https://mesa3d.org) (freedreno / turnip), HackiOS by OOSEX GANG (Adreno bring-up base, Apple80211 code, APSL 2.0), [ios-flame](https://github.com/NWylynko/ios-flame) (Pixel 4 port, Wi-Fi integration), the original `sweet` port's contributors, and [TWRP](https://twrp.me) / [OrangeFox Recovery](https://orangefox.download). iOS itself is Apple's and is not distributed here.
+
+## License
+
+MIT for this repository's own code and docs ([`LICENSE`](LICENSE)). The XNU patches in `xnu/patches/` modify
+Apple's APSL 2.0 kernel and stay under the APSL 2.0; staged and third-party code keeps its own license. No Apple
+software is included.
