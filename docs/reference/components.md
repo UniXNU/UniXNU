@@ -40,8 +40,7 @@ Continue with [Building](/building) after the dependencies and source revisions 
 | `runtime_identifiers` | Source filenames, classes, bundle/plugin IDs, symbols, protocols |
 
 Implementation scope and hardware verification are separate fields. Adreno740
-implements the A740 GPU interface used by SM8550. sheng is its recorded device
-verification target. AdrenoMetal provides the Metal frontend through metal2vulkan
+implements the A740 GPU interface used by SM8550. AdrenoMetal provides the Metal frontend through metal2vulkan
 and Turnip, with dependencies on the kernel interface and OS ABI.
 
 ## Selection
@@ -58,7 +57,7 @@ selection in full; dependencies are added by the resolver. Inspect the resolved
 selection, source revisions, local overrides, and build order:
 
 ```sh
-./unixnu status --json -D ../UniXNU-sheng
+./unixnu status --json -D /path/to/device
 ```
 
 Search this catalog, the [component pages](/drivers/repositories), the README,

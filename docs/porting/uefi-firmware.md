@@ -39,7 +39,7 @@ HobLib|MdePkg/Library/DxeHobLib/DxeHobLib.inf
 FdtLib|MdePkg/Library/BaseFdtLib/BaseFdtLib.inf
 ```
 
-Add `PartitionDxe` when the payload uses a partition table. The FAT driver also needs the platform's Unicode collation service. sheng's `Include/DXE.inc` contains these dependencies.
+Add `PartitionDxe` when the payload uses a partition table. The FAT driver also needs the platform's Unicode collation service. The reference firmware's `Include/DXE.inc` contains these dependencies.
 
 `UniXNURamDiskDxe` is shared by devices using Mu-Silicium's FDT handoff. Its source is in UniXNU's `package/UniXNUPkg/Driver/UniXNURamDiskDxe/`. Board memory reservations and memory expansion remain in the firmware platform.
 

@@ -124,7 +124,7 @@ CI 和文档。保留 `runtime_identifiers` 记录的源文件名、运行时类
 插件文件名、导出符号和协议 ID。
 
 Adreno740 提供 A740 内核 GPU 接口，AdrenoMetal 提供 Metal 前端。元数据分别记录
-A740/SM8550 实现范围和 sheng 验证结果。设备提供固件、电源策略、内存调整和显示集成。
+A740/SM8550 实现范围和各设备验证结果。设备提供固件、电源策略、内存调整和显示集成。
 
 改名前，先将各组件 origin URL 与组件目录对应。社区分支保留自身仓库身份和固定版本；将其作为独立组件选择时，在维护的组件目录中补齐元数据与构建配方。
 
@@ -172,7 +172,7 @@ include_dirs = ["soc:dts"]
 1. 根据步骤 3，在 `components.include` 中补齐设备需要的全部驱动。
 2. 保留 `configs/<defconfig>` 及必需开关。共享片段按列表顺序应用，设备 defconfig 最后应用。
 3. 创建 `patches/xnu/series`，每行填写一个相对于该目录的板级补丁路径。全部补丁来自共享 profile 时，可使用空 series。
-4. 将继承的 archive 计划与设备必需的构建器比较。设置 `kernel.archives` 时写出完整有序列表。组件目录配方使用 `component:<ID>`，辅助构建器使用脚本文件名。[sheng 的 board.toml](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)提供了两者组合的完整示例。
+4. 将继承的 archive 计划与设备必需的构建器比较。设置 `kernel.archives` 时写出完整有序列表。组件目录配方使用 `component:<ID>`，辅助构建器使用脚本文件名。[参考 board.toml](https://github.com/UniXNU/UniXNU-sheng/blob/main/board.toml)提供了两者组合的完整示例。
 5. 保留设备的固件路径、分区布局、启动镜像设置和 payload 策略。OS 属性放在所选 OS profile，板级 ADT 覆盖放在设备带类型的 `[adt]` 表中。
 
 **表按键合并，数组整体替换。** 组件、配置片段、补丁序列和 archive 列表都遵循此规则。覆盖数组时写出全部必需条目。显式 archive 计划必须覆盖每个所选内核阶段配方，组件构建顺序由依赖确定。
@@ -251,9 +251,9 @@ data_ramdisk = "/path/to/data-seed.dbr"
 
 启用 `panic_screen = true` 时，固件仓库提供 `FrameBufferSerialPortLib/Font.h`，UniXNU 主仓库提供入口探针和渲染源码。参见 [panic 屏幕输入](/zh/guide/debugging#panic-屏幕)。
 
-### sheng 构建输入 {#build-inputs}
+### 构建输入 {#build-inputs}
 
-sheng 的 archive 和镜像步骤需要：
+按所选 archive 与镜像配方准备输入：
 
 - 含 iPhoneOS SDK 的完整 Xcode。
 - `storage-abi/interface-audit.json` 及匹配的存储 ABI 输入。
@@ -263,7 +263,7 @@ sheng 的 archive 和镜像步骤需要：
 - Metal 插件使用的 `.cache/mesa-work`、已构建的 Turnip 和 metal2vulkan 输入。
 - 所选 IPSW 成员、平台种子、trust cache、Data seed 和固件 DTB。
 
-其他设备按所选配方和[驱动适配](/zh/porting/drivers)中链接的子系统指南准备匹配输入。
+按所选配方和[驱动适配](/zh/porting/drivers)中链接的子系统指南确定所需输入。
 
 **完成结果：** 固件集成和本地输入路径已配置。缺失输入与依赖它的构建步骤一并记录。
 
@@ -347,7 +347,7 @@ npm --prefix docs run build
 
 [UniXNU-sheng](https://github.com/UniXNU/UniXNU-sheng)提供维护中的格式 2 示例。结合阅读 `board.toml`、`feeds.toml`、`configs/sheng_defconfig`、`dts/sheng.dts`、`patches/xnu/series`、`package/` 和 `porting.toml`。共享源码位于 [UniXNU-sm8550-common](https://github.com/UniXNU/UniXNU-sm8550-common)，OS profile 位于 `profiles/os/ipados-17.7.11-21H461/`，固件位于 [uefi-sheng](https://github.com/UniXNU/uefi-sheng)。
 
-使用已有 sheng 仓库时，设置 `DEVICE=sheng`、`DEVICE_DIR=../UniXNU-sheng` 和 `DEFCONFIG=sheng_defconfig`，准备 [sheng 输入](#build-inputs)，再执行步骤 6 至 9。输出目录为 `out/sheng/ipados-17.7.11-21H461/sheng/`。它选择 Adreno740、AdrenoMetal，以及设备的存储、输入、显示和镜像组件。[设备页面](/zh/devices/sheng)记录实现范围与验证结果。
+按目标设备仓库设置 `DEVICE`、`DEVICE_DIR` 和 `DEFCONFIG`，准备[构建输入](#build-inputs)，再执行步骤 6 至 9。输出目录为 `out/<device>/<os_profile>/<config>/`。所选配置提供 GPU、存储、输入、显示和镜像组件，验证结果写入设备的 `porting.toml`。
 
 ## 下一步
 
@@ -366,12 +366,12 @@ Apple 的 [iOS 26.5 清单](https://github.com/apple-oss-distributions/distribut
 原版 iOS 或 iPadOS 二进制兼容。
 
 准备好内核构建树、与配置固定提交一致的干净源码检出，以及设备缓存中的
-Novatek 固件后，在 UniXNU 中运行：
+Novatek 固件后，在 UniXNU 中运行参考构建器：
 
 ```sh
 python3 scripts/build-sheng-source-drivers.py \
-  --tree out/sheng/ipados-27.0.1-24A446/sheng_ipados27/tree \
-  --device ../UniXNU-sheng \
+  --tree /path/to/resolved/tree \
+  --device /path/to/device \
   --storage-source out/driver-sources/IOStorageFamily \
   --hid-source out/driver-sources/IOHIDFamily \
   --with-storage-family

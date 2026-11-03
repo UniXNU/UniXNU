@@ -41,7 +41,7 @@ Use a device without a Home button:
 - `/buttons` without a `menu` entry
 - `home-button-type = 2`
 
-SpringBoard reads the value through `BSPlatform homeButtonType`. With value 2 the lock screen uses the swipe-up gesture. On sheng, a swipe up from the lock screen reaches the passcode view and the passcode view names the device as an iPad.
+SpringBoard reads the value through `BSPlatform homeButtonType`. With value 2 the lock screen uses the swipe-up gesture.
 
 ## iPadOS and iOS
 

@@ -4,7 +4,17 @@ schema_version = 1
 name = "merlinx"
 soc = "MT6768"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel probe that reaches M2 voltage and stops at the VSRAM pwrap read; Data persistence, userland display and GPU execution remain incomplete."
+# Related repositories (rendered by the device documentation workflow):
+#   UniXNU-merlinx, uefi-merlinx, UniXNU-MT6768-common, NativeEmmc, Mali-G52, MaliMetal
+summary = "Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel path that completes M2/M3/M4/M6, reads GPU_ID and reports MALI RC 0; a GPU job/fence, NativeMali service, PanVK device and userland display remain incomplete."
+repositories = [
+  { name = "UniXNU-merlinx", url = "https://github.com/Dracen-W/UniXNU-merlinx", role = "device" },
+  { name = "uefi-merlinx", url = "https://github.com/Dracen-W/uefi-merlinx", role = "firmware" },
+  { name = "UniXNU-MT6768-common", url = "https://github.com/Dracen-W/UniXNU-MT6768-common", role = "soc" },
+  { name = "NativeEmmc", url = "https://github.com/Dracen-W/NativeEmmc", role = "storage" },
+  { name = "Mali-G52", url = "https://github.com/Dracen-W/Mali-G52", role = "gpu-kernel" },
+  { name = "MaliMetal", url = "https://github.com/Dracen-W/MaliMetal", role = "gpu-userland" },
+]
 
 [[area]]
 id = "configuration"
@@ -122,19 +132,20 @@ evidence = []
 [[area]]
 id = "gpu"
 status = "implemented"
-components = ["MaliG52"]
-paths = ["components.toml", "drivers/MaliG52/**", "scripts/build-mali-g52.py", "scripts/make-merlinx-adt.py", "patches/xnu/native-mali-personality.patch", "board.toml", "configs/merlinx_defconfig"]
-inputs = ["Mali-G52 r1p0 at 0x13040000, MT6358 VGPU/VSRAM via pwrap WACS2, and the SPM, INFRACFG, topckgen and mfgcfg clock and power windows."]
-configuration = ["MaliG52 is selected by board.toml and components.toml. The kernel personality matches mediatek,mali. build-mali-g52.py is invoked with --m2-writes so the fixed-voltage, clock-source, four power-domain and clock-gate writes are compiled in. M3, M4 and M6 writes remain off. The IOKit glue, archive layout and build integration follow the official Adreno740 driver as the reference implementation; the Mali register, power and clock facts remain from MediaTek and panfrost sources."]
-procedure = ["Build the kernel, build a payload with the Mali diagnostic image, flash it to p33 and read the MALI status lines through the GOP framebuffer."]
-findings = ["The kernel matches the Mali provider and maps all six windows. GICD_PIDR2 reads 0x3b, proving the physical MMIO path. PMIC PSEQ_ID reads 0x0800, proving pwrap reads. The M2 marker reaches M2V, then V1 read VSRAM, and stops before V2, so the first pwrap VSRAM read blocks. GPU_ID has never been read and no GPU job has run. The Adreno740 driver is the integration and ABI reference, not a source of Mali register behavior."]
+components = ["MaliG52", "MaliMetal"]
+paths = ["components.toml", "drivers/MaliG52/**", "drivers/MaliMetal/**", "scripts/build-mali-g52.py", "scripts/make-merlinx-adt.py", "patches/xnu/native-mali-personality.patch", "board.toml", "configs/merlinx_defconfig"]
+inputs = ["Mali-G52 r1p0 at 0x13040000, MT6358 VGPU/VSRAM via pwrap WACS2, and the SPM, INFRACFG, topckgen and mfgcfg clock and power windows.", "NativeMali fixed external-method ABI and the MaliMetal MM3 pan_kmod seam."]
+configuration = ["MaliG52 is selected by board.toml and components.toml. The kernel personality matches mediatek,mali. build-mali-g52.py is invoked with --m2-writes --m3-writes --m4-writes --m6-writes so power, reset, MMU and job-write stages are compiled in. The IOKit glue, archive layout and build integration follow the official Adreno740 driver as the reference implementation; the Mali register, power and clock facts remain from MediaTek and panfrost sources. MaliMetal is the userland Metal/PanVK frontend and is not yet selected by the kernel build."]
+procedure = ["Build the kernel, build a payload with the Mali diagnostic image, flash it to p33 and read the MALI status lines through the GOP framebuffer.", "For the userland path, build PanVK with the MaliMetal patch series and open the NativeMali service from the MaliMetal bundle."]
+findings = ["The kernel matches the Mali provider and maps all six windows. GICD_PIDR2 reads 0x3b, proving the physical MMIO path. PMIC PSEQ_ID reads 0x0800, proving pwrap reads. M2 power/clock/domain setup completes, the M3 GPU reset and M4 MMU initialization run, and the M6 job-write stage is enabled.", "GPU_ID reads 0x74021000, which masks to product 0x7002 (Mali-G52). MALI RC is 0, and the GPU service publishes its device state. No GPU job, completed fence, PanVK device or userland Metal device has run yet.", "MaliMetal contains the host-tested NativeMali client and the MM3 device/sync patch series; the mesa-panvk CI job compiles the seam but the NativeMali IOUserClient is not installed."]
 completion = ["M2 completes, GPU_ID reads 0x70021000 with the expected feature and present masks, and a bounded GPU submission returns a completed fence."]
-limits = ["The M2 voltage read path is blocked at VSRAM. M3 reset, M4 MMU enable, M6 jobs and MaliMetal are not yet exercised. The current image has no panic screen because the local UEFI font input was unavailable."]
-next_action = ["Add pwrap read sub-markers inside readRail, compare the VSRAM path with the successful PSEQ_ID read, and consider reusing the M1 rail snapshot instead of re-reading it in setFixed()."]
+limits = ["The kernel path is confirmed through reset and MMU setup, but no job/fence has completed. The NativeMali IOUserClient and service are not installed in the current boot image, so MM4 cannot create a PanVK device on hardware. PanVK's 144 MB JM indirect buffer also exceeds the current 128 MB NativeMali per-BO limit. Userland display remains at IOMFB_FDR_loader exit 1."]
+next_action = ["Build and install the NativeMali IOUserClient, lower or extend the PanVK indirect allocation, cross-build the target PanVK dylib, then run one bounded PanVK job and record its fence."]
 evidence = [
   { kind = "source", reference = "drivers/MaliG52/xnu/NativeMaliGpuService.cpp", result = "The IOKit service matches the ADT Mali node, maps the GPU and power windows and exposes the diagnostic stages." },
-  { kind = "source", reference = "components.toml", result = "The MaliG52 component pins revision 2a422ae and the M2-enabled build recipe." },
-  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot out/merlinx-uefi-emmc-mali-vsteps.img", revision = "382ed687ee82860d3276cadd8cd889c7f98ffb0b", result = "The panel shows MALI MATCH, MALI M2P, M2V, then V1 read VSRAM and stops." },
+  { kind = "source", reference = "components.toml", result = "The MaliG52 component pins revision be5ed4437fed98def5b9e392f9fa4da790b341e1 and the M2/M3/M4/M6 build recipe." },
+  { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot out/merlinx-uefi-emmc-mali-m4m6.img", revision = "22f479e03dcdf22006415cb22300f509faa75bbf", result = "MALI RC 0; GPU_ID 0x74021000; M3 reset, M4 MMU and M6 job-write stages enabled." },
+  { kind = "host", reference = "https://github.com/Dracen-W/MaliMetal/actions/runs/41444900463", command = "tests/run.sh; meson setup build-vk ...; ninja -C build-vk src/panfrost/vulkan/libvulkan_panfrost.so", revision = "df45b652c8d321c4a98d4195c8eb47896c62072d", result = "All five jobs passed, including the full mesa-panvk compile of the 0001-0006 patch series." },
 ]
 
 [[area]]

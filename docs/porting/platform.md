@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -49,9 +49,9 @@ before enabling additional cores.
 On a SoC with two core types, tag every CPU node in the board DTS with
 `unixnu,cluster-type = "E"` or `"P"`. The ADT then carries each CPU's
 `cluster-type`, and a scheduler patch runs XNU's Edge scheduler with one E and
-one P cluster. The sheng reference:
+one P cluster. The SM8550 reference:
 
-| Input | sheng value |
+| Input | Reference value |
 | --- | --- |
 | E cluster | cpu0 to cpu2 (Cortex-A510) |
 | P cluster | cpu3 to cpu7 (Cortex-A715, A710 and X3) |
@@ -88,7 +88,7 @@ Continue with [UFS adaptation](/porting/ufs) for the storage controller.
 | [AppleKeyStoreState](/drivers/apple-key-store-state) | Qualify selectors and state callbacks against the OS; connect initialization and event callers | Required state queries and notifications complete |
 | [XnuPrelink](/drivers/xnu-prelink) | Select matching XNU, original kernelcache, archive bindings and patch order | Prelink resolves the selected drivers and produces the kernel |
 | [DarwinBoot](/drivers/darwin-boot) | Include the loader in firmware or payload; provide Mach-O, ADT and selected sidecars | Loader validates the inputs and reports kernel handoff |
-| [ShengPreflight](/drivers/sheng-preflight) | Read its sheng checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
+| [ShengPreflight](/drivers/sheng-preflight) | Read its board checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
 
 Use [prelink](/concepts/prelink), [integrity policy](/concepts/security),
 [payload](/concepts/payload) and [userdata](/guide/userdata) for the required

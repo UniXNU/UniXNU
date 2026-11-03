@@ -6,7 +6,7 @@
 
 Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（120 Hz 面板，滑动约 54 fps）与电池读数；基于 UniXNU-pong
 
-源记录: [porting.toml](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/porting.toml), `b5fc720cf97f9f15c3a07997a19b380c59554c2c`.
+源记录: [porting.toml](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/porting.toml), `fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd`.
 
 本页按设备记录自动生成。
 
@@ -20,7 +20,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 | [显示](#display) | `implemented` |
 | [输入](#input) | `implemented` |
 | [GPU](#gpu) | `implemented` |
-| [网络](#network) | `planned` |
+| [网络](#network) | `host-verified` |
 | [音频](#audio) | `planned` |
 | [电源](#power) | `implemented` |
 | [镜像组装](#packaging) | `host-verified` |
@@ -54,6 +54,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 - zizhan 与 Pong 的 DRAM 第二段不同（0xf4600000+0xba00000，Pong 为 0xf1400000+0xec00000），ADSP carveout 为 0x9fd00000+0x3100000（Pong 为 0x85700000+0x2800000）；其余 SMEM、IPCC、AOSS、cmd-db 地址相同。
 - 构建脚本不读取 board 名，改名 zizhan 不影响 Pong 脚本。
+- 新增隔离的 zizhan\_ipados18\_wifi\_defconfig 与 zizhan-wifi-sm8475.json；默认 GPU 配置继续关闭 Wi-Fi。实机 WLAN PHY 和供电参数不同于 Pong，已用本机 live DT 逐项核验新 profile。
 
 ### 完成条件
 
@@ -69,8 +70,8 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [记录了实机硬件参数、全分区备份和原厂 UEFI 内存表对照。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-28-device-prep.md)
-- `source`: [记录了 zizhan 与 Pong 的硬件地址差异。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
+- `source`: [记录了实机硬件参数、全分区备份和原厂 UEFI 内存表对照。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-28-device-prep.md)
+- `source`: [记录了 zizhan 与 Pong 的硬件地址差异。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-battery.md)
 - `host`: [托管 runner 上解析四层配置、编译 dts/zizhan.dts、应用全部 13 个 XNU 补丁并链接出 CI 内核，产物 pong-macos-products 已上传。](https://github.com/qiumochen/UniXNU-zizhan/actions/runs/41304992346)
   Command: <code>GitHub Actions zizhan macOS build（macos-15-intel，Xcode 16.4，pong_ipados18_ci_defconfig）</code>. Revision: `28d9f4fe869293e7a384b18b800ceb8dd56c1244`.
 
@@ -116,7 +117,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [UEFI、DarwinBoot24 交接和 XNU 早期启动的上机记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
+- `source`: [UEFI、DarwinBoot24 交接和 XNU 早期启动的上机记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-29-xnu-bringup.md)
 
 ## CPU 与中断 {#cpu}
 
@@ -158,8 +159,8 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [8 核启动（k4），E/P 调度对比和 tsample 线程采样记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [X2 优先调度的测量和结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-120hz-and-cadence.md)
+- `source`: [8 核启动（k4），E/P 调度对比和 tsample 线程采样记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [X2 优先调度的测量和结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-120hz-and-cadence.md)
 
 ## 内存与 DMA {#memory}
 
@@ -197,7 +198,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [k1 打印受管内存 9728 MiB。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
+- `source`: [k1 打印受管内存 9728 MiB。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-29-xnu-bringup.md)
 
 ## 存储与根卷 {#storage}
 
@@ -240,7 +241,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [根文件系统方案、挂根死锁的根因分析和 0006 修复前后的对比。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [根文件系统方案、挂根死锁的根因分析和 0006 修复前后的对比。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-30-root-and-autoloop.md)
 
 ## 显示 {#display}
 
@@ -277,16 +278,19 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 ### 当前范围
 
 - 外屏没有驱动；背光沿用 bootloader 的状态，系统里不能调节亮度。
+- 旧内核截图日志每行被截断，只保留左侧约 39/135 个采样列；新分段格式已在 g248、g249 上机验证，但采样截图不能代替像素级面板检查。
 
 ### 下一步
 
-- 接入面板背光的 DCS 命令，让亮度设置生效。
+- 接入面板背光的 DCS 命令。
 
 ### 证据
 
-- `source`: [内屏显示 iPadOS 主屏（u3）。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/2026-10-30-u3-ipados-homescreen.jpg)
-- `source`: [120 Hz 切换和帧率测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-120hz-and-cadence.md)
-- `source`: [DPU 翻页零拷贝三缓冲的实现和测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `source`: [内屏显示 iPadOS 主屏（u3）。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/evidence/2026-10-30-u3-ipados-homescreen.jpg)
+- `source`: [120 Hz 切换和帧率测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-120hz-and-cadence.md)
+- `source`: [DPU 翻页零拷贝三缓冲的实现和测量。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `device`: [每轮 6 张截图均完整解出 135/135 列、120/120 行；主屏及天气画面横跨整幅图，旧右侧黑区确为缺失数据补黑。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-shot-and-watermark.md)
+  Command: <code>cycle.sh g248、g249；tools/zizhan/mac/shot.py</code>. Revision: `c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d`.
 
 ## 输入 {#input}
 
@@ -328,8 +332,9 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [用触摸打开了「设置」。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/2026-10-30-t4-settings-by-touch.jpg)
-- `source`: [触摸驱动的轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [用触摸打开了「设置」。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/evidence/2026-10-30-t4-settings-by-touch.jpg)
+- `source`: [触摸驱动的轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [ui\_compat18.c 新增 zizhan display-link 速率 WIP；未构建、未上机，触摸与动画体验需要独立回归，未改变输入区域验证等级。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-gpu-astc-and-fairplayd.md)
 
 ## GPU {#gpu}
 
@@ -359,6 +364,9 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 - 壁纸扩展 MercuryPosterEx 会和 backboardd 抢 GPU，基线 13 轮里有 5 轮整机 GPU 丢失；拒绝它之后 6/6 没有丢失，滑动帧率平均 54.5 fps。
 - 固定 900 MHz 不比 DCVS 快，GPU 频率不是瓶颈。
 - GPU 客户端因内存 ledger 被杀（SBRendererService 渲染电池页时）会在用户映射还在时释放 BO 页，内核 pmap\_assert\_free panic；PongAdrenoClient 的 dropViews 现在 unmap 并释放映射，NativeAdrenoMemory::release 在页还给 VM 前对每页 pmap\_disconnect（NativeAdrenoDisconnectPages）。
+- ASTC 布局修复后，g248 和已安装 watermark 桥接库的 g249 在 DeviceSupportsASTC=1 时自动打开天气 App；各 6 张分段截图均记录完整 135/135 列，主屏与天气画面横跨整屏。g251 时钟和 g252 设置也记录到完整宽度的 App 画面。
+- g253、g254 的 GPU 时间线分别完整完成 592/592 和 403/403 笔提交；deadline 看到的 submitted/retired 差 1 是 backboardd 在复位前 26 ms 正常提交的在途工作，不是持续 fence 停滞。
+- Photos 的零尺寸断言来自 Tungsten 以 0x0 调用 PXCreateContext；Photos 专用运行时钩子把零轴收敛为 1，g262、g263 和最终内核 g264 均成功进入 Photos，ASTC 开关两组都没有再崩溃。
 
 ### 完成条件
 
@@ -367,37 +375,59 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 ### 当前范围
 
 - 壁纸扩展不能用 GPU；metal2vulkan 每次提交仍有约 10–20 ms 的 CPU 开销。
+- ASTC 修复已自动验证主屏、天气、时钟、设置和 Photos 整幅采样截图；多任务、触摸动画和 Photos 的相册/搜索/编辑路径仍待人工确认，默认仍关闭 ASTC。早先确认过的整机 GPU 丢失仍有 stuck-copy 和 poison 检测。
+- Photos 启动与相册首页已自动验证，但首次提示后的网格、搜索、编辑和图片浏览仍需人工操作；IOSurfaceSharedEvent 监听仍缺失。
 
 ### 下一步
 
-- 支持 IOSurfaceSharedEvent 监听，让壁纸扩展重新使用 GPU。
+- 支持 IOSurfaceSharedEvent 监听，让壁纸扩展和依赖监听的服务重新使用 GPU 事件。
+- 同镜像验证 fairplayd，再测试 display-link WIP，随后按调研顺序处理 nopreamble、BO 缓存、壁纸和截图清晰度。
 
 ### 证据
 
-- `source`: [GPU bring-up、GPU 丢失的诊断和拒绝壁纸扩展的对照实验。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [逐帧 GPU 提交时间线。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-31-frame-timeline.md)
+- `source`: [GPU bring-up、GPU 丢失的诊断和拒绝壁纸扩展的对照实验。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [逐帧 GPU 提交时间线。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-31-frame-timeline.md)
+- `host`: [最终 Metal 桥接库和插件构建成功；源码里的 ASTC 格式编号与 iPhoneOS SDK 核对。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-astc-layout.md)
+  Command: <code>metal-refresh.sh astc-final 的 bridge / plugin 构建</code>. Revision: `e3be89264924267a610e472e559c9d4d8a66b803`.
+- `device`: [ASTC=1，天气 App 在连续 3 张旧格式截图的左侧区域有画面，自动返回 Android；右侧数据缺失。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-astc-layout.md)
+  Command: <code>round.sh g247 pong_touch_synth=3 tsa=1118 touch_lat=1 pong_shot=60 pong_shot_ms=1000 pong_astc=1</code>. Revision: `e3be89264924267a610e472e559c9d4d8a66b803`.
+- `device`: [watermark 桥接库安装后 ASTC=1，天气启动，主屏与天气 6 张截图完整，自动返回 Android；GPU fence 停滞仍在。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-shot-and-watermark.md)
+  Command: <code>metal-refresh.sh watermark；cycle.sh g249</code>. Revision: `c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d`.
+- `device`: [时钟、设置成功启动且整幅截图完整；照片启动后反复以 PXPixelSizeAreaIsZero 断言退出。每轮均自动返回 Android。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-shot-and-watermark.md)
+  Command: <code>cycle.sh g250–g252</code>. Revision: `caa3a06b6b809be46146fc890995b16d51c8a99c`.
+- `device`: [两轮时间线无丢失，提交全部完成，零拷贝 fence 无超时；deadline fence 是复位前 26 ms 的正常在途提交。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-fence-diagnostics.md)
+  Command: <code>cycle.sh g253、g254；pong_gtrace_delay、pong_gtrace、pong_gtrace_ib</code>. Revision: `a0eb276866aee06a31189f182335760d5a39d4a9`.
+- `source`: [记录 ASTC 后续工作、fairplayd 当前镜像状态和 display-link WIP 的未验证边界。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-gpu-astc-and-fairplayd.md)
+- `device`: [钩子把 Tungsten 的 0x0 收敛为 1x1；Photos 不再触发零尺寸断言或退出，最终 ASTC=1 轮次保持运行并自动返回 Android。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-photos-context.md)
+  Command: <code>cycle.sh g262–g264；pong_astc=0/1；Photos PXCreateContext 兼容钩子</code>. Revision: `1ebf568205630bc5fa25737ae95392d2908f0e8a`.
 
 ## 网络 {#network}
 
-`planned`
+`host-verified`
 
 组件: `PongPlatform24`.
 
 ### 硬件与依赖
 
-- QCA6490（与 Nothing Phone \(2\) 相同），zizhan 自己的 board data
+- QCA6490（PCI 17cb:1103）；本机只读导出的固件与 Linux v7.0.14 ath11k 源码，不入仓库
 
 ### 配置
 
-- CONFIG\_XNU\_PONG\_WIFI=n，boot-arg pong\_wifi=0
+- 默认 GPU 配置仍为 CONFIG\_XNU\_PONG\_WIFI=n、pong\_wifi=0；试验配置 zizhan\_ipados18\_wifi\_defconfig 为 CONFIG\_XNU\_PONG\_WIFI=y，镜像需 WIFI=1 写入 pong\_wifi=1
 
 ### 操作步骤
 
-- 暂不启动 Pong 的 Wi-Fi 栈。
+- 从实机 Android live DT 核对 PCIe0、WLAN GPIO、SID；在隔离试验配置中构建并打包 Wi-Fi 镜像。
+- USB 恢复后临时 fastboot boot，按 PCIe、供电、MHI、固件、MSI、扫描顺序定位首个失败阶段。
 
 ### 开发经验
 
-- zizhan 的 PCIe、GPIO 和 board data 还没有与 Pong 核对。
+- 实机 DT 确认 PCIe0、GPIO 80/94/95/96/204、SID 0x1c00/0x1c01；Android 链路为 Gen2 x1。
+- 旧 Pong profile 与 zizhan live DT 的 PHY 表有 6 条差异，多出一条本机没有的 WLAN 供电请求；g265/g266 均未启动。
+- zizhan profile 经完整 live DT 核验；g267 镜像虽已打包，监视在设备未出现时撤下，未有设备结果。
+- 高位 QMI board ID 分支已保留 chip ID 决定的 bdwlan/bdwlang 前缀；三配置重新构建成功，g268 镜像含自动返回参数，实际 QMI ID 仍待设备日志。
+- g268 自动轮次的 USB 工具已修正启动失败误报并限制 adb/fastboot 阻塞；CI、GPU、Wi-Fi 三配置再构建通过，仍无设备启动证据。
+- g268 镜像内 PWF2 与本机 213 个原始固件文件逐项一致；包内没有高位 board ID 文件，实际 QMI ID 待设备日志。
 
 ### 完成条件
 
@@ -405,15 +435,26 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 当前范围
 
-- 没有接入。
+- 尚无 Wi-Fi 试验配置的设备启动日志、实际 QMI board ID、扫描或关联证据；USB 当前不可见。默认镜像继续关闭 Wi-Fi。
+- 若实际 QMI board ID 超过 0xff，本机导出的固件包没有对应高位命名文件；需先看实际请求名，不能猜测替代。
 
 ### 下一步
 
-- 从实机 DT 核对 PCIe0 和 WLAN 使能 GPIO，再打开 CONFIG\_XNU\_PONG\_WIFI。
+- 恢复 USB 枚举，执行 g268 试验镜像的临时启动和自动返回轮次，取回日志后处理首个失败阶段。
 
 ### 证据
 
-- `source`: [记录了 Wi-Fi 芯片型号。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-28-device-prep.md)
+- `source`: [记录了 Wi-Fi 芯片型号。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-28-device-prep.md)
+- `host`: [旧 profile 的三配置构建通过，但试验镜像已因板级输入不符撤下，g265/g266 均未启动。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>ci_kernel.sh：zizhan_ipados18_wifi_defconfig、pong_ipados18_ci_defconfig、zizhan_ipados18_gpu_defconfig</code>. Revision: `79ae5b1d7b92f621ac549aec80e73e30e404d649`.
+- `host`: [zizhan profile 完整核验；三配置成功，g267 命令行含唯一 Wi-Fi 开关和自动返回；设备尚未启动。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>PONG_WIFI_DTB=&lt;local live DT&gt; ci_kernel.sh：zizhan_ipados18_wifi_defconfig；另构建 pong_ipados18_ci_defconfig、zizhan_ipados18_gpu_defconfig；ci_boot_ufs.sh boot-g267</code>. Revision: `ae24f8a89f41fe2864d997ea3b8005fb1824ae89`.
+- `host`: [QMI 扩展 board ID 命名修正后，三配置成功；g268 镜像命令行和自动返回参数检查通过，尚无设备结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>ci_kernel.sh：Wi-Fi、CI、GPU 三配置；ci_boot_ufs.sh boot-g268</code>. Revision: `2eab51d14ecc79b3e9b34a4adf65a2b0a81322d8`.
+- `host`: [三配置再次成功；adb 可见、未授权、阻塞和 fastboot boot 成败模拟通过；g268 仍未启动设备。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>ci_kernel.sh：CI、GPU、Wi-Fi 三配置；USB 工具模拟</code>. Revision: `890ec93c136a23bbc0e857d0879c3119bf945b83`.
+- `host`: [213/213 文件一致；内核和最终镜像均含完整包；无高位 board ID 文件，实际 QMI ID 未知。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>解析 PWF2 目录并逐项 SHA-256 比对本机导出，核对 g268 镜像内嵌固件包</code>. Revision: `0949ebe471d258965f2ef2ae21b44cd1eda13576`.
 
 ## 音频 {#audio}
 
@@ -423,7 +464,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 硬件与依赖
 
-- 2 个 CS35L41 功放（I2C 2-0040、2-0042）；Pong 用的是 TFA9873
+- 2 个 CS35L41 功放（地址 0x40、0x42）；公开 zizhan Android DT 给出 SE15 I²C（0x880000）、SDA/SCL（GPIO56/57）和 IRQ（GPIO88/118），共用 GPIO1 复位；启用前须与本机 live DT 核对。Pong 音频代码使用 TFA9873，总线/引脚/地址均不同。
 
 ### 配置
 
@@ -431,11 +472,13 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 操作步骤
 
-- 暂不启动音频。
+- 保持 pong\_audio=0；先核对本机 live DT 和 I²C 前置条件，再以隔离配置做只读身份探针，最后实现 CS35L41 初始化与 ADSP 播放路由。
 
 ### 开发经验
 
 - 功放型号与 Pong 不同，Pong 的 TFA9873 路径不能直接用。
+- 公开 zizhan Android DT 的两颗 CS35L41 位于 SE15 I²C 0x880000，SDA/SCL 为 GPIO56/57，地址 0x40/0x42，共用 GPIO1 复位；PongAudio.cpp 使用 SE13 0xa94000、GPIO48/49、TFA 地址 0x34/0x35。
+- GeniI2c 底层有多字节收发入口，但现有功放包装和寄存器写入是 TFA9873 专用，不能仅改地址。
 
 ### 完成条件
 
@@ -443,15 +486,17 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 当前范围
 
-- 没有 CS35L41 驱动。
+- 没有 CS35L41 驱动；公开提取 DT 尚未与本机 live DT 再核对，未有音频设备启动或声音证据。
 
 ### 下一步
 
-- 参照 Linux cs35l41 驱动写 I2C 初始化序列。
+- 先核对本机 live DT 的 SE15 时钟、引脚、复位与 IRQ；隔离配置只读 CS35L41 身份，再核对调音/固件与 ADSP 路由，逐段上机验证。
 
 ### 证据
 
-- `source`: [记录了音频不启动的原因和空功放表。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
+- `source`: [记录了音频不启动的原因和空功放表。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-battery.md)
+- `source`: [公开提取的 zizhan Android DT 给出 SE15、GPIO56/57、CS35L41 地址和复位/IRQ；本机尚待 live DT 复核。](https://github.com/sm8450-mainline/fdt/blob/3e347601d9e91dd2f1f48e51499823225f7bc0bc/zizhan.dts)
+- `source`: [逐项对照 PongAudio.cpp，列出隔离探针的前置条件和未验证边界。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-audio-board-audit.md)
 
 ## 电源 {#power}
 
@@ -497,7 +542,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [ADSP 启动阶段 1–13 全部通过，电池读数与 Android 一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-battery.md)
+- `source`: [ADSP 启动阶段 1–13 全部通过，电池读数与 Android 一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-battery.md)
 
 ## 镜像组装 {#packaging}
 
@@ -527,6 +572,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 - fairplayd.A2 在本移植上启动即退出，launchd 握着 KeepAlive 端口，排队的请求永远没有回复；build-ipados18.py 的 EXCLUDED18 把它移出服务缓存。
 - DarwinBoot24 命令行上限 1020 字节：等于默认值的 pong\_ui\_software=0、pong\_software\_ui=0、pong\_ram\_banks=1 不再写入（约 −54 字节）。
 - ADT /product 的 udid-version 决定 MobileGestalt 怎么算 UniqueDeviceID：1 要 SerialNumber、ECID、WifiAddress、BluetoothAddress，Wi-Fi 关着时 WifiAddress 的回答让调用者等几秒（设置主线程卡在 -\[ISDefaults init\]，首屏 6.4 s）；有 /chosen 种子时改用 iPhone17,1 自己的 2（ChipID-ECID），首屏 1.2 s。
+- 11-02 为调查 Weather 卡住，从 g213 修改前镜像恢复当前 OS 的 fairplayd.A2 job/plist；g245 交接记录为 2560 帧、moving 2453 / 72.0 fps、fairplayd failed lookup 零行，但仍 respawn，功能恢复未验证。EXCLUDED18 仍排除它，全量重建会再移除。
 
 ### 完成条件
 
@@ -535,16 +581,20 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 ### 当前范围
 
 - Apple 镜像、固件和 ABI 二进制都要在本机准备。
+- job-restore.sh 泛化版仅做静态检查，尚未在 Mac / 设备运行；当前已安装镜像与全量重建的 fairplayd 策略不同。
 
 ### 下一步
 
 - 用这个版本打包启动镜像并上机跑一轮，记录设备结果。
+- 同镜像做 fairplayd 有/无对照并核对 Weather / 电池页，决定是否修改 EXCLUDED18；Mac 补做双配置内核及 plugin / UI 构建。
 
 ### 证据
 
-- `source`: [构建链说明。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-29-xnu-bringup.md)
-- `host`: [Mac Studio（Apple silicon，Xcode 26.6.0）从全新的构建目录完整编译出 DEVELOPMENT\_ARM64\_PONG 内核，18321080 字节；zizhan 的 boot-arg 字符串（pong\_fts、pong\_panel\_hz、pong\_dpu\_flip 等）与上机使用的内核一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/evidence/host-build-zizhan_ipados18_gpu.txt)
+- `source`: [构建链说明。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-29-xnu-bringup.md)
+- `host`: [Mac Studio（Apple silicon，Xcode 26.6.0）从全新的构建目录完整编译出 DEVELOPMENT\_ARM64\_PONG 内核，18321080 字节；zizhan 的 boot-arg 字符串（pong\_fts、pong\_panel\_hz、pong\_dpu\_flip 等）与上机使用的内核一致。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/evidence/host-build-zizhan_ipados18_gpu.txt)
   Command: <code>ZIZHAN_SRC=&lt;work dir&gt; ci_prep.sh &amp;&amp; DEFCONFIG=zizhan_ipados18_gpu_defconfig JOBS=10 ci_kernel.sh</code>. Revision: `1ec1190f4e3467a36a7a7402bc766dfdf688adf1`.
+- `source`: [区分当前镜像回填和源码 EXCLUDED18，记录 g245 现象及下一项验证，未增加 device-verified 证据。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-02-gpu-astc-and-fairplayd.md)
+- `source`: [Wi-Fi 本机输入路径、三配置构建和试验镜像打包记录；无设备结果。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
 
 ## 诊断 {#diagnostics}
 
@@ -560,7 +610,7 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 - pong\_autoreset=&lt;秒&gt;（默认 300），pong\_autoreset\_sb
 - pong\_klog\_4k：内核把 ramoops 区复制到 UFS 上的固定文件
-- pong\_gtrace、touch\_lat：逐帧时间线
+- pong\_gtrace、pong\_gtrace\_delay、pong\_gtrace\_ib、touch\_lat：可定时启动的逐帧时间线
 
 ### 操作步骤
 
@@ -573,6 +623,10 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 - 连续多轮后手机发热，DRAM 里的 ramoops 几乎每行都有位翻转；pong\_klog\_4k 写到 UFS 的副本没有这个问题。
 - 带 pong\_url=&lt;秒&gt; 的轮里，SpringBoard 打开 prefs:root=&lt;pong\_pane&gt;（H = 电池健康），settings\_compat18.c 在设置启动后 6/12/20/30 s 打印界面（标签、表格、cell 的 specifier id、转圈、SwiftUI 无障碍元素，非 ASCII 转义为 \\xHH），tools/zizhan/mac/settings-ui.py 解码；无人值守就能判断一个设置页的状态。
 - 手势采样器 gs\_all=2（patches/xnu-ipados18/0005）也记录等待中的线程，tools/zizhan/mac/gsym.py 符号化整条栈；用它沿同步 XPC 一路查到 timed 卡在 gethostuuid\(\)。
+- pong\_gtrace\_delay 可把提交时间线移到 SpringBoard 后的指定秒数；deadline fence 年龄用于区分持续停滞与自动复位瞬间的在途提交。
+- USB 枚举探测有 6 秒上限；fastboot boot 传输有 180 秒上限并保留失败状态，避免把未启动的轮次记为已启动。
+- g268 USB 等待任务由用户图形域 launchd 托管，进程父级为 launchd，日志有定期心跳；手机尚未枚举。
+- logfs 导出/拉取失败时轮次现在清除本机旧副本并停止，避免把同名历史镜像作为本轮取证。
 
 ### 完成条件
 
@@ -581,6 +635,8 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 ### 当前范围
 
 - 日志位翻转与温度有关；cycle.sh 在每轮之前等电池降到 35 °C。
+- 11-02 display-link 诊断随 ui\_compat18.c WIP 保存，touch\_lat=1 打印调用方；未构建、未上机。
+- g268 等待 USB 恢复，尚无这版自动轮次工具的设备返回证据。
 
 ### 下一步
 
@@ -588,7 +644,15 @@ Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（1
 
 ### 证据
 
-- `source`: [免按键闭环的设计和轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-10-30-root-and-autoloop.md)
-- `source`: [四条复位回路的修复。](https://github.com/qiumochen/UniXNU-zizhan/blob/b5fc720cf97f9f15c3a07997a19b380c59554c2c/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `source`: [免按键闭环的设计和轮次记录。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-10-30-root-and-autoloop.md)
+- `source`: [四条复位回路的修复。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-01-zero-copy-and-return-paths.md)
+- `source`: [公开交接收录 Mac clone 工作流、诊断默认值和验证边界，旧主机同步流程退役。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/CLAUDE.md)
+- `source`: [USB 无枚举导致 g265 未启动；fastboot 探测加 6 秒上限，when-back 支持指定试验镜像；主机模拟通过，设备回路尚待恢复。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+- `host`: [失败启动不再被记录为 booted；三配置构建成功。手机未枚举，设备轮次待运行。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>adb-visible.sh 与 fastboot-boot.sh 模拟；CI、GPU、Wi-Fi 三配置构建</code>. Revision: `890ec93c136a23bbc0e857d0879c3119bf945b83`.
+- `host`: [等待进程由 launchd 托管并记录心跳；手机仍未枚举，无设备日志或截图。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>launchctl submit g268 when-back；launchctl list 与日志检查</code>. Revision: `5eaa262d46cdb2c3d7a56de28805d57cea548185`.
+- `host`: [导出失败、拉取部分文件和空文件都删除旧副本并失败；成功保留新副本；三配置构建通过，设备尚未验证。](https://github.com/qiumochen/UniXNU-zizhan/blob/fe4bff38928dce4b4c2e03a9bf0f4f3dca2cc7fd/docs/progress/2026-11-03-wifi-bringup.md)
+  Command: <code>pull-logfs.sh 失败注入四种情况；ci_kernel.sh CI/GPU/Wi-Fi 三配置</code>. Revision: `0a03bab9a4876f1490e453559a24244ffca76958`.
 
 </div>

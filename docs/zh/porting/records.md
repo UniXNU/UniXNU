@@ -85,8 +85,8 @@
 7. 发布设备改动，由目录工作流更新源码版本和生成页面。
 
 ```sh
-python3 scripts/porting-record.py check --device ../UniXNU-sheng
-python3 scripts/porting-record.py check --device ../UniXNU-sheng --base origin/main
+python3 scripts/porting-record.py check --device /path/to/device
+python3 scripts/porting-record.py check --device /path/to/device --base origin/main
 ```
 
 第二条命令在待提交的设备分支上运行，比较已提交改动与基准版本。每个代码路径
@@ -133,7 +133,7 @@ npm --prefix docs run build
 本地预览：
 
 ```sh
-python3 scripts/porting-record.py site --local sheng=../UniXNU-sheng
+python3 scripts/porting-record.py site --local myboard=/path/to/device
 cd docs
 npx vitepress build
 ```

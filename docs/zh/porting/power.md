@@ -26,7 +26,7 @@
 | [ShengAdsp.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/ShengAdsp.h#L15) | `ShengAdspClient`、通道注册和发送队列 |
 | [LegacyDisplayProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/LegacyDisplayProbe.cpp#L493) | DSP 与消费者的初始化顺序 |
 
-sheng 文件提供 Qualcomm GLINK 集成参考。使用该接口时：
+链接的文件提供 Qualcomm GLINK 集成参考。使用该接口时：
 
 1. 按目标硬件适配固件认证、预留内存和电源投票。打开通道前，先建立邮箱和 ready/crash 通知路径。
 2. 实现 `ShengAdspClient` 的通道状态和接收回调。回调运行于 DSP 线程，应将收到的字节复制到
@@ -99,9 +99,9 @@ Linux 提供协议和流生命周期参考。使用选定 XNU 的接口实现其
    字节；周期不满是正常的。
 6. **发布输入。** 直接采集已知声音成功后，再发布输入流。
 
-sheng 的路由，见 [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/main/package/AudioProbe.cpp)：
+参考路由见 [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/main/package/AudioProbe.cpp)：
 
-| 阶段 | sheng 取值 |
+| 阶段 | 参考取值 |
 | --- | --- |
 | Codec | WCD938x，复位 gpio108，供电 ldob15，TX master（0x6d30000）上的 SoundWire 设备 1 |
 | 模拟 | AMIC3、micbias 3、ADC2 |

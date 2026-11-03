@@ -4,7 +4,7 @@ schema_version = 1
 name = "kebab"
 soc = "SM8250"
 os_profile = "ipados-17.7.11-21H461"
-summary = "OnePlus 8T (KB2000). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds with the 407db1a source fixes and is reproducible. The BSD kebab_ufs driver is linked (kebab_ufs_rootdev) with the /kebab-ufs ADT node and rd=ufsroot0 ufsroot=userdata rootrw=0 documented, but root discovery is not reached on hardware: the kernel stops before bsd_init with the last line 'Unable to find vm tag ?+z for btlog'. The GIC handler is installed and the first PPI-27 IRQ fires, but the virtual timer never repeats; the same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point. The blocker is the periodic timer/early allocator path, not the UFS driver."
+summary = "OnePlus 8T (KB2000). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds through a temporary mirror because Actions on the fork are disabled. The active interrupt path is now GFander's source-level GICv3 design: HAS_GIC_V3 in the board header, Group-1 setup in pe_fiq.c and the Group-1 dispatch in sleh_irq (patches/xnu/10063-kebab-gic-vtimer.patch); CI builds succeed. The source-GIC hardware images currently show only colour bars and no text, so the console/panic transport is unresolved. The BSD kebab_ufs driver is linked (kebab_ufs_rootdev) with the /kebab-ufs ADT node and rd=ufsroot0 ufsroot=userdata rootrw=0; a binary-GIC ufsprobe2 image that marks IOFindBSDRoot -> kebab_ufs_rootdev is built but not flashed. UFS root is not confirmed yet."
 
 [[area]]
 id = "configuration"
@@ -94,14 +94,14 @@ result = "DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB 
 id = "storage"
 status = "implemented"
 components = []
-paths = ["docs/bring-up.md", "scripts/ufs-ci-pre-build.sh", "patches/xnu/kebab-ufs-10063.patch"]
+paths = ["docs/bring-up.md", "scripts/ufs-ci-pre-build.sh", "patches/xnu/kebab-ufs-10063.patch", "patches/xnu/10063-kebab-gic-vtimer.patch"]
 inputs = ["UFS host controller 0x1D84000", "root /kebab-ufs ADT node reg <0x01d84000 0x30000>", "userdata GPT partition on LUN 0"]
 configuration = ["BSD bdevsw driver bsd/dev/kebab_ufs.c added through bsd/conf/files; no IOKit IOBlockStorageDevice or VerifiedRoot", "boot args rd=ufsroot0 ufsroot=userdata rootrw=0", "read-only unless ufsrw=1", "polled UFSHCI legacy transfer list, one physically contiguous DMA allocation, 512-byte BSD sectors over 4 KiB device blocks"]
 procedure = ["Apply patches/xnu/kebab-ufs-10063.patch and add /kebab-ufs with reg <0x01d84000 0x30000> to the ADT", "Build payload/firmware and flash boot_a", "Read the KEBAB UFS and BSD root colour markers in the framebuffer logger"]
-findings = ["The BSD UFS driver compiles and links; kebab_ufs_rootdev is present in the kernel image and the ADT carries the absolute controller window.", "It is not reached on hardware yet: the kernel stops before bsd_init with the last line 'Unable to find vm tag ?+z for btlog'; bsd_init, IOFindBSDRoot and KEBAB UFS markers never appear.", "The GIC stub installs its handler and the first PPI-27 timer IRQ fires (magenta/cyan bands), but no second tick follows; re-arming CNTV_TVAL/CNTV_CTL after rtclock_intr and a run that skips rtclock_intr both stay static.", "The same GIC/FB/bring-up patch on the old kernel-novc3 stops at the same point, so the immediate blocker is the periodic timer/early allocator path rather than the UFS driver source."]
+findings = ["The BSD UFS driver compiles and links; kebab_ufs_rootdev is present in the kernel image and the ADT carries the absolute controller window.", "GFander's source-level GICv3 path (HAS_GIC_V3, pe_fiq Group-1 setup, sleh_irq Group-1 dispatch) is ported as patches/xnu/10063-kebab-gic-vtimer.patch and builds in CI.", "The source-GIC hardware images srcgic5/srcgic6 show only cyan/blue/magenta bars and no text; the standalone framebuffer logger maps PE_state.video and hooks _kprintf, so this is a console/panic transport gap, not the old binary-stub scratch dependency.", "The binary-GIC ufsprobe2 image marks the IOFindBSDRoot -> kebab_ufs_rootdev call with a green band; it is built but not flashed, so no hardware UFS result exists yet."]
 completion = ["IOFindBSDRoot selects ufsroot0 and the root APFS volume mounts read-only from the userdata partition."]
 limits = ["No UFS hardware result yet; the UFS host, PHY, clocks and IOMMU state are owned by the firmware and no UART is attached."]
-next_action = ["Fix the PPI-27 periodic timer or route another timer source so the early allocator can progress, then re-test rd=ufsroot0."]
+next_action = ["Get a console (UART or a direct marker) on the source-GIC kernel; then flash ufsprobe2 to confirm IOFindBSDRoot -> kebab_ufs_rootdev, and retest rd=ufsroot0."]
 [[area.evidence]]
 kind = "source"
 reference = "patches/xnu/kebab-ufs-10063.patch"

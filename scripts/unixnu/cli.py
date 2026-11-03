@@ -5,7 +5,7 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, tree, userdata
+from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, tree, userdata, vendor_boot
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
@@ -67,6 +67,13 @@ def parser():
     i.add_argument('--dtb', metavar='FILE', help='compiled device tree; or UNIXNU_DTB')
     i.add_argument('--ramdisk', metavar='FILE', help='ramdisk image, or none (default: the payload step output when present, else empty)')
     i.add_argument('-o', '--output', metavar='FILE', help='output (default: out/<device>/boot/boot.img)')
+    v = sub.add_parser('vendor_boot', parents=[c], help='replace the vendor ramdisk of a stock vendor_boot image')
+    v.add_argument('--stock', metavar='FILE', help='stock vendor_boot image to rebuild from')
+    v.add_argument('--ramdisk', metavar='FILE', help='vendor ramdisk to install, or none for an empty one')
+    v.add_argument('--ramdisk-addr', metavar='ADDR', help='ramdisk load address (default: the stock address)')
+    v.add_argument('--verify-against', action='store_true',
+                   help='repack the stock ramdisk first and require a byte-identical result')
+    v.add_argument('-o', '--output', metavar='FILE', help='output (default: vendor_boot.img next to --stock)')
     w = sub.add_parser('ipsw', parents=[c], help='show or extract the components of the target IPSW')
     w.add_argument('action', choices=('info', 'fetch'))
     w.add_argument('components', nargs='*', help='components to extract (default: the small ones the board lists)')
@@ -189,6 +196,14 @@ def cmd_bootimg(ctx):
     if ramdisk is None:
         log('ramdisk: empty; build payload or pass --ramdisk FILE to include configured boot entries')
     bootimg.build(ctx, uefi, fd, dtb, ramdisk, expand(ctx.args.output) if ctx.args.output else None)
+
+
+def cmd_vendor_boot(ctx):
+    stock = expand(ctx.args.stock)
+    ramdisk = None if ctx.args.ramdisk in (None, 'none') else expand(ctx.args.ramdisk)
+    vendor_boot.build(stock, ramdisk, expand(ctx.args.output) if ctx.args.output else None,
+                      int(ctx.args.ramdisk_addr, 0) if ctx.args.ramdisk_addr else None,
+                      ctx.args.verify_against)
 
 
 def cmd_ipsw(ctx):
@@ -333,7 +348,8 @@ def main(argv=None):
     try:
         ctx = Context(args)
         {'defconfig': cmd_defconfig, 'fetch': cmd_fetch, 'tree': lambda c: prepare(c), 'build': cmd_build,
-         'bootimg': cmd_bootimg, 'ipsw': cmd_ipsw, 'status': cmd_status, 'clean': cmd_clean, 'release': cmd_release}[args.command](ctx)
+         'bootimg': cmd_bootimg, 'vendor_boot': cmd_vendor_boot, 'ipsw': cmd_ipsw, 'status': cmd_status,
+         'clean': cmd_clean, 'release': cmd_release}[args.command](ctx)
     except Error as error:
         sys.exit(f'unixnu: {error}')
     except KeyboardInterrupt:

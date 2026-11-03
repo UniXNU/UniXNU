@@ -16,4 +16,4 @@ Live updates map or unmap a batch of pages in one transaction: one page publicat
 
 ## Build
 
-The consuming driver's recipe compiles the kit sources. sheng includes `ArmSmmu4K*.c` in its GPU archive. Supply MMIO, context/stream ownership and allocation callbacks as described in [platform adaptation](/porting/platform).
+The consuming driver's recipe compiles the kit sources. The GPU archive recipe includes `ArmSmmu4K*.c`. Supply MMIO, context/stream ownership and allocation callbacks as described in [platform adaptation](/porting/platform).

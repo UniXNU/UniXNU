@@ -2,7 +2,7 @@
 
 没有蜂窝基带的 Wi-Fi 平板可以跳过本页。在 `porting.toml` 中将蜂窝网络项设为 `not-applicable`，在 `limits` 写明硬件原因。
 
-示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 [QcomBaseband](/zh/drivers/qcom-baseband)。它把 iPadOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iPadOS 17（21H461）。
+示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 [QcomBaseband](/zh/drivers/qcom-baseband)。它把 iOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iOS 17（21H461）。
 
 先完成[平台内存与 DMA](/zh/porting/platform)，确认 modem 型号、控制传输、数据引擎、固件、SIM 接口和 EFS/NV 存储。
 
@@ -12,12 +12,12 @@
 | --- | --- | --- |
 | SoC 与板级 | 电源、时钟、保留内存、固件启动、中断、DMA、EFS/NV | MBA/MPSS、SMEM/SMP2P、GLINK/QRTR、rmtfs |
 | 控制桥 | QMUX 帧、QMI 客户端分配、服务发现和回复路由 | `baseband/coachz_bb_qmux.h` |
-| iPadOS 接口 | 基带服务、通道、异步读写和启动交互 | `baseband/coachz_baseband.cpp`、`coachz_bb_channels.h`、`coachz_bb_sahara.h` |
+| iOS 接口 | 基带服务、通道、异步读写和启动交互 | `baseband/coachz_baseband.cpp`、`coachz_bb_channels.h`、`coachz_bb_sahara.h` |
 | 数据通路 | IPA/GSI、QMAP mux、系统网卡收发 | `ipa/`、`platform/coachz/coachz_modem.c` |
 
 源码位于 [UniXNU/QcomBaseband](https://github.com/UniXNU/QcomBaseband)。寄存器地址、DMA 布局和固件策略由设备或 SoC 仓库提供。
 
-SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 PCIe 基带类名。通过 PCIe/MHI 连接的 modem 使用对应的板级传输实现。
+SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iOS 发布苹果 PCIe 基带类名。通过 PCIe/MHI 连接的 modem 使用对应的板级传输实现。
 
 ## 2. 启动 modem 并建立 QMI {#modem-startup}
 
@@ -30,7 +30,7 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 
 
 **结果：** modem 持续运行，QMI 服务响应，IPA 初始化完成。
 
-## 3. 接入 iPadOS 桥接层 {#ios-bridge}
+## 3. 接入 iOS 桥接层 {#ios-bridge}
 
 阅读 `baseband/QcomBaseband.h` 和 [Coachz 接线示例](https://github.com/UniXNU/QcomBaseband/blob/main/platform/coachz/README.md)。
 
@@ -51,7 +51,9 @@ modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注�
 
 Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，重新插拔 SIM 后状态栏显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。开机即显示 SIM 状态、运营商设置包、EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
 
-`coachz_bb_esim.h` 发现真实 eUICC 卡槽、补充 UIM 能力字段，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU，处理请求与结果分片、超时和原卡槽映射恢复。主机模型中的卡状态指示和旧版 GetCsn 用例仍未通过，eSIM 开通仍待实机验证。
+`coachz_bb_esim.h` 发现真实 eUICC 卡槽，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU。卡状态应答与指示都保留能力 TLV `0x21`；旧版 GetCsn 返回 `0x204`，完成原版驱动初始化。EID 与能力请求读取 TLV `0x01`，Tape 结果使用 11 字节头。
+
+挑战、认证与下载准备共用所属客户端的通道。终结操作、错误、客户端断开或空闲 180 秒后关闭通道并恢复原卡槽映射。会话恢复查询返回空记录集。主机模型已通过。Coachz 的设置中已出现 eSIM，页面显示仍需完善，profile 开通仍待实机验证。使用已开通数据套餐的 SIM 卡验证蜂窝数据收发。
 
 ## 5. 构建与记录 {#build}
 

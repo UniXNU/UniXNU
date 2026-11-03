@@ -16,4 +16,4 @@ live 更新在一个事务内映射或解除一批页：每批只发布一次页
 
 ## 构建
 
-消费该 kit 的驱动配方编译其源码。sheng 将 `ArmSmmu4K*.c` 加入 GPU 归档。按[平台适配](/zh/porting/platform)提供 MMIO、context/stream 所有权和分配回调。
+消费该 kit 的驱动配方编译其源码。GPU 归档配方包含 `ArmSmmu4K*.c`。按[平台适配](/zh/porting/platform)提供 MMIO、context/stream 所有权和分配回调。

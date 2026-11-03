@@ -10,7 +10,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -42,9 +42,9 @@ dtc -I dtb -O dts /tmp/board-hardware.dtb
 
 SoC 有两类核心时，在板级 DTS 中给每个 CPU 节点加 `unixnu,cluster-type = "E"`
 或 `"P"`。ADT 随后带上每个 CPU 的 `cluster-type`，调度器补丁让 XNU 的 Edge
-调度器按一个 E 簇和一个 P 簇运行。sheng 参考：
+调度器按一个 E 簇和一个 P 簇运行。SM8550 参考：
 
-| 输入 | sheng 取值 |
+| 输入 | 参考取值 |
 | --- | --- |
 | E 簇 | cpu0 至 cpu2（Cortex-A510） |
 | P 簇 | cpu3 至 cpu7（Cortex-A715、A710 和 X3） |
@@ -77,7 +77,7 @@ GPU、UFS、SPI 和 PCIe 可使用不同 stream 与分配策略。追踪消费�
 | [AppleKeyStoreState](/zh/drivers/apple-key-store-state) | 根据 OS 确认 selector 和状态回调，接入初始化与事件调用方 | 所需状态查询与通知完成 |
 | [XnuPrelink](/zh/drivers/xnu-prelink) | 选择匹配的 XNU、原始 kernelcache、归档绑定和补丁顺序 | 预链接解析选定驱动并生成内核 |
 | [DarwinBoot](/zh/drivers/darwin-boot) | 将加载器加入固件或 payload，提供 Mach-O、ADT 和所需 sidecar | 加载器验证输入并报告内核交接 |
-| [ShengPreflight](/zh/drivers/sheng-preflight) | 阅读 sheng 检查，再为目标固件和内存布局编写检查 | 目标固件输入通过对应检查 |
+| [ShengPreflight](/zh/drivers/sheng-preflight) | 阅读其板级检查，再为目标固件和内存布局编写检查 | 目标固件输入通过对应检查 |
 
 所需产物见[预链接](/zh/concepts/prelink)、[完整性策略](/zh/concepts/security)、
 [payload](/zh/concepts/payload)和 [userdata](/zh/guide/userdata)。

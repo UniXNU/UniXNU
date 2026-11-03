@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel probe that reaches M2 voltage and stops at the VSRAM pwrap read; Data persistence, userland display and GPU execution remain incomplete.
+Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel path that completes M2/M3/M4/M6, reads GPU\_ID and reports MALI RC 0; a GPU job/fence, NativeMali service, PanVK device and userland display remain incomplete.
 
-Source record: [porting.toml](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/porting.toml), `5b2ed6149eb70ec2b553124e386974866cb1df07`.
+Source record: [porting.toml](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/porting.toml), `c6443a068d0fe662fae2e991be1511b06efb7ef3`.
 
 This page is generated from the device record.
 
@@ -62,7 +62,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `DarwinBoot`, `XnuPrelink`
 
 ### Evidence
 
-- `source`: [Board name, SoC, OS profile, components and package defconfig are declared.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/board.toml)
+- `source`: [Board name, SoC, OS profile, components and package defconfig are declared.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/board.toml)
 - `device`: [The UEFI menu, kernel and payload start on the phone.](https://github.com/Dracen-W/UniXNU-merlinx)
   Command: <code>fastboot flash boot &lt;merlinx-boot.img&gt;</code>. Revision: `237c204655577c1ed1c9536a4bdc890bb2eaf1cc`.
 
@@ -102,7 +102,7 @@ Components: `DarwinBoot`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [The device tree reserves the splash region and describes the board.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/dts/merlinx.dts)
+- `source`: [The device tree reserves the splash region and describes the board.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/dts/merlinx.dts)
 - `device`: [UniXNU and DarwinBoot start from p33.](https://github.com/Dracen-W/UniXNU-merlinx)
   Command: <code>fastboot flash boot &lt;merlinx-boot.img&gt;</code>. Revision: `237c204655577c1ed1c9536a4bdc890bb2eaf1cc`.
 
@@ -142,7 +142,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [ArmCpu and the architectural timer are selected.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/configs/merlinx_defconfig)
+- `source`: [ArmCpu and the architectural timer are selected.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/configs/merlinx_defconfig)
 
 ## Memory and DMA {#memory}
 
@@ -180,7 +180,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [The generator encodes the DRAM and owned-memory values.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/scripts/make-merlinx-adt.py)
+- `source`: [The generator encodes the DRAM and owned-memory values.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/scripts/make-merlinx-adt.py)
 
 ## Storage and root {#storage}
 
@@ -218,7 +218,7 @@ Components: `NativeEmmc`, `RamBlock`.
 
 ### Evidence
 
-- `source`: [NativeEmmc, RamBlock and the owner Data path are selected.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/configs/merlinx_defconfig)
+- `source`: [NativeEmmc, RamBlock and the owner Data path are selected.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/configs/merlinx_defconfig)
 - `device`: [SystemOS mounts, initproc runs and launchd exec succeeds.](https://github.com/Dracen-W/UniXNU-merlinx)
   Command: <code>fastboot flash boot &lt;merlinx-boot.img&gt;</code>. Revision: `237c204655577c1ed1c9536a4bdc890bb2eaf1cc`.
 
@@ -256,7 +256,7 @@ Components: `NativeEmmc`, `RamBlock`.
 
 ### Evidence
 
-- `source`: [The GOP status lines and panic screen are linked into the kernel.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/patches/xnu/offline-owner-systemos-mount.patch)
+- `source`: [The GOP status lines and panic screen are linked into the kernel.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/patches/xnu/offline-owner-systemos-mount.patch)
 
 ## Input {#input}
 
@@ -298,23 +298,27 @@ Collect evidence using the next action.
 
 `implemented`
 
-Components: `MaliG52`.
+Components: `MaliG52`, `MaliMetal`.
 
 ### Hardware and dependencies
 
 - Mali-G52 r1p0 at 0x13040000, MT6358 VGPU/VSRAM via pwrap WACS2, and the SPM, INFRACFG, topckgen and mfgcfg clock and power windows.
+- NativeMali fixed external-method ABI and the MaliMetal MM3 pan\_kmod seam.
 
 ### Configuration
 
-- MaliG52 is selected by board.toml and components.toml. The kernel personality matches mediatek,mali. build-mali-g52.py is invoked with --m2-writes so the fixed-voltage, clock-source, four power-domain and clock-gate writes are compiled in. M3, M4 and M6 writes remain off. The IOKit glue, archive layout and build integration follow the official Adreno740 driver as the reference implementation; the Mali register, power and clock facts remain from MediaTek and panfrost sources.
+- MaliG52 is selected by board.toml and components.toml. The kernel personality matches mediatek,mali. build-mali-g52.py is invoked with --m2-writes --m3-writes --m4-writes --m6-writes so power, reset, MMU and job-write stages are compiled in. The IOKit glue, archive layout and build integration follow the official Adreno740 driver as the reference implementation; the Mali register, power and clock facts remain from MediaTek and panfrost sources. MaliMetal is the userland Metal/PanVK frontend and is not yet selected by the kernel build.
 
 ### Procedure
 
 - Build the kernel, build a payload with the Mali diagnostic image, flash it to p33 and read the MALI status lines through the GOP framebuffer.
+- For the userland path, build PanVK with the MaliMetal patch series and open the NativeMali service from the MaliMetal bundle.
 
 ### Development findings
 
-- The kernel matches the Mali provider and maps all six windows. GICD\_PIDR2 reads 0x3b, proving the physical MMIO path. PMIC PSEQ\_ID reads 0x0800, proving pwrap reads. The M2 marker reaches M2V, then V1 read VSRAM, and stops before V2, so the first pwrap VSRAM read blocks. GPU\_ID has never been read and no GPU job has run. The Adreno740 driver is the integration and ABI reference, not a source of Mali register behavior.
+- The kernel matches the Mali provider and maps all six windows. GICD\_PIDR2 reads 0x3b, proving the physical MMIO path. PMIC PSEQ\_ID reads 0x0800, proving pwrap reads. M2 power/clock/domain setup completes, the M3 GPU reset and M4 MMU initialization run, and the M6 job-write stage is enabled.
+- GPU\_ID reads 0x74021000, which masks to product 0x7002 \(Mali-G52\). MALI RC is 0, and the GPU service publishes its device state. No GPU job, completed fence, PanVK device or userland Metal device has run yet.
+- MaliMetal contains the host-tested NativeMali client and the MM3 device/sync patch series; the mesa-panvk CI job compiles the seam but the NativeMali IOUserClient is not installed.
 
 ### Completion criteria
 
@@ -322,18 +326,20 @@ Components: `MaliG52`.
 
 ### Current limits
 
-- The M2 voltage read path is blocked at VSRAM. M3 reset, M4 MMU enable, M6 jobs and MaliMetal are not yet exercised. The current image has no panic screen because the local UEFI font input was unavailable.
+- The kernel path is confirmed through reset and MMU setup, but no job/fence has completed. The NativeMali IOUserClient and service are not installed in the current boot image, so MM4 cannot create a PanVK device on hardware. PanVK's 144 MB JM indirect buffer also exceeds the current 128 MB NativeMali per-BO limit. Userland display remains at IOMFB\_FDR\_loader exit 1.
 
 ### Next action
 
-- Add pwrap read sub-markers inside readRail, compare the VSRAM path with the successful PSEQ\_ID read, and consider reusing the M1 rail snapshot instead of re-reading it in setFixed\(\).
+- Build and install the NativeMali IOUserClient, lower or extend the PanVK indirect allocation, cross-build the target PanVK dylib, then run one bounded PanVK job and record its fence.
 
 ### Evidence
 
-- `source`: [The IOKit service matches the ADT Mali node, maps the GPU and power windows and exposes the diagnostic stages.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/drivers/MaliG52/xnu/NativeMaliGpuService.cpp)
-- `source`: [The MaliG52 component pins revision 2a422ae and the M2-enabled build recipe.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/components.toml)
-- `device`: [The panel shows MALI MATCH, MALI M2P, M2V, then V1 read VSRAM and stops.](https://github.com/Dracen-W/UniXNU-merlinx)
-  Command: <code>fastboot flash boot out/merlinx-uefi-emmc-mali-vsteps.img</code>. Revision: `382ed687ee82860d3276cadd8cd889c7f98ffb0b`.
+- `source`: [The IOKit service matches the ADT Mali node, maps the GPU and power windows and exposes the diagnostic stages.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/drivers/MaliG52/xnu/NativeMaliGpuService.cpp)
+- `source`: [The MaliG52 component pins revision be5ed4437fed98def5b9e392f9fa4da790b341e1 and the M2/M3/M4/M6 build recipe.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/components.toml)
+- `device`: [MALI RC 0; GPU\_ID 0x74021000; M3 reset, M4 MMU and M6 job-write stages enabled.](https://github.com/Dracen-W/UniXNU-merlinx)
+  Command: <code>fastboot flash boot out/merlinx-uefi-emmc-mali-m4m6.img</code>. Revision: `22f479e03dcdf22006415cb22300f509faa75bbf`.
+- `host`: [All five jobs passed, including the full mesa-panvk compile of the 0001-0006 patch series.](https://github.com/Dracen-W/MaliMetal/actions/runs/41444900463)
+  Command: <code>tests/run.sh; meson setup build-vk ...; ninja -C build-vk src/panfrost/vulkan/libvulkan_panfrost.so</code>. Revision: `df45b652c8d321c4a98d4195c8eb47896c62072d`.
 
 ## Network {#network}
 
@@ -441,7 +447,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [The platform power archive is built for the kernel.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/scripts/build-merlinx-platform-power.py)
+- `source`: [The platform power archive is built for the kernel.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/scripts/build-merlinx-platform-power.py)
 
 ## Image assembly {#packaging}
 
@@ -479,7 +485,7 @@ Components: `DarwinBoot`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [The fixed packaging entry point is present.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/scripts/package.sh)
+- `source`: [The fixed packaging entry point is present.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/scripts/package.sh)
 
 ## Diagnostics {#diagnostics}
 
@@ -515,7 +521,7 @@ Components: `DarwinBoot`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [The device page records the panel checkpoints and their limits.](https://github.com/Dracen-W/UniXNU-merlinx/blob/5b2ed6149eb70ec2b553124e386974866cb1df07/docs/devices/merlinx.md)
+- `source`: [The device page records the panel checkpoints and their limits.](https://github.com/Dracen-W/UniXNU-merlinx/blob/c6443a068d0fe662fae2e991be1511b06efb7ef3/docs/devices/merlinx.md)
 - `device`: [The panel shows ROOT, VOL, CACHE, EXEC and LAUNCHD.](https://github.com/Dracen-W/UniXNU-merlinx)
   Command: <code>fastboot flash boot &lt;merlinx-boot.img&gt;</code>. Revision: `237c204655577c1ed1c9536a4bdc890bb2eaf1cc`.
 
