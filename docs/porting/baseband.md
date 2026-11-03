@@ -51,7 +51,9 @@ A modem's `kOnline` state means its radio is online. Check NAS registration, the
 
 The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear after SIM reinsertion. DPM/WDA setup and WDS/QOS bindings succeed. Cold-boot SIM state, carrier settings, EFS write persistence and a working `pdp_ip` data session remain open.
 
-`coachz_bb_esim.h` discovers real eUICC slots, adds UIM capability fields and carries VINYL Tape through ISD-R logical-channel APDUs. It handles request/result segmentation, timeouts and restoration of the original slot mapping. The host model currently fails card-status indication and legacy GetCsn cases. Device eSIM provisioning remains unverified.
+`coachz_bb_esim.h` discovers real eUICC slots and carries VINYL Tape through ISD-R logical-channel APDUs. Preserve capability TLV `0x21` in card-status replies and indications. Legacy GetCsn returns `0x204` to complete native driver initialization; EID/capability requests read TLV `0x01`, and Tape results use an 11-byte header.
+
+Challenge, authentication and download preparation retain the owning client's channel. Terminal operations, errors, disconnect and 180 seconds of inactivity close it and restore the original slot mapping. Recovery queries return an empty record set. The host models pass. Coachz shows eSIM in Settings with an incomplete page; profile provisioning remains unverified. Test cellular traffic with a SIM that has an active data plan.
 
 ## 5. Build and record {#build}
 

@@ -51,7 +51,9 @@ modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注�
 
 Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，重新插拔 SIM 后状态栏显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。开机即显示 SIM 状态、运营商设置包、EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
 
-`coachz_bb_esim.h` 发现真实 eUICC 卡槽、补充 UIM 能力字段，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU，处理请求与结果分片、超时和原卡槽映射恢复。主机模型中的卡状态指示和旧版 GetCsn 用例仍未通过，eSIM 开通仍待实机验证。
+`coachz_bb_esim.h` 发现真实 eUICC 卡槽，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU。卡状态应答与指示都保留能力 TLV `0x21`；旧版 GetCsn 返回 `0x204`，完成原版驱动初始化。EID 与能力请求读取 TLV `0x01`，Tape 结果使用 11 字节头。
+
+挑战、认证与下载准备共用所属客户端的通道。终结操作、错误、客户端断开或空闲 180 秒后关闭通道并恢复原卡槽映射。会话恢复查询返回空记录集。主机模型已通过。Coachz 的设置中已出现 eSIM，页面显示仍需完善，profile 开通仍待实机验证。使用已开通数据套餐的 SIM 卡验证蜂窝数据收发。
 
 ## 5. 构建与记录 {#build}
 
