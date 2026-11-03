@@ -35,7 +35,18 @@
     lists smpa6 twice, same address 0x40200) -> errno 19, BT_EN never raised. sweet_pcie.c ignores the same failure
     for Wi-Fi (rails on from the bootloader), so 0234 now only logs rail failures. Image `shim/out/umi-0235b-bt5.img`
     (same line) is built with that, not booted yet (phone not put in fastboot).
-  - Next: boot 0235b (expect `THE CHIP ANSWERS from its ROM`, firmware, scan results); then sweetbt=6; then the
+  - Boot 0235b (22:56, rail failures only logged): BT_EN high, SW_CTRL reads 1, HCI Reset sent (no send timeout) but
+    `HCI 0xc03 timed out (rx 0, irq 0)`. Boot 0235c (23:06): three power-ups in one boot (SW_CTRL input 56 ms; driven
+    high 200 ms; driven high 500 ms): all silent, every time `pins CTS 1 RTS 0 TX 1 RX 0, GENI status 0x41000`. RX
+    (GPIO 19, the chip's TX) LOW = no idle UART line: the chip's UART side looks unpowered, not slow.
+  - Cause found by comparing with the Mi 10 port (hackios-xnu-kernel-umi umi_bluetooth.c / umi_rpmh.c, MIT): same
+    pins, values, 56 ms; but (1) it accepts cmd-db duplicates at the same address -- ours refused smpa5/smpa6/smpc8
+    (each listed twice), so NO rail vote ever went out, Wi-Fi's included (Wi-Fi works off bootloader state); (2) its
+    BT rails include smpf2 (digital, 950 mV), ours did not; ldoa16 was blocked by the vreg whitelist (errno 22).
+    Uncommitted fix in the kernel tree: rh_lookup_type accepts same-address duplicates; sweet_rpmh_bt_power() votes
+    smpa6 950, smpf2 950, smpa5 1900, smpc8 1350, ldoa16 3025 (voltage + enable). Side effect: Wi-Fi's votes now go
+    out too (stock voltages). Image `shim/out/umi-0235d-bt5.img`, not booted yet.
+  - Next: boot 0235d (expect `THE CHIP ANSWERS from its ROM`, firmware, scan results; check Wi-Fi still joins); then sweetbt=6; then the
     bluetoothd side, as apollo: env BT_HCI_TRANSPORT=H4:POSIX:com.sweet.bluetooth,115200 + BT_BAUDRATE (launchd
     can't set it -> a library inserted by the kernel: needs kern.exec_inject, research/exec-inject-wip.diff) and a
     BlueTool stand-in answering RunBuiltinScript boot/init with 0. Open: apollo's library also patches bluetoothd's
