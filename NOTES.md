@@ -61,6 +61,17 @@
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
+- **2026-11-03 0231: ringtones play fully; one ADSP crash seen, not reproduced** (patch
+  `xnu/patches/0231-umi-adsp-f3-dedup.patch`, boot `shim/out/umi-0232-audio.img` = 0231c's line).
+  - Boot 0231c (2026-11-03 19:36), after ~15 min of tests: the ADSP died right after a ~1 s sound ("Opening" tapped
+    in the Ringtone list): `crash reason (item 423): "SFR Init: wdog or kernel error suspected."`; afterwards the node
+    accepts nothing (plug-in ring full, no write-dones) -> silence until a reboot. Its F3 messages were lost: the old
+    3000-line budget had been used up by one QShrink message (L712 797f3f52) repeating every ~5 ms while idle.
+  - 0231: each F3 hash prints 20 times, then every 1000th with its count. Boot 0232: "Opening" x several + "Seaside":
+    **sound good (user), no crash**, tones ~7 s each (335872 frames). The volume buttons / slider showing the ringer
+    HUD while a tone plays in Sounds & Haptics is normal iOS (they set the ringer volume there).
+  - Open: why the ADSP crashed (watch for `crash reason` with the F3 lines before it); no ADSP restart after a crash
+    yet (audio is gone until a reboot); idle stream = the ASM session keeps running on underruns (Linux pauses it).
 - **2026-11-02 0230: no more glitches; iOS stops each sound after ~2 s (open)** (patch
   `xnu/patches/0230-umi-sweet-audio-queue.patch`, boot `shim/out/umi-0231c-audio.img`, plug-in from `phone/sweet-audio/`
   installed).
