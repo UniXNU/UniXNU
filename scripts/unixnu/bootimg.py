@@ -147,7 +147,7 @@ def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
             raise Error('boot image header does not match the requested parameters')
         if kernel_address != image['base'] + image['kernel_offset'] or tags != image['base'] + image['tags_offset']:
             raise Error('boot image load addresses do not match the requested offsets')
-        start = 0
+        start = page
         ramdisk_start = page * (1 + -(-kernel_size // page))
     kernel = data[start:start + kernel_size]
     if compression == 'gzip':
