@@ -1,86 +1,88 @@
 # Ath12kWifi
 
-先按[适配流程](/zh/porting/network)准备板级输入、修改源码、接入构建并逐步验证。
-
-Ath12kWifi 实现基于 ath12k 的 Wi-Fi 栈，包含 PCI、MHI、QRTR 和板级接口。
-源码包含 QCC2072、QCN9274 和 WCN7850 硬件定义。
+Ath12kWifi 在 XNU 上运行 Linux 的 ath12k、mac80211 和 cfg80211，
+通过 MHI、QRTR 和 QMI 启动设备，使用用户态 wpa_supplicant 2.12
+完成 SME/WPA 认证。普通网络数据包在内核中传输。
 
 | 字段 | 值 |
 | --- | --- |
 | 仓库 | [UniXNU/Ath12kWifi](https://github.com/UniXNU/Ath12kWifi) |
-| 功能 | ath12k Wi-Fi 传输与驱动集成 |
-| 板级输入 | PCI 访问、中断、固件和板级回调 |
-| 硬件验证 | 在设备页记录具体设备结果 |
+| 源码 | 固定版本的 Linux v7.0.14、配套头文件和 supplicant 2.12 |
+| 板级输入 | 电源、PCIe、BAR、MSI、DMA、固件和网络接口 |
+| 原生接口 | `include/nw_abi.h`、`org.unixnu.wifi.control` |
+| 已选认证类型 | 开放网络、支持 PMF 的 WPA2-PSK |
 
-选择前阅读组件 README 和 `nw_board` 接口。组件目录记录源码版本、OS 要求、构建
-命令和输出。运行组件的主机检查和板级网络验证流程。
+按[网络适配流程](/zh/porting/network)准备板级输入并接入构建，
+依赖项见[组件目录](/zh/reference/components)。
 
-## WCN7850 参考集成
+## 运行路径与性能
 
-Ath12kWifi 在自己的兼容层（`shim/`）上编译 Linux 的 ath12k、MHI 和 QMI 源码，并加上自己的 station 层（`src/nw_sta.c`：扫描、加入、WPA2-Personal、数据路径）。板级接口是 `include/nw_abi.h`，`tools/prepare.sh` 获取并打补丁驱动源码。板级集成给芯片上电、训练 PCIe0，并把模块作为 `en0` 接到 iOS（`package/WifiProbe.cpp`：电源、PCIe0、固件、DMA、MSI、模块线程；`package/WifiNet.cpp`：`en0` 与系统的 Wi-Fi 请求）。
+生产构建在 ath12k 之前启动 cfg80211/mac80211，使用主线 station
+实现。原生控制通道在无线工作线程上串行处理扫描、认证、关联、密钥、
+EAPOL 和无线电命令，通过所有者编号与连接代次匹配当前请求。
 
-状态：能加入 WPA2-Personal、获得 DHCP、Safari 能打开页面。吞吐量低。
+supplicant 负责密码派生、握手和换钥，运行配置保存在内存中；wifid
+负责选择网络并提供系统保存的凭据。无线电打开后等待网络选择，
+控制服务退出时释放所属接口。
 
-| 启动参数 | 含义 |
+mac80211 负责聚合、重排序、FQ 和 AQL。DMA 克隆和 A-MSDU 分片
+共享存储；发送从保留的 mbuf 直接复制到 DMA，接收从分片复制到对齐的
+缓存 mbuf，每批提交最多 64 帧。NAPI 每轮预算为 256 包或 2 ms，
+工作队列每轮为 64 项或 2 ms。MSI 和待处理期限控制线程休眠，
+PHY 速率与 RSSI 直接读取已有缓存。
+
+## sheng 的 iPadOS 27 集成
+
+WifiProbe 提供板级硬件操作，WifiNet 提供 en0 和 Apple80211。
+WCN7850 导出为 `/arm-io/wlan`，满足 24A446 系统 wifid 服务的
+设备树条件。Wi-Fi DMA 窗口为 128 MiB。
+
+签名后的 supplicant 通过 Data 支持的只读映射运行于
+`/usr/libexec/unixnu-wpa_supplicant`，配置位于
+`/private/var/ngpu/etc/wifi/`。打包时保留原有系统任务，合入独立
+服务任务，通过 Apple `plutil binary1` 序列化 launchd 缓存，
+同时打包匹配的独立签名和信任哈希。
+
+固件在 addon 解包完成后通过 VFS 从
+`/private/var/ngpu/firmware/ath12k/WCN7850/hw2.0/` 加载。
+板级 `package/WifiFirmware.h` 统一定义加载与打包路径，
+`firmware/wcn7850/manifest.json` 固定文件长度和 SHA-256。
+
+WifiNet 接受 592 字节和 656 字节关联请求。24A446 的异步结果为
+完整初始化的 540 字节，结果和有效标志位于 0x214/0x218。
+明确的连接请求在端口授权后完成；取消只结束一次待完成请求，
+无结果的连接在 30 秒后超时。断开和关闭无线电会发送 BSD 与
+Apple80211 断链事件。
+
+RSSI 来自关联 BSS，并每秒从 peer 缓存更新一次；变化至少 3 dB
+时通知系统，SNR 最小为零。
+
+| 设置 | 当前行为 |
 | --- | --- |
-| `sheng-wifi=5` | 启动 Wi-Fi。没有它模块不会运行。 |
-| `sheng-wifi-aj=0` | 启动时不加入网络，由设置加入。 |
+| `sheng-wifi=5` | 启动主线 Wi-Fi 栈 |
+| `sheng-wifi-aj=0` | 由设置页面和 wifid 选择网络 |
+| `log-wifi=1` | 开启 Wi-Fi 诊断 |
+| `log-gpu=0 log-display=0` | 跳过 GPU 和显示诊断采集 |
+| 自动重启 | 当前临时启动镜像已关闭 |
 
-### iPadOS 27 服务启动
+## 验证状态
 
-参考板级 DTS 通过 `unixnu,adt-name = "wlan"` 将 WCN7850 导出为
-`/arm-io/wlan`。24A446 原生 `com.apple.wifid` 任务带有
-`_LimitLoadToDeviceTree` 条件，launchd 加载前会检查。缺少匹配节点时，
-内核的 `join.txt` 路径仍能连接并收发数据，但设置中的 Wi-Fi 页面为空，
-开关无法打开。`/chosen/mac-address-wifi0` 和 IOService 网络对象不能满足
-这个设备树条件。
+在 Ath12kWifi 中按改动运行相关检查：
 
-27 的默认 payload 参数包含 `sheng-wifi=5`。修改 DTS 后需要重新生成
-payload 和 boot 镜像，并检查镜像内的 ADT。该集成让设置页面可以切换
-Wi-Fi 开关并显示 SSID 列表。手动测试镜像应移除 `sheng-autoreset`。
+```sh
+python3 tools/fetch-sources.py --check
+python3 tools/test-mainline-runtime.py
+python3 tools/test-supplicant.py
+python3 tools/test-cfg80211-control.py
+python3 tools/check-mainline-link.py --build-report FILE --kernel FILE
+```
 
-WifiNet 支持 592 字节的旧版关联请求和 656 字节的 24A446 请求，
-并在认证前校验凭据。手动 WPA2 关联和 DHCP 已获上机确认。
+使用模拟无线电操作的主机测试已通过 ASan/UBSan，核心生命周期
+释放全部 287 次跟踪分配。生产审计覆盖 125 个对象和 13 个 XNU
+导入，缺失导入和重复定义均为零。板级检查覆盖 Apple80211、事件
+分配、接收批处理和 VFS 读取；内核、payload、签名、固件与启动镜像
+检查均通过。
 
-关闭 Wi-Fi 或断开连接会发布链路断开通知，并隐藏旧连接状态。
-重复加入当前网络会回报完成；切换网络会等待旧连接断开后再提交新请求。
-认证查询将 WPA2 个人网络报告为 0x10。AddressSanitizer 和
-UndefinedBehaviorSanitizer 主机回归测试、内核与 payload 编译、镜像校验
-均已通过。当前镜像的加入网络、网络切换、Wi-Fi 图标和密码弹窗行为待上机验证。
-
-吞吐量偏低，仍待排查。使用 `log-wifi=1` 记录加入日志，
-使用 `sheng-wifi-aj=0` 关闭驱动自动连接。
-
-### 事实
-
-- 六条 PMU 电源轨各需要 RPMh 的模式、电压和使能请求。缺少模式请求时有两条保持关闭，链路无法训练。
-- PCIe0 以 Gen2 x1 到达 L0，端点读到 `17cb:1107`。
-- 固件 c2-00259 在按需换页处挂起，固件 c7-00108 可用并被采用。
-- 固件报告全零 MAC，由板级按芯片 ID 生成一个。
-- 开发时固件从备用的 `oops` 分区读取。
-- 扫描不含 6 GHz：它的 59 个被动信道占了 11 秒扫描的大部分时间。
-- 固件的 beacon 丢失在 5 秒内仍有帧到达时被忽略。
-- 加入和四次握手约 100 ms 完成。
-- 关联里没有 HT 和 VHT 时链路为 phymode 11g，约 20 Mbit/s。带上接入点的带宽（80 MHz）但对端条目用本射频的能力时，863 个发送帧中 596 个从未被确认。改用接入点自己的能力后几乎所有帧都被确认。
-- 接入点会以 VHT MCS 10/11 发送一些帧，驱动丢弃它们（每次运行约 70 个）。
-- 芯片的 MSI 指向无人监视的页时，线程每 1 ms 轮询模块；改为经 PCIe0 自带的 MSI 接收器送到 SPI 141 后，线程在中断之间休眠：16 个向量，空闲时每秒几十次中断。
-- 速度测试（5 GHz、80 MHz、-73 dBm）：下行约 12 Mbit/s，上行约 24 Mbit/s，发送丢包低于 1 %。DHCP 在开机后 31 秒内给出地址。
-- 系统 Wi-Fi 守护进程接管启动时的加入并一直扫描，直到手动加入。系统无法保存网络密码（钥匙串错误 -25291）。
-- 发热的进程是 `coreduetd` 和另一个系统进程，不是 Wi-Fi 线程。
-
-### 猜测
-
-- 吞吐限制在到 `ifnet_input` 的接收路径（每次调用复制一帧）或 TCP 窗口。
-- 守护进程离开启动时的加入，是因为该网络没有作为已知网络保存。
-- 发热来自系统守护进程和 GPU 路径。
-
-### 计划
-
-1. 在速度测试期间统计每个接收阶段的每秒帧数。
-2. 成链地把接收帧交给协议栈，去掉多余的复制。
-3. 从文件而不是 `oops` 加载固件，然后恢复 `oops`。
-4. 之后：6 GHz、Wi-Fi 6/7 能力、省电。
-
-### 构建
-
-`unixnu build kernel` 用 UniXNU-sheng 的 `scripts/build-ath12k-wifi.py` 编译该模块，源码来自 UniXNU-sheng 的 `drivers/Ath12kWifi` 或 `ATH12K_WIFI_DIR`。
+设备已验证 Wi-Fi 开关、SSID 扫描、WPA2 关联、DHCP、网络流量和
+连接结果通知。当前待实测：取消和超时收尾、信号显示、Data 固件
+启动，以及吞吐、抖动和发热。详见[sheng 网络记录](/zh/devices/sheng#network)。
