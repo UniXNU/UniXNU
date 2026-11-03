@@ -41,6 +41,8 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iOS 发布苹果 PCI
 5. 将苹果固件打包并挂载到 ABM、BBUpdater 读取的位置。示例的 SAHARA 端点接收这段启动交互，高通 modem 继续运行自己的固件。
 6. 发布 CommCenter 需要的 PDP 管理服务，分别检查 ABM 启动、QMUX 客户端、SIM 状态、modem 身份和设置中的蜂窝网络页面。
 
+桥接层每通道为 ABM 暂存最多 1024 帧；每通道前 32 次丢帧记录队列深度与消息头。冷启动和注册时检查丢帧计数。
+
 **结果：** CommCenter 与实际 modem 通信，读到 SIM 和设备身份。
 
 ## 4. 接通移动数据 {#data-path}
@@ -49,7 +51,7 @@ modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注�
 
 `coachz_bb_data.h` 在第一个 WDS 客户端绑定前通过 DPM 打开 IPA 硬件端口，配置 WDA raw IP/QMAPv4。它将 WDS/QOS 的苹果 PCIe 端点 `{3, 4}` 转换为 embedded `{4, 1}`，为只带 mux id 的请求补上端点。随后将 WDS 会话绑定到 QMAP mux，再建立数据会话。把返回的地址、路由、DNS、MTU 接到 `pdp_ip`。按 mux 将数据送到对应网卡，按 DMA 完成结果归还缓冲区。依次验证发送、接收、断开、飞行模式和 modem 复位。eSIM 还需要 UIM/APDU 与 VINYL 流程。
 
-Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，重新插拔 SIM 后状态栏显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。开机即显示 SIM 状态、运营商设置包、EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
+Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，冷启动后状态栏直接显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。运营商设置包与 APN 尚未匹配，CommCenter 因而没有发起数据呼叫。EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
 
 `coachz_bb_esim.h` 发现真实 eUICC 卡槽，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU。卡状态应答与指示都保留能力 TLV `0x21`；旧版 GetCsn 返回 `0x204`，完成原版驱动初始化。EID 与能力请求读取 TLV `0x01`，Tape 结果使用 11 字节头。
 
