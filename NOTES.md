@@ -18,6 +18,27 @@
     present, cheap here, removal waits for the user's OK; `com.apple.driverkitd` = present but not respawning here.
   - ios-s9's patches are kept for reference in git-ignored `research/ios-s9/` (with their LICENSE).
 
+- **🎉 2026-11-04 0236: BLUETOOTH ON IN iOS: bluetoothd stays up on the QCA6390, stack STACK_READY, powered on**
+  (patch `xnu/patches/0236-umi-exec-inject-dyld-policy.patch`, kernel e277964; phone file
+  `/usr/local/lib/libsweet-bt.dylib` (new, 54304 bytes, read back; source `phone/sweet-bt/sweet_bt_inject.c`, built
+  and installed by `phone/build-sweet-bt.sh install`); boot `shim/out/umi-0236-btinject.img`, 00:08).
+  - Boot line = 0233b's minus `ufslogsecs=2`, `sweetwlanssid=...` (a standing OPEN join that failed with 2 every
+    boot; wifid joins saved networks itself) and the second `sweetfb_direct=0` (dead: PE_parse_boot_argn takes the
+    first match, the base line's `=1`), plus `sweetbt=6 sweetinject=/usr/local/lib/libsweet-bt.dylib,bluetoothd,BlueTool
+    sweetbtlog=1 sweetnull=bluetoothd,BlueTool` (601 chars).
+  - Kernel 0236: kern.exec_inject (the parked research/exec-inject-wip.diff, kern_exec.c half) adds
+    DYLD_INSERT_LIBRARIES to the named programs; the "AMFI" interface policy answers dyld's op 0x5a "allow all"
+    for those programs only (`SWEET AMFI: dyld policy for bluetoothd: everything allowed`).
+  - libsweet-bt (ios-apollo's userland/bt-inject, MIT, minus its forced-result stopgap; offsets are 20H392's, umi's
+    build, each checked before writing): bluetoothd gets BT_HCI_TRANSPORT=H4:POSIX:com.sweet.bluetooth,115200 +
+    BT_BAUDRATE, the H4 transport's empty stack-stopped slot filled (in memory), os_log mirror (sweetbtlog=1);
+    BlueTool's main() goes to our com.apple.BlueTool responder (`RunBuiltinScript boot -> 0`, `init -> 0`).
+  - Result: `SWEET BT: H4: connected (uid 501, unit 1)`; btd `Booting chipset`, `Powering on chipset`,
+    `Stack: STACK_OFF -> STACK_BUSY`, `STACK_BUSY -> STACK_READY`, then `Power state changed ... managerState 5`
+    (CBManagerStatePoweredOn). 245 HCI commands from iOS in 4 min (LE scan 0x200b/0x200c, Create Connection
+    0x401, ...; vendor 0xfce2/0xfce9 answered by the kernel); an SDP record for a remote AVRCP device. Only 5
+    bluetoothd execs in total (4 before the radio was up at ~30 s), 4 BlueTool: the 9 s respawn loop is gone.
+  - Not checked yet: Settings > Bluetooth (scan list, pairing), turning Bluetooth off/on, audio.
 - **2026-11-03 0236 boot (no kernel change): sweetbt=6: the radio stays up for iOS; bluetoothd now calls BlueTool**
   (boot `shim/out/umi-0236-bt6.img` = 0233b's line + `sweetbt=6`, kernel fe5ecbb + the uncommitted sched WIP, 23:46).
   Firmware as in 0235d, then `bluetoothd's vendor, erroneous-data-reporting and 0x204a commands answered here`,
