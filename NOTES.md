@@ -2,6 +2,22 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-03 0233: `sweettop=N`, a CPU top in the kernel log; first idle numbers; ios-s9's CPU fixes mapped** (patch
+  `xnu/patches/0233-umi-sweettop.patch`, boot `shim/out/umi-0234-top.img` = 0233b's line + `sweettop=10`).
+  - Every N s: `TOP --- round K: all processes X% of one core` and the 12 busiest `TOP name[pid] Y%` (user + system
+    time from TASK_ABSOLUTETIME_INFO). **Idle on the home screen, ~2.5 min after boot: 140-180 % of one core** (of
+    800 %): backboardd ~64 % (CoreAnimation on the CPU), ReportCrash ~55-65 % (crash loops), CommCenter ~7 %,
+    kernel_task ~8 %. Respawns over ~5 min (exec lines): AegirPoster 58 (`abort`, the Astronomy/Earth poster:
+    Metal), bluetoothd 34 (exits, no driver yet), CommCenter 25 (16 abort, 9 SIGSEGV; the noncellular job that brought
+    the Location Services row back), KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP ~12 each.
+  - ios-s9 (syncmodz/ios-s9, MIT, a fork of this port) fixes vs here: securityd AKS wrap storm = **already handled**
+    (SweetKeyStore answers kAKSWrapKey / kAKSUnwrapKey); fast-core scheduler (0092, `sweetfast=MASK`, default 0xf0 =
+    the A77s on SM8250) = **applied to the tree, uncommitted, not yet booted**; touch thread pinning (0094) = not
+    needed (our touch uses GENI DMA, no bit-bang loop); BTAudioHALPlugin / bluetoothd = Bluetooth bring-up started
+    instead (patch 0234, its own session); ad daemons `com.apple.ap.adprivacyd` / `com.apple.ap.promotedcontentd` =
+    present, cheap here, removal waits for the user's OK; `com.apple.driverkitd` = present but not respawning here.
+  - ios-s9's patches are kept for reference in git-ignored `research/ios-s9/` (with their LICENSE).
+
 - **2026-11-03 0234: Bluetooth stage A: the kernel reads the BT firmware; the chip not powered yet** (patch
   `xnu/patches/0234-umi-bluetooth-qca6390.patch`, kernel 3c5be0e; boot `shim/out/umi-0235-bt5.img` = 0233b's line
   + `sweetbt=5`). Goal: bluetoothd (respawns every ~9 s, 34 execs in 5 min) finds a controller.
