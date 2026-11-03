@@ -2,7 +2,7 @@
 
 没有蜂窝基带的 Wi-Fi 平板可以跳过本页。在 `porting.toml` 中将蜂窝网络项设为 `not-applicable`，在 `limits` 写明硬件原因。
 
-示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 [QcomBaseband](/zh/drivers/qcom-baseband)。它把 iPadOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iPadOS 17（21H461）。
+示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 [QcomBaseband](/zh/drivers/qcom-baseband)。它把 iOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iOS 17（21H461）。
 
 先完成[平台内存与 DMA](/zh/porting/platform)，确认 modem 型号、控制传输、数据引擎、固件、SIM 接口和 EFS/NV 存储。
 
@@ -12,12 +12,12 @@
 | --- | --- | --- |
 | SoC 与板级 | 电源、时钟、保留内存、固件启动、中断、DMA、EFS/NV | MBA/MPSS、SMEM/SMP2P、GLINK/QRTR、rmtfs |
 | 控制桥 | QMUX 帧、QMI 客户端分配、服务发现和回复路由 | `baseband/coachz_bb_qmux.h` |
-| iPadOS 接口 | 基带服务、通道、异步读写和启动交互 | `baseband/coachz_baseband.cpp`、`coachz_bb_channels.h`、`coachz_bb_sahara.h` |
+| iOS 接口 | 基带服务、通道、异步读写和启动交互 | `baseband/coachz_baseband.cpp`、`coachz_bb_channels.h`、`coachz_bb_sahara.h` |
 | 数据通路 | IPA/GSI、QMAP mux、系统网卡收发 | `ipa/`、`platform/coachz/coachz_modem.c` |
 
 源码位于 [UniXNU/QcomBaseband](https://github.com/UniXNU/QcomBaseband)。寄存器地址、DMA 布局和固件策略由设备或 SoC 仓库提供。
 
-SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 PCIe 基带类名。通过 PCIe/MHI 连接的 modem 使用对应的板级传输实现。
+SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iOS 发布苹果 PCIe 基带类名。通过 PCIe/MHI 连接的 modem 使用对应的板级传输实现。
 
 ## 2. 启动 modem 并建立 QMI {#modem-startup}
 
@@ -30,7 +30,7 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 
 
 **结果：** modem 持续运行，QMI 服务响应，IPA 初始化完成。
 
-## 3. 接入 iPadOS 桥接层 {#ios-bridge}
+## 3. 接入 iOS 桥接层 {#ios-bridge}
 
 阅读 `baseband/QcomBaseband.h` 和 [Coachz 接线示例](https://github.com/UniXNU/QcomBaseband/blob/main/platform/coachz/README.md)。
 
