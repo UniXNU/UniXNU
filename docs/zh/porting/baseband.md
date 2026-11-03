@@ -43,6 +43,8 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iOS 发布苹果 PCI
 
 桥接层每通道为 ABM 暂存最多 1024 帧；每通道前 32 次丢帧记录队列深度与消息头。冷启动和注册时检查丢帧计数。
 
+观察 CommCenter 的 EF_ICCID 与 EF_IMSI 读取，将卡内数据转换为阅读顺序的 BCD，通过激活 TLV `0x42` 与 `0x43` 提供给运营商匹配流程。
+
 **结果：** CommCenter 与实际 modem 通信，读到 SIM 和设备身份。
 
 ## 4. 接通移动数据 {#data-path}
@@ -51,11 +53,13 @@ modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注�
 
 `coachz_bb_data.h` 在第一个 WDS 客户端绑定前通过 DPM 打开 IPA 硬件端口，配置 WDA raw IP/QMAPv4。它将 WDS/QOS 的苹果 PCIe 端点 `{3, 4}` 转换为 embedded `{4, 1}`，为只带 mux id 的请求补上端点。随后将 WDS 会话绑定到 QMAP mux，再建立数据会话。把返回的地址、路由、DNS、MTU 接到 `pdp_ip`。按 mux 将数据送到对应网卡，按 DMA 完成结果归还缓冲区。依次验证发送、接收、断开、飞行模式和 modem 复位。eSIM 还需要 UIM/APDU 与 VINYL 流程。
 
-Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，冷启动后状态栏直接显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。运营商设置包与 APN 尚未匹配，CommCenter 因而没有发起数据呼叫。EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
+Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，冷启动后状态栏直接显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。SIM 已匹配运营商设置包，状态栏显示 LTE，蜂窝数据收发可用。EFS 写入仍保存在内存中，重启后重新加载原厂数据。
+
+`coachz_bb_pdp.cpp` 由 `coachz_baseband.cpp` 包含，为 QMAP mux 1 至 4 注册 `pdp_ip0` 至 `pdp_ip3`，MTU 为 1492。WDS 绑定、IP family、启动、停止与状态应答分别控制各地址族。在 QRTR/IPA 所属线程实现 `QcomBaseband.h` 中的 `coachz_modem_data_send` 与 `coachz_modem_data_receiver`；Coachz 适配器已提供两者。分别验证 IPv4、IPv6，以及停止一个地址族后另一个仍能通信。
 
 `coachz_bb_esim.h` 发现真实 eUICC 卡槽，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU。卡状态应答与指示都保留能力 TLV `0x21`；旧版 GetCsn 返回 `0x204`，完成原版驱动初始化。EID 与能力请求读取 TLV `0x01`，Tape 结果使用 11 字节头。
 
-挑战、认证与下载准备共用所属客户端的通道。终结操作、错误、客户端断开或空闲 180 秒后关闭通道并恢复原卡槽映射。会话恢复查询返回空记录集。主机模型已通过。Coachz 的设置中已出现 eSIM，页面显示仍需完善，profile 开通仍待实机验证。使用已开通数据套餐的 SIM 卡验证蜂窝数据收发。
+挑战、认证与下载准备共用所属客户端的通道。终结操作、错误、客户端断开或空闲 180 秒后关闭通道并恢复原卡槽映射。会话恢复查询返回空记录集。四项只读 ES10 缓存复用重复查询的卡片应答，命中时保持物理卡槽映射，状态变更指令清除缓存。主机模型已通过。Coachz 的设置中已出现 eSIM，页面显示仍需完善，profile 开通仍待实机验证。使用已开通数据套餐的 SIM 卡验证蜂窝数据收发。
 
 ## 5. 构建与记录 {#build}
 
@@ -67,7 +71,7 @@ XNU 构建完成后，在目标构建树运行：
 python3 scripts/build-qcom-baseband.py --coachz
 ```
 
-输出为 `build/qcom-baseband/libQcomBaseband.a`。配方用 C 编译记录构建 `coachz_ipa_config.c`、`coachz_gsi.c`、`coachz_modem.c`，用 C++ 记录构建 `coachz_baseband.cpp`。`coachz_modem.c` 将命令、RX、modem 实现包含在同一编译单元。
+输出为 `build/qcom-baseband/libQcomBaseband.a`。配方用 C 编译记录构建 `coachz_ipa_config.c`、`coachz_gsi.c`、`coachz_modem.c`，用 C++ 记录构建 `coachz_baseband.cpp`。`coachz_modem.c` 将命令、RX、modem 实现包含在同一编译单元；PDP 源码包含在基带 C++ 单元中。
 
 按[驱动接入步骤](/zh/porting/drivers#build-integration)链接归档，连接 IOKit 类初始化与启动调用。在 `porting.toml` 中分别记录 modem 启动、QMI、SIM 身份、网络注册、数据、复位和 eSIM。
 

@@ -43,6 +43,8 @@ Read `baseband/QcomBaseband.h` and the [Coachz integration](https://github.com/U
 
 The bridge queues up to 1,024 frames per channel for ABM. Each channel logs queue depth and message headers for its first 32 dropped frames. Check queue drops during cold boot and registration.
 
+Observe CommCenter's EF_ICCID and EF_IMSI reads. Convert their values to reading-order BCD and publish activation TLVs `0x42` and `0x43` so carrier matching receives both identifiers.
+
 **Result:** CommCenter communicates with the actual modem and reads its SIM and identity.
 
 ## 4. Connect cellular data {#data-path}
@@ -51,11 +53,13 @@ A modem's `kOnline` state means its radio is online. Check NAS registration, the
 
 `coachz_bb_data.h` opens the IPA hardware port with DPM and configures WDA raw IP/QMAPv4 before the first WDS client binds. It translates WDS/QOS endpoint fields from Apple PCIe `{3, 4}` to embedded `{4, 1}` and supplies the endpoint for mux-only requests. Bind the WDS session to a QMAP mux, then start a data call. Connect the returned address, routes, DNS and MTU to `pdp_ip`. Route each QMAP mux to the corresponding interface, and pair DMA completion with buffer ownership. Exercise transmit, receive, disconnect, flight mode and modem reset. eSIM needs its UIM/APDU and VINYL flow in addition to the physical-SIM path.
 
-The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear directly after a cold boot. DPM/WDA setup and WDS/QOS bindings succeed. Carrier-bundle and APN selection remain incomplete, so CommCenter does not start a data call. EFS write persistence and a working `pdp_ip` data session remain open.
+The Coachz example displays IMEI, ICCID and modem firmware with its factory FSG. A valid SIM registers on LTE roaming with CS/PS attached; the operator and signal bars appear directly after a cold boot. DPM/WDA setup and WDS/QOS bindings succeed. The SIM matches its carrier bundle, LTE is shown and cellular data send/receive works. EFS writes remain in memory until reboot.
+
+`coachz_bb_pdp.cpp`, included by `coachz_baseband.cpp`, registers `pdp_ip0` through `pdp_ip3` for QMAP muxes 1 through 4 with MTU 1492. WDS bind, IP-family, start, stop and status replies control each family independently. Supply `coachz_modem_data_send` and `coachz_modem_data_receiver` from `QcomBaseband.h` on the QRTR/IPA owner thread; the Coachz adapter implements both. Verify IPv4 and IPv6 separately, including disconnect of one family while the other remains active.
 
 `coachz_bb_esim.h` discovers real eUICC slots and carries VINYL Tape through ISD-R logical-channel APDUs. Preserve capability TLV `0x21` in card-status replies and indications. Legacy GetCsn returns `0x204` to complete native driver initialization; EID/capability requests read TLV `0x01`, and Tape results use an 11-byte header.
 
-Challenge, authentication and download preparation retain the owning client's channel. Terminal operations, errors, disconnect and 180 seconds of inactivity close it and restore the original slot mapping. Recovery queries return an empty record set. The host models pass. Coachz shows eSIM in Settings with an incomplete page; profile provisioning remains unverified. Test cellular traffic with a SIM that has an active data plan.
+Challenge, authentication and download preparation retain the owning client's channel. Terminal operations, errors, disconnect and 180 seconds of inactivity close it and restore the original slot mapping. Recovery queries return an empty record set. A four-entry read-only ES10 cache answers repeated queries without a physical-slot switch; state-changing card commands clear it. The host models pass. Coachz shows eSIM in Settings with an incomplete page; profile provisioning remains unverified. Test cellular traffic with a SIM that has an active data plan.
 
 ## 5. Build and record {#build}
 
@@ -67,7 +71,7 @@ From the resolved target tree after building XNU:
 python3 scripts/build-qcom-baseband.py --coachz
 ```
 
-The output is `build/qcom-baseband/libQcomBaseband.a`. The recipe compiles `coachz_ipa_config.c`, `coachz_gsi.c` and `coachz_modem.c` with the C compile record, and `coachz_baseband.cpp` with the C++ record. `coachz_modem.c` includes the command, RX and modem implementations as one translation unit.
+The output is `build/qcom-baseband/libQcomBaseband.a`. The recipe compiles `coachz_ipa_config.c`, `coachz_gsi.c` and `coachz_modem.c` with the C compile record, and `coachz_baseband.cpp` with the C++ record. `coachz_modem.c` includes the command, RX and modem implementations as one translation unit. The PDP source is included by the baseband C++ unit.
 
 Link the archive and connect its IOKit class initialization and startup calls using [driver build integration](/porting/drivers#build-integration). Record modem boot, QMI, SIM identity, registration, data, reset and eSIM as separate checkpoints in `porting.toml`.
 
