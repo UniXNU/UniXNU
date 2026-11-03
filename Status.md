@@ -122,7 +122,7 @@
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,
-  haptics on the Actuator, pausing the idle stream (in testing)
+  haptics on the Actuator
 * **Video**: hardware decode (VideoToolbox / AVD)
 * **GPU**: reliable rendering, so CoreAnimation can move off the CPU
 * **Wi-Fi**: 5 GHz, HT / VHT rates, WPA3

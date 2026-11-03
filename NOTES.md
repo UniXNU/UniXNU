@@ -61,6 +61,13 @@
     tools/umi-push-tree.sh from an unpacked tarball; check clashes with Apple's /bin/ps, /bin/df, /usr/bin/* first,
     `*.sweet-orig` backups), (3) dpkg status entries for the libs + Sileo, /etc/apt/sources.list.d, check giveMeRoot
     gets root (setuid on HFS+), (4) refresh sources over Wi-Fi and install a test package from Sileo.
+- **2026-11-03 0232: idle pause + 160 ms cushion: ringtones clean, no pops (user)** (patch
+  `xnu/patches/0232-umi-audio-idle-pause.patch`, boot `shim/out/umi-0233b-audio.img` = 0231c's line).
+  - ASM_SESSION_CMD_PAUSE after 1 s with nothing queued or in flight, RUN_V2 again when frames arrive (writes wait for
+    its answer; 2 s timeout treats it as running): "paused (idle) -> 0" / "running again -> 0" for every tone, no
+    ADSP crash in two boots (0233, 0233b).
+  - 0233 (prefill 3 periods): plays, but "some little popping" during tones: the ADSP held only 2-3 periods (40-60
+    ms). 0233b (prefill 8, 160 ms): 5-7 periods at the ADSP while playing, **no pops**.
 - **2026-11-03 0231: ringtones play fully; one ADSP crash seen, not reproduced** (patch
   `xnu/patches/0231-umi-adsp-f3-dedup.patch`, boot `shim/out/umi-0232-audio.img` = 0231c's line).
   - Boot 0231c (2026-11-03 19:36), after ~15 min of tests: the ADSP died right after a ~1 s sound ("Opening" tapped
