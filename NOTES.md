@@ -2,6 +2,14 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04: ad daemons out of launchd's job list (ios-s9's fix, user OK'd)**: no kernel change, not booted yet.
+  - Phone file changed: `/System/Library/xpc/launchd.plist`, jobs `com.apple.ap.adprivacyd` and
+    `com.apple.ap.promotedcontentd` removed (532 -> 530 LaunchDaemons, every other job and section identical), made with
+    `tools/patch-launchd-plist.py IN OUT --remove com.apple.ap.adprivacyd com.apple.ap.promotedcontentd`; rm + put,
+    read back identical (794203 bytes). The previous file (fairplayd already out) is on the phone as
+    `launchd.plist.sweet-ads`; `.sweet-orig` stays the untouched original. Undo: put `.sweet-ads` back.
+  - Both are cheap here (not in `sweettop`'s top 12), so this is housekeeping, not the idle load; the load is
+    backboardd's CPU rendering (~64 %) and ReportCrash (~60 %, the AegirPoster / CommCenter / TTS crash loops).
 - **2026-11-04 0238: CPU FREQUENCY SCALING: an EPSS governor; the clocks follow the load** (patch
   `xnu/patches/0238-umi-cpufreq-governor.patch`, kernel 084245e; boot `shim/out/umi-0238-cpufreq.img` = 0236b's line
   without `sweetbtdelay=1` (0237's default), + `sweettop=10` (605 chars), 00:53).

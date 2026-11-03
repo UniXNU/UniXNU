@@ -123,7 +123,8 @@
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
 * **CPU load**, the fixes ios-s9 describes (`xnu/patches/0092`-`0094` there, idle CPU 460 % → ~50 %), to check and
   redo here: the securityd retry storm; `BTAudioHALPlugin.driver` polling a daemon that is not running; render / UI
-  threads on the slow cores and the touch polling thread on the fast ones; ad daemons; `driverkitd` killed and
+  threads on the slow cores and the touch polling thread on the fast ones; ad daemons (removed from launchd.plist
+  2026-11-04); `driverkitd` killed and
   respawned every 10 s
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
