@@ -1,0 +1,66 @@
+diff --git a/src/freedreno/vulkan/tu_clear_blit.cc b/src/freedreno/vulkan/tu_clear_blit.cc
+--- a/src/freedreno/vulkan/tu_clear_blit.cc
++++ b/src/freedreno/vulkan/tu_clear_blit.cc
+@@ -628,6 +628,17 @@ tu_gmem_transfer_swap_fixup(uint32_t info, uint32_t swap_mask, uint32_t identity
+    return mutable_view ? info : ((info & ~swap_mask) | identity);
+ }
+ 
++/* The memory side of a transfer between tile memory and a linear image keeps the image's own swap. Measured on the device (the plugin's
++ * NativeTurnipSwapTest.h, swaptest4, device and imported host memory alike): a draw leaves its colour in tile memory in shader order (it
++ * reads back right through an input attachment), so with the identity swap on the memory side a GMEM pass stored drawn BGRA8 colour with
++ * red and blue exchanged (cc6633 for 3366cc) and loaded memory into tile memory in memory order (an input attachment read the loaded
++ * blue as red). The tile side stays the identity (tu_gmem_transfer_swap_fixup in r3d_dst_gmem). */
++static inline uint32_t
++tu_gmem_memory_side_info(uint32_t info)
++{
++   return info;
++}
++
+ template <chip CHIP>
+ static void
+ r2d_dst_impl(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer,
+@@ -635,8 +646,7 @@ r2d_dst_impl(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer,
+ {
+    uint32_t dst_info = iview->RB_A2D_DEST_BUFFER_INFO;
+    if (gmem_transfer)
+-      dst_info = tu_gmem_transfer_swap_fixup(dst_info, A6XX_RB_A2D_DEST_BUFFER_INFO_COLOR_SWAP__MASK,
+-                                             A6XX_RB_A2D_DEST_BUFFER_INFO_COLOR_SWAP(WZYX), iview->is_mutable);
++      dst_info = tu_gmem_memory_side_info(dst_info);
+    enum a6xx_format fmt = (enum a6xx_format) pkt_field_get(
+       A6XX_RB_A2D_DEST_BUFFER_INFO_COLOR_FORMAT, dst_info);
+    enum pipe_format dst_format = iview->format;
+@@ -1691,7 +1701,8 @@ r3d_src_gmem_load(struct tu_cmd_buffer *cmd,
+                   uint32_t layer)
+ {
+    tu_note_gmem_side(cmd, iview, 1, iview->image->layout[0].tile_mode == TILE6_LINEAR, false, WZYX);
+-   r3d_src_load<CHIP>(cmd, cs, iview, layer, VK_FILTER_NEAREST, true);
++   /* The memory side keeps the image's own swap (tu_gmem_memory_side_info); a mutable view's stays as upstream. */
++   r3d_src_load<CHIP>(cmd, cs, iview, layer, VK_FILTER_NEAREST, iview->view.is_mutable);
+ }
+ 
+ template <chip CHIP>
+@@ -1776,8 +1787,7 @@ r3d_dst_impl(struct tu_cs *cs, const struct fdl6_view *iview, uint32_t layer,
+ {
+    uint32_t mrt_buf_info = iview->RB_MRT_BUF_INFO;
+    if (gmem_transfer)
+-      mrt_buf_info = tu_gmem_transfer_swap_fixup(mrt_buf_info, A6XX_RB_MRT_BUF_INFO_COLOR_SWAP__MASK,
+-                                                 A6XX_RB_MRT_BUF_INFO_COLOR_SWAP(WZYX), iview->is_mutable);
++      mrt_buf_info = tu_gmem_memory_side_info(mrt_buf_info);
+ 
+    enum a6xx_format fmt = (enum a6xx_format) pkt_field_get(
+       A6XX_RB_MRT_BUF_INFO_COLOR_FORMAT, mrt_buf_info);
+@@ -2470,12 +2480,8 @@ event_blit_run(struct tu_cmd_buffer *cmd,
+          tu_cs_emit(cs, A6XX_RB_RESOLVE_SYSTEM_BUFFER_PITCH(blt_view->stencil_pitch).value);
+       }
+    } else {
+-      tu_cs_emit(cs, gmem_transfer ?
+-                        tu_gmem_transfer_swap_fixup(blt_view->view->RB_RESOLVE_SYSTEM_BUFFER_INFO,
+-                                                    A6XX_RB_RESOLVE_SYSTEM_BUFFER_INFO_COLOR_SWAP__MASK,
+-                                                    A6XX_RB_RESOLVE_SYSTEM_BUFFER_INFO_COLOR_SWAP(WZYX),
+-                                                    blt_view->view->is_mutable) :
+-                        blt_view->view->RB_RESOLVE_SYSTEM_BUFFER_INFO);
++      tu_cs_emit(cs, gmem_transfer ? tu_gmem_memory_side_info(blt_view->view->RB_RESOLVE_SYSTEM_BUFFER_INFO) :
++                                     blt_view->view->RB_RESOLVE_SYSTEM_BUFFER_INFO);
+       tu_cs_image_ref_2d<CHIP>(cs, blt_view->view, blt_view->layer, false);
+ 
+       tu_cs_emit_pkt4(cs, REG_A6XX_RB_RESOLVE_SYSTEM_FLAG_BUFFER_BASE, 3);
