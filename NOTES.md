@@ -18,6 +18,19 @@
     present, cheap here, removal waits for the user's OK; `com.apple.driverkitd` = present but not respawning here.
   - ios-s9's patches are kept for reference in git-ignored `research/ios-s9/` (with their LICENSE).
 
+- **2026-11-04 0237: Bluetooth in Control Center: start the radio 1 s after UFS, not 30 s** (patch
+  `xnu/patches/0237-umi-bt-start-early.patch`, kernel: sweetbtdelay default 1; tested as boot
+  `shim/out/umi-0236b-btearly.img` = 0236's line + `sweetbtdelay=1`, `sweetnull=bluetoothd` (607 chars), 00:20).
+  - User after 0236: scan, connect and pair work, "but a bit buggy": Bluetooth missing from Control Center.
+    ConnectivityModule's Bluetooth button is always made (+[CCUIConnectivityButtonViewController isSupported] = YES,
+    20H392 0x209d5944c); the 0236 log had no `com.apple.springboard-MBF` session at all (Preferences, CommCenter,
+    tipsd... had one): with the controller up at ~30 s, bluetoothd exited 4 times first and SpringBoard's
+    BluetoothManager never attached again.
+  - 0236b: `com.apple.springboard-MBF` and `springboard-central` sessions present; **user: the Bluetooth button is in
+    Control Center.** (The UDP log of 0236b starts late, after usbnet: no early exec counts.)
+  - With 0237's kernel `sweetbtdelay=1` is no longer needed on the line. bluetoothd still answers MobileBluetooth's
+    power-state query with `Returning bluetooth power state: ffffffff`; harmless so far.
+  - Still untested: Bluetooth off/on, pairing kept across a reboot, A2DP audio.
 - **🎉 2026-11-04 0236: BLUETOOTH ON IN iOS: bluetoothd stays up on the QCA6390, stack STACK_READY, powered on**
   (patch `xnu/patches/0236-umi-exec-inject-dyld-policy.patch`, kernel e277964; phone file
   `/usr/local/lib/libsweet-bt.dylib` (new, 54304 bytes, read back; source `phone/sweet-bt/sweet_bt_inject.c`, built
