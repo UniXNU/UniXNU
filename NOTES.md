@@ -30,7 +30,10 @@
     Control Center.** (The UDP log of 0236b starts late, after usbnet: no early exec counts.)
   - With 0237's kernel `sweetbtdelay=1` is no longer needed on the line. bluetoothd still answers MobileBluetooth's
     power-state query with `Returning bluetooth power state: ffffffff`; harmless so far.
-  - Still untested: Bluetooth off/on, pairing kept across a reboot, A2DP audio.
+  - User: Bluetooth off then on works, but slowly ("won't go back", then "it got back up"). The log has
+    `Session ... wants connectability on` -> `Delaying connectability change event as stack is busy`, no stack
+    transition and no BlueTool deepsleep logged: the off/on did not cycle the controller. Not chased further.
+  - Still untested: pairing kept across a reboot, A2DP audio.
 - **🎉 2026-11-04 0236: BLUETOOTH ON IN iOS: bluetoothd stays up on the QCA6390, stack STACK_READY, powered on**
   (patch `xnu/patches/0236-umi-exec-inject-dyld-policy.patch`, kernel e277964; phone file
   `/usr/local/lib/libsweet-bt.dylib` (new, 54304 bytes, read back; source `phone/sweet-bt/sweet_bt_inject.c`, built
