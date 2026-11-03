@@ -26,3 +26,10 @@ ShengUfs 由设备仓库作为子模块提供。阅读 [UFS 移植指南](/zh/po
 分区和完成条件。
 
 arm64e 的公开源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
+
+## Wi-Fi DMA 窗口
+
+WCN7850 DMA 窗口为 128 MiB，IOVA 从 0x10000000 起，使用独立
+SMMU 上下文中的 64 个 2 MiB 块。设备验证已达到 Wi-Fi 接口就绪和
+网络传输，DMA 分配失败为零；板级 `scripts/check-wifi-dma.py` 检查
+容量和分配边界。

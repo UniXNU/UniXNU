@@ -1,93 +1,91 @@
 # Ath12kWifi
 
-Start with the [adaptation procedure](/porting/network) for board inputs, source changes, build integration and verification order.
-
-Ath12kWifi implements an ath12k-based Wi-Fi stack with PCI, MHI, QRTR, and
-board-supplied interfaces. The source includes QCC2072, QCN9274, and WCN7850
-hardware definitions.
+Ath12kWifi runs Linux ath12k, mac80211 and cfg80211 on XNU. It uses MHI,
+QRTR and QMI for device startup and wpa_supplicant 2.12 for userspace
+SME/WPA authentication. Ordinary network packets stay in the kernel.
 
 | Field | Value |
 | --- | --- |
 | Repository | [UniXNU/Ath12kWifi](https://github.com/UniXNU/Ath12kWifi) |
-| Function | ath12k Wi-Fi transport and driver integration |
-| Board inputs | PCI access, interrupts, firmware and board callbacks |
-| Hardware verification | Record device-specific results in the device page |
+| Sources | Pinned Linux v7.0.14, matching headers and supplicant 2.12 |
+| Board inputs | Power, PCIe, BARs, MSI, DMA, firmware and network interface |
+| Native interface | `include/nw_abi.h`, `org.unixnu.wifi.control` |
+| Selected profiles | Open and WPA2-PSK with PMF |
 
-Read the component README and `nw_board` interfaces before selecting it. The
-catalog records its source revision, OS requirements, build command, and outputs.
-Use the component's host checks and the board's network verification procedure.
+Follow the [network adaptation procedure](/porting/network) for board inputs
+and build integration. The [catalog](/reference/components) records dependencies.
 
-## WCN7850 reference integration
+## Runtime and performance
 
-Ath12kWifi compiles the Linux ath12k, MHI and QMI sources over its own compatibility layer (`shim/`) and adds a station layer (`src/nw_sta.c`: scan, join, WPA2-Personal, data path). The board interface is `include/nw_abi.h`. `tools/prepare.sh` fetches and patches the driver sources. The board integration powers the chip, trains PCIe0 and attaches the module to iOS as `en0` (`package/WifiProbe.cpp`: power, PCIe0, firmware, DMA, MSI, module thread; `package/WifiNet.cpp`: `en0` and the system's Wi-Fi requests).
+The production manifest starts cfg80211/mac80211 before ath12k and selects
+the mainline station runtime. The native control broker serializes scan,
+authentication, association, key, EAPOL and radio commands on the wireless
+worker. Owner IDs and connection generations associate events with active requests.
 
-Status: joins WPA2-Personal, gets DHCP, Safari loads pages. Throughput is low.
+The supplicant owns password derivation, handshake and rekey. Profiles live
+in RAM; wifid supplies network selection and OS-saved credentials. Radio
+power-on waits for that selection. Closing an owner releases its interface.
 
-| Boot argument | Meaning |
+mac80211 supplies aggregation, reordering, FQ and AQL. DMA clones and A-MSDU
+fragments share storage. TX copies directly from the retained mbuf into DMA;
+RX copies fragments into aligned cached mbufs and submits up to 64 frames
+per batch. NAPI has a 256-packet/2 ms budget; work dispatch has a 64-item/2 ms
+budget. MSI and pending deadlines control worker sleep. Cached counters
+provide PHY rate and RSSI without firmware statistics requests.
+
+## sheng on iPadOS 27
+
+WifiProbe supplies board hardware operations; WifiNet exposes en0 and
+Apple80211. WCN7850 is exported as `/arm-io/wlan`, satisfying the stock
+24A446 wifid job's device-tree condition. The DMA window is 128 MiB.
+
+The signed supplicant runs at `/usr/libexec/unixnu-wpa_supplicant` through a
+read-only Data-backed overlay. Its configuration is under
+`/private/var/ngpu/etc/wifi/`. Packaging merges its job into the OS launchd
+cache, preserves stock jobs, serializes with Apple `plutil binary1`, and
+packages the matching detached signature and trust hashes.
+
+Firmware loads through VFS from
+`/private/var/ngpu/firmware/ath12k/WCN7850/hw2.0/` after addon installation.
+The board's `package/WifiFirmware.h` defines both the loader and packer path;
+`firmware/wcn7850/manifest.json` pins file sizes and SHA-256 hashes.
+
+WifiNet accepts 592-byte and 656-byte association requests. The 24A446
+asynchronous result contains 540 initialized bytes, with result and validity
+at 0x214/0x218. Explicit joins complete after port authorization. Cancellation
+completes a pending request once; unanswered joins expire after 30 seconds.
+Disconnect and power-off publish BSD and Apple80211 link-down events.
+
+RSSI comes from the association BSS and a peer-cache refresh once per second.
+Changes of at least 3 dB publish link updates. SNR is floored at zero.
+
+| Setting | Current behavior |
 | --- | --- |
-| `sheng-wifi=5` | Start Wi-Fi. Without it the module never runs. |
-| `sheng-wifi-aj=0` | No join at boot; Settings joins. |
+| `sheng-wifi=5` | Start the mainline Wi-Fi stack |
+| `sheng-wifi-aj=0` | Let Settings/wifid select networks |
+| `log-wifi=1` | Enable Wi-Fi diagnostics |
+| `log-gpu=0 log-display=0` | Skip GPU/display diagnostic collection |
+| Automatic reset | Disabled in the current temporary image |
 
-### iPadOS 27 service startup
+## Verification
 
-The reference board DTS exports WCN7850 as `/arm-io/wlan` using
-`unixnu,adt-name = "wlan"`. The stock 24A446 `com.apple.wifid` job checks
-`_LimitLoadToDeviceTree` before launchd loads it. Without a matching node,
-the kernel's `join.txt` path can still connect and exchange packets while
-Settings shows an empty Wi-Fi page and cannot enable the switch.
-`/chosen/mac-address-wifi0` and the IOService network objects do not satisfy
-this device-tree condition.
+From Ath12kWifi, run the checks affected by a change:
 
-The 27 payload defaults include `sheng-wifi=5`. After changing the DTS,
-rebuild the payload and boot image, then inspect the ADT inside the image.
-Settings can toggle Wi-Fi and list SSIDs with this integration. Manual test images
-should omit `sheng-autoreset`.
+```sh
+python3 tools/fetch-sources.py --check
+python3 tools/test-mainline-runtime.py
+python3 tools/test-supplicant.py
+python3 tools/test-cfg80211-control.py
+python3 tools/check-mainline-link.py --build-report FILE --kernel FILE
+```
 
-WifiNet supports both 592-byte legacy and 656-byte 24A446 association
-requests and validates credentials before authentication. Manual WPA2
-association and DHCP have device confirmation.
+Host fixtures pass ASan/UBSan with simulated radio operations. The core
+lifecycle releases 287 tracked allocations. Production auditing covers
+125 objects and 13 XNU imports, with zero missing imports or duplicate definitions.
+Board fixtures cover Apple80211, event allocation, RX batching and VFS reads.
+The kernel, payload, signatures, firmware files and packed boot image pass checks.
 
-Power-off and disconnect publish link-down notifications and hide stale
-connection state. Repeated joins preserve completion; switching networks
-waits for teardown before queuing a new join. Authentication queries report
-WPA2 personal as 0x10. Host regression with AddressSanitizer and
-UndefinedBehaviorSanitizer, the kernel/payload build and packed-image
-checks pass. The current image awaits device validation of joining,
-network switching, the Wi-Fi icon and password-sheet dismissal.
-
-Throughput is low and remains under investigation. Use `log-wifi=1` for
-join diagnostics and `sheng-wifi-aj=0` to disable driver auto-join.
-
-### Facts
-
-- Each of the six PMU rails needs RPMh mode, voltage and enable requests. Without the mode request two rails stay off and the link never trains.
-- PCIe0 reaches L0 at Gen2 x1. The endpoint reads `17cb:1107`.
-- Firmware c2-00259 hangs in its demand pager. Firmware c7-00108 works and is used.
-- The firmware reports a zero MAC. The board supplies one made from the chip ID.
-- For development the firmware is read from the spare `oops` partition.
-- 6 GHz is left out of the scan: its 59 passive channels took most of an 11 s scan.
-- A firmware beacon miss is ignored while frames still arrive within 5 s.
-- Join and the four-way handshake complete in about 100 ms.
-- Without HT and VHT in the association the link ran phymode 11g, about 20 Mbit/s. With the access point's width (80 MHz) but this radio's capability in the peer entry, 596 of 863 transmitted frames were never acknowledged. With the access point's own capability almost every frame is acknowledged.
-- The access point sends some frames at VHT MCS 10/11. The driver drops them (about 70 per run).
-- With the chip's MSIs on an unwatched page, a thread polled the module every 1 ms. Routing them through PCIe0's own MSI receiver to SPI 141 lets the thread sleep between interrupts: 16 vectors, a few tens of interrupts per second when idle.
-- Speed test (5 GHz, 80 MHz, -73 dBm): about 12 Mbit/s down, 24 Mbit/s up, under 1 % transmit loss. DHCP gives an address within 31 s of boot.
-- The system Wi-Fi daemon takes over from the boot join and scans until a manual join. The system cannot store the network password (keychain error -25291).
-- The hot processes are `coreduetd` and one other system process, not the Wi-Fi thread.
-
-### Guesses
-
-- The throughput limit is in the receive path to `ifnet_input` (one copied frame per call) or in the TCP window.
-- The daemon leaves the boot join because the network is not stored as known.
-- The heat comes from system daemons and the GPU path.
-
-### Plan
-
-1. Count frames per second at each receive stage during a speed test.
-2. Pass received frames to the stack in chains, without the extra copy.
-3. Load the firmware from files instead of `oops`, then restore `oops`.
-4. Later: 6 GHz, Wi-Fi 6/7 capability, power save.
-
-### Build
-
-`unixnu build kernel` compiles the module with UniXNU-sheng's `scripts/build-ath12k-wifi.py`, from `drivers/Ath12kWifi` in UniXNU-sheng or `ATH12K_WIFI_DIR`.
+Device verification covers Wi-Fi toggling, SSID scanning, WPA2 association,
+DHCP, traffic and join-result delivery. Current device checks pending:
+cancellation/timeout completion, signal display, Data firmware startup,
+throughput, jitter and heat. See the [sheng network record](/devices/sheng#network).
