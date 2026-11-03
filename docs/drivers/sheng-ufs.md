@@ -30,3 +30,10 @@ The device repository supplies ShengUfs as a submodule. Follow the
 DMA, partition and completion details in the [storage record](/devices/sheng#storage).
 
 For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
+
+## Wi-Fi DMA window
+
+The WCN7850 DMA window maps 128 MiB at IOVA 0x10000000 using 64 two-MiB
+blocks in its own SMMU context bank. Device checks reach Wi-Fi interface
+readiness and traffic with zero DMA allocation failures. The board fixture
+`scripts/check-wifi-dma.py` checks capacity and allocation boundaries.
