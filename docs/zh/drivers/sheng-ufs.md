@@ -2,26 +2,26 @@
 
 先按[适配流程](/zh/porting/ufs)准备板级输入、修改源码、接入构建并逐步验证。
 
-ShengUfs 为 SM8550 上的 sheng 提供 UFS 存储路径，管理主机控制器、SMMU 映射、
+ShengUfs 提供 SM8550 UFS 存储路径，管理主机控制器、SMMU 映射、
 命令队列和根卷读取。板级集成包含时钟资源、持久 Data 区域和日志区域。
 
 | 字段 | 值 |
 | --- | --- |
 | 仓库 | [UniXNU/ShengUfs](https://github.com/UniXNU/ShengUfs) |
 | 硬件 | SM8550 UFS 主机、PHY、时钟和 SMMU 资源 |
-| 板级依赖 | sheng 电源策略和存储布局 |
-| 已验证设备 | sheng 原生 UFS 根卷 |
+| 板级依赖 | 板级电源策略和存储布局 |
+| 已验证设备 | [参考原生 UFS 根卷](/zh/devices/sheng#storage) |
 | 运行时类 | `NativeUfs` |
 
 组件目录提供内核 archive 构建命令。设备配置启用 `CONFIG_XNU_NATIVE_UFS` 并提供板级输入。
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 ## 移植与记录
 
-ShengUfs 由 sheng 设备仓库作为子模块提供。阅读 [UFS 移植指南](/zh/porting/ufs)，
+ShengUfs 由设备仓库作为子模块提供。阅读 [UFS 移植指南](/zh/porting/ufs)，
 按[设备存储记录](/zh/devices/sheng#storage)维护控制器、时钟、PHY、SMMU、DMA、
 分区和完成条件。
 

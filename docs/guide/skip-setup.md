@@ -118,7 +118,7 @@ The edited seed is cached by the hash of the original and of `skip_setup_args`. 
 3. Run `./unixnu bootimg`, then boot the newly packed image.
 4. The log reaches SpringBoard instead of the Setup pages.
 
-The reference implementation is `scripts/seed-data-skip-setup.py` in this repository. The sheng port recorded the first hardware boot with these changes.
+The reference implementation is `scripts/seed-data-skip-setup.py` in this repository.
 
 ## Next steps
 

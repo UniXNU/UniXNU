@@ -10,7 +10,7 @@ initialization, archive recipes and the OS ABI, then run this page's hardware ch
 ## Sources and interfaces {#source-map}
 
 These links identify reviewed source revisions. Match interfaces to the selected
-SoC, component and OS versions. Files in `UniXNU-sheng` provide board integration
+SoC, component and OS versions. The linked device sources provide board integration
 examples.
 
 | Implementation | Source | What to read and implement |
@@ -53,7 +53,7 @@ The Novatek processing core uses a 40 × 60 matrix. Verify geometry and bounds
 when adapting its firmware or processing core. Firmware extraction is owned by
 the device's `scripts/gen-touch-firmware.py` and proprietary-file inventory.
 
-sheng's `sheng-touch=1`, `2`, `3` and `4` select resource inspection, clocks/pins,
+The reference probe arguments `sheng-touch=1`, `2`, `3` and `4` select resource inspection, clocks/pins,
 controller identification, then firmware/scanning. Use those stages only after
 adapting the hardware values consumed by that stage.
 
@@ -64,13 +64,13 @@ preserve snapshot consistency when replacing the producer.
 ## 3. Publish HID reports
 
 Qualify IOHIDFamily methods and object layouts against the selected kernelcache.
-The sheng archive recipe uses a prelinked candidate and ABI records; see
+The reference archive recipe uses a prelinked candidate and ABI records; see
 [build inputs](/porting/migration#build-inputs). Adapt the report descriptor,
 logical coordinate ranges and contact limits to the sensor.
 
 Select the sensor, transport and HID components in the complete component list.
-The sheng display recipe links the sensor and bus objects; its HID recipe binds
-the OS interface. `sheng-touch-hid=1` enables sheng's touch publication path.
+The reference display recipe links the sensor and bus objects; its HID recipe binds
+the OS interface. `sheng-touch-hid=1` enables its touch publication path.
 From the assembled target tree, inspect their integration:
 
 ```sh
@@ -89,7 +89,7 @@ interrupt sampling and HID button events.
 Map the target's GPIO or PMIC inputs, polarity, ownership, interrupt routing and
 acknowledgement. Access only the PMIC peripherals owned by the selected execution
 environment. Adapt `BootResetCore.h` helpers where the SPMI controller differs.
-Connect press/release state to the HID consumer report. sheng uses report 2 bits
+Connect press/release state to the HID consumer report. The reference uses report 2 bits
 for Power, Volume Increment and Volume Decrement and enables this with
 `sheng-buttons=1`.
 

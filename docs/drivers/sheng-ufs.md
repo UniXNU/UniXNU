@@ -2,7 +2,7 @@
 
 Start with the [adaptation procedure](/porting/ufs) for board inputs, source changes, build integration and verification order.
 
-ShengUfs provides the sheng UFS storage path for SM8550. It owns the host
+ShengUfs provides the SM8550 UFS storage path. It owns the host
 controller, SMMU mappings, command queues, and root reads. Its board integration
 includes clock resources and the persistent Data and log regions. On request it
 also gives the display bank (`sheng-dpu-scanout`) and the WiFi endpoint
@@ -12,20 +12,20 @@ also gives the display bank (`sheng-dpu-scanout`) and the WiFi endpoint
 | --- | --- |
 | Repository | [UniXNU/ShengUfs](https://github.com/UniXNU/ShengUfs) |
 | Hardware | SM8550 UFS host, PHY, clocks and SMMU resources |
-| Board dependencies | sheng power policy and storage layout |
-| Verified device | sheng native UFS root |
+| Board dependencies | Board power policy and storage layout |
+| Verified device | [Reference native UFS root](/devices/sheng#storage) |
 | Runtime class | `NativeUfs` |
 
 The component catalog supplies its kernel archive recipe. The selected device
 profile enables `CONFIG_XNU_NATIVE_UFS` and supplies the board inputs.
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 ## Porting and records
 
-The sheng device repository supplies ShengUfs as a submodule. Follow the
+The device repository supplies ShengUfs as a submodule. Follow the
 [UFS porting guide](/porting/ufs) and maintain controller, clock, PHY, SMMU,
 DMA, partition and completion details in the [storage record](/devices/sheng#storage).
 

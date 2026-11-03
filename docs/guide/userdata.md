@@ -65,7 +65,7 @@ The writable Data volume comes from the Data ramdisk seed in the payload. The se
 ./unixnu build payload --data-ramdisk data.img
 ```
 
-For sheng's persistent-store layout, the macOS growth tool can resize a seed:
+On macOS, resize a seed to fit the selected persistent-store layout:
 
 ```sh
 python3 scripts/seed-data-grow.py --gib 8 /path/to/data.dbr /path/to/data-grow.dbr

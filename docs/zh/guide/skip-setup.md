@@ -118,7 +118,7 @@ out/<device>/<os_profile>/<config>/payload/payload.json
 3. 运行 `./unixnu bootimg`，再启动新生成的镜像。
 4. 日志到达 SpringBoard，不再停留在 Setup 页面。
 
-参考实现是本仓库的 `scripts/seed-data-skip-setup.py`。sheng 移植记录了使用这些改动的首次硬件启动。
+参考实现是本仓库的 `scripts/seed-data-skip-setup.py`。
 
 ## 下一步
 

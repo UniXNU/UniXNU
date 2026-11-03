@@ -29,7 +29,7 @@ Logical Metal queues share one Vulkan queue and kernel queue per process. The fr
 
 ## Build and checks
 
-From the resolved sheng iPadOS 27 tree:
+From the resolved iOS 27 target tree:
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios27

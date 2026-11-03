@@ -41,7 +41,7 @@ The kit is verified through the drivers that use it: [Adreno 740](/drivers/adren
 ## Integration
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 [Component catalog](/reference/components)

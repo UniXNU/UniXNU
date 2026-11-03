@@ -13,7 +13,7 @@ The component requires a compatible MMIO device, interrupt routing, and the sele
 The catalog records implementation scope, hardware and OS requirements, board dependencies, revision, build stage, outputs, and runtime identifiers. The selected profile orders build commands by dependency.
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 [Component catalog](/reference/components)

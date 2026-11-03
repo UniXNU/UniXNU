@@ -42,7 +42,7 @@ scripts/package.sh [--os 17|27|PROFILE] [--no-deps] [--check] [unixnu 选项]
 ## 在 GitHub 上
 
 设备仓库带有 `.github/workflows/package.yml`。它在 macOS runner 上运行
-`scripts/package.sh`，UniXNU 和 uefi-sheng 检出在设备仓库旁边，并把
+`scripts/package.sh`，UniXNU 和设备 UEFI 检出在设备仓库旁边，并把
 `boot.img`、`payload.img`、`kernel.macho` 和 `package.manifest.json` 作为
 运行的产物。
 
@@ -107,7 +107,7 @@ remove = [ ... ]
 
 [构建与启动](/zh/building)、[设备仓库](/zh/porting/device-repository)
 
-## sheng iPadOS 27 运行输入
+## iOS 27 运行输入
 
 `payload.runtime` 在编译内核前准备运行输入。Apple 静态、System 和 App 信任模块从所选
 IPSW 原样提取；Turnip、AdrenoMetal 和设备音频 HAL 从源码编译，其 CDHash 写入
@@ -122,7 +122,7 @@ GPU 和音频更新放在 addon 中，不修改 seed。构建会检查 APFS 卷 
 **首次安装**可用 `scripts/package.sh --os 27 --init-data`，从 IPSW 的初始
 `private/var` 生成 APFS seed，采用设备配置的 `data_gib` 和 Setup 偏好，并把新
 UUID 写入内核配置。该命令只写本机构建文件，不擦除或刷写设备。此后应一直保留
-`out/sheng/ipados-27.0.1-24A446/sheng_ipados27/runtime/data.dbr`。
+`out/<device>/<os_profile>/<config>/runtime/data.dbr`。
 持久化 Data 绑定的是 seed 的内容身份，仅保留 UUID 或从同一 IPSW 重做都不能替代原文件。
 
 Actions 会恢复安装对应的 seed 缓存，也支持原 seed 的下载 URL 加必填 SHA-256。
