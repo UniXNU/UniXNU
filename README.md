@@ -44,32 +44,9 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 - **No App Store, no Apple ID.**
 - **Security is off:** permissive code signing (AMFI) and sandbox policies, a stub AppleKeyStore, no data protection. Do not put anything personal on it.
 
-## To do
+## Status and to do
 
-Rough priority order; details and the state of each are in `NOTES.md`.
-
-- [ ] **Sensors**: accelerometer, gyroscope, magnetometer (compass), proximity, barometer through the SLPI (only the
-      ambient light sensor is wired so far, for auto-brightness); True Tone needs its color channels
-- [ ] **Camera**: none of the camera stack (CAMSS / ISP / sensors) exists yet
-- [ ] **Bluetooth**: QCA6390's Bluetooth half (UART / HCI), then bluetoothd
-- [ ] **CPU frequency scaling**: the cores run at their boot clock; no cpufreq / DCVS (CPRh / OSM) driver yet
-- [ ] **CPU load** (the fixes [ios-s9](https://github.com/syncmodz/ios-s9) describes, `xnu/patches/0092`-`0094` there:
-      idle CPU 460 % -> ~50 %), to check and redo here:
-  - [ ] securityd retry storm
-  - [ ] Bluetooth audio HAL plug-in (`BTAudioHALPlugin.driver`) polling a daemon that is not running
-  - [ ] render / UI threads landing on the slow cores, touch polling thread on the fast ones
-  - [ ] ad daemons
-  - [ ] `driverkitd` killed and respawned every 10 s
-- [ ] **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location, 2026-10-31); still to do:
-      put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build instead of
-      a hand edit
-- [ ] **Audio**: microphones (Codec / Hawking devices are silent), the earpiece amp as the second channel, start the
-      ADSP before 200 s, restart it after a crash (one `SFR Init: wdog or kernel error` seen), haptics on the
-      Actuator device
-- [ ] **Video**: hardware decode (VideoToolbox / AVD)
-- [ ] **GPU**: reliable rendering (fence timeouts), so CoreAnimation can leave the CPU
-- [ ] **Wi-Fi**: 5 GHz, HT/VHT rates, WPA3
-- [ ] **Cellular**, **GPS**, **Face ID / SEP**, **NFC**
+Feature by feature, with what is missing and planned next: [`Status.md`](Status.md).
 
 ## How it boots
 
