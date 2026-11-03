@@ -18,6 +18,17 @@
     present, cheap here, removal waits for the user's OK; `com.apple.driverkitd` = present but not respawning here.
   - ios-s9's patches are kept for reference in git-ignored `research/ios-s9/` (with their LICENSE).
 
+- **2026-11-03 0236 boot (no kernel change): sweetbt=6: the radio stays up for iOS; bluetoothd now calls BlueTool**
+  (boot `shim/out/umi-0236-bt6.img` = 0233b's line + `sweetbt=6`, kernel fe5ecbb + the uncommitted sched WIP, 23:46).
+  Firmware as in 0235d, then `bluetoothd's vendor, erroneous-data-reporting and 0x204a commands answered here`,
+  `SweetBluetooth: the registry entry "bluetooth" is published`, `THE RADIO IS UP for iOS: H4 at com.sweet.bluetooth`.
+  In ~5 min: 32 `exec bluetoothd` (still respawning) and, new, 8 `exec BlueTool` (bluetoothd finds the controller entry
+  and asks BlueTool to boot it, as apollo saw); no `H4: connected` (bluetoothd has no BT_HCI_TRANSPORT naming it).
+  - Next (stage C, needs a phone file): kernel exec_inject (finish research/exec-inject-wip.diff) + our libsweet-bt in
+    /usr/local/lib (adapted from apollo's userland/bt-inject, MIT): in bluetoothd set BT_HCI_TRANSPORT=
+    H4:POSIX:com.sweet.bluetooth,115200 + BT_BAUDRATE=115200; in BlueTool answer RunBuiltinScript boot/init/deepsleep
+    with 0. Decide first: apollo's library also fills bluetoothd's empty H4 stack-stopped handler in memory (else
+    turning Bluetooth off crashes it) -- an in-memory patch of an Apple binary.
 - **🎉 2026-11-03 0235: BLUETOOTH CHIP UP: the QCA6390 runs its firmware and the radio hears devices** (patch
   `xnu/patches/0235-umi-rpmh-duplicates-bt-rails.patch`, kernel fe5ecbb; boot `shim/out/umi-0235d-bt5.img` = 0233b's
   line + `sweetbt=5`, 23:37). All five Bluetooth rails voted (`ACTIVE vote complete`), then: `THE CHIP ANSWERS from its
