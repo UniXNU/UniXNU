@@ -76,6 +76,11 @@
     The route is right: VirtualAudio builds `d22_speaker_ringtone` over our Speaker (spp3 speaker protection runs
     open-loop: "Closed loop checks failed ... SpClProps.size=0"), software volume, 48 kHz, 1024-frame buffers.
     Next test: something that plays for long (a song, a video in Safari, a tapped ringtone in the Ringtone list).
+  - **2026-11-03 (boot 0231c again): a ringtone tapped in Settings > Sounds & Haptics > Ringtone plays its full
+    length (user).** The "1 s and a glitch" report of that boot was again the ringer slider (SHSRingerControl steps,
+    activateRingerHUD, Settings' own timeControlStatus=0 ~2 s after the finger lifts). No Music or Safari audio session
+    appears in the unified log at all (clients: SpringBoard MediaPlayback, Preferences RingtonePreview): media apps
+    never reached the audio system; video also needs the missing hardware decoder (VideoToolbox / AVD).
   - (Earlier reading: every sound gets StopIO from the server after ~1.5-3 s.) Our side is healthy: ~48
     kframes/s pushed and played, 0 left in the ring, zero time stamp calls every 21 ms (max gap 21 ms), 1024-frame I/O.
     The user also sees a "Do Not Disturb off" notice each time a sound starts. Suspects: speaker protection (the
