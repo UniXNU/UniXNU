@@ -25,7 +25,8 @@
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
 | 🦷 Bluetooth | | ❌ |
 | 📶 Cellular Data | | ❌ |
-| 📍 Location | Wi-Fi positioning works; no GPS | ⚠️ |
+| 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
+| 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
 | 🧭 Sensor | Ambient light only | ⚠️ |
 | 🎆 GPU | Adreno 650 runs our command streams; rendering not reliable yet, UI mostly on the CPU | ⚠️ |

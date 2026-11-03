@@ -27,7 +27,7 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | Battery | IOPMPowerSource from the PM8150B fuel gauge: real percentage, voltage, current and charging state |
 | Wi-Fi | QCA6390 over PCIe + MHI with an in-kernel driver (firmware boot, WMI, data path, WPA2-PSK handshake); wifid and Settings scan and join open and WPA2-PSK networks on 2.4 GHz |
 | Audio | The ADSP (booted by the kernel, APR to its AFE / ASM / ADM services) plays through tertiary MI2S (SD1) into the two CS35L41 amps; iOS's audio server reaches it through our `SweetAudio.driver` HAL plug-in and `/dev/sweet-audio` (`sweetadsp=1 sweetamp=1 sweetaudio=1`); ringtones and system sounds play from the speaker, ~3.5 min after boot |
-| Location | Wi-Fi positioning (Weather shows the city; no GPS); works since fairplayd.H2 was taken out of launchd's job list |
+| Location | Works: Wi-Fi positioning (Weather shows the city for My Location; Maps asks for permission), since fairplayd.H2 was taken out of launchd's job list. No GPS receiver yet |
 | USB | ECM gadget (USB Ethernet) with a live kernel log and a small kernel file server for development |
 | GPU | Adreno 650 powered through GMU/RPMh, zap shader authenticated by TrustZone, command processor running our command streams; a Metal path over Mesa's turnip is experimental (`sweetmtl`) |
 | Device identity | iPhone X (`iPhone10,3` / `D22AP`): no Home button, gesture UI |
@@ -35,7 +35,7 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 
 ## What does not work (yet)
 
-- **No Bluetooth, cellular, camera, motion sensors, GPS or SEP / Face ID.** Daemons for them start and fail or keep relaunching.
+- **No Bluetooth, cellular, camera, motion sensors or SEP / Face ID**, and no GPS receiver (location itself works, from Wi-Fi). Daemons for them start and fail or keep relaunching.
 - **No True Tone**: the light sensor reports brightness only, not color.
 - **No microphones** yet, and the earpiece speaker is not used as a second channel.
 - **No hardware video decoding** (VideoToolbox / AVD), so videos do not play; music apps never reached the audio system in tests.
