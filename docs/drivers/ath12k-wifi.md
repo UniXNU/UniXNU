@@ -17,9 +17,9 @@ Read the component README and `nw_board` interfaces before selecting it. The
 catalog records its source revision, OS requirements, build command, and outputs.
 Use the component's host checks and the board's network verification procedure.
 
-## State on sheng (WCN7850)
+## WCN7850 reference integration
 
-Ath12kWifi compiles the Linux ath12k, MHI and QMI sources over its own compatibility layer (`shim/`) and adds a station layer (`src/nw_sta.c`: scan, join, WPA2-Personal, data path). The board interface is `include/nw_abi.h`. `tools/prepare.sh` fetches and patches the driver sources. UniXNU-sheng powers the chip, trains PCIe0 and attaches the module to iPadOS as `en0` (`package/WifiProbe.cpp`: power, PCIe0, firmware, DMA, MSI, module thread; `package/WifiNet.cpp`: `en0` and the system's Wi-Fi requests).
+Ath12kWifi compiles the Linux ath12k, MHI and QMI sources over its own compatibility layer (`shim/`) and adds a station layer (`src/nw_sta.c`: scan, join, WPA2-Personal, data path). The board interface is `include/nw_abi.h`. `tools/prepare.sh` fetches and patches the driver sources. The board integration powers the chip, trains PCIe0 and attaches the module to iOS as `en0` (`package/WifiProbe.cpp`: power, PCIe0, firmware, DMA, MSI, module thread; `package/WifiNet.cpp`: `en0` and the system's Wi-Fi requests).
 
 Status: joins WPA2-Personal, gets DHCP, Safari loads pages. Throughput is low.
 
@@ -30,7 +30,7 @@ Status: joins WPA2-Personal, gets DHCP, Safari loads pages. Throughput is low.
 
 ### iPadOS 27 service startup
 
-The sheng board DTS exports WCN7850 as `/arm-io/wlan` using
+The reference board DTS exports WCN7850 as `/arm-io/wlan` using
 `unixnu,adt-name = "wlan"`. The stock 24A446 `com.apple.wifid` job checks
 `_LimitLoadToDeviceTree` before launchd loads it. Without a matching node,
 the kernel's `join.txt` path can still connect and exchange packets while
@@ -40,7 +40,7 @@ this device-tree condition.
 
 The 27 payload defaults include `sheng-wifi=5`. After changing the DTS,
 rebuild the payload and boot image, then inspect the ADT inside the image.
-Settings on sheng can toggle Wi-Fi and list SSIDs. Manual test images
+Settings can toggle Wi-Fi and list SSIDs with this integration. Manual test images
 should omit `sheng-autoreset`.
 
 WifiNet supports both 592-byte legacy and 656-byte 24A446 association

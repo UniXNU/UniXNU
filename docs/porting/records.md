@@ -90,8 +90,8 @@ the measurement needed to resolve them in `next_action`.
 7. Publish the device change. The catalog workflow refreshes its source revision and generated page.
 
 ```sh
-python3 scripts/porting-record.py check --device ../UniXNU-sheng
-python3 scripts/porting-record.py check --device ../UniXNU-sheng --base origin/main
+python3 scripts/porting-record.py check --device /path/to/device
+python3 scripts/porting-record.py check --device /path/to/device --base origin/main
 ```
 
 Run the second command on the proposed device branch. It compares committed
@@ -146,7 +146,7 @@ summary. Correct the device record and publish it before the next scan.
 For a local preview:
 
 ```sh
-python3 scripts/porting-record.py site --local sheng=../UniXNU-sheng
+python3 scripts/porting-record.py site --local myboard=/path/to/device
 cd docs
 npx vitepress build
 ```
