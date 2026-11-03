@@ -26,6 +26,8 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | Buttons | Power, volume up/down (PMIC through SPMI) as HID keys; lock/wake works |
 | Battery | IOPMPowerSource from the PM8150B fuel gauge: real percentage, voltage, current and charging state |
 | Wi-Fi | QCA6390 over PCIe + MHI with an in-kernel driver (firmware boot, WMI, data path, WPA2-PSK handshake); wifid and Settings scan and join open and WPA2-PSK networks on 2.4 GHz |
+| Audio | The ADSP (booted by the kernel, APR to its AFE / ASM / ADM services) plays through tertiary MI2S (SD1) into the two CS35L41 amps; iOS's audio server reaches it through our `SweetAudio.driver` HAL plug-in and `/dev/sweet-audio` (`sweetadsp=1 sweetamp=1 sweetaudio=1`); ringtones and system sounds play from the speaker, ~3.5 min after boot |
+| Location | Wi-Fi positioning (Weather shows the city; no GPS); works since fairplayd.H2 was taken out of launchd's job list |
 | USB | ECM gadget (USB Ethernet) with a live kernel log and a small kernel file server for development |
 | GPU | Adreno 650 powered through GMU/RPMh, zap shader authenticated by TrustZone, command processor running our command streams; a Metal path over Mesa's turnip is experimental (`sweetmtl`) |
 | Device identity | iPhone X (`iPhone10,3` / `D22AP`): no Home button, gesture UI |
@@ -33,13 +35,41 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 
 ## What does not work (yet)
 
-- **No Bluetooth, cellular, audio, camera, sensors, GPS or SEP / Face ID.** Daemons for them start and fail or keep relaunching.
+- **No Bluetooth, cellular, camera, motion sensors, GPS or SEP / Face ID.** Daemons for them start and fail or keep relaunching.
 - **No True Tone**: the light sensor reports brightness only, not color.
-- **Location services hang** behind fairplayd, which also keeps some features (the iOS 16 wallpaper's Featured row, location-based suggestions) away.
+- **No microphones** yet, and the earpiece speaker is not used as a second channel.
+- **No hardware video decoding** (VideoToolbox / AVD), so videos do not play; music apps never reached the audio system in tests.
 - **Wi-Fi** is 2.4 GHz only, legacy rates, no WPA3.
 - **GPU** rendering is not reliable yet (fence timeouts); CoreAnimation mostly renders on the CPU.
 - **No App Store, no Apple ID.**
 - **Security is off:** permissive code signing (AMFI) and sandbox policies, a stub AppleKeyStore, no data protection. Do not put anything personal on it.
+
+## To do
+
+Rough priority order; details and the state of each are in `NOTES.md`.
+
+- [ ] **Sensors**: accelerometer, gyroscope, magnetometer (compass), proximity, barometer through the SLPI (only the
+      ambient light sensor is wired so far, for auto-brightness); True Tone needs its color channels
+- [ ] **Camera**: none of the camera stack (CAMSS / ISP / sensors) exists yet
+- [ ] **Bluetooth**: QCA6390's Bluetooth half (UART / HCI), then bluetoothd
+- [ ] **CPU frequency scaling**: the cores run at their boot clock; no cpufreq / DCVS (CPRh / OSM) driver yet
+- [ ] **CPU load** (the fixes [ios-s9](https://github.com/syncmodz/ios-s9) describes, `xnu/patches/0092`-`0094` there:
+      idle CPU 460 % -> ~50 %), to check and redo here:
+  - [ ] securityd retry storm
+  - [ ] Bluetooth audio HAL plug-in (`BTAudioHALPlugin.driver`) polling a daemon that is not running
+  - [ ] render / UI threads landing on the slow cores, touch polling thread on the fast ones
+  - [ ] ad daemons
+  - [ ] `driverkitd` killed and respawned every 10 s
+- [ ] **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location, 2026-10-31); still to do:
+      put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build instead of
+      a hand edit
+- [ ] **Audio**: microphones (Codec / Hawking devices are silent), the earpiece amp as the second channel, start the
+      ADSP before 200 s, restart it after a crash (one `SFR Init: wdog or kernel error` seen), haptics on the
+      Actuator device
+- [ ] **Video**: hardware decode (VideoToolbox / AVD)
+- [ ] **GPU**: reliable rendering (fence timeouts), so CoreAnimation can leave the CPU
+- [ ] **Wi-Fi**: 5 GHz, HT/VHT rates, WPA3
+- [ ] **Cellular**, **GPS**, **Face ID / SEP**, **NFC**
 
 ## How it boots
 
