@@ -116,17 +116,17 @@ python3 scripts/porting-record.py check --device "$DEVICE_DIR"
 schema_version = 2
 
 [board]
-name = "sheng"
+name = "myboard"
 soc = "SM8550"
 soc_source = "sm8550"
 os_profile = "ipados-17.7.11-21H461"
-kit = "sheng"
+kit = "myboard"
 
 [components]
 include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "ShengUfs", "ShengHidInput", "ShengNovatekTouch", "GopFramebuffer"]
 
 [device_tree]
-source = "device:dts/sheng.dts"
+source = "device:dts/myboard.dts"
 include_dirs = ["soc:dts"]
 ```
 
@@ -147,7 +147,7 @@ include_dirs = ["soc:dts"]
 
 ```toml
 [kernel]
-defconfig = "sheng_defconfig"
+defconfig = "myboard_defconfig"
 config_fragments = ["arch:configs/common.config", "soc:configs/sm8550.config"]
 patch_series = ["arch:patches/xnu/series", "soc:patches/xnu/series", "os:patches/xnu/series", "device:patches/xnu/series"]
 ```
@@ -379,7 +379,7 @@ CONFIG_XNU_OWNER_CACHE_VOLUME_UUID="00000000-0000-0000-0000-000000000000"
 
 取值可以是 `y`、`n`、数字或带引号字符串。每个 `CONFIG_XNU_<NAME>` 变成内核构建的 `XNU_<NAME>`，字符串中的 `{tree}` 替换为构建树路径。
 
-`CONFIG_XNU_OWNER_CACHE_VOLUME_UUID` 指定 owner 链作为缓存载体挂载的 SystemOS cryptex 卷，即签名 SystemOS 策略所覆盖镜像中的 APFS 卷 UUID。不设置时，内核使用 sheng 镜像的卷。
+`CONFIG_XNU_OWNER_CACHE_VOLUME_UUID` 指定 owner 链作为缓存载体挂载的 SystemOS cryptex 卷，即签名 SystemOS 策略所覆盖镜像中的 APFS 卷 UUID。不设置时，内核使用内置的卷 UUID。
 
 ## feeds.toml
 
@@ -477,5 +477,4 @@ entry = "<entry id>"
 完成条件，记录字段与 `board.toml` 及组件依赖匹配。设备 CI 检查代码路径对应部分
 的经验或证据更新。字段、状态和发布流程见[记录指南](/zh/porting/records)。
 
-板级驱动子模块归属设备仓库。sheng 在设备仓库固定 ShengUfs、ShengHidInput、
-ShengNovatekTouch 和 ShengPreflight。
+板级驱动子模块归属设备仓库。在其中固定所选组件版本，记录板级输入与构建配方。

@@ -29,7 +29,7 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 
 ## 构建和检查
 
-在解析后的 sheng iPadOS 27 构建树中执行：
+在解析后的 iOS 27 目标构建树中执行：
 
 ```sh
 python3 scripts/build-turnip-darwin.py --target ios27

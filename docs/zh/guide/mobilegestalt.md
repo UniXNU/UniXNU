@@ -41,7 +41,7 @@ MobileGestalt 从 Apple 设备树（ADT）读取设备信息。负载在构建�
 - `/buttons` 不包含 `menu`
 - `home-button-type = 2`
 
-SpringBoard 通过 `BSPlatform homeButtonType` 读取该值。值为 2 时，锁屏使用上滑手势。sheng 上从锁屏上滑可以到达密码界面，密码界面把设备识别为 iPad。
+SpringBoard 通过 `BSPlatform homeButtonType` 读取该值。值为 2 时，锁屏使用上滑手势。
 
 ## iPadOS 与 iOS
 

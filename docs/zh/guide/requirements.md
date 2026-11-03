@@ -99,7 +99,7 @@ OS 配置的目标可以是 iOS 或 iPadOS 恢复镜像，镜像类别须与设�
 | arm64 | iOS，iPhone X（iPhone10,3、iPhone10,6） | 16.7.16 | 20H392 | [iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw](https://updates.cdn-apple.com/2025FallFCS/fullrestores/122-77006/1158E502-D76D-4226-AA06-ED5E30CD1111/iPhone10,3,iPhone10,6_16.7.16_20H392_Restore.ipsw) |
 | arm64 | iPadOS，iPad Pro 12.9 英寸第二代（iPad7,1） | 17.7.11 | 21H461 | [iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw](https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw) |
 | arm64e | iOS，iPhone 16 Pro（iPhone17,1） | 27.0.1 | 24A446 | [iPhone17,1_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/59ffd938-75b6-41e5-af04-f4295ee8aeb3/iPhone17,1_27.0.1_24A446_Restore.ipsw) |
-| arm64e | iPadOS，iPad Pro M5（iPad17,1 至 iPad17,4），sheng 默认 | 27.0.1 | 24A446 | [iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw) |
+| arm64e | iPadOS，iPad Pro M5（iPad17,1 至 iPad17,4） | 27.0.1 | 24A446 | [iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw) |
 
 iOS 16 与 iPadOS 17 都是 arm64 镜像，共用 arm64 补丁系列（`profiles/arch/arm64`），对其中一个的修复同样适用于另一个。链接来自 [ipsw.me](https://ipsw.me)，指向 Apple 服务器。
 
@@ -123,4 +123,4 @@ iOS 16 与 iPadOS 17 都是 arm64 镜像，共用 arm64 补丁系列（`profiles
 - [设备仓库](/zh/porting/device-repository)介绍板级文件。
 - [设备](/zh/devices/)列出设备仓库和各自的输入。
 
-开始 sheng 完整构建前，核对 [ABI、SDK、固件和镜像输入清单](/zh/porting/migration#build-inputs)。
+完整构建前，核对 [ABI、SDK、固件和镜像输入清单](/zh/porting/migration#build-inputs)。

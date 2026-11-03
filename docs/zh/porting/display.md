@@ -9,7 +9,7 @@
 ## 源码与接口 {#source-map}
 
 以下链接固定到已核对的源码版本。使用所选 SoC、组件和 OS 版本核对接口；
-`UniXNU-sheng` 中的文件提供板级集成示例。
+链接的设备源码提供板级集成示例。
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
@@ -31,18 +31,18 @@
 `NativeGOPPresenter.cpp` 和 `NativeGOPWire.h`。它从 `PE_current_console` 获取帧缓冲，
 并接入选定的 MobileFramebuffer 和 IOSurface ABI。
 
-在 [sheng package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package) 中检查
+在 [参考板级 package](https://github.com/UniXNU/UniXNU-sheng/tree/main/package) 中检查
 `LegacyDisplayProbe.cpp` 与 `DisplayTimingProbe.cpp`。
 设备脚本 `scripts/build-gop-legacy-display.py` 使用预链接候选内核验证 ABI 方法，再生成后期显示归档。
 按[构建输入](/zh/porting/migration#build-inputs)提供匹配的候选内核和审计文件。
 
 1. 选择 GopFramebuffer 和显示归档配方，保留所需依赖。
-2. 启用配方需要的内核配置和初始化调用。sheng 使用 `CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y`
+2. 启用配方需要的内核配置和初始化调用。参考实现使用 `CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y`
    及相应的 `offline-legacy-*` 参数。
 3. 在 CPU 呈现路径中确认像素布局、行跨度、分配大小和缓存处理，检查已知画面能否显示。
 4. 确认交换完成通知与 IOSurface 生命周期后再启用 [GPU 呈现](/zh/porting/gpu)。
-5. 按目标控制器适配时序读取。sheng 的 `sheng-dpu=1` 通过 `DisplayTimingProbe.cpp`
-   采样 SM8550 DPU 和双 DSI 计数器。根据实际面板模式设置刷新策略；`sheng-vsync=120` 是 sheng 的请求值。
+5. 按目标控制器适配时序读取。参考探针 `sheng-dpu=1` 通过 `DisplayTimingProbe.cpp`
+   采样 SM8550 DPU 和双 DSI 计数器。根据实际面板模式设置刷新策略；参考实现用 `sheng-vsync=120` 请求 120 Hz。
 
 对 `NativeGOPWire.h` 路径，先通过 mode 请求读取格式和几何参数，再检查每个呈现缓冲的大小与行跨度。
 GPU 交接使用 `NGPSwap.sequence` 跟踪待处理帧，复制完成后用相同序列提交 `NGPComplete`。
@@ -57,14 +57,14 @@ GPU 交接使用 `NGPSwap.sequence` 跟踪待处理帧，复制完成后用相�
 
 ### 读取显示管线 {#dpu-pipes}
 
-修改显示控制器的取图来源前，先读取固件留下的状态。sheng 上由 `DisplayTimingProbe.cpp` 完成：
+修改显示控制器的取图来源前，先读取固件留下的状态。参考实现的 `DisplayTimingProbe.cpp` 提供以下阶段：
 
 | 参数 | 读取内容 |
 | --- | --- |
 | `sheng-dpu=2` | VIG 0 和 1 的源地址、尺寸、格式和取图设置；CTL 0 状态；两个接口的 tear check；apps SMMU 中的显示流 |
 | `sheng-dpu=3` | 另外重写每条管线的当前地址，并测量 CTL flush 的锁存时间 |
 
-sheng 上两条 VIG 管线取同一个 32 位物理地址，右侧管线用自己的源 x 坐标；面板自行
+参考实现中两条 VIG 管线取同一个 32 位物理地址，右侧管线用自己的源 x 坐标；面板自行
 刷新，flush 不需要 start，5.4 ms 内锁存。显示 context bank 起始时关闭地址转换。
 
 直接扫描输出（`sheng-dpu-scanout=2`）为实验功能，默认关闭：它给显示 bank 一个
@@ -88,7 +88,7 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
 
 ## 4. 适配并启用亮度
 
-1. 更新板级引擎映射、时钟投票和中断路由。sheng 的 GENI 路径采用固件加载的引擎代码与时序；
+1. 更新板级引擎映射、时钟投票和中断路由。参考 GENI 路径采用固件加载的引擎代码与时序；
    核对该交接状态，或实现目标所需初始化。
 2. 实现目标控制器的亮度编码、写入和回读，按面板连接匹配控制器数量和更新顺序。
 3. 使用 GENI 示例时，先调用 `geni_i2c_prepare`，再启动读写，把中断状态交给 `geni_i2c_event`，
@@ -96,19 +96,19 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
    服务请求在工作循环上处理，确认失败处理后再启用渐变调光。
 4. 根据选定 OS ABI 配置 `IODisplayParameters` 亮度范围和 `backlight-control`。
    服务接受 brightness 与 `FadePeriod` 属性。
-5. 构建服务和注册封装。sheng 的显示配方包含两者，`sheng-backlight=1` 启用 probe。
+5. 构建服务和注册封装。参考显示配方包含两者，`sheng-backlight=1` 启用 probe。
 
 在解析后的构建树定位集成点：
 
 ```sh
-rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/sheng/AppleARMBacklight.cpp
+rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/*/AppleARMBacklight.cpp
 rg -n 'backlight|GeniI2c' scripts/build-gop-legacy-display.py
 ```
 
 新设备使用对应 kit 路径，按[构建指南](/zh/building)重建内核、payload 和启动镜像。
 
 **预期结果：** 最低、中间和最高设置有对应回读与可见亮度，渐变调光完成，超时计数稳定。
-sheng 的 `native_backlight_stats` 记录发布、请求、回读、中断和失败。
+参考实现的 `native_backlight_stats` 记录发布、请求、回读、中断和失败。
 控制器写入与系统 UI 亮度调整分别验证。
 
 ## 下一步

@@ -25,7 +25,7 @@
 
 UniXNU 为不同 SoC 和设备的移植提供共享构建工具、ARM64 支持、OS 配置和可复用组件。SoC 仓库提供公共平台支持，设备仓库提供板级配置和硬件集成。
 
-**🎉 News:** Adreno740 和 AdrenoMetal 在 sheng 上提供 GPU 加速。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/adreno740)。
+**🎉 News:** Adreno740 和 AdrenoMetal 实现 A740/SM8550 GPU 加速。详见 [Adreno 740 驱动文档](https://unixnu.com/zh/drivers/adreno740)。
 
 文档：[unixnu.com](https://unixnu.com/zh/)。从[移植设备](https://unixnu.com/zh/porting/)或[构建与启动](https://unixnu.com/zh/building)开始。
 

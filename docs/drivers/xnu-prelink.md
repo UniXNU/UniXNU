@@ -19,7 +19,7 @@ matching code signature before reusing a map.
 comparison. It transfers unambiguous names from unique code matches and resolves
 those names in the actual native kernel. The map records the reference hash.
 
-The sheng iPadOS 27 build runs `build-fileset-release-reference.py --tree . --lto`
+The iOS 27 reference build runs `build-fileset-release-reference.py --tree . --lto`
 before prelinking. Keep LTO enabled for this comparison: the non-LTO reference
 loses matches needed by original kexts, including corecrypto's startup call to
 `kprintf`. With `--allow-missing`, such a call reaches `unixnu_fileset_unmapped`
@@ -71,7 +71,7 @@ the original kexts and records `native-only` beside the output.
 The catalog records implementation scope, hardware and OS requirements, board dependencies, revision, build stage, outputs, and runtime identifiers. The selected profile orders build commands by dependency.
 
 ```sh
-./unixnu build prelink -D ../UniXNU-sheng
+./unixnu build prelink -D /path/to/device
 ```
 
 [Component catalog](/reference/components)

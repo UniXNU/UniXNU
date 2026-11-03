@@ -142,4 +142,4 @@ volatile int native_touch_ids[NVT_SLOTS];
 
 - [XNU 驱动](/zh/drivers/xnu-drivers)
 - [设备树匹配](/zh/drivers/device-tree-matching)
-- [sheng 设备页](/zh/devices/sheng)
+- [参考设备记录](/zh/devices/sheng)

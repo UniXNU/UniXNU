@@ -41,7 +41,7 @@ include = ["Sm8550Platform", "Adreno740", "AdrenoMetal", "AdrenoFirmware", "ArmS
 ## 集成
 
 ```sh
-./unixnu build kernel -D ../UniXNU-sheng
+./unixnu build kernel -D /path/to/device
 ```
 
 [组件目录](/zh/reference/components)
