@@ -37,3 +37,24 @@ diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd
     tu_autotune::render_mode optimal_mode =
        cmd->device->autotune->get_optimal_mode(cmd, rp_ctx, rp_key);
     bool use_sysmem = optimal_mode == tu_autotune::render_mode::SYSMEM;
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -1725,11 +1725,12 @@ tu_knl_darwin_load(struct tu_instance *instance)
+    device->has_set_iova = !!(info->flags & NativeAdrenoDeviceClientIova);
+    device->va_start = info->va_start;
+    device->va_size = info->va_size;
+-   /* Lazily allocated memory only where passes may keep attachments in tile memory (darwin_sparse_vma_init). With every pass in system
+-    * memory (TU_DEBUG=sysmem) a lazy BO is backed in full at the first pass, on the render thread: 40-112 MiB wired inside
+-    * vkCmdEndRenderPass, up to 340 ms each (untagged-3f2bd680), and freed again with the memory. Without the type a memoryless
+-    * attachment is ordinary device memory, which the runtime places and keeps spare for the next one. */
+-   device->has_lazy_bos = !TU_DEBUG(SYSMEM);
++   /* Lazily allocated memory (darwin_sparse_vma_init) with TU_DEBUG=sysmem too: a pass with a transient attachment that has no memory
++    * yet renders in GMEM (use_sysmem_rendering), so Metal's memoryless textures take none. As ordinary device memory they were new
++    * 32-112 MiB image allocations whenever the render server held more of them than before, wired page by page (up to 309 ms in
++    * untagged-7718d8c9). A pass that cannot render in GMEM still backs its attachment in full at the pass
++    * (tu_allocate_transient_attachments). */
++   device->has_lazy_bos = true;
+    device->has_sparse = false;
+    device->has_sparse_prr = false;
+    device->has_raytracing = false;
