@@ -2,6 +2,28 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-03 0234: Bluetooth stage A: the kernel reads the BT firmware; the chip not powered yet** (patch
+  `xnu/patches/0234-umi-bluetooth-qca6390.patch`, kernel 3c5be0e; boot `shim/out/umi-0235-bt5.img` = 0233b's line
+  + `sweetbt=5`). Goal: bluetoothd (respawns every ~9 s, 34 execs in 5 min) finds a controller.
+  - Source: project-BadApple / ios-apollo (Mi 10T, same SM8250 + QCA6390, MIT, full licence in sweet_bt.c) has iOS
+    Bluetooth working; its driver comes from the Mi 10 port hackios-xnu-kernel-umi (MIT). umi's DT: no BT node, but
+    cnss-qca6390 gives BT_EN GPIO 21, SW_CTRL GPIO 124; qupv3_se6_4uart @0x998000 on GPIO 16-19 = apollo's wiring.
+  - Kernel: sweet_bt.c steps 1-6 (1 clocks/pins, 2 GENI regs, 3 loopback, 4 BT_EN + HCI reset/version from ROM,
+    5 firmware + 3 s LE scan + 4 s inquiry, 6 radio stays up: H4 kernel control `com.sweet.bluetooth` + IOService
+    "bluetooth" with local-mac-address / transport-speed bytes). umi changes: firmware read-only from the
+    `bluetooth` partition FAT16 (`image/htbtfw20.tlv`, `image/htnv20.bin`; boot-args sweetbtpart/sweetbtfw/sweetbtnv),
+    rails S6A/S5A/S8C (SMPS) + L16A, sweetbtdelay default 30 s. sweet_wlan.c: FAT reader for any partition
+    (`sweet_fat_read_file`), 8.3 names, "*" lists a directory.
+  - Boot 0235 (21:39): `bluetooth FAT16, 4096-byte sectors`, `htbtfw20.tlv 188564 bytes, htnv20.bin 5733 bytes`;
+    step 1/2 fine (SE6 clocks start, GENI readable). Step 4 stopped: `smpa6 lookup matches=2; refusing` (umi's cmd-db
+    lists smpa6 twice, same address 0x40200) -> errno 19, BT_EN never raised. sweet_pcie.c ignores the same failure
+    for Wi-Fi (rails on from the bootloader), so 0234 now only logs rail failures. Image `shim/out/umi-0235b-bt5.img`
+    (same line) is built with that, not booted yet (phone not put in fastboot).
+  - Next: boot 0235b (expect `THE CHIP ANSWERS from its ROM`, firmware, scan results); then sweetbt=6; then the
+    bluetoothd side, as apollo: env BT_HCI_TRANSPORT=H4:POSIX:com.sweet.bluetooth,115200 + BT_BAUDRATE (launchd
+    can't set it -> a library inserted by the kernel: needs kern.exec_inject, research/exec-inject-wip.diff) and a
+    BlueTool stand-in answering RunBuiltinScript boot/init with 0. Open: apollo's library also patches bluetoothd's
+    H4 stack-stopped handler in memory (only for turning BT off): check against "don't patch Apple binaries".
 - **🎉 2026-11-01 0230: SILEO ON THE HOME SCREEN AND IT OPENS (user: "Opens")** - stage 1 of the Sileo plan, no
   kernel change (boot `shim/out/umi-0230-sileo-lsreset.img` = the 0227 kernel, 0229b's line without
   `sweetadspprobe=0 sweetamp* sweetadsptone=1`, + `sweetlsreset=1`; booted twice, since the first boot's reset ran
