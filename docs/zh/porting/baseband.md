@@ -22,7 +22,7 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 
 ## 2. 启动 modem 并建立 QMI {#modem-startup}
 
 1. 记录 modem 电源、复位、时钟、互连请求、中断、固件内存和 SMMU stream。按地址转换模式提供 DMA 地址与缓存维护。
-2. 加载板级 MBA/MPSS 固件，提供 EFS/NV 存储，确认 modem 启动和 SMP2P 就绪信号。
+2. 加载板级 MBA/MPSS 固件，提供本机的原厂 FSG/EFS/NV 数据。Coachz 从 eMMC 硬件启动分区读取 FSG，并核对设备保存的摘要。确认 modem 启动、设备身份和 SMP2P 就绪信号。
 3. 建立 GLINK/QRTR，跟踪服务发布与移除，验证 QMI 请求和回复。QRTR 端口、轮询和复位恢复由板级负责。
 4. IPA v4.2 示例在 modem 启动前配置 IPA，收到 `ipa-setup-ready` 后建立 GSI 与端点，再通过 QMI 完成 INIT_DRIVER、INIT_COMPLETE。Coachz 在此后启动 modem 的收发通道。
 
@@ -36,7 +36,7 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 
 
 1. 发布 `AppleBaseband`、`AppleBasebandPCIControl`，以及每个通道的 `AppleBasebandPCIInterface`。用 `ABPInterfaceProtocol` 设置并匹配 `pbl`、`sahara`、`qmux1`、`qmux2` 等名称。按所选 OS 核对 UserClient 类名、方法号、参数大小和异步完成参数。
 2. 提供 `coachz_baseband_configure(send, del_client)`，通过 `coachz_baseband_new_server`、`coachz_baseband_del_server`、`coachz_baseband_qrtr` 转发 QRTR 服务变化和消息，在传输工作线程调用 `coachz_baseband_poll`。
-3. CTL 分配 QMI 客户端和本地 QRTR 端口；标准服务消息经 QMUX/QRTR 桥转发，苹果私有服务当前回复 `QMI_ERR_NOT_SUPPORTED`。
+3. CTL 分配 QMI 客户端和本地 QRTR 端口；标准服务消息经 QMUX/QRTR 桥转发。桥接层处理 BSP 激活和 VINYL Tape 请求，其他苹果私有请求回复 `QMI_ERR_NOT_SUPPORTED`。激活指示带上服务已开通和卡槽已接受状态。
 4. 加入所选蜂窝 ADT 节点与产品属性，让 launchd 选择蜂窝版 CommCenter。示例使用 `/chosen/coachz-baseband`、`/baseband`、`baseband-chipset = mav16` 和根节点 `compatible = J121AP`，保持显示身份属性不变。按目标 IPSW 与基带 ABI 适配这些身份值。
 5. 将苹果固件打包并挂载到 ABM、BBUpdater 读取的位置。示例的 SAHARA 端点接收这段启动交互，高通 modem 继续运行自己的固件。
 6. 发布 CommCenter 需要的 PDP 管理服务，分别检查 ABM 启动、QMUX 客户端、SIM 状态、modem 身份和设置中的蜂窝网络页面。
@@ -47,9 +47,11 @@ SC7180 通过 GLINK/QRTR 传输 QMI，桥接层在其上向 iPadOS 发布苹果 
 
 modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注册状态、驻留网络和分组业务附着。
 
-配置 WDA 数据格式，将 WDS 会话绑定到 QMAP mux，再建立数据会话。把返回的地址、路由、DNS、MTU 接到 `pdp_ip`。按 mux 将数据送到对应网卡，按 DMA 完成结果归还缓冲区。依次验证发送、接收、断开、飞行模式和 modem 复位。eSIM 还需要 UIM/APDU 与 VINYL 流程。
+`coachz_bb_data.h` 在第一个 WDS 客户端绑定前通过 DPM 打开 IPA 硬件端口，配置 WDA raw IP/QMAPv4。它将 WDS/QOS 的苹果 PCIe 端点 `{3, 4}` 转换为 embedded `{4, 1}`，为只带 mux id 的请求补上端点。随后将 WDS 会话绑定到 QMAP mux，再建立数据会话。把返回的地址、路由、DNS、MTU 接到 `pdp_ip`。按 mux 将数据送到对应网卡，按 DMA 完成结果归还缓冲区。依次验证发送、接收、断开、飞行模式和 modem 复位。eSIM 还需要 UIM/APDU 与 VINYL 流程。
 
-当前 Coachz 示例能识别 SIM 并显示 modem 固件。现有 EFS 镜像为空，modem 报不出 IMEI，CommCenter 因此保持 SIM 禁用。ICCID、网络注册、`pdp_ip` 数据收发和 eSIM 尚未完成。
+Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，重新插拔 SIM 后状态栏显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。开机即显示 SIM 状态、运营商设置包、EFS 写入持久化和可用的 `pdp_ip` 数据会话仍待完成。
+
+`coachz_bb_esim.h` 发现真实 eUICC 卡槽、补充 UIM 能力字段，将 VINYL Tape 请求转为 ISD-R 逻辑通道上的 APDU，处理请求与结果分片、超时和原卡槽映射恢复。主机模型中的卡状态指示和旧版 GetCsn 用例仍未通过，eSIM 开通仍待实机验证。
 
 ## 5. 构建与记录 {#build}
 
