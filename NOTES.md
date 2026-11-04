@@ -2,6 +2,24 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 0244: drawables go back to CoreAnimation 3 vsyncs after the flip; only the app switcher still
+  glitches** (patch `xnu/patches/0244-umi-fb-drawable-release-delay.patch`; boot **`shim/out/umi-0244c-retire3-walk.img`**
+  = 0238's line, 12:45, the current image).
+  - SweetFramebuffer flips scanout on the 60 Hz vsync timer and marks a surface in use for CoreAnimation
+    (IOSurfaceClientIsInUse, +0x18 of the shared state page) from SwapEnd until it is off the panel. Before 0244 that
+    was ONE tick (16.7 ms) after the flip to the next frame - but umi's command-mode panel latches a flip at its next
+    refresh and keeps fetching the old surface until that frame ends, so CA could render the next frame into a surface
+    still on screen. Now replaced surfaces queue for `sweetfb_retire=N` ticks (default 3, max 6) before their hold is
+    dropped; a line every 10 s counts the releases and how many found the CTL flush bits still set (0 of 3000+: the
+    flip had always latched by then - the flush bits ARE a usable latch signal for a later exact release).
+  - Tests (user verdicts): walk off + release 3 (0244): "definitely less glitchy"; walk off + release 6 (0244b): "got
+    better at some place got worse at other"; **walk on + release 3 (0244c): "i only see glitches in app switcher"**.
+    0244c backboardd over 10 rounds of use: min 23 / median 34 / max 93 % of one core, kernel share min 5 / median 13 /
+    max 43 %.
+  - Next: (1) the app switcher - its cards are app snapshots, surfaces other processes produced (often decoded on the
+    CPU) that backboardd samples: CPU-write -> GPU-read coherence of imports, or the cross-process order of an app's
+    GPU writes vs backboardd's reads; (2) release on the latched flush bit instead of a fixed count; (3) why the
+    per-submit walk is still needed (0243b: its flush changes nothing in memory - it works by time).
 - **2026-11-04 0239-0240: GPU FENCE INTERRUPTS; backboardd's kernel time per GPU submit cut; the "fence timeouts" were
   log noise** (patches `xnu/patches/0239-umi-gpu-fence-irq.patch` kernel 206fdec, `0240-umi-gpu-submit-cost.patch`
   kernel 7a5f177; boot `shim/out/umi-0240d-fullring.img` = 0238's line unchanged, made with the new

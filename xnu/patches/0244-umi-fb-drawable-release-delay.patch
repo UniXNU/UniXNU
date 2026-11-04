@@ -1,0 +1,102 @@
+From 7ac8d3d8e1f50b8ed0818660be176fc4929ceb92 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 12:47:26 +0100
+Subject: [PATCH] umi: release a replaced drawable to CoreAnimation 3 vsyncs
+ after the flip, not 1 (sweetfb_retire)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 54 +++++++++++++++++++++++++--
+ 1 file changed, 50 insertions(+), 4 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index fbd1656..a93e0dc 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -143,6 +143,13 @@ public:
+ 	SweetSurface *fLastSurf;      /* surface of the last direct frame */
+ 	uint64_t      fLastOff;       /* its panel window: byte offset in the surface */
+ 	SweetSurface *fPendHold[SWEET_FB_LAYERS], *fShowHold[SWEET_FB_LAYERS], *fRetireHold[SWEET_FB_LAYERS];
++	/* (0244) frames replaced on the panel, held for fRetireTicks more vsyncs before CoreAnimation may draw
++	 * into them again: [0] newest; a command-mode panel latches a flip at its next refresh and keeps
++	 * reading the old surface until that frame ends */
++#define SWEET_FB_RETIRE_MAX 6
++	SweetSurface *fRetireQ[SWEET_FB_RETIRE_MAX][SWEET_FB_LAYERS];
++	uint32_t      fRetireTicks;
++	uint64_t      fRetireDrops, fRetirePending;
+ 	uint64_t      fGpuHoldUntil;  /* sweet_fb_gpu_begin(): no frames shown before then (mach time), boot framebuffer scanned */
+ 	int           fGpuHoldConsoleMuted;     /* sweet_console_muted before the hold; put back when it ends */
+ 	void          setupScanout();
+@@ -289,6 +296,11 @@ AppleCLCD::start(IOService *provider)
+ 	uint32_t hz = 10;
+ 	PE_parse_boot_argn("sweetfb_hz", &hz, sizeof(hz));
+ 	fFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;
++	fRetireTicks = 3;
++	PE_parse_boot_argn("sweetfb_retire", &fRetireTicks, sizeof(fRetireTicks));
++	if (fRetireTicks < 1 || fRetireTicks > SWEET_FB_RETIRE_MAX) {
++		fRetireTicks = 3;
++	}
+ 	fVsync->setTimeoutUS(SWEET_FB_VSYNC_US);
+ 
+ 	setProperty(kIOUserClientClassKey, "IOMobileFramebufferUserClient");
+@@ -428,19 +440,53 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 			bzero(fb->fPendHold, sizeof(fb->fPendHold));
+ 		}
+ 	}
+-	/* frames replaced at the previous vsync have been latched by now */
+-	memcpy(retire, fb->fRetireHold, sizeof(retire));
+-	bzero(fb->fRetireHold, sizeof(fb->fRetireHold));
++	/* (0244) frames replaced fRetireTicks vsyncs ago are no longer read by the panel: drop their holds.
++	 * Before 0244 that was ONE tick (16.7 ms) after the flip - but the command-mode panel latches the flip
++	 * at its next refresh and keeps fetching the old surface until that frame ends, so CoreAnimation could
++	 * render the next frame into a surface still on the panel (the stale "previous frames"; the old
++	 * per-submit walk hid it by delaying CA by milliseconds). sweetfb_retire=N ticks (default 3, max 6). */
++	uint32_t last = fb->fRetireTicks - 1;
++	memcpy(retire, fb->fRetireQ[last], sizeof(retire));
++	for (uint32_t q = last; q > 0; q--) {
++		memcpy(fb->fRetireQ[q], fb->fRetireQ[q - 1], sizeof(retire));
++	}
++	bzero(fb->fRetireQ[0], sizeof(fb->fRetireQ[0]));
++	for (uint32_t i = 0; i < SWEET_FB_LAYERS; i++) {
++		if (retire[i] != NULL) {
++			fb->fRetireDrops++;
++			if (fb->fCtl != NULL && (fb->fCtl[0x18 / 4] & fb->fFlushBits) != 0) {
++				fb->fRetirePending++;   /* the CTL flush bits still set: is the flip latched? */
++			}
++		}
++	}
+ 	IOLockUnlock(fb->fLock);
+ 	sweet_hold_drop(retire);
+ 	if (rec != NULL) {
+ 		fb->present(rec);
+ 		IOFreeData(rec, SWEET_FB_SWAP_REC_SIZE);
+ 		IOLockLock(fb->fLock);
+-		memcpy(fb->fRetireHold, fb->fShowHold, sizeof(taken));
++		/* the surface shown until now joins the queue; one still queued from an earlier frame keeps its place */
++		for (uint32_t i = 0; i < SWEET_FB_LAYERS; i++) {
++			if (fb->fShowHold[i] == NULL) {
++				continue;
++			}
++			if (fb->fRetireQ[0][i] != NULL) {
++				SweetSurface *one[SWEET_FB_LAYERS] = {};
++				one[i] = fb->fRetireQ[0][i];
++				fb->fRetireQ[0][i] = NULL;
++				IOLockUnlock(fb->fLock);
++				sweet_hold_drop(one);   /* two flips within one tick: the older one is long off the panel */
++				IOLockLock(fb->fLock);
++			}
++			fb->fRetireQ[0][i] = fb->fShowHold[i];
++		}
+ 		memcpy(fb->fShowHold, taken, sizeof(taken));
+ 		IOLockUnlock(fb->fLock);
+ 	}
++	if ((count % 600) == 0 && fb->fRetireDrops != 0) {
++		IOLog("SWEET FB: %llu drawables released %u vsyncs after their replacement, %llu with the CTL flush bits "
++		    "still set\n", fb->fRetireDrops, fb->fRetireTicks, fb->fRetirePending);
++	}
+ 	sweet_fb_dump_idle(fb);
+ 	sender->setTimeoutUS(SWEET_FB_VSYNC_US);
+ }
+-- 
+2.54.0 (Apple Git-157)
+
