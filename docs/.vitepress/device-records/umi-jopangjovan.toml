@@ -1,0 +1,213 @@
+schema_version = 1
+
+[device]
+name = "umi"
+soc = "SM8250"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Standalone UniXNU migration. Early source-built XNU checkpoints are observed on UMI; full kernel boot remains incomplete. HakiOS results are reference evidence only."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", "scripts/check-hardware.py"]
+inputs = ["UniXNU arm64 profile, stock UMI DTB and pinned SM8250 platform source."]
+configuration = ["Format 2 board; iPadOS 17.7.11 / Darwin 23.6; umi_defconfig; cpus=1."]
+procedure = ["Run ./unixnu defconfig umi_defconfig -D ../UniXNU-umi and ./unixnu status --json."]
+findings = ["The layered arch/SoC/OS/device configuration resolves successfully with a local development SoC override. Remote feed pins the published SoC commit."]
+completion = ["configuration is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["configuration: no standalone UniXNU hardware result yet."]
+next_action = ["Resolve the pinned feed without local overrides and build the kernel after toolchain installation."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
+
+[[area]]
+id = "firmware"
+status = "implemented"
+components = ["DarwinBoot"]
+paths = ["reports/firmware-build.json", "scripts/check-vendor-inputs.py"]
+inputs = ["UMI firmware source 72279e8ff783bd108255097185415902d5c1f77e; 309 locally extracted UMI XBL files recorded by hash in the firmware repository."]
+configuration = ["FD 0x9fc00000 + 0x300000; 1080x2340 GOP; board-local SEC entry-argument HOB; UniXNU/DarwinBoot/ramdisk/FAT modules."]
+procedure = ["./unixnu firmware; ./unixnu package; ./unixnu bootimg --ramdisk <smoke FAT payload>."]
+findings = ["DEBUG firmware builds. The reduced module set reaches the UniXNU menu and launches HelloPayload on UMI. RESULT PASS 0 passed 0 failed confirms basic EFI launch only."]
+completion = ["firmware is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["Local vendor files are not distributed. Device menu, FAT initrd discovery, basic EFI launch, XNU entry and several early initialization checkpoints are observed; full kernel boot remains unverified."]
+next_action = ["Temporarily boot the standalone XNU diagnostic image and capture its last progress stage."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["dts/board.dts", "reports/hardware-inputs.json", "reports/hardware-check.json"]
+inputs = ["Stock affinities 0x000 through 0x700; GICD 0x17a00000; GICR 0x17a60000; stride 0x20000; 19.2 MHz timer; PSCI SMC."]
+configuration = ["Enable only cpu0; retain disabled secondary topology and E/P tags for later qualification."]
+procedure = ["scripts/check-hardware.py --stock-dtb /path/to/umi.dtb"]
+findings = ["The host check confirms CPU affinities, GIC resources, timer rate and PSCI match stock; ADT conversion succeeds."]
+completion = ["cpu is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["Timer delivery, PSCI startup and IPIs have not been tested in UniXNU on this device."]
+next_action = ["Boot a source-built kernel and confirm timer ticks before enabling secondaries."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["dts/board.dts", "reports/hardware-inputs.json"]
+inputs = ["Stock bank 0xc0000000+0xc0000000 and UMI XBL low-memory reservations."]
+configuration = ["Contiguous 3 GiB ADT handoff bank; DarwinBoot owned-memory request 512 MiB. Firmware reserves DDR hole and boot initrd/FDT arena."]
+procedure = ["Compile hardware DTS; convert ADT; inspect firmware memory map before kernel handoff."]
+findings = ["The stock tree has discontiguous RAM and must not be passed wholesale to the common one-bank ADT generator."]
+completion = ["memory is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["Actual DarwinBoot window allocation and DMA mappings have not been observed on hardware."]
+next_action = ["Capture firmware memory map and DarwinBoot owned-window address."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["drivers/UmiUfs", "scripts/*ufs*", "scripts/*storage*", "scripts/*userdata*", "scripts/*root*"]
+inputs = ["Stock UMI DTB and local Xiaomi SM8250 4.19 source at ../../workspace/xiaomi_sm8250, revision 4ae1f1e4c89ce26c09846655da746e2e7cd38901; see reports/hardware-inputs.json."]
+configuration = ["UFSHCI 0x1d84000/0x3000, ICE 0x1d90000/0x8000, QMP-v4 PHY 0x1d87000/0xe00, two lanes and 19.2 MHz reference clock. No XNU UFS driver is selected yet."]
+procedure = ["Complete storage adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["The vendor 4.19 board source confirms the UMI Kona UFS register, clock, reset and rail wiring. Its UFS node does not declare SMMU stream IDs; qcom,disable-lpm is commented out. Do not reuse another board's stream IDs or SM8550 clock values."]
+completion = ["Host: register, clock, link and SMMU facts match the board inventory.", "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.", "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region."]
+limits = ["No UMI runtime SMMU stream/context capture, native XNU UFS implementation, block read or root mount has been verified."]
+next_action = ["Continue XNU entry diagnosis; then implement UmiUfs in the device-owned source tree using the recorded 4.19 hardware facts."]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
+inputs = ["UMI display hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["display: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete display adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["display: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
+limits = ["display: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU display interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
+inputs = ["UMI input hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["input: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete input adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["input: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
+limits = ["input: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU input interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = ["UMI gpu hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["gpu: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete gpu adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["gpu: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
+limits = ["gpu: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU gpu interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/Ath12kWifi", "package/*Wifi*", "package/MhiBoot*", "scripts/*wifi*", "scripts/*mhi*"]
+inputs = ["UMI network hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["network: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete network adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["network: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
+limits = ["network: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU network interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Adsp*", "package/*Audio*", "package/*Gpr*", "package/QcomGlink*", "package/QcomMdt*", "package/QcomSmem*", "package/QcomSmp2p*", "scripts/*adsp*", "scripts/*audio*", "scripts/*gpr*"]
+inputs = ["UMI audio hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["audio: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete audio adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["audio: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["Each declared route carries the selected audio format through playback or capture and handles start/stop correctly."]
+limits = ["audio: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU audio interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["package/*Battery*", "package/*Battmgr*", "package/*Power*", "package/*PlatformPower*", "package/QcomQmp*", "package/QcomRpmh*", "package/QcomScm.h", "scripts/*power*", "scripts/*battery*", "scripts/*pmgr*"]
+inputs = ["UMI power hardware information from the stock DTB and extracted firmware; UniXNU OS ABI adaptation remains required."]
+configuration = ["power: no peripheral driver enabled in the initial single-core bring-up."]
+procedure = ["Complete power adaptation after CPU, timer and firmware handoff are device-qualified."]
+findings = ["power: HakiOS hardware behavior is reference evidence only; no binary ABI compatibility assumed."]
+completion = ["Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals."]
+limits = ["power: no standalone UniXNU hardware result yet."]
+next_action = ["Inspect the UniXNU power interface and build a UMI-specific implementation without editing shared templates."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = []
+paths = ["board.toml", "reports/firmware-build.json"]
+inputs = ["UniXNU package, UMI FD, stock DTB and a 32 MiB FAT smoke payload."]
+configuration = ["Android boot header v1; gzip firmware with appended UMI DTB; no HakiOS XNUP payload."]
+procedure = ["./unixnu package; ./unixnu bootimg --ramdisk <smoke FAT payload>."]
+findings = ["The package and Android boot image build; the boot packer checks firmware, shim, DTB and ramdisk bytes."]
+completion = ["packaging is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["Smoke payload tests EFI execution only; OS root and persistent Data are not implemented."]
+next_action = ["Test the smoke image, then package a source-built XNU when its ABI inputs are available."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
+
+[[area]]
+id = "diagnostics"
+status = "implemented"
+components = []
+paths = ["BRINGUP.md", "reports/**"]
+inputs = ["Stock fastboot and user-observed UEFI screen output."]
+configuration = ["-v serial=3 debug=0x14e cpus=1 for initial XNU test."]
+procedure = ["Use adb reboot bootloader; use fastboot boot for temporary images."]
+findings = ["Firmware menu and basic EFI payload launch were observed on UMI. Timed source-built XNU probes reached MMU enable, initial platform setup, kernel startup, VM setup, serial initialization and KPRINTF startup. No device partitions were flashed."]
+completion = ["diagnostics is complete only after its hardware checkpoints are recorded with source/image identities."]
+limits = ["A later early-platform checkpoint did not return; the full kernel and userspace remain unverified. See reports/kernel-bringup.json."]
+next_action = ["Verify the physical GOP framebuffer handoff and continue early XNU startup."]
+
+[[area.evidence]]
+kind = "source"
+reference = "BRINGUP.md"
+result = "Standalone board and firmware interfaces implemented; host checks documented separately."
