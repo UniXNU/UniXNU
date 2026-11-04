@@ -67,6 +67,26 @@
     a one-time clean of each new BO through the cacheable physmap at BoAlloc (`sweetgpuphysclean=1`, 0242c), a plain
     3 ms sleep before the doorbell (`sweetgpucheck=3`, 0242d). SMMU side checked in the code: every map/unmap cleans
     all table pages and TLBIASID+TLBSYNC. **So the walk does something none of these do; what is open.**
+  - **0243** (`xnu/patches/0243-umi-gpu-stale-frame-switches.patch`; image `shim/out/umi-0243-gpu.img` = 0242e's
+    behaviour with the new switches off, not booted - use `umi-0242e-gpu.img`, booted): three more tests, walk off
+    unless said, user verdict each: (a) client BOs mapped "inner NC, outer write-back" (MAIR idx 3 = 0xf4, Linux's
+    IO_PGTABLE_QUIRK_ARM_OUTER_WBWA on SM8250; `sweetgpuattr=3`): "glitchier than before"; (b) **the decisive
+    measurement, walk ON, `sweetgpucoh=2`**: per walked page, memory through a WC mapping of our own (one reserved
+    kernel page, pmap_enter/pmap_remove - removable, unlike ml_io_map) vs the cached alias before and after the
+    walk's flush: **~450000 pages compared, 1 word differed (one bit, a word mid-write) - the flush changes nothing
+    in memory**; the walk fixes frames by its TIME (milliseconds per submit; animating it visited up to 300000 pages
+    a second), not by cache maintenance. (This mode renders at ~2 s a frame.) (c) presents wait for 4 ms of GPU
+    quiet after the newest fence (`sweetfb_quiet=4000`): 198 of 207 presents quiet, still "glitchy af". Also: the
+    Mac's 192.168.7.1 alias dropped once mid-boot (user re-ran tools/umi-usbnet.sh).
+    **Where that leaves it:** the stale frames are timing-dependent but neither submit-side delay (3 ms) nor a
+    present-side quiet period fixes them; the walk's delay is larger and per submit, scaling with the frame's
+    commands. Next suspect: CoreAnimation's double-buffer protocol with our IOMFB swap (selectors 79/74) - if the
+    kernel signals a drawable free (swap complete) before the panel has stopped scanning it, or CA redraws only
+    damaged regions and relies on the drawable's previous contents, old frames mix in. A hint, NOT reliable: the
+    directPresent pixel log showed the middle of the drawables as 00000000, but that log reads the surface through
+    the kernel's CACHED view without invalidating (since 0240's no-flush), so it may be stale cache. Next: log swap
+    / release timing per drawable (present N on surface S at t, released at t'), invalidate before any pixel log,
+    and test a per-submit delay of 20+ ms (`sweetgpucheck=20`) to bound the race.
   - **Open:** (0) what the per-submit walk fixes (not cache mode, write buffers, UCHE, zero-fill lines or delay - see
     0241/0242); (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
     WC, Turnip's map WC) - fix that and the per-submit walk can go (0240b showed sys 3 %); suspects: the cacheable
