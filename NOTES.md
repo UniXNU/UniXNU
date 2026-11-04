@@ -2,6 +2,35 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 evening: App Library blur NOT fixed - narrowed to one blur pass whose output decays to black with
+  identical inputs; phone and sources restored** (same 0247 image; no patch).
+  - User: the background goes black **while the App Library is in use**, sometimes coming back small in a corner.
+  - Method: trace/snapshot builds of the SweetMetal2 front end (per-pass shape, texture ids, vertex/uniform buffers,
+    samplers; after a pass a GPU blit copies the target to a buffer and the zero fraction + a 4x4 map are logged) and a
+    runtime trace (memory placements, image binds, recorded render passes). Kept outside git.
+  - **How CoreAnimation draws it:** the backdrop (284x611 = 1/4 of the 1125x2436 frame) is blurred into pooled textures,
+    often at quarter or eighth resolution into a corner (renderTargetWidth/Height + scissors), and the composite stretches
+    that corner through its texture matrix (buffer 3) and a clamp rect (fc_coord_function0 = 5). CA's writes and reads
+    agree in every frame; the vertex data, matrices, clamp rects and samplers (normalized, linear, clamp to edge) are
+    identical in good and bad frames. Offline (host metal2vulkan CLI on QuartzCore's default.metallib) the composite's
+    vertex and fragment translation is right.
+  - **The fault seen:** pass = Load + `single_pass_blur_3_lph` (no blending; its source, a downsample of the screen, stays
+    at mean 114) + `fixed_frag_lph_cph` (framebuffer fetch, 2 attachments). With the same uniforms every frame (weight
+    0.25, unpremultiply on, factor 1, tap offsets shrinking to 0) the output goes 58, 43, 23, 12, 6, 5, 2, 1, 0: the
+    blur draw contributes ~nothing and the result follows the previous frame's pixels. A black backdrop = the black
+    background.
+  - **Ruled out (measured):** viewport/scissor/render area (ignoring renderTargetWidth only moved the glitch); GMEM vs
+    sysmem (`TU_DEBUG` sysmem, gmem: same; sysmem adds black bars); `rast_order`; `flushall` (earlier); waiting for the GPU
+    after every commit (no change, causes resprings); overlapping memory (0 overlaps); failed pipelines (none); purged
+    textures (never); ConstantLanes (sparse only). Our Turnip has the same immediate `VK_SYNC_WAIT_PENDING` as UniXNU's
+    (ios-apollo's Turnip 0102), but our submit waits for every dependency's fence on the CPU, so it is not this.
+  - **Next:** rebuild that one pass in a small Metal test through the bridge on the phone and check its two draws apart
+    (the blur draw vs the fetch draw with its second attachment, which the runtime turns from DontCare into Clear).
+    ios-apollo (same metal2vulkan + Turnip on an A650) has no fix for this; its bridge patch 0016 (tile stores write whole
+    16x4 blocks past a linear texture's edge) contradicts our 0101 for IOSurface aliases and is worth porting later.
+  - **State:** phone = the pre-session plugin (`SweetMetal2`; `.sweet-orig` untouched), `/var/local/mtl2-tu-debug` =
+    `noubwc`, logs cleared for space (mtl2.log emptied; m2v-trace.log, pipelines.log, tu-bo-*.log, turnip-*.log removed).
+    The heavy snapshot builds made the UI flicker; do not reuse them as they are. Sources on the Mac restored.
 - **2026-11-04 0247: text fixed - small GPU imports cleaned before every submit; only the App Library background
   (a blur) still glitches** (patch `xnu/patches/0247-umi-gpu-small-import-clean.patch`; boot
   **`shim/out/umi-0247-impclean.img`** = 0238's line, 13:41, the current image; 0246's direct/copy counter showed the
