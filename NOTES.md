@@ -22,6 +22,15 @@
   - **The walk is still needed:** 0245b's kernel with `sweetgpucheck=0` (`shim/out/umi-0245c-nowalk.img`, 13:18): user
     "again yet more glitch". So besides the release race (0244) and the surface leak (0245) there is a third,
     timing-dependent cause that the walk's milliseconds per submit hide (its flush itself changes nothing, 0243b).
+  - **0246** (`xnu/patches/0246-umi-fb-path-stats.patch`; boot `shim/out/umi-0246-pathstats.img` = 0245b + a 10 s
+    line `SWEET FB: presents N: direct D, copy C (reasons)`, 13:34): user saw occasional tearing on 0245b/c; the copy
+    fallback (it writes into the boot framebuffer the panel is scanning) is NOT it - 2 of 770 presents ("0 layers"
+    swaps), the rest direct. 0 failed surface creates; backboardd 8 rounds min 11 / median 19 / max 95 %. User:
+    **glitches only in the App Library and on some text in Settings** - content the CPU draws for the GPU to sample
+    (glyphs, icons, folder images). Imports are cleaned once at BoMap and never again (0183: re-cleaning at submit
+    pushed stale CPU lines over GPU frames), so later CPU writes into an imported buffer may never reach the GPU.
+    Next: find which surfaces / buffers carry the text (CoreText's glyph cache path through metal2vulkan:
+    replaceRegion via staging, or host-memory imports), then clean those at the right moment.
   - Next: the remaining small glitches and that third cause (candidates: CoreAnimation reusing an offscreen /
     intermediate surface before the GPU read of it finished - an IOSurface use count CA reads while a submission
     that samples it is still queued; cross-process order of an app's GPU writes vs backboardd's reads); release
