@@ -32,6 +32,11 @@ with native 4 KiB pages. Configuration locks coordinate clock votes and SMMU
 allocation with touch and audio. GPIO79 wakes the gated UART through the shared
 TLMM IRQ. The UART requires protocol-2 microcode from the boot firmware.
 
+The board exports a Bluetooth device-tree node and a matching IOService before
+userland starts. H4 UART.SK encoding and 3.2 Mbaud use four-byte little-endian
+properties. Both carry the stable private address derived from the platform
+identity. The Linux boundary converts the public address to bdaddr_t order.
+
 The worker retains its DMA memory, services bounded batches and sleeps on IRQ,
 ring-space or deadline events. Hardware faults abort command waiters immediately.
 The `[bluetooth]` boot-log row records phase, transfers, sleep, power ownership
@@ -80,8 +85,20 @@ The offline patch retains authenticated fixup metadata and PACIBSP entry pads.
 It passes 144 native instruction cases at two ASLR slides; PAC operations are
 modeled without device keys. The production publisher passes 58 ASan/UBSan HCI
 and policy cases. `tools/build-type0.py` builds and signs the arm64e library.
-Runtime installation and device scanning, pairing, audio, power and Wi-Fi
-coexistence measurements are pending.
+The board's `payload.runtime` selects `build-bluetooth-userspace.py` for ios27.
+It stages signed BlueTool, bluetoothd and QcaBTType0.dylib with pinned firmware.
+The native daemon keeps its original identifier and entitlements. Read-only
+unions expose /usr/lib and /usr/sbin entries, with the library mounted first.
+BlueTool keeps its Mach service and runs as root with transactions enabled.
+Wi-Fi and Bluetooth share one signed launchd cache; other native jobs remain
+unchanged. Missing code hashes are appended to the preserved trust bundle.
+
+`check-bluetooth-runtime.py` validates the packed addon, signatures, firmware,
+launchd jobs, trust modules and original Data seed. The combined addon verifies
+45 files, three signed Bluetooth binaries and 716 launchd jobs. Host libxpc
+accepts the cache, and the overlay patch compiles for the target. Component
+registration, the complete image rebuild and device scanning, pairing, audio,
+power and coexistence measurements are pending.
 
 Sources: [Linux](https://github.com/ianchb/sm8550-mainline),
 [Debian sheng](https://github.com/ianchb/debian-sheng),
