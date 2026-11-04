@@ -89,6 +89,8 @@ Setup 依赖的服务在这个平台上不运行。板级文件用启动参数�
 sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent
 ```
 
+在 sheng 上对比图标服务时，`sheng-lite=2` 会在 `sheng-lite=1` 的作业名单中额外停用 `com.apple.iconservices.iconservicesagent`。板级代码在 launchd 启动前写入策略。没有缓存的应用图标可能显示为空白。
+
 `com.apple.CommCenter` 是蜂窝服务。列表是板级配置。保留用户态需要的服务，移除阻塞首次启动的服务。
 
 ## 输出
