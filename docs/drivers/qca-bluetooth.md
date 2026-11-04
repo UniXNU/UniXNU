@@ -25,6 +25,18 @@ The board stages hashed firmware under `firmware/qca` in the Data addon.
 `package/BluetoothFirmware.h` defines the same path used by
 `scripts/stage-bluetooth-firmware.py`. VFS reads wait for addon installation.
 
+`sheng-bluetooth=1` starts the UART14 worker after addon installation. The board
+binds GENI SE6 at 0x898000, IRQ 493 and QUP2 DMA SID 0x423. SM8550 operations
+select the exact 51.2 MHz source for 3.2 Mbaud and map a 32 KiB DMA aperture
+with native 4 KiB pages. Configuration locks coordinate clock votes and SMMU
+allocation with touch and audio. GPIO79 wakes the gated UART through the shared
+TLMM IRQ. The UART requires protocol-2 microcode from the boot firmware.
+
+The worker retains its DMA memory, services bounded batches and sleeps on IRQ,
+ring-space or deadline events. Hardware faults abort command waiters immediately.
+The `[bluetooth]` boot-log row records phase, transfers, sleep, power ownership
+and SMMU status. `log-bluetooth=1` adds initialization messages.
+
 ## Build and checks
 
 From the component checkout:
@@ -43,8 +55,22 @@ selected kernel. BlueTool compiles and passes code-signature verification.
 The board power check covers both radio startup orders, independent release,
 idempotent votes and failed transitions; the Wi-Fi consumer compiles for arm64e.
 
-Board resource binding, runtime packaging and the iPadOS 27 native controller
-adapter remain in development. Hardware scanning, pairing, audio, power and
+From the workspace root, board checks are:
+
+```sh
+python3 UniXNU-sheng/scripts/check-bluetooth-platform.py
+python3 UniXNU-sheng/scripts/check-bluetooth-shared.py
+python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/assembled/tree
+```
+
+The platform model checks frequency ratios, DFS handoff, independent DMA tables,
+ASID conflicts and timeout bounds. The shared-resource model checks IRQ dispatch,
+concurrent registration and UART/audio clock ownership. UART14, ArmCpu, touch,
+audio and boot-log sources compile for the selected target; the build recipe
+compiles eight protocol and SoC objects into the board archive inputs.
+
+Runtime payload installation and the iPadOS 27 native controller adapter remain
+in development. Hardware scanning, pairing, audio, power and
 Wi-Fi coexistence measurements are pending.
 
 Sources: [Linux](https://github.com/ianchb/sm8550-mainline),

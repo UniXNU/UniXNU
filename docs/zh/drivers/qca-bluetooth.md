@@ -21,6 +21,16 @@ GENI 使用四块 2048 字节接收缓冲和一块 4096 字节发送缓冲。硬
 固件按哈希校验后打入 Data 插件的 `firmware/qca`。读取端与打包脚本共用
 `package/BluetoothFirmware.h` 定义的路径，VFS 读取等待插件安装完成。
 
+`sheng-bluetooth=1` 在插件安装后启动 UART14 工作线程。板级代码绑定 0x898000 的
+GENI SE6、中断 493 和 QUP2 DMA 流 0x423。SM8550 代码使用精确的 51.2 MHz 时钟
+生成 3.2 Mbaud，并以原生 4 KiB 页映射 32 KiB DMA 区域。配置锁协调触摸、音频
+与蓝牙的时钟票和 SMMU 分配。GPIO79 通过共享 TLMM 中断唤醒已关时钟的串口。
+UART 需要启动固件提供协议号为 2 的微码。
+
+工作线程保留 DMA 内存，每次处理有界批量，等待中断、队列空间或期限事件。
+硬件错误立即结束命令等待。启动日志的 `[bluetooth]` 行记录阶段、收发、休眠、
+供电归属和 SMMU 状态；`log-bluetooth=1` 增加初始化信息。
+
 ## 构建与检查
 
 在组件目录运行：
@@ -38,7 +48,19 @@ Skywalk 桥接和板级固件读取代码通过 iPadOS 27 arm64e 内核参数编
 电源模拟检查覆盖两种启动顺序、独立释放、重复申请和失败处理；Wi-Fi 消费端通过
 arm64e 编译。
 
-板级资源绑定、运行时打包和 iPadOS 27 控制器适配仍在开发。扫描、配对、音频、
+在工作区根目录运行板级检查：
+
+```sh
+python3 UniXNU-sheng/scripts/check-bluetooth-platform.py
+python3 UniXNU-sheng/scripts/check-bluetooth-shared.py
+python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/assembled/tree
+```
+
+平台模型检查频率比例、DFS 切换、独立 DMA 页表、ASID 冲突和超时边界；共享资源
+模型检查中断分发、并发注册和串口与音频的时钟归属。UART14、ArmCpu、触摸、音频
+与启动日志代码通过目标编译，构建脚本为板级归档编译八个协议和 SoC 对象。
+
+运行时安装和 iPadOS 27 控制器适配仍在开发。扫描、配对、音频、
 功耗及 Wi-Fi 共存等待上机验证。
 
 参考：[Linux](https://github.com/ianchb/sm8550-mainline)、
