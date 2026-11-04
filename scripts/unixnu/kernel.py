@@ -71,6 +71,8 @@ def version_env(modules, ctx=None):
         if root.get('app_volume_uuid'):
             env['UNIXNU_ROOT_APP_UUID'] = root['app_volume_uuid']
         env['UNIXNU_IPSW_BUILD'] = ctx.board.get('ipsw', {}).get('build', '')
+        # The device package's folder in the tree (kits/<kit>), where board sources are looked up.
+        env['UNIXNU_BOARD_KIT'] = ctx.board.get('board', {}).get('kit', ctx.name)
         env['UNIXNU_XNU_ARCH'] = load_toml(ctx.profile_roots['arch'] / 'profile.toml').get('arch', {}).get('name', 'arm64')
     return env
 

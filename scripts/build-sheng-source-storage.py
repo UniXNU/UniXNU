@@ -85,13 +85,14 @@ def main():
             parser.error(f'no policy directory for {build_id}: pass --policy-dir or ship scripts/policies/*{build_id}')
         policies = shipped[0]
     policies = policies.resolve()
-    # The resolved build tree links the device package as kits/sheng, while an
+    # The resolved build tree links the device package as kits/<board kit> (kits/sheng for sheng), while an
     # explicit device repository keeps package/ and drivers/ side by side.
+    kit = os.environ.get('UNIXNU_BOARD_KIT') or 'sheng'
     package_dirs = [device / 'package']
     if device != tree:
-        package_dirs += [device / 'kits/sheng', tree / 'kits/sheng']
+        package_dirs += [device / 'kits' / kit, tree / 'kits' / kit]
     else:
-        package_dirs += [tree / 'kits/sheng']
+        package_dirs += [tree / 'kits' / kit]
 
     def device_source(relative, *extra):
         for directory in list(extra) + package_dirs + [device, tree]:
