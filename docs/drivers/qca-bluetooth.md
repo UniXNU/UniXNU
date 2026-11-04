@@ -69,6 +69,15 @@ concurrent registration and UART/audio clock ownership. UART14, ArmCpu, touch,
 audio and boot-log sources compile for the selected target; the build recipe
 compiles eight protocol and SoC objects into the board archive inputs.
 
+The version-locked native routing stage selects controller type zero, clears
+vendor hooks and retains standard HCI initialization. Optional command 0x0c5b
+uses its real support bit. H4 pre-stop skips its empty extension while retaining
+native close. The patch passes 76 AArch64 instruction cases at two
+ASLR slides; PAC operations are modeled without device keys. The inspector reads
+USERLAND24 fixups and identifies ten native capability slots. The generated
+stage reports `adapter_ready=false` until capability publication is
+integrated.
+
 Runtime payload installation and the iPadOS 27 native controller adapter remain
 in development. Hardware scanning, pairing, audio, power and
 Wi-Fi coexistence measurements are pending.
