@@ -10,6 +10,10 @@
     `launchd.plist.sweet-ads`; `.sweet-orig` stays the untouched original. Undo: put `.sweet-ads` back.
   - Both are cheap here (not in `sweettop`'s top 12), so this is housekeeping, not the idle load; the load is
     backboardd's CPU rendering (~64 %) and ReportCrash (~60 %, the AegirPoster / CommCenter / TTS crash loops).
+  - Booted 2026-11-04 01:00 (`umi-0238-cpufreq.img`, `sweettop=10`): neither ad daemon was exec'd. Idle 80-121 % of
+    one core over rounds 6-9 (was 140-180 % on 0233b); ReportCrash 43-69 % is now nearly all of it, backboardd was not
+    in the top (screen state not checked, so not yet a like-for-like comparison). Clocks idled at 288-700 / 710 / 844
+    MHz, hottest core 57-69 C.
 - **2026-11-04 0238: CPU FREQUENCY SCALING: an EPSS governor; the clocks follow the load** (patch
   `xnu/patches/0238-umi-cpufreq-governor.patch`, kernel 084245e; boot `shim/out/umi-0238-cpufreq.img` = 0236b's line
   without `sweetbtdelay=1` (0237's default), + `sweettop=10` (605 chars), 00:53).
