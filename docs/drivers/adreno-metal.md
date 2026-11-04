@@ -43,6 +43,8 @@ See the [GPU adaptation procedure](/porting/gpu) for staging and board inputs.
 
 Frame diagnostics retain allocation, command, completion and GPU/display timing. Pixel capture is disabled. See [GPU frame diagnostics](/porting/gpu-diagnostics).
 
+With `sheng-gpu-trace=1`, kernel event 65 identifies the Metal device and command queue used by `iconservicesagent`. Up to eight `metal-work` records report completion status, draw count and dispatch count for command buffers with GPU work.
+
 `sheng-wallpaper-freeze=1` isolates wallpaper rendering. A Poster renderer retains its first successfully drawn and stored IOSurface output of at least two million pixels, then parks later command buffers before runtime submission. Parked buffers remain committed and unscheduled; their owners and queue leases stay retained. Previously submitted work completes normally. PosterBoard, backboardd and other clients continue submitting. The mode defaults to off.
 
 Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel sampling of the render, encode and completion threads correlates upstream waits.
