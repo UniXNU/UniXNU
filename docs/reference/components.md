@@ -64,6 +64,15 @@ Search this catalog, the [component pages](/drivers/repositories), the README,
 and source before implementing a capability. Match interfaces, hardware scope,
 OS requirements, and board inputs.
 
+A new component can use an explicit local source before catalog publication:
+
+```sh
+./unixnu tree -D /path/to/device --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+```
+
+The new module is linked into the assembled tree. Its consuming board supplies
+the integration recipe. Catalog components still require profile selection.
+
 ## Source identity
 
 Official compatibility names resolve using the repository identity recorded in
