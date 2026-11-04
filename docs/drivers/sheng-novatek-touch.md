@@ -51,7 +51,9 @@ The host tests supply a fake bus. The kernel probe supplies the GENI SPI transfe
 7. Compute a weighted centroid per blob.
 8. Apply edge compensation.
 9. Track contacts across frames with a radius and a down/up threshold.
-10. Report contacts from the second frame of a slot.
+10. Confirm tip-down on the second scan and report the first position so HID can identify edge starts.
+
+During a pinch, distinct peaks assigned to established fingers stay separate. A quiet matrix releases the contacts. A partial dropout can retain the last reported position for up to three scans and rejoin near the predicted position.
 
 The core has no allocation. Its scratch arrays live in `struct nvt_touch_core`, which the probe allocates once. The comments record why: kernel thread stacks are 16 KiB and the scratch is larger.
 
