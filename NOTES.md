@@ -2,6 +2,25 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 0245: THE APP SWITCHER WAS A SURFACE LEAK; the UI is now clean on the GPU ("a little glitchy here and
+  there but barely noticeable")** (patch `xnu/patches/0245-umi-surface-zombie-leak.patch`; boot
+  **`shim/out/umi-0245b-zombiefix.img`** = 0238's line, 13:00, the current image).
+  - The 0244c log had 271 full-screen IOSurface creates failing with kIOReturnNoMemory (0xe00002bd) against 107
+    successes: SpringBoard's app-switcher snapshots, even backboardd's drawables. 0245's dump at the first failure
+    (`SWEET SURF: live surfaces`, every SweetSurface alive, grouped by creator): 669 surfaces, 1553 MB = the 1.5 GB
+    wired cap - CollectionsPoster 340 (952 MB), WeatherPoster 274 (120 MB), PosterBoard 39 (418 MB), **all "held
+    only by the kernel"** (released by their clients).
+  - Cause: a released view (trapRelease) stays in the client's fZombies list (last 256 per client) so its read-only
+    state page stays mapped (the old IOSurfaceClientGetSeed crash) - but the zombie also kept `ref->surface`, i.e.
+    the whole surface and its pixels. backboardd's and SpringBoard's zombie lists held the poster extensions' surfaces
+    until every full-screen create failed. Fix: the zombie releases the surface and keeps only the state mapping.
+  - 0245b boot: **0 failed creates (223 ok), no live-surface dump, no panic**; backboardd over 37 rounds min 6 /
+    median 23 / max 109 % of one core, kernel share min 4 / median 10 / max 52 %. User: "a little glitchy here and
+    there but barely noticeable".
+  - The failed creates also explain part of the earlier "stale frames": a drawable or snapshot CoreAnimation could not
+    get showed whatever was in its place.
+  - Next: the remaining small glitches; then test the walk off again on top of 0244+0245 (its CPU cost is most of the
+    kernel share while animating); release drawables on the latched CTL flush bit instead of 3 ticks.
 - **2026-11-04 0244: drawables go back to CoreAnimation 3 vsyncs after the flip; only the app switcher still
   glitches** (patch `xnu/patches/0244-umi-fb-drawable-release-delay.patch`; boot **`shim/out/umi-0244c-retire3-walk.img`**
   = 0238's line, 12:45, the current image).

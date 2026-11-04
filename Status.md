@@ -29,7 +29,7 @@
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
 | 🧭 Sensor | Ambient light only | ⚠️ |
-| 🎆 GPU | Adreno 650 draws the UI (CoreAnimation through Metal / turnip); CPU overhead still high | ⚠️ |
+| 🎆 GPU | Adreno 650 draws the UI (CoreAnimation through Metal / turnip); CPU overhead while animating still high | ✅ |
 | 🎬 Video decode | No hardware decoder, videos do not play | ❌ |
 | 📷 Camera | | ❌ |
 | 🔦 Camera Flash | | ❌ |
@@ -92,8 +92,8 @@
 |---|---|---|
 | ⚙️ Power-up | GMU / RPMh, zap shader authenticated by TrustZone | ✅ |
 | 🧾 Command streams | The command processor runs our streams | ✅ |
-| 🎨 Metal | Over Mesa's turnip (`sweetmtl`), fence interrupts; per-submit cache walk still costs CPU | ⚠️ |
-| 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; clean except the app switcher, backboardd ~23-35 % of a core, more when animating | ⚠️ |
+| 🎨 Metal | Over Mesa's turnip (`sweetmtl`), fence interrupts; a per-submit command walk still costs CPU | ✅ |
+| 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; barely noticeable glitches left, backboardd median ~23 % of a core, more when animating | ✅ |
 
 ## 🧠 CPU and performance
 

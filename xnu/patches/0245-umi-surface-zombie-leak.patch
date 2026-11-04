@@ -1,0 +1,156 @@
+From e72ed811b21bad34f4de57dc8bda0fdbb2b8a37c Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 13:09:58 +0100
+Subject: [PATCH] umi: released IOSurface views no longer keep their surface
+ alive (zombie leak); live-surface dump on failed creates
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetSurface.cpp | 97 +++++++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetSurface.h   |  4 +-
+ 2 files changed, 100 insertions(+), 1 deletion(-)
+
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index 3c1f93b..172b887 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -172,9 +172,89 @@ sweet_scanout_free_slot(int slot)
+ 
+ OSDefineMetaClassAndStructors(SweetSurface, OSObject);
+ 
++/*
++ * (0245) Every SweetSurface alive (created and not yet freed), in or out of the id table, so a failed create
++ * can say who holds the wired memory: sweet_surface_live_dump() groups them by creator - count, MB, how many
++ * are still in the table and their user counts. Out of the table but alive = retained by a kernel holder
++ * (a client's released view, a framebuffer hold, a GPU import).
++ */
++#define SWEET_SURFACE_LIVE_MAX 4096
++static SweetSurface *sweet_surface_live[SWEET_SURFACE_LIVE_MAX];
++
++static void
++sweet_surface_live_add(SweetSurface *s)
++{
++	IOLockLock(sweet_surface_lock);
++	for (int i = 0; i < SWEET_SURFACE_LIVE_MAX; i++) {
++		if (sweet_surface_live[i] == NULL) {
++			sweet_surface_live[i] = s;
++			s->liveSlot = i;
++			break;
++		}
++	}
++	IOLockUnlock(sweet_surface_lock);
++}
++
++static void
++sweet_surface_live_dump(const char *why)
++{
++	struct {
++		char name[17];
++		uint32_t count, inTable, users, scanout;
++		uint64_t bytes;
++	} g[24];
++	uint32_t ng = 0, total = 0;
++	uint64_t totalBytes = 0;
++
++	bzero(g, sizeof(g));
++	IOLockLock(sweet_surface_lock);
++	for (int i = 0; i < SWEET_SURFACE_LIVE_MAX; i++) {
++		SweetSurface *s = sweet_surface_live[i];
++		if (s == NULL) {
++			continue;
++		}
++		total++;
++		totalBytes += s->allocSize;
++		uint32_t k;
++		for (k = 0; k < ng && strncmp(g[k].name, s->creator, sizeof(g[k].name)) != 0; k++) {
++			;
++		}
++		if (k == ng) {
++			if (ng == 24) {
++				continue;
++			}
++			strlcpy(g[ng].name, s->creator, sizeof(g[ng].name));
++			ng++;
++		}
++		g[k].count++;
++		g[k].bytes += s->allocSize;
++		g[k].scanout += s->scanoutPhys != 0;
++		if (s->id < SWEET_SURFACE_MAX_ID && sweet_surface_table[s->id] == s) {
++			g[k].inTable++;
++			g[k].users += sweet_surface_users[s->id];
++		}
++	}
++	IOLockUnlock(sweet_surface_lock);
++	IOLog("SWEET SURF: live surfaces (%s): %u, %llu MB (wired buffers %llu MB)\n", why, total, totalBytes >> 20,
++	    sweet_surface_wired >> 20);
++	for (uint32_t k = 0; k < ng; k++) {
++		IOLog("SWEET SURF:   %s: %u surfaces, %llu MB, %u from the scanout pool, %u in the table (%u users), "
++		    "%u held only by the kernel\n", g[k].name[0] ? g[k].name : "?", g[k].count, g[k].bytes >> 20, g[k].scanout,
++		    g[k].inTable, g[k].users, g[k].count - g[k].inTable);
++	}
++}
++
+ void
+ SweetSurface::free()
+ {
++	if (liveSlot >= 0 && sweet_surface_lock != NULL) {
++		IOLockLock(sweet_surface_lock);
++		if (sweet_surface_live[liveSlot] == this) {
++			sweet_surface_live[liveSlot] = NULL;
++		}
++		IOLockUnlock(sweet_surface_lock);
++		liveSlot = -1;
++	}
+ 	if (OSDynamicCast(IOBufferMemoryDescriptor, memory) != NULL) {
+ 		OSAddAtomic64(-(SInt64)allocSize, (volatile SInt64 *)&sweet_surface_wired);
+ 	}
+@@ -886,6 +966,15 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 			}
+ 		}
+ 	}
++	if (ret == kIOReturnSuccess && s->memory != NULL) {
++		proc_selfname(s->creator, sizeof(s->creator));
++		sweet_surface_live_add(s);
++	} else if (ret == kIOReturnNoMemory) {
++		static uint32_t failed;
++		if ((failed++ % 50) == 0) {
++			sweet_surface_live_dump("a create failed");
++		}
++	}
+ 	/* full-screen surfaces are always logged (their lifetime tells the framebuffer story); the
+ 	 * small ones keep their 64-line budget */
+ 	if (ret != kIOReturnSuccess || sweet_surface_creates_logged < 64 ||
+@@ -1474,6 +1563,14 @@ IOSurfaceRootUserClient::trapRelease(void *id, void *, void *, void *, void *, v
+ 		 */
+ 		OSSafeReleaseNULL(ref->data);
+ 		sweet_surface_put(ref->surface);
++		/* (0245) and let go of the surface itself: the zombie needs only its state page (ref->state, a
++		 * mapping that holds the page on its own). Keeping ref->surface kept the whole surface - up to
++		 * 11 MB of wired pixels - alive for as long as the view sat in the 256-entry zombie list: the
++		 * poster extensions' released surfaces piled up in backboardd's and SpringBoard's clients (0245
++		 * dump: 650 surfaces, 1.5 GB "held only by the kernel") until every full-screen create failed -
++		 * the app switcher's broken cards. */
++		ref->surface->release();
++		ref->surface = NULL;
+ 		ref->released = true;
+ 		ref->detached = false;
+ 		if (fZombies != NULL && fZombies->setObject(ref)) {
+diff --git a/iokit/Kernel/arm/SweetSurface.h b/iokit/Kernel/arm/SweetSurface.h
+index e8d92d1..646ecc6 100644
+--- a/iokit/Kernel/arm/SweetSurface.h
++++ b/iokit/Kernel/arm/SweetSurface.h
+@@ -45,8 +45,10 @@ public:
+ 	bool                      wrapped;      /* memory is a prepared range of a task (IOSurfaceWrapClient*) */
+ 	uint64_t                  scanoutPhys;  /* direct scanout pool slot (physical), or 0 */
+ 	int                       scanoutSlot;  /* pool slot, -1 when not from the pool */
++	char                      creator[17];  /* the creating process (0245: who holds the wired memory) */
++	int                       liveSlot;     /* index in sweet_surface_live, -1 when none */
+ 
+-	bool init() APPLE_KEXT_OVERRIDE { values = NULL; purgeable = 0; wrapDelta = 0; wrapped = false; scanoutPhys = 0; scanoutSlot = -1; return OSObject::init(); }
++	bool init() APPLE_KEXT_OVERRIDE { values = NULL; purgeable = 0; wrapDelta = 0; wrapped = false; scanoutPhys = 0; scanoutSlot = -1; creator[0] = 0; liveSlot = -1; return OSObject::init(); }
+ 	void free() APPLE_KEXT_OVERRIDE;
+ 
+ 	/* Kernel address of the pixels (mapped on first use), or 0. */
+-- 
+2.54.0 (Apple Git-157)
+
