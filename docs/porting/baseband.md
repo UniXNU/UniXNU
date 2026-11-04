@@ -65,6 +65,8 @@ Challenge, authentication and download preparation retain the owning client's ch
 
 Add `QcomBaseband` to the device's existing component selection. Its normal archive command is `component:QcomBaseband`. For the Coachz IPA adapter, use `build-qcom-baseband.py --coachz` in the kernel archive recipe.
 
+When updating QcomBaseband, pin the same commit in `components.toml` and the main repository's `drivers/QcomBaseband` submodule.
+
 From the resolved target tree after building XNU:
 
 ```sh
