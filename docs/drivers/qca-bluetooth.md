@@ -41,6 +41,10 @@ The resolved QcaBluetooth checkout supplies both kernel and userland builds.
 UART clock-restore failures end the transport with the original error and stop
 forwarding and retries.
 
+Controller shutdown and faults wake both UART.SK rings. Their synchronization
+callbacks return the controller error before moving data. Notifications retain
+the rings until completion so disconnect can drain them.
+
 The worker retains its DMA memory, services bounded batches and sleeps on IRQ,
 ring-space or deadline events. Hardware faults abort command waiters immediately.
 The `[bluetooth]` boot-log row records phase, transfers, sleep, power ownership
