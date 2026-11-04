@@ -70,6 +70,11 @@ def prepare(ctx, kernel_build=False):
                    data_ramdisk=str(seed), init_data=init,
                    gpu_addon=str(Path(addon).expanduser().resolve()) if addon else None,
                    trust_cache=str(Path(trust).expanduser().resolve()) if trust else None)
+    bluetooth = getattr(ctx, 'modules', {}).get(('driver', 'QcaBluetooth'))
+    if spec.get('bluetooth_tool') and bluetooth is not None:
+        if bluetooth.path is None:
+            raise Error('QcaBluetooth source missing; run unixnu fetch')
+        request['bluetooth_component'] = str(bluetooth.path.resolve())
     if not seed.is_file() or not trust or not addon or spec.get('wifi_tool') or spec.get('bluetooth_tool'):
         source = Ipsw(ctx)
         if not seed.is_file() or not addon or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool'):
