@@ -60,15 +60,15 @@ python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/assembled/tree
 模型检查中断分发、并发注册和串口与音频的时钟归属。UART14、ArmCpu、触摸、音频
 与启动日志代码通过目标编译，构建脚本为板级归档编译八个协议和 SoC 对象。
 
-原生路由补丁固定匹配目标二进制，选择控制器类型零，清除厂商钩子并保留标准 HCI
-初始化。可选命令 0x0c5b 根据真实支持位执行，H4 预关闭跳过空钩子并保留原生关闭。
-补丁通过两种 ASLR 偏移下的 76 项
-AArch64 指令模拟，PAC 操作按无设备密钥模型处理。检查器读取 USERLAND24 指针
-修正链，定位十个原生能力槽位。能力发布接通前，生成结果标记为
-`adapter_ready=false`。
+iPadOS 27 原生适配固定匹配目标二进制，选择控制器类型零并保留标准 HCI 初始化。
+扫描、连接、广播及 coded、2M PHY 能力来自 Supported Commands 和 LE Features。
+异步 0x203b 查询取得广播组数，上限为原生数组的六组。模型查询、配置缓存、
+底层开关及广播模式使用同一份能力。正常数据收发留在 UART.SK 和原生栈。
 
-运行时安装和 iPadOS 27 控制器适配仍在开发。扫描、配对、音频、
-功耗及 Wi-Fi 共存等待上机验证。
+离线补丁保留指针修正链的认证信息与 PACIBSP 入口。144 项原生指令模拟覆盖两种
+ASLR 偏移，PAC 操作按无设备密钥模型处理；生产能力发布代码通过 58 项 ASan/UBSan
+HCI 与策略测试。`tools/build-type0.py` 构建并签名 arm64e 能力发布库。
+运行时安装以及扫描、配对、音频、功耗和 Wi-Fi 共存的上机验证待完成。
 
 参考：[Linux](https://github.com/ianchb/sm8550-mainline)、
 [Debian sheng](https://github.com/ianchb/debian-sheng)、
