@@ -89,7 +89,7 @@ Setup depends on services that do not run on this platform. The board disables t
 sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent
 ```
 
-For a sheng icon service comparison, `sheng-lite=2` extends the usual `sheng-lite=1` job list with `com.apple.iconservices.iconservicesagent`. The board writes the policy before launchd starts. This can leave uncached app icons blank.
+For a sheng icon service comparison, `sheng-lite=2` extends the usual `sheng-lite=1` job list with `com.apple.iconservices.iconservicesagent`. The board writes the policy before launchd starts. On the tested iPadOS 27 boot, all app icon artwork was missing from the visible Home Screen and Dock. Settings still opened.
 
 `com.apple.CommCenter` is the cellular service. The list is board specific. Keep the services the userland needs and remove the ones that block the first boot.
 
