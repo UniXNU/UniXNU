@@ -240,8 +240,10 @@ def main():
             mount_work = work / 'bluetooth-os'
             mount_work.mkdir()
             with os_mount(request['os_image'], mount_work) as mount:
+                component = request.get('bluetooth_component')
                 run(sys.executable, Path(request['device']) / request['bluetooth_tool'],
-                    bluetooth, request['bluetooth_target'], '--os-root', mount)
+                    bluetooth, request['bluetooth_target'], '--os-root', mount,
+                    *(['--component', component] if component else []))
             bluetooth_report = json.loads((bluetooth / 'report.json').read_text())
             directories = []
             for prefix, relative in bluetooth_report['directories'].items():
