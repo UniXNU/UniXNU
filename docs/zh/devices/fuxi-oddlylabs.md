@@ -6,7 +6,7 @@
 
 Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch driver and its staged kernel probe; CI builds the kernel, the payload, the DEBUG firmware and the fastboot boot image. On 2026-11-02 the image boots on the device to bsd\_init \(e901139\), and the touch probe's stage 3 reads the controller's chip id 36 40 there. With the PMGR bridge \(484a650\) the kernel runs on to the root device wait, and stage 4 reports real touches, with polling and with the interrupt.
 
-源记录: [porting.toml](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/porting.toml), `99ddb33136e2183ec2604e3ca5013ca685987d5c`.
+源记录: [porting.toml](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/porting.toml), `78f30b651c0ca6ea325682832bb25767523212f5`.
 
 本页按设备记录自动生成。
 
@@ -16,7 +16,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 | [固件与启动](#firmware) | `host-verified` |
 | [CPU 与中断](#cpu) | `implemented` |
 | [内存与 DMA](#memory) | `implemented` |
-| [存储与根卷](#storage) | `planned` |
+| [存储与根卷](#storage) | `implemented` |
 | [显示](#display) | `planned` |
 | [输入](#input) | `implemented` |
 | [GPU](#gpu) | `planned` |
@@ -41,7 +41,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 - board.toml: name fuxi, kit fuxi, soc\_source sm8550, os\_profile ipados-17.7.11-21H461, device\_tree.source device:dts/fuxi.dts.
 - configs/fuxi\_defconfig: the template options, CONFIG\_XNU\_NATIVE\_ADRENO off \(the SoC fragment turns it on\), and CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES for the touch archive and the force-loaded HID archive. The arch fragment sets CONFIG\_XNU\_BUILD\_ARCHIVES, CONFIG\_XNU\_NATIVE\_AES, CONFIG\_XNU\_NATIVE\_ARCH\_TIMER and CONFIG\_XNU\_NATIVE\_PAN; the OS fragment sets CONFIG\_XNU\_SOURCE\_MOCKFS.
-- \[kernel\] archives in build order: corecrypto \(plain and namespaced\), ArmDTPlatform, ArmCpu, SoftwareAES and its bindings, libpthread, the mockfs fixture, build-fuxi-platform-power.py, build-fuxi-hid-input.py, build-fuxi-touch.py.
+- \[kernel\] archives in build order: corecrypto \(plain and namespaced\), ArmDTPlatform, ArmCpu, SoftwareAES and its bindings, libpthread, the mockfs fixture, build-fuxi-platform-power.py, build-fuxi-hid-input.py, build-fuxi-ram-block.py, build-fuxi-touch.py.
 
 ### 操作步骤
 
@@ -62,6 +62,8 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 - CONFIG\_XNU\_SOURCE\_MOCKFS \(OS fragment\) makes vfs\_conf.o reference mockfs, so the link needs build/mockfs-fixture/libmockfs\_fixture.a: the first CI kernel build at 450f518 applied all 62 patches and built every listed archive, then stopped at that missing archive.
 - ArmCpu needs the source corecrypto provider, so corecrypto is built before the components, as in UniXNU-sheng.
 - board.toml's kernel\_args start the secondary cores \(sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1, the arguments of image s3-selfipi\) and run the touch probe to stage 4 with the HID digitizer \(fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2\), so the CI image waits for a touch and otherwise ends in the root device wait.
+- fuxi\_defconfig sets CONFIG\_XNU\_NATIVE\_RAM\_BLOCK=y. Without CONFIG\_XNU\_SOURCE\_STORAGE the kernel build script requires CONFIG\_XNU\_NATIVE\_AES \(set by the arch fragment\) and force-loads build/ram-block/libRamBlock.a; the owner Data code of patches/xnu/offline-owner-systemos-mount.patch stays out, since CONFIG\_XNU\_OWNER\_DATA\_MOUNT is not set.
+- board.toml's kernel\_args add sheng-touch-hid=1, which NativeHidInput reads to give its default device the digitizer collection.
 
 ### 完成条件
 
@@ -77,7 +79,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 证据
 
-- `source`: [Board selection and archive order](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/board.toml)
+- `source`: [Board selection and archive order](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/board.toml)
 - `host`: [All sources resolved, 62 patches applied, nine archives built, kernel linked and prelinked](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41261795785)
   Command: <code>./unixnu defconfig fuxi_defconfig; ./unixnu build kernel</code>. Revision: `8b4c03f69fc15878d7ee92c0f157215fa235d78d`.
 
@@ -134,9 +136,9 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
   Command: <code>./unixnu build firmware --uefi ../uefi-fuxi --target DEBUG (Ubuntu 26.04, clang 21.1.8, uefi-fuxi 87554bf90a6f5707ceeb3720b3dc507de914db94, UniXNU 6ae4c252937ae1920ab68eaded10fc78447e0194)</code>. Revision: `72300f2b07ccee230e07caa7b31f5af269b4f942`.
 - `host`: [DEBUG firmware from uefi-fuxi 87554bf9 built on macOS 26 at 0x300000 bytes \(fd\_sha256 627fe52af360...\) and packed into the boot image](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41273003819)
   Command: <code>./unixnu build firmware --uefi ../uefi-fuxi --target DEBUG</code>. Revision: `2bbd3993e97081db16d8ecc00c58c78f53200b8e`.
-- `device`: [Firmware log, UniXNU entry, DarwinBoot hand-off \(kernel pa 0x8C007C000, window 0x130000000, video 0xB8000000 1080x2400\); the kernel reaches bsd\_init and its panic screen draws on that framebuffer](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Firmware log, UniXNU entry, DarwinBoot hand-off \(kernel pa 0x8C007C000, window 0x130000000, video 0xB8000000 1080x2400\); the kernel reaches bsd\_init and its panic screen draws on that framebuffer](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the run 41378843724 image (SHA-256 e360c41aa4057d27)</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
-- `device`: [Firmware with the corrected map: DarwinBoot hands over, the kernel reaches its touch report; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Firmware with the corrected map: DarwinBoot hands over, the kernel reaches its touch report; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image m1-touch (SHA-256 be38300f17d03ca1): uefi-fuxi c5793bc2, fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `740711055534bd48f056f25d7bbc2673b1f57044`.
 
 ## CPU 与中断 {#cpu}
@@ -167,6 +169,9 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 - The payload's ADT \(image m1-touch\) has what CPU\_ON needs: eight cpu nodes with reg 0x000 to 0x700 \(MPIDR affinity\), cpu0 running and cpu1-7 waiting, three cortex-a510 in cluster E and two cortex-a715, two cortex-a710 and one cortex-x3 in cluster P; /psci has method smc. UniXNU-sheng boots the same SoC with sheng-smp=1 armcpu-spi-ipi=1. No screen showed ArmCpu's secondary-core variables until the SMP rows of the touch report, so an image with only the arguments changed shows whether the boot survives, not which cores run.
 - Device \(680a818, images s2-smp and s3-selfipi\): with sheng-smp=1 armcpu-spi-ipi=1 all seven secondary cores start. CPU\_ON over smc returns 0 for each, each core enters initCPU with its own MPIDR, finds its redistributor and runs \(step 7\), the scheduler counts eight processors \(processor\_avail\_count 8\), and the probe's thread reported from core 3 and from core 4.
 - Without armcpu-self-ipi=1 the kernel sends no IPI at all \(s2-smp: 0 sent, 0 taken\): xnu-10063 starts every core with SIGPdisabled in cpu\_signal, cpu\_signal\_internal skips a core while it is set, and only a handled IPI clears it. With armcpu-self-ipi=1 each core sends itself one IPI from initCPU, the self-IPI XNU expects from PE\_cpu\_machine\_init \(comment in osfmk/kern/machine.c\), and IPIs go through \(s3-selfipi: 85 sent, every core took its own, cores 3 and 4 took 28 and 51\). Cores 1 and 2 \(cluster E\) took no timer interrupt in either boot, and core 6 none in s3-selfipi.
+- SGIs do not arrive on fuxi \(2026-11-03, image h3-sgi\): without armcpu-spi-ipi=1 the eight self-IPIs went out through ICC\_SGI1R\_EL1 and none was taken \(ipi8/0\), as UniXNU-sheng records for sheng, so armcpu-spi-ipi=1 is required.
+- One boot of six with sheng-smp=1 \(image h2-edge, by the order of the photographs\) started no secondary core: CPU\_ON returned 0 for all seven, none entered initCPU, and the scheduler ran on core 0 alone. armcpu-edge=1 is read only after processor\_start returns, so it cannot hold a core before initCPU; the cause is unknown.
+- Two more SMP boots \(11db5c0, h4-hid and h5-edge\) started all seven cores, so they failed to start once in nine boots. armcpu-edge=1 did not put work on cores 1 and 2 in a probe boot; with user space running \(r3-ramblock\) core 1 took timer interrupts and IPIs reached every core.
 
 ### 完成条件
 
@@ -175,11 +180,11 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 ### 当前范围
 
 - Hardware inputs are not recorded in dts/fuxi.dts beyond the SoC DTSI.
-- Cores 1 and 2 have not been seen taking a timer interrupt. The SMP boots end in the probe's panic within about a minute, so longer SMP runs are not tested, and the SGI path \(without armcpu-spi-ipi\) is not tested on fuxi.
+- Cores 1 and 2 have not been seen taking a timer interrupt. The SMP boots end in the probe's panic within about a minute, so longer SMP runs are not tested. In one boot of nine no secondary core reached initCPU after a successful CPU\_ON.
 
 ### 下一步
 
-- Find out whether cores 1 and 2 ever run work \(board.toml passes sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 since the HID change\); armcpu-edge=1 makes ArmCpu call ml\_cpu\_init\_completed, so the Edge scheduler sets up its cluster matrix.
+- Record whether the secondary cores fail to start again; armcpu-edge=1 \(h5-edge\) changed nothing for cores 1 and 2. Find out whether cores 1 and 2 ever run work \(board.toml passes sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 since the HID change\); armcpu-edge=1 makes ArmCpu call ml\_cpu\_init\_completed, so the Edge scheduler sets up its cluster matrix.
 
 ### 证据
 
@@ -189,14 +194,20 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
   Command: <code>fastboot boot of entry-probe reset images (local payloads from the run 41363175206 kernel, firmware 627fe52a)</code>. Revision: `12f9f38d63e4642d335583e159603cfcea2c3744`.
 - `device`: [Reset after ml\_parse\_cpu\_topology through PE\_create\_console \(12 images\); no reset after PE\_init\_printf \(one run\); official image: panel photograph shows the three bands and the end of the firmware log, no kernel text, no panic screen, no USB device for 5 min](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41372182658)
   Command: <code>fastboot boot of entry-probe reset images and of the official image (run 41372182658, AMP patch)</code>. Revision: `65c4f4e4c59f08e81b6790fe75d4c3eaaf04e794`.
-- `device`: [The boot CPU reaches bsd\_init; the touch probe's kernel thread runs and panics with its report \(frames touchThread, Call\_continuation\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [The boot CPU reaches bsd\_init; the touch probe's kernel thread runs and panics with its report \(frames touchThread, Call\_continuation\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the run 41378843724 image (SHA-256 e360c41aa4057d27)</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
-- `device`: [The boot survives with the secondary cores started: touch report as before \(rows 1 to 3 and frames as in m1-touch\), no reset in 240 s; free pages 383 below m1-touch](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [The boot survives with the secondary cores started: touch report as before \(rows 1 to 3 and frames as in m1-touch\), no reset in 240 s; free pages 383 below m1-touch](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s1-smp (SHA-256 281e450dddc9dea5): sheng-smp=1 armcpu-spi-ipi=1 armcpu-diagnostics=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `740711055534bd48f056f25d7bbc2673b1f57044`.
-- `device`: [SMP run7 c1 b0 cpu3 av8 st7777777 f0000000 psci0,0,0,0,0,0,0 ipi0/0; timer interrupts per core 76/0/0/677/679/226/200/228, no IPI on any core](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [SMP run7 c1 b0 cpu3 av8 st7777777 f0000000 psci0,0,0,0,0,0,0 ipi0/0; timer interrupts per core 76/0/0/677/679/226/200/228, no IPI on any core](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s2-smp (SHA-256 6ca28d294bb2b318): sheng-smp=1 armcpu-spi-ipi=1 armcpu-diagnostics=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
-- `device`: [SMP run7 c1 b0 cpu4 av8 st7777777 f0000000 psci0,0,0,0,0,0,0 ipi85/84; timer interrupts per core 76/0/0/2006/6/5/0/2, IPIs per core 1/1/1/28/51/1/1/1](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [SMP run7 c1 b0 cpu4 av8 st7777777 f0000000 psci0,0,0,0,0,0,0 ipi85/84; timer interrupts per core 76/0/0/2006/6/5/0/2, IPIs per core 1/1/1/28/51/1/1/1](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s3-selfipi (SHA-256 ff832779a415c262): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
+- `device`: [SMP run0 av1 st4444444 psci0,0,0,0,0,0,0 ipi1/1: CPU\_ON succeeded for all seven cores and none entered initCPU](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h2-edge (SHA-256 65d0dbc3039bec62): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2 armcpu-edge=1</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [SMP run7 av8 st7777777 ipi8/0, IPIs per core all 0: the self-IPIs sent as SGIs never arrived](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h3-sgi (SHA-256 b7064ed8aff71697): sheng-smp=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [SMP run7 av8 st7777777; timer interrupts per core 73/0/0/2031/11/12/4/2: cores 1 and 2 idle; HID rep40/0](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h5-edge (SHA-256 c2a3653351ae6384): fuxi-touch=4 fuxi-touch-hid=1 sheng-touch-hid=1 fuxi-touch-panic=2 armcpu-edge=1</code>. Revision: `11db5c00e84246681b9c9c06582d4eb31fb6ae26`.
 
 ## 内存与 DMA {#memory}
 
@@ -235,14 +246,14 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 证据
 
-- `device`: [With CONFIG\_XNU\_DT\_PANIC\_REGION the kernel passes PE\_create\_console and reaches bsd\_init; vm\_page\_pages 0x127068 and vm\_page\_free\_count 0x125ccd at the panic](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [With CONFIG\_XNU\_DT\_PANIC\_REGION the kernel passes PE\_create\_console and reaches bsd\_init; vm\_page\_pages 0x127068 and vm\_page\_free\_count 0x125ccd at the panic](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the run 41378843724 image (SHA-256 e360c41aa4057d27)</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
-- `device`: [Kernel on the corrected map: vm\_page\_pages 0x12705b and vm\_page\_free\_count 0x125c40, the same as the third t4b-touch boot \(old map, same arguments\); no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Kernel on the corrected map: vm\_page\_pages 0x12705b and vm\_page\_free\_count 0x125c40, the same as the third t4b-touch boot \(old map, same arguments\); no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image m1-touch (SHA-256 be38300f17d03ca1): uefi-fuxi c5793bc2, fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `740711055534bd48f056f25d7bbc2673b1f57044`.
 
 ## 存储与根卷 {#storage}
 
-`planned`
+`implemented`
 
 ### 硬件与依赖
 
@@ -251,6 +262,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 ### 配置
 
 - CONFIG\_XNU\_NATIVE\_UFS is not set.
+- CONFIG\_XNU\_NATIVE\_RAM\_BLOCK=y: UniXNU RamBlock's NativeRamBlock \(package/NativeRamBlock.cpp and its headers, unchanged copies of RamBlock 4be2d7e\) built by scripts/build-fuxi-ram-block.py with the IOBlockStorageDevice addresses of scripts/fuxi\_storage\_abi.py; the native personality starts it, and it publishes a RAM disk from the loader as a block device. package/FuxiRamBlockStore.cpp answers its persistent-store hooks with no store.
 
 ### 操作步骤
 
@@ -259,6 +271,10 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 ### 开发经验
 
 - Other fuxi ports report the UFS controller hand-off from the firmware as usable; not reproduced here.
+- RAM root paths \(2026-11-03\): handed over as md0 \(rd=md0\), a RAM disk is a BSD device without IOMedia, so nothing loads APFS, and mockfs, which the OS fragment enables and which accepts any device, is asked before any kext filesystem \(devfs, nullfs, bindfs, mockfs and routefs come first in xnu-10063's list\). Through NativeRamBlock the disk is an IOMedia: APFS attaches, publishes its volumes, and the root can be chosen by volume UUID \(payload.adt.root\_match\_volume\_uuid\), as sheng roots on UFS. APFS, IOStorageFamily and the HID kexts are prelinked in the fuxi kernel.
+- UniXNU binds NativeRamBlock through build/storage-abi/interface-audit.json, which needs a research candidate kernel and a gdb observation that CI does not have. IOBlockStorageDevice sits at the addresses UniXNU's marble-milacy port records: vtable 0xfffffff005cb44c0 \(address point +16, 190 slots, 14 pure\), metaclass 0xfffffff006add1d0, constructor 0xfffffff00496ed98, D2 0xfffffff00496edb8, with D1 and D0 brk traps; the prelinker bound the family to this kernel's IOService constructor and destructor.
+- Device \(22579b4, image r2-ramblock\): the restore ramdisk mounts as root through NativeRamBlock. DarwinBoot hands over the packed disk, APFS attaches to the whole disk, IOFindBSDRoot finds the volume by UUID and vfs\_mountroot mounts it; the managed pages drop by the disk's 129.6 MiB. bsd\_init then panics with rootvp not authenticated after mounting: a non-macOS boot requires a sealed root unless bsd\_rooted\_ramdisk\(\), which tests the rd boot argument for the prefix md0. rd=md0-ramblock marks the RAM-disk root and leaves IOFindBSDRoot on the UUID match \(its md path needs exactly three characters\).
+- User space from the restore ramdisk \(11db5c0, image r3-ramblock\): with rd=md0-ramblock bsd\_init skips the sealed-root check, and launchd \(pid 1\), restored\_external \(pid 3\) and mount\_tmpfs \(pid 4\) run from the ramdisk's APFS volume on /dev/disk1s1, trusted by the restore trust cache. The full OS \(OS and SystemOS images, about 7.9 GiB\) does not fit a fastboot payload; it needs another delivery, a USB receiver in the firmware \(as mouse233's port has\) or a UFS driver.
 
 ### 完成条件
 
@@ -266,15 +282,20 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 当前范围
 
-- No storage driver is selected.
+- No UFS driver is selected. The RAM block is linked but not yet seen on the device; the payload of a fastboot boot image limits a RAM disk to what fits next to the kernel \(DarwinBoot takes at most 256 MiB\).
 
 ### 下一步
 
-- Choose the root path \(RAM root or UFS\) once the firmware boots.
+- Boot the IPSW's restore ramdisk \(044-75545-038.dmg, one APFS volume ramdisk, UUID 9071148B-B025-402D-AD7A-48464D8B5FFF\) through NativeRamBlock with that root\_match\_volume\_uuid and the restore trust cache, and read the SYS row of the touch report: done, it reaches restored\_external. Next: choose the delivery of the full OS.
 
 ### 证据
 
-按下一步操作收集证据。
+- `host`: [IOStorageFamily contract: instructions, IOService bindings, metaclass and 190-slot vtable as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/ci/check-ram-block-bindings.py)
+  Command: <code>python3 ci/check-ram-block-bindings.py &lt;prelinked kernel of run 41439604891&gt; --contract-only</code>. Revision: `99ddb33136e2183ec2604e3ca5013ca685987d5c`.
+- `device`: [rootvp not authenticated after mounting: the restore ramdisk volume was found by UUID and mounted as root, then refused as not sealed](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image r2-ramblock (SHA-256 25026daa23badab2): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2, packed restore ramdisk, restore trust cache, root_match_volume_uuid 9071148B-B025-402D-AD7A-48464D8B5FFF</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [SYS root apfs /dev/disk1s1 1:launchd 3:restored\_externa 4:mount\_tmpfs n3: the restore ramdisk's user space runs](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image r3-ramblock (SHA-256 cd5a110268c79ce7): fuxi-touch=4 fuxi-touch-panic=2 rd=md0-ramblock, packed restore ramdisk, restore trust cache, root_match_volume_uuid 9071148B-B025-402D-AD7A-48464D8B5FFF</code>. Revision: `11db5c00e84246681b9c9c06582d4eb31fb6ae26`.
 
 ## 显示 {#display}
 
@@ -312,7 +333,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 证据
 
-- `source`: [Panel facts with sources \(section 3\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/fuxi_touch_panel_porting.md)
+- `source`: [Panel facts with sources \(section 3\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/fuxi_touch_panel_porting.md)
 
 ## 输入 {#input}
 
@@ -331,7 +352,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 - board.toml \[components\] selects QcomGeniSpi and FuxiFtsTouch; \[kernel\] archives runs scripts/build-fuxi-touch.py.
 - configs/fuxi\_defconfig links build/fuxi-touch/libFuxiTouch.a through CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES; patches/xnu/fuxi-touch-probe.patch calls native\_touch\_probe\(\) from bsd\_init after IOKitInitializeTime\(\).
-- Boot arguments: fuxi-touch=1..4, fuxi-touch-panic=1 or 2, fuxi-touch-hid=1, fuxi-touch-hz, fuxi-touch-power, fuxi-touch-tcs, fuxi-touch-poll, fuxi-touch-map. board.toml sets fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2.
+- Boot arguments: fuxi-touch=1..4, fuxi-touch-panic=1 or 2, fuxi-touch-hid=1, fuxi-touch-hz, fuxi-touch-power, fuxi-touch-tcs, fuxi-touch-poll, fuxi-touch-map. board.toml sets fuxi-touch=4 fuxi-touch-hid=1 sheng-touch-hid=1 fuxi-touch-panic=2.
 - The HID digitizer: package/NativeHidInput.cpp, an unchanged copy of UniXNU ShengHidInput 71a40e7, built by scripts/build-fuxi-hid-input.py with the kernelcache addresses of scripts/fuxi\_hid\_abi.py and force-loaded by fuxi\_defconfig. package/FuxiHidProbe.cpp, in the touch archive, loads IOHIDFamily and IOHIDEventDriver, waits for IOHIDResource, registers NativeHidInput's metaclass and starts the touch-only device; the touch probe calls it once sensing runs.
 
 ### 操作步骤
@@ -351,11 +372,14 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 - Stage 4 in polling mode on the device \(484a650, image p3-poll, fuxi-touch-poll=1\): sensing starts \(status 0\), 3531 FIFO reads bring 12 events, one tap gives 1 enter, 8 moves and 1 leave, with no error event, no re-arm and no failed transfer. The last position is 2885,18595 in the raw range 0..10800 x 0..24000 \(pixel 288,1859\). The owner was asked to tap the lower left: y is above the short-axis range, so the axes are not swapped, and small x with large y means neither is mirrored; the two interrupt-mode taps read there too \(not a calibration\).
 - Stage 4 with the interrupt armed works on the device \(484a650\): image t4c-diag \(with armcpu-diagnostics=1\) reads in1 mv9 up1 at 1295,16685 with irq11/0 and rd12, and the second run of t4b-touch reads in1 mv8 up1 at 1635,19935 with irq10/0 and rd11: one interrupt per touch event, none spurious, against 3531 FIFO reads in polling mode. The path is sheng's except for the edge \(fuxi falling, sheng rising\).
 - Two contacts on the device \(484a650, third run of t4b-touch\): pressing with two fingers and lifting one reads in2 mv539 up1 c1, with the remaining contact at 3095,15215, irq290/0 and rd291: an interrupt brings about two events, because the probe drains the FIFO in one read.
-- Unexplained reset: the first run of t4b-touch reset the phone by itself within seconds of the kernel starting \(the owner saw the bands, then a restart; Android up 65 s after the boot command, no panic screen\). The same bytes ran to the touch report twice afterwards, one of those started from running Android through adb reboot bootloader, and armcpu-diagnostics=1 reported nothing in t4c-diag. So it is intermittent, one of eight boots with the bridge and the interrupt armed, and the cause is unknown. That first run is the only one that entered fastboot by hand after Android: one sample, not a cause.
+- Unexplained reset: the first run of t4b-touch reset the phone by itself within seconds of the kernel starting \(the owner saw the bands, then a restart; Android up 65 s after the boot command, no panic screen\). The same bytes ran to the touch report twice afterwards, one of those started from running Android through adb reboot bootloader, and armcpu-diagnostics=1 reported nothing in t4c-diag. So it is intermittent, one of fourteen boots with the bridge and the interrupt armed, and the cause is unknown. That first run is the only one that entered fastboot by hand after Android: one sample, not a cause.
 - On a boot with sheng-smp=1 the touch interrupt stays on the boot CPU \(armcpu\_spi\_attach routes an SPI to the boot affinity\) while the probe's thread may run on any core, so its wakeup can cross cores through an IPI. The report then ends with two SMP rows after the four FTS rows \(see cpu and diagnostics\).
 - With all eight cores running \(s1-smp, s2-smp, s3-selfipi\) the touch path works unchanged: irq43/0, irq86/0 and irq8/0, no spurious interrupt, no error event and no failed transfer, while the interrupt stays routed to core 0 and the probe's thread ran on core 3 or 4.
 - The RPMh votes are needed \(680a818, image p4-power0, fastboot entered by hand from a panic screen\): with fuxi-touch-power=0 only the two rail votes are skipped, and the controller never answers. No ready event after three resets and the 4-wire fallback \(FTS\_ERR\_CHIP\), chip id 00 00, while no transfer failed; with the votes every boot reads 36 40.
 - ShengHidInput is not selected as a catalog component: that would pull in its catalog dependency ShengNovatekTouch, and UniXNU's build-sheng-hid-input.py reads a prelinked reference candidate that only an earlier sheng build leaves. fuxi builds the unchanged source with its own script, as it does the PMGR bridge. IOHIDFamily sits at the same addresses in the fuxi kernel as in UniXNU's reference: the pinned constructor, handleStart and handleReport instructions match, getMetaClass returns the bound metaclass, and IOHIDDevice overrides the same 18 IOService slots, with its 56 own slots in the kext.
+- The touch archive also holds FuxiSysProbe.cpp, whose SYS row follows the SMP and HID rows of the panic message; it is empty until a root is mounted, so the reports of the earlier boots are unchanged.
+- HID on the device \(22579b4, images h2-edge and h3-sgi\): IOHIDFamily and IOHIDEventDriver load, IOHIDDevice has 208 bytes, IOHIDResource is found, NativeHidInput's metaclass registers and the touch-only device starts, but no IOHIDEventDriver attaches below it, so no report is sent. NativeHidInput's comments name sheng's default device \(keyboard collection first, digitizer second\) as the arrangement whose event driver attaches on hardware; FuxiHidProbe.cpp now creates that one, which needs sheng-touch-hid=1 for its digitizer.
+- HID reports reach IOHIDFamily \(11db5c0, images h4-hid and h5-edge\): an IOHIDEventDriver attaches to sheng's default device, every published contact set goes out as a digitizer report without error \(68 and 40\), and NativeHidInput's edge wrapper is installed on the event driver.
 
 ### 完成条件
 
@@ -363,44 +387,50 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 当前范围
 
-- One boot of stage 4 reset the phone for an unknown reason \(see findings\). Unverified: whether the done bit latches without the TCS interrupt, stable contact IDs over longer gestures, and the HID orientation on a portrait panel. The HID layer is linked but not yet seen on the device.
+- One boot of stage 4 reset the phone for an unknown reason \(see findings\). Unverified: whether the done bit latches without the TCS interrupt, stable contact IDs over longer gestures, and the HID orientation on a portrait panel. HID reports reach IOHIDFamily on the device; no user-space consumer has read them yet.
 - GENI has no setting for the 10 us chip-select hold the vendor driver uses \(SPI\_DELAY\_CS\).
 
 ### 下一步
 
-- Boot an image with fuxi-touch-hid=1 and read the HID row: the device should start, an event driver attach, and the hid counter rise with each touch. If a reset happens again, record how the phone reached fastboot and what ran before it.
+- Check the HID orientation and contact identifiers once backboardd reads the reports, which needs a display path; the buttons need a driver. If a reset happens again, record how the phone reached fastboot and what ran before it.
 
 ### 证据
 
 - `source`: [FTM5 protocol and contact tracking with host tests](https://github.com/OddlyLabs/FuxiFtsTouch)
-- `source`: [Staged board probe](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/package/FuxiTouchProbe.cpp)
-- `source`: [Touch facts with sources and the Android measurements \(sections 2 and 6\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/fuxi_touch_panel_porting.md)
-- `device`: [Stage 3 report on the panic screen: reset status 0 after 1 attempt, last event 03 00 00 \(ready\), chip id 36 40, SPI at 12000000 Hz, no transfer error](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `source`: [Staged board probe](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/package/FuxiTouchProbe.cpp)
+- `source`: [Touch facts with sources and the Android measurements \(sections 2 and 6\)](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/fuxi_touch_panel_porting.md)
+- `device`: [Stage 3 report on the panic screen: reset status 0 after 1 attempt, last event 03 00 00 \(ready\), chip id 36 40, SPI at 12000000 Hz, no transfer error](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the run 41378843724 image (SHA-256 e360c41aa4057d27)</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
-- `device`: [Stage 4 report on the panic screen: in1 mv8 up1, position 2885,18595, no error, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Stage 4 report on the panic screen: in1 mv8 up1, position 2885,18595, no error, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image p3-poll (SHA-256 d17cc5498a404abd): fuxi-touch=4 fuxi-touch-poll=1 fuxi-touch-panic=2</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
-- `device`: [The phone reset by itself after the bands; Android up 65 s after the boot command; no report](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [The phone reset by itself after the bands; Android up 65 s after the boot command; no report](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image t4b-touch (SHA-256 ca080270f58e179c): fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
-- `device`: [Stage 4 report with the interrupt: in1 mv9 up1, position 1295,16685, irq11/0, rd12, no error, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Stage 4 report with the interrupt: in1 mv9 up1, position 1295,16685, irq11/0, rd12, no error, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image t4c-diag (SHA-256 dd04ebd82e680c5f): fuxi-touch=4 fuxi-touch-panic=2 armcpu-diagnostics=1</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
-- `device`: [Stage 4 report with the interrupt: in1 mv8 up1, position 1635,19935, irq10/0, rd11, no error, no failed transfer; no reset this time](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Stage 4 report with the interrupt: in1 mv8 up1, position 1635,19935, irq10/0, rd11, no error, no failed transfer; no reset this time](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>second fastboot boot of image t4b-touch (SHA-256 ca080270f58e179c): fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
-- `device`: [Two fingers, one lifted: in2 mv539 up1 c1 at 3095,15215, irq290/0, rd291, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Two fingers, one lifted: in2 mv539 up1 c1 at 3095,15215, irq290/0, rd291, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>third fastboot boot of image t4b-touch (SHA-256 ca080270f58e179c), from running Android through adb reboot bootloader</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
-- `device`: [Two fingers, one lifted: in2 mv221 up1 c1 at 3575,13965, irq113/0, rd114, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Two fingers, one lifted: in2 mv221 up1 c1 at 3575,13965, irq113/0, rd114, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image m1-touch (SHA-256 be38300f17d03ca1): uefi-fuxi c5793bc2, fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `740711055534bd48f056f25d7bbc2673b1f57044`.
-- `device`: [Two fingers, one lifted: in2 mv80 up1 c1 at 4095,17295, irq43/0, rd44, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Two fingers, one lifted: in2 mv80 up1 c1 at 4095,17295, irq43/0, rd44, no error, no failed transfer; no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s1-smp (SHA-256 281e450dddc9dea5): sheng-smp=1 armcpu-spi-ipi=1 armcpu-diagnostics=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `740711055534bd48f056f25d7bbc2673b1f57044`.
-- `device`: [Two fingers, one lifted, all cores running: in2 mv167 up1 c1 at 7495,11165, irq86/0, rd87, no error; the probe reported from core 3](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Two fingers, one lifted, all cores running: in2 mv167 up1 c1 at 7495,11165, irq86/0, rd87, no error; the probe reported from core 3](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s2-smp (SHA-256 6ca28d294bb2b318): sheng-smp=1 armcpu-spi-ipi=1 armcpu-diagnostics=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
-- `device`: [One tap, all cores running with IPIs: in1 mv6 up1 at 3665,16785, irq8/0, rd9, no error; the probe reported from core 4](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [One tap, all cores running with IPIs: in1 mv6 up1 at 3665,16785, irq8/0, rd9, no error; the probe reported from core 4](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s3-selfipi (SHA-256 ff832779a415c262): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
-- `device`: [Stage 2 of 4, error -19 at step 7: reset -19 after 3 tries and the 4-wire fallback, chip id 00 00, no ready event, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Stage 2 of 4, error -19 at step 7: reset -19 after 3 tries and the 4-wire fallback, chip id 00 00, no ready event, no failed transfer](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image p4-power0 (SHA-256 a2c0581f2ea1cacb): fuxi-touch=4 fuxi-touch-panic=2 fuxi-touch-power=0</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
-- `host`: [IOHIDFamily contract: instructions, metaclass, 207-slot vtable and IOService bindings as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/ci/check-hid-bindings.py)
+- `host`: [IOHIDFamily contract: instructions, metaclass, 207-slot vtable and IOService bindings as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/ci/check-hid-bindings.py)
   Command: <code>python3 ci/check-hid-bindings.py &lt;prelinked kernel of run 41419783238&gt; --contract-only</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
 - `host`: [The HID archive, its bindings and FuxiHidProbe.cpp link; the only undefined symbol is \_native\_buttons\_set\_sink, NativeHidInput's weak import for the combined device's buttons, which a static kernel link still needs defined. FuxiHidProbe.cpp now defines it and never calls the sink.](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41437861526)
   Command: <code>CI build of the kernel (run 41437861526)</code>. Revision: `9a04dd78c087b9a7e5a3a87452e9149603e99107`.
+- `device`: [HID st6 fam0 evd0 sz208 res1 meta0 dev4 drv0 up1 rep0: the touch-only device started, no event driver attached, no report](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h2-edge (SHA-256 65d0dbc3039bec62): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2 armcpu-edge=1</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [HID as in h2-edge \(drv0, rep0\); touch path unchanged: irq383/0, no error](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h3-sgi (SHA-256 b7064ed8aff71697): sheng-smp=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [HID drv1 tk10/1 rep68/0 edge1, FTS hid68: the event driver attached and all 68 contact sets went out as HID reports](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h4-hid (SHA-256 10955c46c71c7b35): fuxi-touch=4 fuxi-touch-hid=1 sheng-touch-hid=1 fuxi-touch-panic=2</code>. Revision: `11db5c00e84246681b9c9c06582d4eb31fb6ae26`.
 
 ## GPU {#gpu}
 
@@ -551,10 +581,10 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 证据
 
-- `device`: [Panic screen: AMFI: No PMGR? at ConfigurationSettings.cpp:235, from a thread call; no touch report](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Panic screen: AMFI: No PMGR? at ConfigurationSettings.cpp:235, from a thread call; no touch report](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the stage 4 image t4-touch (SHA-256 a43145873cbdfd7e): the run 41378843724 kernel with fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `d7aaf7d94f7ef6ec44abab4f60f61013a969e374`.
-- `source`: [UniXNU-sheng PMGR bridge, unchanged](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/package/ShengPlatformPower.cpp)
-- `device`: [Panel: Failed to mount root device at IOKitBSDInit.cpp:984 \(frames IOFindBSDRoot, bsd\_init, kernel\_bootstrap\_thread\); no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `source`: [UniXNU-sheng PMGR bridge, unchanged](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/package/ShengPlatformPower.cpp)
+- `device`: [Panel: Failed to mount root device at IOKitBSDInit.cpp:984 \(frames IOFindBSDRoot, bsd\_init, kernel\_bootstrap\_thread\); no reset](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image p1-pmgr (SHA-256 cba346b63087500c): sheng-pmgr=2 without the touch probe</code>. Revision: `484a6508b6b37c780500a9742f2e2b4cee3cd4a7`.
 
 ## 镜像组装 {#packaging}
@@ -609,7 +639,7 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
   Command: <code>./unixnu build kernel --device fuxi</code>. Revision: `8b4c03f69fc15878d7ee92c0f157215fa235d78d`.
 - `host`: [boot.img v0, 11677696 bytes \(sha256 931ac9582632...\), uploaded encrypted; decrypted with ci/decrypt-boot-image.sh, ci/check-boot-image.py passes: text offset 0, firmware and 192 MiB FUXIESP payload in the kernel image, FdtBlob appended, kernel.macho with the touch probe, its ADT and the boot arguments of board.toml](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41273003819)
   Command: <code>./unixnu build payload --uefi ../uefi-fuxi --unique-chip-id 0x0123456789abcdef; ./unixnu bootimg --uefi ../uefi-fuxi --target DEBUG --dtb &lt;FdtBlob&gt;</code>. Revision: `2bbd3993e97081db16d8ecc00c58c78f53200b8e`.
-- `device`: [The image boots: ABL OKAY, firmware and UniXNU menu, DarwinBoot loads kernel.macho and kernel.macho.adt from the payload, the kernel reaches bsd\_init and shows the touch probe report](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [The image boots: ABL OKAY, firmware and UniXNU menu, DarwinBoot loads kernel.macho and kernel.macho.adt from the payload, the kernel reaches bsd\_init and shows the touch probe report](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of the run 41378843724 image (SHA-256 e360c41aa4057d27)</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
 
 ## 诊断 {#diagnostics}
@@ -644,6 +674,9 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 - With sheng-smp=1 the touch report ends with two SMP rows \(package/FuxiTouchProbe.cpp smpText\) built from ArmCpu's secondary-core variables, which the probe references weakly as it does armcpu\_spi\_attach \(no rows without ArmCpu\); without sheng-smp the message is as before. Locally the rows compile without warnings under the probe's -Wall -Wextra -Werror \(clang 21, arm64-apple-ios17\), and every ArmCpu symbol is a weak reference; the CI kernel build is the check that counts.
 - The SMP rows read on the panel \(s2-smp, s3-selfipi\). ArmCpu increments its shared IPI totals from several cores without atomics: in s3-selfipi the per-core counts add up to 85 while the total taken reads 84, so the per-core counts are the ones to use.
 - ci/check-hid-bindings.py checks the HID bindings in the prelinked kernel: the IOHIDFamily instructions UniXNU pins, getMetaClass's metaclass, IOHIDDevice's 207-slot vtable with its 56 own slots at the bound addresses, and NativeHidInput's vtable, of which only its ten own slots may differ; --contract-only checks the family alone. With fuxi-touch-hid=1 the touch report ends with a HID row \(FuxiHidProbe.cpp fuxi\_hid\_row\), and the run ends only at a lift after the HID start has settled \(device and event driver up, a step failed, or 20 s\), so an early tap needs a second one.
+- The touch report ends with a SYS row once a root is mounted \(package/FuxiSysProbe.cpp fuxi\_sys\_row\): the root's filesystem type and the device it came from, the first six processes by pid with their names, and the number of processes. ci/check-ram-block-bindings.py checks the RAM block bindings after the link, as check-hid-bindings.py does for HID.
+- With HID requested, a tap before the HID start settles does not end the run, so the owner has to tap again after about 20 s: in h1-hid the only tap came early and the root device wait ended the boot first.
+- The SYS row reads on the panel \(r3-ramblock\): the root's filesystem and device, the first processes by pid with their names \(cut at 16 characters, as proc\_name gives them\) and their number.
 
 ### 完成条件
 
@@ -659,18 +692,24 @@ Xiaomi 13 \(fuxi\). Board files from the UniXNU device template, the FTM5 touch 
 
 ### 证据
 
-- `source`: [Panic report and kernel log rows](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/package/FuxiTouchProbe.cpp)
+- `source`: [Panic report and kernel log rows](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/package/FuxiTouchProbe.cpp)
 - `device`: [Panel photograph: green, blue and magenta bands, then the end of the firmware log; no kernel text or panic screen; no USB device for 2.5 min](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41273003819)
   Command: <code>fastboot boot boot.img</code>. Revision: `2bbd3993e97081db16d8ecc00c58c78f53200b8e`.
 - `host`: [The image artifact decrypts with the owner's key \(sha256 matches boot.img.sha256\) and every check passes; a tampered boot.json fails two checks](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41273003819)
   Command: <code>bash ci/decrypt-boot-image.sh &lt;key&gt; &lt;artifact&gt;; python3 ci/check-boot-image.py boot.img boot.json ../uefi-fuxi</code>. Revision: `2bbd3993e97081db16d8ecc00c58c78f53200b8e`.
-- `device`: [Reset probes located the two stops \(table in the evidence file\); the panic screen shows the touch report](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [Reset probes located the two stops \(table in the evidence file\); the panic screen shows the touch report](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of 22 reset-probe images and the run 41372182658 and 41378843724 images</code>. Revision: `e90113974b1186120e4eb4c3f77bfb8d909934bf`.
-- `device`: [The panic screen shows the two SMP rows after the four FTS rows, followed by the source line, the frames and the page counters](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/evidence/2026-11-02-first-boot.md)
+- `device`: [The panic screen shows the two SMP rows after the four FTS rows, followed by the source line, the frames and the page counters](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
   Command: <code>fastboot boot of image s2-smp (SHA-256 6ca28d294bb2b318): sheng-smp=1 armcpu-spi-ipi=1 armcpu-diagnostics=1 fuxi-touch=4 fuxi-touch-panic=2</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
-- `host`: [IOHIDFamily contract: instructions, metaclass, 207-slot vtable and IOService bindings as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/99ddb33136e2183ec2604e3ca5013ca685987d5c/ci/check-hid-bindings.py)
+- `host`: [IOHIDFamily contract: instructions, metaclass, 207-slot vtable and IOService bindings as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/ci/check-hid-bindings.py)
   Command: <code>python3 ci/check-hid-bindings.py &lt;prelinked kernel of run 41419783238&gt; --contract-only</code>. Revision: `680a818ff5efbd920d03dbedd87963d5c6116fbc`.
 - `host`: [The HID archive, its bindings and FuxiHidProbe.cpp link; the only undefined symbol is \_native\_buttons\_set\_sink, NativeHidInput's weak import for the combined device's buttons, which a static kernel link still needs defined. FuxiHidProbe.cpp now defines it and never calls the sink.](https://github.com/OddlyLabs/unixnu-fuxi/actions/runs/41437861526)
   Command: <code>CI build of the kernel (run 41437861526)</code>. Revision: `9a04dd78c087b9a7e5a3a87452e9149603e99107`.
+- `host`: [IOStorageFamily contract: instructions, IOService bindings, metaclass and 190-slot vtable as pinned](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/ci/check-ram-block-bindings.py)
+  Command: <code>python3 ci/check-ram-block-bindings.py &lt;prelinked kernel of run 41439604891&gt; --contract-only</code>. Revision: `99ddb33136e2183ec2604e3ca5013ca685987d5c`.
+- `device`: [Failed to mount root device: the tap came before the HID start settled, and the root wait ran out before another](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image h1-hid (SHA-256 fcc0fd7fc4d10f8f): sheng-smp=1 armcpu-spi-ipi=1 armcpu-self-ipi=1 fuxi-touch=4 fuxi-touch-hid=1 fuxi-touch-panic=2</code>. Revision: `22579b483fd9f982aef8883f14932208a7953700`.
+- `device`: [SYS root apfs /dev/disk1s1 1:launchd 3:restored\_externa 4:mount\_tmpfs n3: the restore ramdisk's user space runs](https://github.com/OddlyLabs/unixnu-fuxi/blob/78f30b651c0ca6ea325682832bb25767523212f5/evidence/2026-11-02-first-boot.md)
+  Command: <code>fastboot boot of image r3-ramblock (SHA-256 cd5a110268c79ce7): fuxi-touch=4 fuxi-touch-panic=2 rd=md0-ramblock, packed restore ramdisk, restore trust cache, root_match_volume_uuid 9071148B-B025-402D-AD7A-48464D8B5FFF</code>. Revision: `11db5c00e84246681b9c9c06582d4eb31fb6ae26`.
 
 </div>

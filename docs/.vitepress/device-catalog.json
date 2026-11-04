@@ -235,6 +235,16 @@
     "title_zh": "一加平板 2 Pro（erhai）"
   },
   {
+    "name": "erhai-xingxing19035",
+    "title": "OnePlus Pad 2 Pro (OPD2413) (xingxing19035)",
+    "title_zh": "OnePlus Pad 2 Pro (OPD2413) (xingxing19035)"
+  },
+  {
+    "name": "erhai-zczyh0922",
+    "title": "OnePlus Pad 2 Pro OPD2413: iPad7,1 userland bring-up (zczyh0922)",
+    "title_zh": "OnePlus Pad 2 Pro OPD2413: iPad7,1 userland bring-up (zczyh0922)"
+  },
+  {
     "name": "evb10",
     "title": "Rockchip RK3588 EVB10 V10",
     "title_zh": "Rockchip RK3588 EVB10 V10"
@@ -310,6 +320,11 @@
     "title_zh": "Xiaomi 13 (Star-mailaz)"
   },
   {
+    "name": "fuxi-unixnu-fuxi",
+    "title": "Xiaomi 13 (UNIXNU-FUXI)",
+    "title_zh": "Xiaomi 13 (UNIXNU-FUXI)"
+  },
+  {
     "name": "fuxi-xyvern08371",
     "title": "Xiaomi 13 (SM8550) (Xyvern08371)",
     "title_zh": "Xiaomi 13 (SM8550) (Xyvern08371)"
@@ -328,6 +343,11 @@
     "name": "giulia",
     "title": "OnePlus Ace 5 (giulia)",
     "title_zh": "一加 Ace 5（giulia）"
+  },
+  {
+    "name": "giulia-349942669lh-art",
+    "title": "OnePlus Ace 5 PKG110 (349942669lh-art)",
+    "title_zh": "OnePlus Ace 5 PKG110 (349942669lh-art)"
   },
   {
     "name": "gta4l",
@@ -530,14 +550,29 @@
     "title_zh": "Redmi Note 12 Turbo / POCO F5 (marble), Qualcomm SM7475 (Snapdragon 7+ Gen 2) (MiLacy)"
   },
   {
+    "name": "meizu21",
+    "title": "Meizu 21 (M461Q)",
+    "title_zh": "Meizu 21 (M461Q)"
+  },
+  {
     "name": "merlinx",
     "title": "Xiaomi Redmi Note 9 (merlinx)",
     "title_zh": "Redmi Note 9（merlinx）"
   },
   {
+    "name": "merlinx-gytis283123",
+    "title": "Xiaomi Redmi Note 9 (Gytis283123)",
+    "title_zh": "Xiaomi Redmi Note 9 (Gytis283123)"
+  },
+  {
     "name": "mh2lm",
     "title": "LG G8X ThinQ (LM-G850, mh2lm)",
     "title_zh": "LG G8X ThinQ (LM-G850, mh2lm)"
+  },
+  {
+    "name": "miatoll",
+    "title": "Xiaomi Redmi Note 9S / 9 Pro / Note 10 Lite / POCO M2 Pro",
+    "title_zh": "Xiaomi Redmi Note 9S / 9 Pro / Note 10 Lite / POCO M2 Pro"
   },
   {
     "name": "mondrian",
@@ -570,6 +605,11 @@
     "title_zh": "Xiaomi Redmi K40S (munch, 22021211RC) (ErodeNine)"
   },
   {
+    "name": "munch-upcry",
+    "title": "Xiaomi Redmi K40S (munch, 22021211RC), SM8250-AC Snapdragon 870, iOS 16.7.16 iPhone X (D22AP) personality (Upcry)",
+    "title_zh": "Xiaomi Redmi K40S (munch, 22021211RC), SM8250-AC Snapdragon 870, iOS 16.7.16 iPhone X (D22AP) personality (Upcry)"
+  },
+  {
     "name": "muyu",
     "title": "Xiaomi Pad 7 Pro",
     "title_zh": "Xiaomi Pad 7 Pro"
@@ -598,6 +638,11 @@
     "name": "nabu-lee-kenneth",
     "title": "Xiaomi Pad 5 (lee-kenneth)",
     "title_zh": "Xiaomi Pad 5 (lee-kenneth)"
+  },
+  {
+    "name": "nabu-xingjiaostudio",
+    "title": "Xiaomi Pad 5 (nabu) (XingJiaoStudio)",
+    "title_zh": "Xiaomi Pad 5 (nabu) (XingJiaoStudio)"
   },
   {
     "name": "nabu-zzc775",
@@ -675,6 +720,11 @@
     "title_zh": "一加 13T（oneplus13t）"
   },
   {
+    "name": "oneplus13t-shad0w23333",
+    "title": "OnePlus 13T PKX110 with the native Adreno 830 GPU (Shad0w23333)",
+    "title_zh": "OnePlus 13T PKX110 with the native Adreno 830 GPU (Shad0w23333)"
+  },
+  {
     "name": "orangepi5",
     "title": "Orange Pi 5 (Rockchip RK3588S)",
     "title_zh": "Orange Pi 5 (Rockchip RK3588S)"
@@ -693,6 +743,11 @@
     "name": "pdx203",
     "title": "Sony Xperia 1 II (pdx203)",
     "title_zh": "Sony Xperia 1 II（pdx203）"
+  },
+  {
+    "name": "pdx203-shinyquagsire23",
+    "title": "Sony Xperia 1 II (shinyquagsire23)",
+    "title_zh": "Sony Xperia 1 II (shinyquagsire23)"
   },
   {
     "name": "peridot",
@@ -723,6 +778,11 @@
     "name": "picasso",
     "title": "Redmi K30 5G (picasso)",
     "title_zh": "Redmi K30 5G（picasso）"
+  },
+  {
+    "name": "picasso-ahu865",
+    "title": "Redmi K30 5G (ahu865)",
+    "title_zh": "Redmi K30 5G (ahu865)"
   },
   {
     "name": "picasso-huydre",
@@ -765,6 +825,11 @@
     "title_zh": "Xiaomi Pad 6 (xVanTuring)"
   },
   {
+    "name": "pje110",
+    "title": "pje110",
+    "title_zh": "pje110"
+  },
+  {
     "name": "polaris",
     "title": "Xiaomi Mi MIX 2S (polaris)",
     "title_zh": "小米 MIX 2S（polaris）"
@@ -793,6 +858,11 @@
     "name": "pong-hxzbaka",
     "title": "Nothing Phone (2): UniXNU UEFI bring-up (hxzbaka)",
     "title_zh": "Nothing Phone (2): UniXNU UEFI bring-up (hxzbaka)"
+  },
+  {
+    "name": "pong-kmu1757",
+    "title": "Galaxy Tab S7+ (SM-T970) / S20+ (SM-G986N) SM8250 bring-up (kmu1757)",
+    "title_zh": "Galaxy Tab S7+ (SM-T970) / S20+ (SM-G986N) SM8250 bring-up (kmu1757)"
   },
   {
     "name": "pong-y3d4",
@@ -825,6 +895,11 @@
     "title_zh": "Redmi K20 Pro / Mi 9T Pro（raphael）"
   },
   {
+    "name": "raphael-jackyhowh",
+    "title": "Redmi K20 Pro / Mi 9T Pro (raphael) (jackyhowh)",
+    "title_zh": "Redmi K20 Pro / Mi 9T Pro (raphael) (jackyhowh)"
+  },
+  {
     "name": "raphael-johnleeeeeee678",
     "title": "Redmi K20 Pro / Mi 9T Pro (raphael) (JohnLeeeeeee678)",
     "title_zh": "Redmi K20 Pro / Mi 9T Pro (raphael) (JohnLeeeeeee678)"
@@ -835,9 +910,19 @@
     "title_zh": "Realme 5 Pro"
   },
   {
+    "name": "rmx3551",
+    "title": "realme GT2 Master Explorer (RMX3551): UniXNU UEFI bring-up",
+    "title_zh": "realme GT2 Master Explorer (RMX3551): UniXNU UEFI bring-up"
+  },
+  {
     "name": "rmx3823",
     "title": "realme GT5 240W (RMX3823), kalama, 24 GiB, 1240x2772 AMOLED",
     "title_zh": "realme GT5 240W (RMX3823), kalama, 24 GiB, 1240x2772 AMOLED"
+  },
+  {
+    "name": "ruby",
+    "title": "Xiaomi Redmi Note 12 Pro 5G (ruby, MediaTek Dimensity 1080 / MT6877)",
+    "title_zh": "Xiaomi Redmi Note 12 Pro 5G (ruby, MediaTek Dimensity 1080 / MT6877)"
   },
   {
     "name": "ruyi",
@@ -865,6 +950,11 @@
     "title_zh": "Xiaomi Pad 6S Pro (16Crow)"
   },
   {
+    "name": "sheng-ad1095445",
+    "title": "Xiaomi Pad 6S Pro (ad1095445)",
+    "title_zh": "Xiaomi Pad 6S Pro (ad1095445)"
+  },
+  {
     "name": "sheng-airalex002",
     "title": "Xiaomi Pad 6S Pro (airalex002)",
     "title_zh": "Xiaomi Pad 6S Pro (airalex002)"
@@ -885,9 +975,19 @@
     "title_zh": "Xiaomi Pad 6S Pro (chenjin1494)"
   },
   {
+    "name": "sheng-enlixk",
+    "title": "Xiaomi Pad 6S Pro (Enlixk)",
+    "title_zh": "Xiaomi Pad 6S Pro (Enlixk)"
+  },
+  {
     "name": "sheng-fft-infra",
     "title": "Xiaomi Pad 6S Pro (FFT-infra)",
     "title_zh": "Xiaomi Pad 6S Pro (FFT-infra)"
+  },
+  {
+    "name": "sheng-gkxqh",
+    "title": "Xiaomi Pad 6S Pro (gkxqh)",
+    "title_zh": "Xiaomi Pad 6S Pro (gkxqh)"
   },
   {
     "name": "sheng-ht94911",
@@ -940,6 +1040,11 @@
     "title_zh": "sheng 上的 macOS"
   },
   {
+    "name": "sheng-soneoylys",
+    "title": "Xiaomi Pad 6S Pro (Soneoylys)",
+    "title_zh": "Xiaomi Pad 6S Pro (Soneoylys)"
+  },
+  {
     "name": "sheng-thearchitectengineer",
     "title": "Xiaomi Pad 6S Pro (TheArchitectEngineer)",
     "title_zh": "Xiaomi Pad 6S Pro (TheArchitectEngineer)"
@@ -970,6 +1075,11 @@
     "title_zh": "Xiaomi 14 Pro 23116PN5BC"
   },
   {
+    "name": "shennong-baihem",
+    "title": "Xiaomi 14 Pro 23116PN5BC (baihem)",
+    "title_zh": "Xiaomi 14 Pro 23116PN5BC (baihem)"
+  },
+  {
     "name": "sirius",
     "title": "Xiaomi Mi 8 SE (sirius)",
     "title_zh": "小米 8 SE（sirius）"
@@ -995,6 +1105,11 @@
     "title_zh": "三星 Galaxy Tab S7 FE Wi-Fi（SM-T733）"
   },
   {
+    "name": "sm-t970",
+    "title": "Samsung Galaxy Tab S7+ Wi-Fi (SM-T970, gts7xlwifi), single-core platform bootstrap",
+    "title_zh": "Samsung Galaxy Tab S7+ Wi-Fi (SM-T970, gts7xlwifi), single-core platform bootstrap"
+  },
+  {
     "name": "songyuan",
     "title": "REDMI K100 Pro Max (songyuan, SM8850 Canoe)",
     "title_zh": "REDMI K100 Pro Max (songyuan, SM8850 Canoe)"
@@ -1008,6 +1123,11 @@
     "name": "songyuan-wukawl",
     "title": "Redmi K90 Pro Max (songyuan) (WUKAWL)",
     "title_zh": "Redmi K90 Pro Max (songyuan) (WUKAWL)"
+  },
+  {
+    "name": "starlte",
+    "title": "Samsung Galaxy S9 (starlte, SM-G960F, Exynos 9810): HakiOS, iOS 16.5 on XNU; not built on the UniXNU tree",
+    "title_zh": "Samsung Galaxy S9 (starlte, SM-G960F, Exynos 9810): HakiOS, iOS 16.5 on XNU; not built on the UniXNU tree"
   },
   {
     "name": "sweet",
@@ -1040,6 +1160,11 @@
     "title_zh": "Lenovo Xiaoxin Pad 12.1 (2025), Lenovo TB365FC (board cava_prc_consumer_wifi)"
   },
   {
+    "name": "thor",
+    "title": "Xiaomi 12S Ultra (thor): UniXNU UEFI bring-up",
+    "title_zh": "Xiaomi 12S Ultra (thor): UniXNU UEFI bring-up"
+  },
+  {
     "name": "thyme",
     "title": "Xiaomi Mi 10S (thyme)",
     "title_zh": "小米 10S（thyme）"
@@ -1065,6 +1190,11 @@
     "title_zh": "小米平板 7 / POCO Pad X1（uke）"
   },
   {
+    "name": "uke-imposterissus13",
+    "title": "Xiaomi Pad 7 (IMPOSTERiSSUS13)",
+    "title_zh": "Xiaomi Pad 7 (IMPOSTERiSSUS13)"
+  },
+  {
     "name": "uke-iosnjbrepo",
     "title": "Xiaomi Pad 7 (iOSNJBrepo)",
     "title_zh": "Xiaomi Pad 7 (iOSNJBrepo)"
@@ -1088,6 +1218,11 @@
     "name": "umi-agxmx666",
     "title": "Xiaomi Mi 10 / SM8250 UniXNU bring-up (AGXMX666)",
     "title_zh": "Xiaomi Mi 10 / SM8250 UniXNU bring-up (AGXMX666)"
+  },
+  {
+    "name": "umi-jopangjovan",
+    "title": "Xiaomi Mi 10 standalone UniXNU bring-up (JopangJovan)",
+    "title_zh": "Xiaomi Mi 10 standalone UniXNU bring-up (JopangJovan)"
   },
   {
     "name": "umi-mouya-q",
@@ -1138,6 +1273,11 @@
     "name": "vili",
     "title": "Xiaomi 11T Pro (vili, 2107113SG), SM8350 / Snapdragon 888",
     "title_zh": "Xiaomi 11T Pro (vili, 2107113SG), SM8350 / Snapdragon 888"
+  },
+  {
+    "name": "vince",
+    "title": "Xiaomi Redmi 5 Plus (vince, Snapdragon 625, 8x Cortex-A53)",
+    "title_zh": "Xiaomi Redmi 5 Plus (vince, Snapdragon 625, 8x Cortex-A53)"
   },
   {
     "name": "wayne",

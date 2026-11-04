@@ -6,16 +6,16 @@
 
 Redmi K60 \(mondrian/SM8475\). Format 2 device: the kernel builds and prelinks, the payload and the boot image still need the board ADT and the hardware bring-up.
 
-Source record: [porting.toml](https://github.com/Emilelu/UniXNU-mondrian/blob/8598c9797d455dfe275d889c3a873ca0b0d38796/porting.toml), `8598c9797d455dfe275d889c3a873ca0b0d38796`.
+Source record: [porting.toml](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/porting.toml), `c39ff292eee2726c0135f3ba3a98462c9c21d8de`.
 
 This page is generated from the device record.
 
 | Area | Status |
 | --- | --- |
 | [Configuration](#configuration) | `implemented` |
-| [Firmware and boot](#firmware) | `planned` |
-| [CPU and interrupts](#cpu) | `planned` |
-| [Memory and DMA](#memory) | `planned` |
+| [Firmware and boot](#firmware) | `device-verified` |
+| [CPU and interrupts](#cpu) | `implemented` |
+| [Memory and DMA](#memory) | `implemented` |
 | [Storage and root](#storage) | `planned` |
 | [Display](#display) | `planned` |
 | [Input](#input) | `planned` |
@@ -24,7 +24,7 @@ This page is generated from the device record.
 | [Audio](#audio) | `planned` |
 | [Power](#power) | `planned` |
 | [Image assembly](#packaging) | `host-verified` |
-| [Diagnostics](#diagnostics) | `planned` |
+| [Diagnostics](#diagnostics) | `device-verified` |
 
 ## Configuration {#configuration}
 
@@ -63,11 +63,11 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [schema\_version = 2 resolves through the arch, SM8475, 20G81 and device layers; status reports three components and 83 ordered patches](https://github.com/Emilelu/UniXNU-mondrian/blob/8598c9797d455dfe275d889c3a873ca0b0d38796/board.toml)
+- `source`: [schema\_version = 2 resolves through the arch, SM8475, 20G81 and device layers; status reports three components and 83 ordered patches](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/board.toml)
 
 ## Firmware and boot {#firmware}
 
-`planned`
+`device-verified`
 
 ### Hardware and dependencies
 
@@ -99,11 +99,12 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `device`: [Darwin 24 loader boots the board every time: green bar from Entry.S, then the upstream probe's blue and magenta bars at the kernel entry and just before the MMU comes on. Confirms the 0x480 boot\_args ABI, ADT handoff and framebuffer are live on hardware. A readable kernel panic followed at k60\_fontscale=4 until the CPU start order was fixed; that panic is gone.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/docs/ROUTE-A-18-STATE.md)
+  Command: <code>scripts/k60-device.sh boot /mnt/d/Android/k60-ios/boot-darwin24-bc8.img</code>. Revision: `d2af811a6dc9c6225de586e1615ca3824e2edce4`.
 
 ## CPU and interrupts {#cpu}
 
-`planned`
+`implemented`
 
 ### Hardware and dependencies
 
@@ -119,7 +120,8 @@ Collect evidence using the next action.
 
 ### Development findings
 
-- Collect the first cpu and interrupts observation, its cause when established, and the resulting implementation decision.
+- The SM8475 hardware MPIDRs are flat: 0x000..0x700, Aff1 = core index. That is what the vendor device tree and the Android tree carry, and this firmware rejects every CPU\_ON target outside that table. The 4/3/1 A510/A710/X2 grouping seen in Android's sysfs is L2/L3 cache topology, not MPIDR affinity, and the kernel's cluster-type property \(all 'P'\) is what collapses the eight cores into one topology cluster.
+- A starting core is matched to its cpu data by MPIDR &amp; 0xFFFF against the ADT's per-CPU reg, and the same value is the PSCI target, so the ADT must carry the real MPIDRs. The board dts must not override the SoC dtsi's cpu nodes: the ADT generator needs their compatible string and their unixnu,cluster-type.
 
 ### Completion criteria
 
@@ -127,19 +129,24 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for this board.
+- The eight cores register and the boot CPU takes its first IPI, but no secondary has yet been seen past its own entry checkpoint on hardware.
 
 ### Next action
 
-- Inventory the required cpu and interrupts inputs before implementation.
+- Confirm that each secondary CPU runs its own entry checkpoint and serves a timer on the unit.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `device`: [Android's device tree carries the eight hardware MPIDRs flat, 0x000..0x700, and boots all eight through PSCI; Android's sysfs reports a 4/3/1 A510/A710/X2 split by cache grouping, not by MPIDR. Our board dts had overridden the cpu nodes with packed 0x0-0x3/0x100-0x102/0x200 values, which broke both the firmware target table and the reset vector's match; the override is removed and the SoC dtsi's nodes are inherited again.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/dts/mondrian.dts)
+  Command: <code>adb shell 'cat /sys/devices/system/cpu/cpu*/topology/physical_package_id; cat /proc/device-tree/cpus/cpu@*/reg'</code>. Revision: `e636e445b621bed4fac0069f3604b87061350a8d`.
+- `device`: [The Darwin 22 start order in ArmCpu::start\(\) called initCPU\(\) itself, whose trailing signalCPU\(this\) sent the boot CPU a self IPI before cpu\_machine\_init\(\) had set StartedState, so the first IPI tripped the assertion at cpu\_common.c:586 with cpu\_flags 0x2000 against the expected 0x3000. Switching to the Darwin 24 first-boot path \(pong\_cpu\_first\_boot, pong\_cpu\_first\_boot\_wait, ml\_cpu\_init\_completed\) makes the kernel call initCPU\(\) during processor\_boot\(\). The unit now paints all three probe bars, never reaches the assertion, and walks back to Android on its own through the probe's timed PSCI reset.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/drivers/ArmCpu/ArmCpu.cpp)
+  Command: <code>scripts/k60-device.sh boot /mnt/d/Android/k60-ios/boot-darwin24-bc8.img</code>. Revision: `d2af811a6dc9c6225de586e1615ca3824e2edce4`.
+- `device`: [With the flat targets every CPU\_ON was granted and AFFINITY\_INFO answered 'on', yet no core joined: the arrival flag showed MPIDR 0x81000200 in the reset vector, and the core then hung on start.s's Lskip\_cpu\_reset\_handler because the cpu data it matched \(by its real MPIDR\) had no reset handler yet. The flat targets are the firmware's table; the pairing was the defect.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/patches/xnu-ipados18/0247-k60-psci-flat-targets.patch)
+  Command: <code>scripts/k60-device.sh boot /mnt/d/Android/k60-ios/boot-darwin24-bc11.img</code>. Revision: `e636e445b621bed4fac0069f3604b87061350a8d`.
 
 ## Memory and DMA {#memory}
 
-`planned`
+`implemented`
 
 ### Hardware and dependencies
 
@@ -155,7 +162,10 @@ Collect evidence using the next action.
 
 ### Development findings
 
-- Collect the first memory and dma observation, its cause when established, and the resulting implementation decision.
+- Live serial-6033dbec /memory/reg and rooted /proc/iomem give six RAM banks with a 28 GiB hole at 4..32 GiB. The installed 12 GiB cannot be one XNU window: the longest contiguous unreserved run is 8.65 GiB \(0x840000000..0xa69b78000\).
+- The 4 GiB window booted XNU at mem=actual=managed=4096 MiB. An 8 GiB window \(arena equal to the whole 8 GiB\) was refused: DXE occupies part of the arena, so DarwinBoot returned to the UniXNU menu.
+- A 8.625 GiB arena \[0x840000000,0xa68000000\) with a 7 GiB window is accepted: loader printed window 0x1c0000000 bytes at pa 0x8400200000 and HANDOFF EXIT RETURN 0. DarwinWindowSizeValid caps a window at 8 GiB, so 12 GiB is not reachable at all.
+- Screen trace of the 4 GiB boot: suggestd exits with status 163 signal 0 and ns=0 code=0x0, i.e. a normal exit status, not jetsam or a sandbox denial; disk5s APFS transactions keep completing \(xid 2512, 140/140 finished\), so the Data volume is not stuck.
 
 ### Completion criteria
 
@@ -163,15 +173,18 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for this board.
+- The 4 GiB window is the proven configuration; 7 GiB was accepted by the loader but XNU did not start, and 12 GiB is physically impossible as one window. The display/CA prerequisites from the reference project are present in our kernel; the open wall is userland contract/container handling, evidenced by ns=2 SIGABRT/SIGTRAP.
 
 ### Next action
 
-- Inventory the required memory and dma inputs before implementation.
+- Read the STR heap lines from the crash-string image to name the failing framework contract \(container path, MobileGestalt, activation\), then fix that one contract; display/CoreAnimation prerequisites are already audited as present.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `host`: [8.625 GiB arena and 7 GiB window; strict v4 round trip PASS; image sha256 8ea52daf4b3e926d4840e13a73fa00c9cadf9b3f1e97e1ececfdaa446e1afc34.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/docs/MEASURED-HIGH-WINDOW-2026-11-02.md)
+  Command: <code>python3 repair-high-window.py; build-uefi-8g.sh; build-kernel-summary.sh; package-textonly.py</code>. Revision: `48abe35d0a0a57f5fea9f9ba1e570800021ae6b1`.
+- `device`: [Loader accepted window 0x1c0000000 bytes at pa 0x8400200000 and HANDOFF EXIT RETURN 0; console output from XNU not yet observed.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/docs/MEASURED-HIGH-WINDOW-2026-11-02.md)
+  Command: <code>fastboot boot /mnt/e/k60-work/candidates/7g/boot-ios16-7g-textonly.img</code>. Revision: `e06211de59325bbd086c312324bdbf40e21d1045`.
 
 ## Storage and root {#storage}
 
@@ -449,6 +462,7 @@ Collect evidence using the next action.
 
 ### Development findings
 
+- The three local trees use different userland models: ours keeps an OS+SystemOS read-only APFS union from the unixnu partition; ios-sweet-k60 rewrites a writable HFSX image at build time; UniXNU-pong prepares at run time inside its own static init that becomes PID 1 and then execs launchd. Selected approach: diagnose first and do not replace PID 1, because the launchd chain is already verified and the pong adapter targets Darwin 24 ABI. Our kernel already carries exec\_inject and bindfs, so the pong model remains available if the blocker turns out to need run-time preparation. See docs/USERLAND-ROUTES-2026-11-02.md.
 - The kernel links and prelinks on macOS CI. Format 1 run 40631225483 produced 54349824 bytes; format 2 run 40650877574 produced 54419456 bytes at the same slide -0xb9c000 and the same lowest component extent 0xfffffff004426600.
 - The 69632-byte difference is a real fix, not noise: the format-1 glob applied zzzzzz-pong-init-scratch-allocation.patch through fuzz and the panic string it adds is absent from that kernel, while the strict format-2 series applies it at its intended place and the string is present. The checked scratch allocation had never reached a qualified kernel before.
 - mzyxsl daed6b5 fixes the local prelink helper to merge the OS-profile prelink table and board overrides. A real prelink of the 0238 native kernel succeeded with 32 roots and automatic slide -0xb9c000, 53788672 bytes, SHA-256 bb33682837f1807ef28d385cf09acf94f2749f49b3f7337d22348dcbf6c4b9df. Use --profile/--kit for non-sibling checkouts.
@@ -469,10 +483,12 @@ Collect evidence using the next action.
 
 - `host`: [Build kernel succeeded on macOS from this revision: prelink slide -0xb9c000, 54419456 bytes, lowest component extent 0xfffffff004426600](https://github.com/Emilelu/UniXNU/actions/runs/40650877574)
   Command: <code>./unixnu build kernel -D ../UniXNU-mondrian</code>. Revision: `6a10bf5e42ecfad7eed2789cc091287d31009623`.
+- `host`: [Route a-18 chain reproduces end to end: kernel 20,872,544 B \(15966fcd\) -&gt; prelink 54,808,576 B -&gt; payload 201,326,592 B -&gt; boot-darwin24-bc6.img. The verifier confirms the kernel slot is the 112-byte shim plus the rebuilt FD, the ramdisk slot is byte-identical to payload.img, and the in-volume kernel.macho matches the built kernel.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/scripts/verify-boot-img-payload.py)
+  Command: <code>python3 scripts/k60-prelink-darwin24.py &amp;&amp; python3 scripts/verify-boot-img-payload.py --img /mnt/d/Android/k60-ios/boot-darwin24-bc6.img --payload /tmp/k60build/out/mondrian/ipados-18.7.10-22H374/mondrian/payload/payload.img --kernel /tmp/k60build/out/mondrian/ipados-18.7.10-22H374/mondrian/kernel/kernel.macho</code>. Revision: `e636e445b621bed4fac0069f3604b87061350a8d`.
 
 ## Diagnostics {#diagnostics}
 
-`planned`
+`device-verified`
 
 ### Hardware and dependencies
 
@@ -505,6 +521,9 @@ Collect evidence using the next action.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `device`: [Breadcrumbs turned a silent reset into a located fault: column 1 showed six squares, column 2 zero, column 3 one, which put the death inside ml\_parse\_cpu\_topology\(\). The first carrier \(u64 slots at 0xA73FF000\) was useless because a hung board never returns DRAM, so the markers moved into the framebuffer; 0245 then produced a readable panic on hardware.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/patches/xnu-ipados18/0244-k60-breadcrumbs.patch)
+  Command: <code>scripts/k60-device.sh boot /mnt/d/Android/k60-ios/boot-darwin24-bc4.img; count the breadcrumb squares</code>. Revision: `e636e445b621bed4fac0069f3604b87061350a8d`.
+- `device`: [The upstream entry probe installs on this kernel: stage 1 blue bar, stage 2 magenta bar, stage 3 resets the board through PSCI six seconds after the MMU comes on. The board walked back to fastboot and then to Android by itself, so a hung kernel no longer needs a manual power cycle. The probe's panic screen stays off because it installs code in the padding after panic\(\), at an address fixed for the reference kernel.](https://github.com/Emilelu/UniXNU-mondrian/blob/c39ff292eee2726c0135f3ba3a98462c9c21d8de/docs/ROUTE-A-18-UPSTREAM.md)
+  Command: <code>scripts/k60-device.sh boot /mnt/d/Android/k60-ios/boot-darwin24-bc7.img</code>. Revision: `350d1c57c86d2fc562c7fa7529271fdae3af95bc`.
 
 </div>

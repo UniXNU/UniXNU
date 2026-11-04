@@ -4,149 +4,216 @@ schema_version = 1
 name = "zizhan"
 soc = "SM8475"
 os_profile = "ipados-18.7.10-22H374"
-summary = "Xiaomi MIX Fold 2：iPadOS 18.7.10 主屏、内屏触摸、Adreno 730 渲染（120 Hz 面板，滑动约 54 fps）与电池读数；基于 UniXNU-pong"
+summary = "Xiaomi MIX Fold 2: iPadOS 18.7.10 inner display, touch, Adreno 730 rendering and battery readings, derived from UniXNU-pong. A 120 Hz panel and 95.3 moving fps in one synthetic workload; experimental Wi-Fi HTTPS works, Settings join and cross-band reconnect remain unresolved."
 
 [[area]]
 id = "configuration"
 status = "host-verified"
 components = ["PongPlatform24"]
 paths = ["board.toml", "proprietary-files.txt", "feeds.toml", "unixnu.lock", "configs/**", "dts/**", "migration/format2/**", "scripts/*format2*", "scripts/build-pong-profile-kernel.py"]
-inputs = ["zizhan（22061218C）实机 /sys/firmware/fdt，MIUI V14.0.15.0.TLRCNXM（Android 13，内核 5.10.136）", "UniXNU-pong 的 SM8475 公共层与 PongPlatform24（Nothing Phone (2)，同为 SM8475）", "iPad7,11 的 iPadOS 18.7.10 22H374 restore"]
-configuration = ["board.toml：name = zizhan，device_tree = dts/zizhan.dts，kernel.defconfig = zizhan_ipados18_gpu_defconfig", "configs/zizhan_ipados18_gpu_defconfig：CONFIG_XNU_PONG_ADRENO_PLATFORM=y、CONFIG_XNU_PONG_POWER=y、CONFIG_XNU_PONG_WIFI=n、CONFIG_XNU_PONG_BACKLIGHT=n", "patches/xnu-ipados18/series：0001–0006、0008–0014，按序号应用"]
-procedure = ["tools/gen_reserved.py 按 pong.dts 的布局从实机 DT 生成 dts/zizhan.dts：model、compatible、DRAM 区间和 reserved-memory 换成 zizhan 的值。", "固件段指向 uefi-zizhan 的 Platforms/Xiaomi/zizhanPkg/zizhan.dsc。", "其余沿用 Pong 的四层选择（ARM64、SM8475、22H374、板级）。"]
-findings = ["zizhan 与 Pong 的 DRAM 第二段不同（0xf4600000+0xba00000，Pong 为 0xf1400000+0xec00000），ADSP carveout 为 0x9fd00000+0x3100000（Pong 为 0x85700000+0x2800000）；其余 SMEM、IPCC、AOSS、cmd-db 地址相同。", "构建脚本不读取 board 名，改名 zizhan 不影响 Pong 脚本。", "新增隔离的 zizhan_ipados18_wifi_defconfig 与 zizhan-wifi-sm8475.json；默认 GPU 配置继续关闭 Wi-Fi。实机 WLAN PHY 和供电参数不同于 Pong，已用本机 live DT 逐项核验新 profile。"]
-completion = ["dts/zizhan.dts 能编译，内核与启动镜像能构建，手机能进入 iPadOS 主屏"]
-limits = ["外屏（DSI-2，1080x2520）、Wi-Fi、音频没有接入，配置里关闭。"]
-next_action = ["用发布的版本打包启动镜像并上机跑一轮，记录设备结果。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-28-device-prep.md", result = "记录了实机硬件参数、全分区备份和原厂 UEFI 内存表对照。"}, {kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "记录了 zizhan 与 Pong 的硬件地址差异。"}, {kind = "host", command = "GitHub Actions zizhan macOS build（macos-15-intel，Xcode 16.4，pong_ipados18_ci_defconfig）", revision = "28d9f4fe869293e7a384b18b800ceb8dd56c1244", reference = "https://github.com/qiumochen/UniXNU-zizhan/actions/runs/41304992346", result = "托管 runner 上解析四层配置、编译 dts/zizhan.dts、应用全部 13 个 XNU 补丁并链接出 CI 内核，产物 pong-macos-products 已上传。"}]
+inputs = ["zizhan (22061218C) live /sys/firmware/fdt; MIUI V14.0.15.0.TLRCNXM, Android 13, kernel 5.10.136.", "SM8475 shared support and PongPlatform24 from UniXNU-pong (Nothing Phone (2)).", "iPad7,11 iPadOS 18.7.10 / 22H374 restore."]
+configuration = ["board.toml: name=zizhan; device_tree.source=device:dts/zizhan.dts; kernel.defconfig=zizhan_ipados18_gpu_defconfig.", "Default GPU config: CONFIG_XNU_PONG_ADRENO_PLATFORM=y, CONFIG_XNU_PONG_POWER=y, CONFIG_XNU_PONG_WIFI=n, CONFIG_XNU_PONG_BACKLIGHT=n.", "Apply patches/xnu-ipados18/series in order: 0001-0006 and 0008-0014."]
+procedure = ["Generate dts/zizhan.dts from the live DT with tools/gen_reserved.py, replacing model, compatible, DRAM and reserved-memory in the Pong layout.", "Select uefi-zizhan Platforms/Xiaomi/zizhanPkg/zizhan.dsc; retain ARM64, SM8475, 22H374 and board layers."]
+findings = ["The second DRAM bank is 0xf4600000+0xba00000, versus Pong 0xf1400000+0xec00000. ADSP uses 0x9fd00000+0x3100000, versus Pong 0x85700000+0x2800000. SMEM, IPCC, AOSS and cmd-db addresses agree.", "The Pong build scripts do not depend on the board name.", "Isolate Wi-Fi in zizhan_ipados18_wifi_defconfig and zizhan-wifi-sm8475.json; check PHY and power inputs against the live zizhan DT. The default GPU config keeps Wi-Fi disabled."]
+completion = ["Compile the board DTS, kernel and boot image, then reach the iPadOS Home Screen on the phone."]
+limits = ["Outer display and audio remain disabled. Wi-Fi has a separate experimental config; its verified network lifecycle and unresolved native Settings path are recorded in network."]
+next_action = ["Keep build and device evidence separate and reproduce the published configuration before changing board inputs."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-10-28-device-prep.md", result = "Live hardware, partition backup and stock UEFI memory-map comparison."},
+  {kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "Board-specific addresses and differences from Pong."},
+  {kind = "host", command = "GitHub Actions zizhan macOS build (macos-15-intel, Xcode 16.4, pong_ipados18_ci_defconfig)", revision = "28d9f4fe869293e7a384b18b800ceb8dd56c1244", reference = "https://github.com/qiumochen/UniXNU-zizhan/actions/runs/41304992346", result = "Hosted macos-15-intel runner resolved four layers, compiled the DTS, applied 13 XNU patches and linked the CI kernel; pong-macos-products uploaded."},
+]
 
 [[area]]
 id = "firmware"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["drivers/DarwinBoot24/**", "scripts/build-darwinboot24*"]
-inputs = ["uefi-zizhan（uefi-pong 加 Platforms/Xiaomi/zizhanPkg）", "原厂 uefi_b 的 uefiplat.cfg 内存表"]
-configuration = ["MemoryMap：PIL Reserved 大小 0x1DC00000，删去 Demura 和 QTEE", "SimpleFbDxe：framebuffer 0xb8000000，2160x1916（bootloader 留下的 cont_splash_region）", "启动方式：fastboot boot，不写任何分区"]
-procedure = ["build_fw.sh 用 EDK II 构建 zizhanPkg 的 FD；build_bootimg.py 把 BootShim、FD 和实机 DTB 拼成 boot v4 镜像。", "DarwinBoot24 读取 UniXNU 菜单配置，交接 XNU 前武装看门狗（pong_autoreset）。", "命令行不能超过 1023 个字符，ci_boot_ufs.sh 在打包时检查。"]
-findings = ["内屏显示 Silicium logo 和 UniXNU 菜单，颜色和方向正确；DarwinBoot24 能交接给 XNU。", "DarwinBoot24 拒绝启动时，把原因追加到 logfs:\\BOOTFAIL.TXT，然后重试，最后回到 fastboot。"]
-completion = ["fastboot boot 后进入 UniXNU 菜单并启动 XNU；任何失败都能自动回到 fastboot"]
-limits = ["高通 DXE 二进制沿用 uefi-pong 的 Binaries/pong；没有 zizhan 自己的 DisplayDxe，外屏不点亮。"]
-next_action = ["改用原厂 FV 里的 Panel_L18_38_0c_0a_sec_dsc_cmd.xml 尝试点亮外屏。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "UEFI、DarwinBoot24 交接和 XNU 早期启动的上机记录。"}]
+inputs = ["uefi-zizhan: uefi-pong plus Platforms/Xiaomi/zizhanPkg.", "Stock uefi_b uefiplat.cfg memory map."]
+configuration = ["PIL Reserved size=0x1DC00000; remove Demura and QTEE.", "SimpleFbDxe: framebuffer=0xb8000000, 2160x1916, inherited cont_splash_region.", "Temporary fastboot boot only; do not flash partitions."]
+procedure = ["build_fw.sh builds the zizhanPkg FD with EDK II; build_bootimg.py combines BootShim, FD and the device DTB into boot v4.", "DarwinBoot24 reads the UniXNU menu and arms pong_autoreset before XNU handoff.", "ci_boot_ufs.sh rejects command lines above its 1020-byte limit; DarwinBoot24 requires fewer than 1024 bytes."]
+findings = ["The inner panel shows the Silicium logo and UniXNU menu with correct color and orientation; DarwinBoot24 hands off to XNU.", "On refusal, DarwinBoot24 appends the reason to logfs:\\BOOTFAIL.TXT, retries, then returns to fastboot.", "A Wi-Fi kernel with larger embedded firmware occupied the temporary low-memory ReadFile buffer while the loader requested scanout pages. Free copied kernel/ADT inputs before reserving the optional 96 MiB pool. g299/g300 used the same kernel with radio disabled; the changed loader restored the real pool and complete screenshots."]
+completion = ["Temporary boot reaches the menu and XNU; failures retain an automatic return path."]
+limits = ["Qualcomm DXE binaries still come from uefi-pong Binaries/pong. There is no zizhan DisplayDxe and the outer panel stays off."]
+next_action = ["Audit the stock FV Panel_L18_38_0c_0a_sec_dsc_cmd.xml before attempting outer-panel support."]
+evidence = [
+  {kind = "device", command = "cycle.sh g299-wifi-kernel-radio-off; cycle.sh g300-loader-radio-off", revision = "03363797d9ffb10fd35ad5823331e89b4bb3c624", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Loader-only comparison changed no-pool fallback into a real 96 MiB zero-copy pool and full sampled screenshot."},
+  {kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "Device record of UEFI, DarwinBoot24 handoff and early XNU boot."},
+]
 
 [[area]]
 id = "cpu"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["drivers/ArmCpu/**", "drivers/ArmDTPlatform/**", "scripts/build-pong-armcpu*", "scripts/build-pong-platform*", "patches/xnu-ipados18/0003-*", "patches/xnu-ipados18/0005-*", "patches/xnu-ipados18/0008-*", "patches/xnu-ipados18/0014-*"]
-inputs = ["SM8475：4 个 Cortex-A510、3 个 Cortex-A710、1 个 Cortex-X2；GICv3；19.2 MHz 定时器；PSCI"]
-configuration = ["ADT cluster-type（PONG_ADT_CLUSTERS=1），内核用 __ARM_AMP__ 构建两个 cluster", "boot-arg pong_fast_pri（默认 47）和 pong_fast_cpu（默认 7）", "ml-timeout-lock-panic-scale=40、interrupt-masked-debug-mode=1"]
-procedure = ["0008 把 E/P 两个 cluster 交给 AMP 调度器；0014 让 UI 优先级线程先用空闲的 X2；0003 限制 qsort 递归深度，避免启动栈溢出。"]
-findings = ["8 个 CPU 全部启动。AMP 内核如果 ADT 里没有 cluster-type，会在早期卡住（g97）。", "这个 SoC 在 Gunyah 下普通的停顿也会超过 DEVELOPMENT 内核的 500 µs 中断屏蔽阈值，所以超时按 sheng 的做法放大 40 倍，中断屏蔽检查只记录不 panic。", "SpringBoard 主线程在 app 打开卡顿时 0.73 个核跑在 A710、只有 0.09 跑在 X2（g170），0014 因此让 UI 线程先用 X2。"]
-completion = ["8 核启动，滑动时 UI 线程优先落到 X2"]
-limits = ["没有温控；连续多轮后手机发热，ramoops 出现大量位翻转。"]
-next_action = ["接入 SM8475 的温度传感器和 CPU 调频限制。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "8 核启动（k4），E/P 调度对比和 tsample 线程采样记录。"}, {kind = "source", reference = "docs/progress/2026-11-01-120hz-and-cadence.md", result = "X2 优先调度的测量和结果。"}]
+inputs = ["SM8475: four Cortex-A510, three Cortex-A710, one Cortex-X2; GICv3, 19.2 MHz timer and PSCI."]
+configuration = ["ADT cluster-type is required with PONG_ADT_CLUSTERS=1; build two clusters with __ARM_AMP__.", "pong_fast_pri=47 and pong_fast_cpu=7 by default.", "ml-timeout-lock-panic-scale=40; interrupt-masked-debug-mode=1."]
+procedure = ["0008 exposes E/P clusters to AMP, 0014 prefers an idle X2 for UI-priority threads, and 0003 bounds qsort recursion to avoid early stack overflow."]
+findings = ["All eight CPUs start. An AMP kernel without ADT cluster-type stalls early (g97).", "Under Gunyah, ordinary pauses can exceed the DEVELOPMENT 500 us interrupt-masking threshold. Following sheng, scale timeouts by 40 and log masking violations; preserve genuine fatal panic handling.", "In g170, a stalled app-opening workload used 0.73 CPU on A710 and 0.09 on X2 for the SpringBoard main thread; 0014 gives UI work X2 preference."]
+completion = ["Start eight cores and place UI threads on X2 when available."]
+limits = ["No thermal control. Repeated trials heat the phone and can corrupt DRAM ramoops logs."]
+next_action = ["Integrate SM8475 thermal sensors and CPU frequency limits."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "Eight-core boot (k4), E/P scheduling comparison and tsample thread records."},
+  {kind = "source", reference = "docs/progress/2026-11-01-120hz-and-cadence.md", result = "X2 preference and cadence measurements."},
+]
 
 [[area]]
 id = "memory"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["configs/pong-memory-sm8475.json", "drivers/PongAdreno/ArmSmmu4K/**"]
-inputs = ["实机 DT 的 memory 和 reserved-memory 节点"]
-configuration = ["dts/zizhan.dts 的 memory@80000000 和 reserved-memory"]
-procedure = ["DarwinBoot24 只把实际拥有的 RAM 区间交给 XNU。"]
-findings = ["XNU 打印 Pong RAM: 4 owned banks, 9728 MiB；物理内存 12 GiB，空洞不会分配给 VM。"]
-completion = ["XNU 启动并打印受管内存"]
-limits = ["受管容量 9728 MiB，没有用上全部物理内存。"]
-next_action = ["核对 0x9_0000_0000 以上的区间能否交给 XNU。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "k1 打印受管内存 9728 MiB。"}]
+inputs = ["Live device-tree memory and reserved-memory nodes."]
+configuration = ["dts/zizhan.dts memory@80000000 and reserved-memory."]
+procedure = ["DarwinBoot24 passes only owned RAM ranges to XNU."]
+findings = ["XNU reports Pong RAM: 4 owned banks, 9728 MiB. The phone has 12 GiB; holes are excluded from VM."]
+completion = ["XNU boots and reports managed memory."]
+limits = ["Managed RAM is 9728 MiB; not all physical memory is used."]
+next_action = ["Check whether ranges above 0x9_0000_0000 can safely be given to XNU."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "k1 reports 9728 MiB of managed RAM."},
+]
 
 [[area]]
 id = "storage"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["drivers/NativeUfs/**", "scripts/*ufs*", "scripts/*storage*", "scripts/*os-delta*", "patches/xnu-ipados18/0006-*", "tools/zizhan/phone/pinalloc.c", "tools/zizhan/mac/install_pinned.py"]
-inputs = ["UFS 3.1；Android userdata 分区（f2fs）", "22H374 的 OS、SystemOS、Data 镜像（在 Mac 上用 IPSW 制作）"]
-configuration = ["boot-arg pong_shngroot_4k=<4K 块号>：根镜像在 userdata 里的起始块", "pong_ufs_async=0（默认），pong_ufs_defer 默认开"]
-procedure = ["install_pinned.py 用 pinalloc 在 Android /data 里分配一个物理连续的 19.4 GiB 文件 /data/hackios/root.img，写入 OS、SystemOS、Data 三个窗口，打印起始块号。", "RootLayout 按这个块号把三个窗口作为独立的 IOMedia 发布。", "0006：publishResource 发现 IOResources 还在配置中时，立即投递 matched 通知。"]
-findings = ["没有修 0006 之前，大约每 4 次启动有 3 次失败（Failed to mount root device）。原因是 APFS 容器探测在 IOBSD 发布之前运行，持有 APFS 的锁去等 IOBSD，与 IOResources 配置形成死锁环（g28 用 0005 的等待线程转储抓到）。修复后 g36–g39 4/4 正常挂根。", "OS、SystemOS 和可写 Data 三个卷都能挂载，原厂 22H374 launchd 能启动。"]
-completion = ["每次启动都能挂根；Data 卷的写入在下次启动后仍在"]
-limits = ["根镜像在 Android 的 f2fs 文件里，Android 里不能移动或碎片整理这个文件（用一个 40 GiB 的占位文件保持连续）。"]
-next_action = ["给 AppleImage4 提供软件 IOAESAccelerator，消除它在 /defaults 上的永久等待。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "根文件系统方案、挂根死锁的根因分析和 0006 修复前后的对比。"}]
+inputs = ["UFS 3.1 and Android userdata (f2fs).", "OS, SystemOS and Data images prepared locally from 22H374 on macOS."]
+configuration = ["pong_shngroot_4k=<4K block> identifies the root image extent.", "pong_ufs_async=0; pong_ufs_defer enabled by default."]
+procedure = ["install_pinned.py uses pinalloc to allocate a contiguous 19.4 GiB /data/hackios/root.img, writes OS/SystemOS/Data windows and reports its first block.", "RootLayout publishes each window as separate IOMedia.", "0006 immediately sends matched notifications when publishResource finds IOResources still configuring."]
+findings = ["Before 0006, roughly three of four boots failed to mount root. APFS probing held its lock while waiting for IOBSD, forming a cycle with IOResources configuration; waiting-thread dumps identified it in g28. g36-g39 mounted root in 4/4 trials after the fix.", "OS, SystemOS and writable Data mount; stock 22H374 launchd starts.", "Existing SmmuTakeover WIP selects SMR/S2CR validity and SID mask from IDR0.EXIDS. APPSSMMU on this phone has EXIDS disabled; g272-retry through g275 mounted root, wrote fresh UFS klog and returned to Android. EXIDS-enabled behavior has host build coverage only."]
+completion = ["Mount root reliably and preserve Data writes across boots."]
+limits = ["The root image is a pinned f2fs file. Never move or defragment it in Android; a 40 GiB placeholder was used to preserve a contiguous extent."]
+next_action = ["Provide a software IOAESAccelerator for AppleImage4 to resolve its wait on /defaults."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "Root layout, root-mount deadlock analysis and before/after 0006 results."},
+]
 
 [[area]]
 id = "display"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["configs/pong-display-sm8475.json", "drivers/PongPower/PongBacklight*", "scripts/*display*", "patches/xnu-ipados18/0009-*", "patches/xnu-ipados18/0011-*", "patches/xnu-ipados18/0012-*", "patches/xnu-ipados18/0013-*"]
-inputs = ["内屏 DSI-1，2160x1916，命令模式，DSC，60/120 Hz", "bootloader 留下的 cont_splash_region（0xb8000000 + 0x2b00000）"]
-configuration = ["ADT display-scale 和 artwork-scale-factor = 2（1080x958 点）", "pong_panel_hz（默认 120）", "pong_dpu_flip=1、pong_dpu_bufs=2、pong_zc=2、fb_swapwait=1（内核默认值）"]
-procedure = ["DSI 命令 FIFO 发出 DT 里 timing@1 的 timing-switch 命令，把面板切到 120 Hz。", "DPU 直接翻页到 CoreAnimation 自己的画布，三缓冲，不再用 GPU 拷贝。"]
-findings = ["display-scale 为 3 时 1916/3 不是整数，SpringBoard 的状态栏 Auto Layout 无限递归崩溃；改成 2 后主屏正常（u3）。", "INTF_1 帧计数从 60.5/s 变为 120.2/s，翻页 latch 上限从 16.6 ms 降到 8.3 ms，合成滑动的帧率从 44.6 升到 54–55 fps。", "去掉每帧 2.5 ms 的扫描输出拷贝后，每帧都被显示，没有撕裂计数。"]
-completion = ["内屏显示 iPadOS 主屏，120 Hz 下滑动帧率稳定"]
-limits = ["外屏没有驱动；背光沿用 bootloader 的状态，系统里不能调节亮度。", "旧内核截图日志每行被截断，只保留左侧约 39/135 个采样列；新分段格式已在 g248、g249 上机验证，但采样截图不能代替像素级面板检查。"]
-next_action = ["接入面板背光的 DCS 命令。"]
-evidence = [{kind = "source", reference = "docs/evidence/2026-10-30-u3-ipados-homescreen.jpg", result = "内屏显示 iPadOS 主屏（u3）。"}, {kind = "source", reference = "docs/progress/2026-11-01-120hz-and-cadence.md", result = "120 Hz 切换和帧率测量。"}, {kind = "source", reference = "docs/progress/2026-11-01-zero-copy-and-return-paths.md", result = "DPU 翻页零拷贝三缓冲的实现和测量。"}, {kind = "device", command = "cycle.sh g248、g249；tools/zizhan/mac/shot.py", revision = "c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "每轮 6 张截图均完整解出 135/135 列、120/120 行；主屏及天气画面横跨整幅图，旧右侧黑区确为缺失数据补黑。"}]
+inputs = ["Inner DSI-1 panel: 2160x1916, command mode, DSC, 60/120 Hz.", "Bootloader cont_splash_region: 0xb8000000+0x2b00000."]
+configuration = ["ADT display-scale=2 and artwork-scale-factor=2 (1080x958 points).", "pong_panel_hz=120 by default.", "Kernel defaults: pong_dpu_flip=1, pong_dpu_bufs=2, pong_zc=2, fb_swapwait=1."]
+procedure = ["Send timing@1 timing-switch commands through the DSI command FIFO to select 120 Hz.", "Flip DPU directly to CoreAnimation surfaces using triple buffering and no scanout GPU copy."]
+findings = ["At scale 3, 1916/3 is fractional and SpringBoard status-bar Auto Layout recurses until crash; scale 2 reaches Home Screen (u3).", "INTF_1 counters changed from 60.5/s to 120.2/s and latch ceiling from 16.6 to 8.3 ms. The early synthetic workload improved from 44.6 to 54-55 fps; later display-link measurements are in gpu.", "Removing the 2.5 ms per-frame scanout copy presented every submitted frame without counted tears."]
+completion = ["Display iPadOS Home Screen on the inner panel with stable presentation at 120 Hz."]
+limits = ["Outer display is unsupported. Backlight retains bootloader state; system brightness control is absent.", "Old screenshot log lines were truncated to about 39/135 sampled columns. The segmented format was device-verified in g248/g249; sampled screenshots do not replace pixel-level panel inspection."]
+next_action = ["Integrate panel DCS brightness commands."]
+evidence = [
+  {kind = "source", reference = "docs/evidence/2026-10-30-u3-ipados-homescreen.jpg", result = "Inner-panel iPadOS Home Screen (u3)."},
+  {kind = "source", reference = "docs/progress/2026-11-01-120hz-and-cadence.md", result = "120 Hz transition and cadence measurements."},
+  {kind = "source", reference = "docs/progress/2026-11-01-zero-copy-and-return-paths.md", result = "DPU zero-copy triple-buffer implementation and measurements."},
+  {kind = "device", command = "cycle.sh g248, g249; tools/zizhan/mac/shot.py", revision = "c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "Six images per trial decoded all 135/135 columns and 120/120 rows. Home Screen and Weather span the image; the old right black region was missing log data."},
+]
 
 [[area]]
 id = "input"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["userland/touch.c", "drivers/NativeHidInput/**", "drivers/GoodixTouch/**", "userland/ui_compat18.c", "patches/xnu-ipados18/0002-*", "patches/xnu-ipados18/0010-*"]
-inputs = ["内屏触摸 ST FTS（spi0.0 fts-pri），固件 st_fts_l18.ubin", "PMIC 电源键"]
-configuration = ["boot-arg pong_touch=1，touch_flip 默认 2（y 镜像）", "电源键长按 pong_button_reset 毫秒（默认 3000）后热复位到 fastboot"]
-procedure = ["0002 加入 bsd/dev/pong_fts.c：SE4 只能给 GSI 用，所以 SPI 用 GPIO 模拟。", "触摸事件走 Pong 原有的 HID 路径交给 backboardd。"]
-findings = ["用触摸在主屏上打开了「设置」（t4）。", "长按电源键 3 秒能把手机从运行中的 iOS 送回 fastboot。"]
-completion = ["触摸能点开应用、滑动页面"]
-limits = ["外屏触摸（spi2.0 fts-sec）没有驱动；音量键没有核对。"]
-next_action = ["核对音量键的 PMIC 外设地址。"]
-evidence = [{kind = "source", reference = "docs/evidence/2026-10-30-t4-settings-by-touch.jpg", result = "用触摸打开了「设置」。"}, {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "触摸驱动的轮次记录。"}, {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "ui_compat18.c 新增 zizhan display-link 速率 WIP；未构建、未上机，触摸与动画体验需要独立回归，未改变输入区域验证等级。"}]
+inputs = ["Inner ST FTS touch (spi0.0 fts-pri), st_fts_l18.ubin firmware.", "PMIC power key."]
+configuration = ["pong_touch=1; touch_flip=2 (mirror Y) by default.", "Hold the power key for pong_button_reset milliseconds (default 3000) to reset to fastboot."]
+procedure = ["0002 adds bsd/dev/pong_fts.c. SE4 is GSI-only, so SPI is bit-banged through GPIO.", "Deliver events to backboardd through the inherited Pong HID path."]
+findings = ["Touch opened Settings from Home Screen (t4).", "A three-second power-key hold resets running iOS to fastboot.", "ui_compat18.c also owns presentation hooks. The 22H374 UIKit.InProcessAnimationManager class match was corrected and exercised in g298; synthetic-animation evidence does not establish additional physical-touch coverage."]
+completion = ["Use touch to open apps and scroll pages."]
+limits = ["Outer touch (spi2.0 fts-sec) is unsupported; volume keys remain unaudited. g298 measures synthetic input, not real-finger latency."]
+next_action = ["Audit volume-key PMIC addresses and measure physical-touch latency separately from synthetic cadence."]
+evidence = [
+  {kind = "source", reference = "docs/evidence/2026-10-30-t4-settings-by-touch.jpg", result = "Settings opened by touch."},
+  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "Touch-driver trial records."},
+  {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "Historical display-link WIP in ui_compat18.c: not built on November 2, host-built on November 3; device validation was added later without upgrading input status."},
+  {kind = "source", reference = "docs/progress/2026-11-04-displaylink-device.md", result = "g296-g298 compare the actual UIKit class match, synthetic scrolling and first-frame limits; physical-touch qualification remains separate."},
+]
 
 [[area]]
 id = "gpu"
 status = "implemented"
 components = ["PongPlatform24"]
-paths = ["drivers/PongAdreno/**", "drivers/PongMetal/**", "patches/mesa/**", "patches/metal2vulkan/**", "scripts/*metal*", "scripts/*adreno*", "scripts/*turnip*"]
-inputs = ["Adreno730v3；手机自带固件 a730_sqe.fw、gmu_gen70000.bin、a730_zap.*（不进仓库）", "Turnip 和 metal2vulkan"]
-configuration = ["PONG_ADRENO_FIRMWARE 指向固件目录", "pong_gpu_level（GMU 起始档位，默认 9 = 710 MHz）", "内核默认拒绝 MercuryPosterEx 使用 GPU（pong_gpu_deny=- 恢复）"]
-procedure = ["Adreno bring-up 等 rootvnode 出现后再开始；Metal provider 在挂根之后才发布。", "扫描输出按 surface 缓存映射和导入。"]
-findings = ["GPU 渲染的主屏和动画已由用户照片确认。", "壁纸扩展 MercuryPosterEx 会和 backboardd 抢 GPU，基线 13 轮里有 5 轮整机 GPU 丢失；拒绝它之后 6/6 没有丢失，滑动帧率平均 54.5 fps。", "固定 900 MHz 不比 DCVS 快，GPU 频率不是瓶颈。", "GPU 客户端因内存 ledger 被杀（SBRendererService 渲染电池页时）会在用户映射还在时释放 BO 页，内核 pmap_assert_free panic；PongAdrenoClient 的 dropViews 现在 unmap 并释放映射，NativeAdrenoMemory::release 在页还给 VM 前对每页 pmap_disconnect（NativeAdrenoDisconnectPages）。", "ASTC 布局修复后，g248 和已安装 watermark 桥接库的 g249 在 DeviceSupportsASTC=1 时自动打开天气 App；各 6 张分段截图均记录完整 135/135 列，主屏与天气画面横跨整屏。g251 时钟和 g252 设置也记录到完整宽度的 App 画面。", "g253、g254 的 GPU 时间线分别完整完成 592/592 和 403/403 笔提交；deadline 看到的 submitted/retired 差 1 是 backboardd 在复位前 26 ms 正常提交的在途工作，不是持续 fence 停滞。", "Photos 的零尺寸断言来自 Tungsten 以 0x0 调用 PXCreateContext；Photos 专用运行时钩子把零轴收敛为 1，g262、g263 和最终内核 g264 均成功进入 Photos，ASTC 开关两组都没有再崩溃。"]
-completion = ["主屏和应用由 GPU 渲染，长时间滑动没有 GPU 丢失"]
-limits = ["壁纸扩展不能用 GPU；metal2vulkan 每次提交仍有约 10–20 ms 的 CPU 开销。", "ASTC 修复已自动验证主屏、天气、时钟、设置和 Photos 整幅采样截图；多任务、触摸动画和 Photos 的相册/搜索/编辑路径仍待人工确认，默认仍关闭 ASTC。早先确认过的整机 GPU 丢失仍有 stuck-copy 和 poison 检测。", "Photos 启动与相册首页已自动验证，但首次提示后的网格、搜索、编辑和图片浏览仍需人工操作；IOSurfaceSharedEvent 监听仍缺失。"]
-next_action = ["支持 IOSurfaceSharedEvent 监听，让壁纸扩展和依赖监听的服务重新使用 GPU 事件。", "同镜像验证 fairplayd，再测试 display-link WIP，随后按调研顺序处理 nopreamble、BO 缓存、壁纸和截图清晰度。"]
+paths = ["drivers/PongAdreno/**", "drivers/PongMetal/**", "patches/mesa/**", "patches/metal2vulkan/**", "scripts/*metal*", "scripts/*adreno*", "scripts/*turnip*", "userland/ui_compat18.c"]
+inputs = ["Adreno730v3; local device a730_sqe.fw, gmu_gen70000.bin and a730_zap.* firmware, excluded from Git.", "Turnip and metal2vulkan."]
+configuration = ["PONG_ADRENO_FIRMWARE selects the local firmware directory.", "pong_gpu_level=9 (710 MHz initial GMU level) by default.", "MercuryPosterEx is denied GPU access by default; pong_gpu_deny=- restores it."]
+procedure = ["Start Adreno after rootvnode exists and publish the Metal provider after root mount.", "Cache surface mappings and scanout imports."]
+findings = ["User photos confirm GPU-rendered Home Screen and animations.", "MercuryPosterEx competes with backboardd: 5/13 baseline trials lost the GPU. Denying it yielded 6/6 without loss and an early mean scrolling rate of 54.5 fps.", "Fixed 900 MHz did not outperform DCVS; GPU clock was not the limiting factor.", "A ledger-killed GPU client (SBRendererService on Battery) freed BO pages with user mappings alive, causing pmap_assert_free. PongAdrenoClient::dropViews now unmaps/releases mappings; NativeAdrenoMemory::release calls pmap_disconnect per page before returning pages to VM.", "After ASTC layout fixes, g248/g249 opened Weather with DeviceSupportsASTC=1; six segmented images per run had 135/135 columns across the screen. g251 Clock and g252 Settings also had complete app images.", "g253/g254 completed 592/592 and 403/403 GPU submissions. A one-submit deadline difference was backboardd work issued 26 ms before reset, not persistent fence blockage.", "Tungsten called PXCreateContext with 0x0, triggering Photos assertions. A Photos-only hook clamps zero axes to 1; g262/g263 and final-kernel g264 reached Photos with ASTC both off and on.", "g296 observed UIKit.InProcessAnimationManager; the old UIViewInProcessAnimationManager-only hook missed it. g298 matched the actual class, filtered 121 requests and reached 95.3 moving fps versus 56.7-58.4 baseline. Trace presentation gaps p50/p90 improved from about 16.6/33.3 to 8.3/16.6 ms."]
+completion = ["Render Home Screen and apps through the GPU without GPU loss during sustained scrolling."]
+limits = ["Wallpaper extensions cannot use the GPU; metal2vulkan still spends about 10-20 ms CPU time per submission.", "Sampled screenshots verified Home Screen, Weather, Clock, Settings and Photos after ASTC fixes. Multitasking, touch animations and Photos album/search/edit paths need manual checks; ASTC remains off by default. Stuck-copy and poison detection remain enabled for previously observed GPU losses.", "Photos launch and album landing page are verified; grid, search, edit and image viewing after first-use prompts need manual interaction. IOSurfaceSharedEvent listeners are still missing.", "g298 improves the synthetic animation tail; first frame after idle remains about 75-80 ms. Real fingers, Settings scrolling, power and other apps have no independent qualification; this is not a global 120 fps claim."]
+next_action = ["Implement IOSurfaceSharedEvent listeners before restoring dependent services and wallpaper GPU access.", "Locate the roughly 80 ms first frame and measure Settings scrolling separately. Use segmented traces to prioritize BO/IOSurface work; qualify fairplayd and wallpaper independently."]
 evidence = [
-  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "GPU bring-up、GPU 丢失的诊断和拒绝壁纸扩展的对照实验。"},
-  {kind = "source", reference = "docs/progress/2026-10-31-frame-timeline.md", result = "逐帧 GPU 提交时间线。"},
-  {kind = "host", command = "metal-refresh.sh astc-final 的 bridge / plugin 构建", revision = "e3be89264924267a610e472e559c9d4d8a66b803", reference = "docs/progress/2026-11-02-astc-layout.md", result = "最终 Metal 桥接库和插件构建成功；源码里的 ASTC 格式编号与 iPhoneOS SDK 核对。"},
-  {kind = "device", command = "round.sh g247 pong_touch_synth=3 tsa=1118 touch_lat=1 pong_shot=60 pong_shot_ms=1000 pong_astc=1", revision = "e3be89264924267a610e472e559c9d4d8a66b803", reference = "docs/progress/2026-11-02-astc-layout.md", result = "ASTC=1，天气 App 在连续 3 张旧格式截图的左侧区域有画面，自动返回 Android；右侧数据缺失。"},
-  {kind = "device", command = "metal-refresh.sh watermark；cycle.sh g249", revision = "c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "watermark 桥接库安装后 ASTC=1，天气启动，主屏与天气 6 张截图完整，自动返回 Android；GPU fence 停滞仍在。"},
-  {kind = "device", command = "cycle.sh g250–g252", revision = "caa3a06b6b809be46146fc890995b16d51c8a99c", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "时钟、设置成功启动且整幅截图完整；照片启动后反复以 PXPixelSizeAreaIsZero 断言退出。每轮均自动返回 Android。"},
-  {kind = "device", command = "cycle.sh g253、g254；pong_gtrace_delay、pong_gtrace、pong_gtrace_ib", revision = "a0eb276866aee06a31189f182335760d5a39d4a9", reference = "docs/progress/2026-11-02-fence-diagnostics.md", result = "两轮时间线无丢失，提交全部完成，零拷贝 fence 无超时；deadline fence 是复位前 26 ms 的正常在途提交。"},
-  {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "记录 ASTC 后续工作、fairplayd 当前镜像状态和 display-link WIP 的未验证边界。"},
-  {kind = "device", command = "cycle.sh g262–g264；pong_astc=0/1；Photos PXCreateContext 兼容钩子", revision = "1ebf568205630bc5fa25737ae95392d2908f0e8a", reference = "docs/progress/2026-11-03-photos-context.md", result = "钩子把 Tungsten 的 0x0 收敛为 1x1；Photos 不再触发零尺寸断言或退出，最终 ASTC=1 轮次保持运行并自动返回 Android。"},
+  {kind = "device", command = "cycle.sh g296-gpu-default, g297-gpu-native; replace UI library and reuse g296 image for g298-gpu-fixed", revision = "42629e5d8d86ead5c4b57d752e3b3187e702ed6f", reference = "docs/evidence/2026-11-04-g298-displaylink.txt", result = "Matching the real UIKit animation class activated filtering; moving fps 56.7-58.4 to 95.3. All trace submissions completed, zero lost events. Animation tail improved; first frame did not. All three trials returned to Android."},
+  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "GPU bring-up, GPU-loss diagnosis and wallpaper-denial controls."},
+  {kind = "source", reference = "docs/progress/2026-10-31-frame-timeline.md", result = "Per-frame GPU submission timeline."},
+  {kind = "host", command = "metal-refresh.sh astc-final (bridge/plugin build)", revision = "e3be89264924267a610e472e559c9d4d8a66b803", reference = "docs/progress/2026-11-02-astc-layout.md", result = "Final Metal bridge/plugin builds passed; ASTC format numbers checked against the iPhoneOS SDK."},
+  {kind = "device", command = "round.sh g247 pong_touch_synth=3 tsa=1118 touch_lat=1 pong_shot=60 pong_shot_ms=1000 pong_astc=1", revision = "e3be89264924267a610e472e559c9d4d8a66b803", reference = "docs/progress/2026-11-02-astc-layout.md", result = "ASTC=1: Weather appeared in the left region of three old-format screenshots; automatic Android return. Right-side data was missing."},
+  {kind = "device", command = "metal-refresh.sh watermark; cycle.sh g249", revision = "c9c8fd274c279a8571b525a1e1dbdf8eddf84d9d", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "With the watermark bridge and ASTC=1, Weather started and all six Home/Weather images were complete; automatic Android return. Fence-stall diagnosis remained open at that point."},
+  {kind = "device", command = "cycle.sh g250–g252", revision = "caa3a06b6b809be46146fc890995b16d51c8a99c", reference = "docs/progress/2026-11-02-shot-and-watermark.md", result = "Clock and Settings started with complete screenshots. Photos repeatedly exited with PXPixelSizeAreaIsZero. Each trial returned to Android."},
+  {kind = "device", command = "cycle.sh g253, g254; pong_gtrace_delay, pong_gtrace, pong_gtrace_ib", revision = "a0eb276866aee06a31189f182335760d5a39d4a9", reference = "docs/progress/2026-11-02-fence-diagnostics.md", result = "Both traces had no lost events; all submissions completed and zero-copy fences did not time out. Deadline fence was normal work issued 26 ms before reset."},
+  {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "Historical ASTC follow-ups, installed fairplayd state and unverified display-link WIP."},
+  {kind = "device", command = "cycle.sh g262-g264; pong_astc=0/1; Photos PXCreateContext hook", revision = "1ebf568205630bc5fa25737ae95392d2908f0e8a", reference = "docs/progress/2026-11-03-photos-context.md", result = "The hook clamps Tungsten 0x0 to 1x1; Photos stopped hitting the zero-size assertion. Final ASTC=1 trial stayed running and returned to Android."},
+  {kind = "host", command = "Read-only prepared OS/UI inspection; build/sign UI library and Metal bridge/plugin; CI/GPU kernel builds; ui-refresh.sh no-device preflight", revision = "103d97f1ecc7c874429ae1003d29c4a45c4eb383", reference = "docs/progress/2026-11-03-displaylink-host.md", result = "Prepared image contained the hook; UI, bridge/plugin and CI/GPU builds passed. With no device the refresh script left the image untouched. No new device fps or screenshots."},
 ]
 
 [[area]]
 id = "network"
-status = "host-verified"
+status = "device-verified"
 components = ["PongPlatform24"]
-paths = ["drivers/PongWifi/**", "configs/pong-wifi-sm8475.json", "configs/zizhan-wifi-sm8475.json", "configs/zizhan_ipados18_wifi_defconfig", "scripts/*wifi*", "scripts/*ath11k*", "tools/zizhan/mac/ci_boot_ufs.sh"]
-inputs = ["QCA6490（PCI 17cb:1103）；本机只读导出的固件与 Linux v7.0.14 ath11k 源码，不入仓库"]
-configuration = ["默认 GPU 配置仍为 CONFIG_XNU_PONG_WIFI=n、pong_wifi=0；试验配置 zizhan_ipados18_wifi_defconfig 为 CONFIG_XNU_PONG_WIFI=y，镜像需 WIFI=1 写入 pong_wifi=1"]
-procedure = ["从实机 Android live DT 核对 PCIe0、WLAN GPIO、SID；在隔离试验配置中构建并打包 Wi-Fi 镜像。", "USB 恢复后临时 fastboot boot，按 PCIe、供电、MHI、固件、MSI、扫描顺序定位首个失败阶段。"]
-findings = ["实机 DT 确认 PCIe0、GPIO 80/94/95/96/204、SID 0x1c00/0x1c01；Android 链路为 Gen2 x1。", "旧 Pong profile 与 zizhan live DT 的 PHY 表有 6 条差异，多出一条本机没有的 WLAN 供电请求；g265/g266 均未启动。", "zizhan profile 经完整 live DT 核验；g267 镜像虽已打包，监视在设备未出现时撤下，未有设备结果。", "高位 QMI board ID 分支已保留 chip ID 决定的 bdwlan/bdwlang 前缀；三配置重新构建成功，g268 镜像含自动返回参数，实际 QMI ID 仍待设备日志。", "g268 自动轮次的 USB 工具已修正启动失败误报并限制 adb/fastboot 阻塞；CI、GPU、Wi-Fi 三配置再构建通过，仍无设备启动证据。", "g268 镜像内 PWF2 与本机 213 个原始固件文件逐项一致；包内没有高位 board ID 文件，实际 QMI ID 待设备日志。"]
-completion = ["扫描到网络并完成关联"]
-limits = ["尚无 Wi-Fi 试验配置的设备启动日志、实际 QMI board ID、扫描或关联证据；USB 当前不可见。默认镜像继续关闭 Wi-Fi。", "若实际 QMI board ID 超过 0xff，本机导出的固件包没有对应高位命名文件；需先看实际请求名，不能猜测替代。"]
-next_action = ["恢复 USB 枚举，执行 g268 试验镜像的临时启动和自动返回轮次，取回日志后处理首个失败阶段。"]
+paths = ["drivers/PongWifi/**", "configs/pong-wifi-sm8475.json", "configs/zizhan-wifi-sm8475.json", "configs/zizhan_ipados18_wifi_defconfig", "scripts/*wifi*", "scripts/*ath11k*", "tools/zizhan/mac/ci_boot_ufs.sh", "tools/zizhan/tests/**", "userland/wifi-service18.m", "userland/wifi_service_stage.py", "userland/wifi_ui_probe18.h"]
+inputs = ["QCA6490 (PCI 17cb:1103); read-only device firmware export and Linux v7.0.14 ath11k sources kept outside this repository."]
+configuration = ["Default GPU config uses CONFIG_XNU_PONG_WIFI=n and pong_wifi=0. Experimental zizhan_ipados18_wifi_defconfig enables Wi-Fi; pack with WIFI=1 to emit pong_wifi=1. Private auto-association inputs are disabled by default."]
+procedure = ["Check PCIe0, WLAN GPIOs and SIDs against the Android live DT; build and pack the isolated Wi-Fi configuration.", "Temporarily fastboot boot over rear USB-A with automatic return. Diagnose power, PCIe, DMA, MHI, firmware, MSI and scan in order; preserve the first failure."]
+findings = ["Live DT confirms PCIe0, GPIO 80/94/95/96/204 and SID 0x1c00/0x1c01; Android runs Gen2 x1.", "The old Pong profile differed in six PHY entries and one extra power request. g265/g266 never booted. The corrected zizhan profile was checked against the full live DT; g267 was prepared but its waiter was removed before any device boot.", "Extended QMI board IDs preserve the chip-dependent bdwlan/bdwlang prefix. g268 PWF2 matched all 213 exported files; the kernel and boot image contained the complete package. USB tool failures meant no g268 device evidence.", "Remove the unverified Pong PCI subsystem gate; validate the primary ID and log actual subsystem values. The summary reports only the last cold start and does not infer association from scan milestones.", "g272-retry verified power, PCIe link/BAR and subsystem 0x010817cb. SMMU context returned StateMismatch (7), left the SID detached and let iOS continue; no scan.", "g273 passed TCR2 checks but failed SCTLR ASIDPNE readback. Explicit TBI and a coordinated shared ASID enabled SID1c01 DMA in g274; firmware/QMI reported chip_id=0x12, board_id=0xff and selected bdwlang.elf. WMI_INIT returned -11; receiver setup alone did not prove MSI delivery.", "The host replay selects shim headers with -iquote: its first Linux run exposed -I shadowing glibc linux/errno.h and hiding EAGAIN. This is a host-harness fix; driver behavior is unchanged. A reproduced WMI wait bug resent after success. The fix in g275 reached station-ready, 102 channels, a completed 42-channel scan and 15 networks; Apple80211 queries followed. g276 never booted due to USB enumeration; g277 prepared private optional join inputs.", "g278 completed real WPA2 and key installation. g279 native IPConfiguration acquired DHCP; g280/g281 repeated it, but published service state lacked Router despite router/DNS in the ACK.", "g290 default Wi-Fi path used a separate lease compensation session and verified initial HTTPS, requested renewal, disconnect cleanup and reconnect, with three HTTPS 200 responses. A credential-free boot reached station-ready and scanned 11 networks without association or public probes.", "g291 authenticated to a different BSSID but received no DHCP Offer/ACK. A same-image retry crashed firmware into RDDM; repeated recovery messages overwrote early diagnostics.", "g292 verified first connection and requested renewal on 2.4 GHz, then hit RDDM on cross-band reconnect. g294 vdev recreation failed and was removed. g293/g295 bound the native IO80211 user client; after wifid job/cache repair manager-port lookup errors disappeared, but no native scan/join SET and no successful Settings launch were observed.", "g304 and g306 verified 5220-to-2452 MHz and 2452-to-5220 MHz reconnects to distinct BSSIDs: first connection, requested renewal and reconnect each returned HTTPS 200, with route/DNS cleanup and no RDDM. Publish target-band basic rates before assigning the channel context; ath11k reuses its cached management rate at vdev start.", "g301-g303 traced the native UI stall from SpringBoard wifi_manager_open to wifid waiting for InterfaceNamer completion. The stock 300/240-second stack/quiet fallback exceeded short device trials. Stock InterfaceNamer metadata now selects 30/10 seconds and configd publishes its actual TIMEOUT/COMPLETE state.", "g309 used only the native Settings UI: exact private network row, secure text input and navigation Join action. Stock wifid submitted the 900-byte association ABI, WPA2 key installation and DHCP completed, native HTTPS returned 200; ACK compensation released after native route/DNS took over. Kernel auto-association remained disabled.", "g312 reused native saved credentials from an SSID-only/no-password fixture and returned HTTPS 200; kernel credentials and kernel association test remained disabled.", "g311 failed a 128 MiB wired DMA allocation before station readiness. Retry a real 64 MiB arena with SMMU/allocator bounds from the actual size; g312/g314 verified that budget.", "22H374 reads a 2264-byte scan record with a monotonic observation timestamp at 0x8d0. Preserve the legacy prefix and derive real observation time conservatively from frame age.", "RSSI_BOUNDS type 106 was unsupported, leaving a zero legacy threshold that rejected negative-dBm candidates. Report signed decoder format limits after checking SIGNAL_DBM, with no extra station admission floor; native quality policy and actual RSSI readings are preserved. g331 automatic association and HTTPS 200 passed. g332 repeated it with original wifid, no Settings launch and actual default 128 MiB DMA; periodic daemon disconnects remain."]
+completion = ["Scan and associate with a real network.", "On en0, verify DHCP, requested renewal, disconnect route/DNS cleanup, reconnect and three public HTTPS responses (g290 default network path)."]
+limits = ["Wi-Fi remains disabled in the default GPU configuration. Current radio processing still depends on polling; actual GIC MSI delivery is unverified.", "Bidirectional cross-band tests and one Settings join passed against the current WPA2 APs. Natural T1 expiry, different SSIDs/subnets, long-duration roaming, enterprise/SAE and broader device coverage remain unqualified.", "DHCP ACK compensation remains available for missing route/DNS state; g309 observed native takeover. UI fixture files and firmware stay local, and the optional UI test is disabled unless explicitly requested.", "Automatic join and HTTPS passed, but periodic daemon disconnect/rejoin remains unqualified. A true RSN completion event did not by itself remove it. One logging boot failed before userland with shared-cache ENOMEM; preserve this real panic as a failed prerequisite."]
+next_action = ["Read the original daemon disconnect reason and verify sustained connectivity on a clean stock-wifid image before promotion. Reconcile prepared images with the actual install manifest; remove all local diagnostic/credential files.", "Qualify natural T1, different subnets, long-duration reconnect and actual MSI separately before changing the shipping default."]
 evidence = [
-  {kind = "source", reference = "docs/progress/2026-10-28-device-prep.md", result = "记录了 Wi-Fi 芯片型号。"},
-  {kind = "host", command = "ci_kernel.sh：zizhan_ipados18_wifi_defconfig、pong_ipados18_ci_defconfig、zizhan_ipados18_gpu_defconfig", revision = "79ae5b1d7b92f621ac549aec80e73e30e404d649", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "旧 profile 的三配置构建通过，但试验镜像已因板级输入不符撤下，g265/g266 均未启动。"},
-  {kind = "host", command = "PONG_WIFI_DTB=<local live DT> ci_kernel.sh：zizhan_ipados18_wifi_defconfig；另构建 pong_ipados18_ci_defconfig、zizhan_ipados18_gpu_defconfig；ci_boot_ufs.sh boot-g267", revision = "ae24f8a89f41fe2864d997ea3b8005fb1824ae89", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "zizhan profile 完整核验；三配置成功，g267 命令行含唯一 Wi-Fi 开关和自动返回；设备尚未启动。"},
-  {kind = "host", command = "ci_kernel.sh：Wi-Fi、CI、GPU 三配置；ci_boot_ufs.sh boot-g268", revision = "2eab51d14ecc79b3e9b34a4adf65a2b0a81322d8", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "QMI 扩展 board ID 命名修正后，三配置成功；g268 镜像命令行和自动返回参数检查通过，尚无设备结果。"},
-  {kind = "host", command = "ci_kernel.sh：CI、GPU、Wi-Fi 三配置；USB 工具模拟", revision = "890ec93c136a23bbc0e857d0879c3119bf945b83", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "三配置再次成功；adb 可见、未授权、阻塞和 fastboot boot 成败模拟通过；g268 仍未启动设备。"},
-  {kind = "host", command = "解析 PWF2 目录并逐项 SHA-256 比对本机导出，核对 g268 镜像内嵌固件包", revision = "0949ebe471d258965f2ef2ae21b44cd1eda13576", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "213/213 文件一致；内核和最终镜像均含完整包；无高位 board ID 文件，实际 QMI ID 未知。"},
+  {kind = "device", command = "cycle.sh g312, g314, g331, g332", revision = "718f73ce424d427c2ecdc757b9c64eb7cd4f3dca", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Stored credential reuse and real 64 MiB operation passed. Native automatic join and HTTPS 200 passed; original-wifid/no-Settings/default-128 MiB repeated HTTPS, but periodic disconnects remain."},
+  {kind = "host", command = "ci_kernel.sh Wi-Fi/CI/GPU; LLVM 18 loader build; UI/helper compile and codesign; check-wifi-host.py on macOS and Ubuntu", revision = "92ef6d2de5419ce5c5aa8bfe36ab25a9fadeffb7", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Three kernel configurations, loader/UI/helper builds and host regression suites passed. Native metadata staging preserves stock endpoints and rejects other OS builds."},
+  {kind = "device", command = "cycle.sh g304-rate-crossband, g306-rate-2g-to-5g, g309-native-settings-join", revision = "92ef6d2de5419ce5c5aa8bfe36ab25a9fadeffb7", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Both frequency directions passed three HTTPS 200 responses and disconnect cleanup without RDDM. Native Settings join independently passed WPA2, DHCP and HTTPS with kernel auto-association disabled."},
+  {kind = "host", command = "ci_kernel.sh CI/GPU/Wi-Fi configs; check-wifi-host.py; wifid plist/cache staging replay; compile/sign UI library", revision = "fbac25628cfd36365c2850407bc77c3121b36780", reference = "docs/progress/2026-11-04-wifi-native-repair.md", result = "Bounded waits under a busy pump, skb ownership, lease and USB regressions passed. Native interface and firmware-failure cleanup built; host and device findings remain separate."},
+  {kind = "device", command = "cycle.sh g292, g293, g294, g295 (local repair snapshots)", revision = "3ca641b749e9fbba116f7eebcde349e4f8ce81e5", reference = "docs/evidence/2026-11-04-wifi-native-repair.txt", result = "Local repair snapshots based on the recorded commit: first connection and renewal on 2.4 GHz returned HTTPS 200; cross-band RDDM failed. Native IO80211 binding worked and manager-port lookup errors disappeared; Settings/native join failed. Vdev experiment reverted."},
+  {kind = "device", command = "cycle.sh out/g291/pong-xnu-initial.img g291-retry 480", revision = "616bb5eb8d5d622b90c51c06d10486063ecb3bcd", reference = "docs/evidence/2026-11-04-g291-cross-ap.txt", result = "Same-image control: firmware crashed, MHI recovery returned -110 and association failed. Early logs were overwritten; initial fault stage unknown. Deadline returned the phone to Android."},
+  {kind = "device", command = "cycle.sh out/g291/pong-xnu-initial.img g291 480; cycle-resume.sh recovery after interruption", revision = "616bb5eb8d5d622b90c51c06d10486063ecb3bcd", reference = "docs/evidence/2026-11-04-g291-cross-ap.txt", result = "Initial connection and requested renewal returned HTTPS 200; disconnect cleanup passed. WPA2 authenticated to a different BSSID, but no DHCP Offer/ACK arrived. Cross-AP networking failed; returned to Android."},
+  {kind = "device", command = "cycle.sh out/g290-default-wifi/pong-xnu-initial.img g290-default-wifi 420", revision = "ade79e8088f089b7145b9139e410b6115c7ef3ce", reference = "docs/evidence/2026-11-04-g290-default-wifi.txt", result = "Credential-free boot reached station-ready, scanned 11 networks and returned to Android; no automatic association or public probe."},
+  {kind = "device", command = "cycle.sh out/g290/pong-xnu-initial.img g290 480", revision = "ade79e8088f089b7145b9139e410b6115c7ef3ce", reference = "docs/evidence/2026-11-04-g290-lifecycle.txt", result = "Default Wi-Fi path passed initial networking, native requested renewal, disconnect cleanup, reconnect and three HTTPS 200 responses."},
+  {kind = "device", command = "cycle.sh out/g289/pong-xnu-initial.img g289 460", revision = "da8e7cbacf1c73f8aff14ba39fed9ea2ebf45d0e", reference = "docs/evidence/2026-11-04-g289-https.txt", result = "Existing en0 configuration acquired default route and DNS, native HTTPS 200; compensation released after native configuration recovered. Renewal trigger was not run."},
+  {kind = "device", command = "cycle.sh out/g287/pong-xnu-initial.img g287 420", revision = "64c4b52a4081802f9f75e5ca2c963f99df623156", reference = "docs/evidence/2026-11-04-g287-https.txt", result = "Live ACK matched kernel IPv4. After service-state compensation en0 became primary; native HTTPS returned 200 / 577 bytes; returned to Android."},
+  {kind = "device", command = "cycle.sh out/g286/pong-xnu-initial.img g286 420", revision = "c405db767cfc2f21016a0bde10c6559c6d84cd7e", reference = "docs/evidence/2026-11-04-g286-routing.txt", result = "Live ACK was readable; consistency checks rejected compensation. HTTPS failed."},
+  {kind = "device", command = "cycle.sh out/g285/pong-xnu-initial.img g285 420", revision = "3b54df270354f46b9c330622e7a6b238ea5a9faf", reference = "docs/evidence/2026-11-04-g285-routing.txt", result = "Five power rails, association and IPv4 passed. configd had no en0 IPv4 entity and the kernel had no default route."},
+  {kind = "device", command = "cycle.sh out/g283/pong-xnu-initial.img g283-retry 420", revision = "cb2667293f5720ef93b5926e1a49df2730513145", reference = "docs/evidence/2026-11-04-g283-routing.txt", result = "Real association and IPv4 passed; kernel returned ENETUNREACH. Dynamic-store IPv4 service lacked Router; disk lease did not pass validation."},
+  {kind = "device", command = "cycle.sh out/g282/pong-xnu-initial.img g282 480", revision = "9f9423f25e91d26be43476053f49bd7a77f55282", reference = "docs/evidence/2026-11-04-g282-wifi.txt", result = "IPv4 acquired. Experimental ACK-based route/DNS compensation was not applied; HTTPS failed. Returned to Android."},
+  {kind = "device", command = "cycle.sh out/g281/pong-xnu-initial.img g281 480", revision = "70f56e325df7ea2a9f851d53136784d0461169e7", reference = "docs/evidence/2026-11-04-g281-wifi.txt", result = "Session DHCP service succeeded; ACK contained router/DNS while published service lacked Router."},
+  {kind = "device", command = "cycle.sh out/g280/pong-xnu-initial.img g280 480", revision = "0959812c992522b084bfb80a587e888cfd8bee53", reference = "docs/evidence/2026-11-04-g280-wifi.txt", result = "WPA2 and DHCP repeated successfully; four public probes had no primary interface, route or DNS. Returned to Android."},
+  {kind = "device", command = "cycle.sh out/g279/pong-xnu-initial.img g279-retry 480", revision = "333c5defb04af1d5f48fa3c83e912d352869441f", reference = "docs/evidence/2026-11-04-g279-wifi-usb.txt", result = "WPA2 association and IPv4 DHCP lease succeeded; first HTTPS probe failed."},
+  {kind = "device", command = "cycle.sh out/g275/pong-xnu-initial.img g275 480", revision = "32ee207bd5b585d79bc25181f69757aefeab9256", reference = "docs/evidence/2026-11-03-g275-wifi.txt", result = "Station ready and scan found 15 networks. Fresh UFS klog was 941005 bytes; returned to fastboot after 168 seconds, then Android. Association/DHCP unverified."},
+  {kind = "device", command = "cycle.sh g273; three kernel configurations and register replay", revision = "0acd5e0f55cf37635fb333f9735ae7592747403e", reference = "docs/evidence/2026-11-03-g273-wifi.txt", result = "Returned automatically with 1133944 bytes of fresh UFS klog; TCR2 passed, SCTLR ASIDPNE readback mismatched."},
+  {kind = "device", command = "cycle.sh g274; three kernel configurations and register replay", revision = "239d5403defdec0d9dde3c1cc4d11c5e3b2326bd", reference = "docs/evidence/2026-11-03-g274-wifi.txt", result = "Returned automatically with 1105249 bytes of fresh UFS klog; SMMU/DMA and firmware/QMI passed, WMI_INIT=-11. Wi-Fi incomplete."},
+  {kind = "device", command = "cycle.sh out/g272/pong-xnu-initial.img g272-retry 420 (existing local WIP image)", revision = "4927a4b459c6a025d12af96da3265b5c74a1458f", reference = "docs/evidence/2026-11-03-g272-retry-wifi.txt", result = "Temporary boot passed; fastboot return after 107 seconds and 995985 bytes of fresh UFS klog (deadline), then Android. Power/PCIe passed, SMMU status=7; Wi-Fi incomplete."},
+  {kind = "source", reference = "docs/progress/2026-10-28-device-prep.md", result = "Device Wi-Fi chipset identification."},
+  {kind = "host", command = "ci_kernel.sh: zizhan_ipados18_wifi_defconfig, pong_ipados18_ci_defconfig, zizhan_ipados18_gpu_defconfig", revision = "79ae5b1d7b92f621ac549aec80e73e30e404d649", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Three old-profile configs built. Images withdrawn because board inputs mismatched; g265/g266 never booted."},
+  {kind = "host", command = "PONG_WIFI_DTB=<local live DT> ci_kernel.sh (Wi-Fi); ci_kernel.sh CI/GPU; ci_boot_ufs.sh boot-g267", revision = "ae24f8a89f41fe2864d997ea3b8005fb1824ae89", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Full live-DT profile audit and three builds passed. g267 had one Wi-Fi switch and automatic return; no device boot."},
+  {kind = "host", command = "ci_kernel.sh Wi-Fi/CI/GPU; ci_boot_ufs.sh boot-g268", revision = "2eab51d14ecc79b3e9b34a4adf65a2b0a81322d8", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "After QMI extended-ID naming fix, all three configs built; g268 command-line and automatic-return checks passed. No device result."},
+  {kind = "host", command = "ci_kernel.sh CI/GPU/Wi-Fi; USB tool simulations", revision = "890ec93c136a23bbc0e857d0879c3119bf945b83", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Three builds passed again. Visible, unauthorized, blocked adb and fastboot boot success/failure simulations passed; g268 had no device boot."},
+  {kind = "host", command = "Parse PWF2 and compare each SHA-256 with local firmware export; inspect embedded g268 package", revision = "0949ebe471d258965f2ef2ae21b44cd1eda13576", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "213/213 firmware files matched; kernel and final image contained the full package. No high-board-ID file; actual QMI ID was then unknown."},
+  {kind = "host", command = "wifi-stage.py: five isolated log fixtures and g264 non-Wi-Fi replay; ci_kernel.sh CI/GPU", revision = "eb2fe973a6611582c6ad31f45d7c8b9389094a6a", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Distinguished no log, power failure, post-PCIe ath11k failure, multiple boots and scan. CI/GPU builds passed; no g268 device result."},
+  {kind = "host", command = "ci_kernel.sh CI/GPU/Wi-Fi; ci_boot_ufs.sh boot-g269; inspect command line and firmware package", revision = "5b695938a42495d517be09d43b3ecaa2cb4eb59c", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Three builds passed. g269 command line was 913 bytes with one Wi-Fi switch, screenshots and automatic return; new subsystem log marker and PWF2 embedded. Device absent; no device result."},
+  {kind = "host", command = "wifi-stage.py multi-boot/corrupt-value fixtures and g264 replay; ci_kernel.sh CI/GPU", revision = "2b7966cb95f2572f5b28dee8e8d89e49b384ec1d", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Only last cold-start subsystem values were reported; corrupt values rejected. g264 retained NO_WIFI_LOG. CI/GPU builds passed; no g269 device log."},
+]
+
+[[area]]
+id = "cellular"
+status = "planned"
+components = []
+paths = ["drivers/ZizhanCellular/**"]
+inputs = ["SM8475 phone with a cellular modem; unlike a Wi-Fi-only board this area is applicable.", "Board-specific modem firmware, EFS/NV, QRTR/QMI, SIM, IPA/QMAP and OS ABI inputs require an audit. Keep identities and device dumps private."]
+configuration = ["No cellular component is selected or enabled in board.toml; no modem initialization is added by this record."]
+procedure = ["Read the upstream baseband guide and sibling implementation before selecting a shared component.", "Audit the live board resources and firmware dependencies; isolate read-only transport/identity checks before registration or data-session work."]
+findings = ["No cellular implementation or device verification has been performed in this repository; a Wi-Fi HTTPS result does not validate modem transport or data."]
+completion = ["Establish firmware/transport ownership, valid SIM state and network registration.", "Verify IPA/QMAP data sessions, routing and teardown/reset with separate host/device evidence."]
+limits = ["Modem firmware loading, EFS/NV, SIM, registration, IPA/QMAP and data sessions are not implemented or verified. No IMEI/ICCID or raw modem dump is published."]
+next_action = ["Inventory the actual zizhan modem transport, firmware and OS dependencies against the upstream QcomBaseband guide, then choose the first bounded read-only probe."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-11-04-upstream-ci-audit.md", result = "The current upstream record guide lists cellular separately; this modem-equipped phone is planned, not not-applicable."},
 ]
 
 [[area]]
@@ -154,53 +221,82 @@ id = "audio"
 status = "planned"
 components = ["PongPlatform24"]
 paths = ["drivers/PongPower/PongAudio*", "drivers/PongPower/ShengAudioReach*", "userland/PongAudioPlugIn.c", "scripts/*audio*"]
-inputs = ["2 个 CS35L41 功放（地址 0x40、0x42）；公开 zizhan Android DT 给出 SE15 I²C（0x880000）、SDA/SCL（GPIO56/57）和 IRQ（GPIO88/118），共用 GPIO1 复位；启用前须与本机 live DT 核对。Pong 音频代码使用 TFA9873，总线/引脚/地址均不同。"]
-configuration = ["boot-arg pong_audio=0；没有 tfa98xx.cnt 时构建一张空功放表"]
-procedure = ["保持 pong_audio=0；先核对本机 live DT 和 I²C 前置条件，再以隔离配置做只读身份探针，最后实现 CS35L41 初始化与 ADSP 播放路由。"]
-findings = ["功放型号与 Pong 不同，Pong 的 TFA9873 路径不能直接用。", "公开 zizhan Android DT 的两颗 CS35L41 位于 SE15 I²C 0x880000，SDA/SCL 为 GPIO56/57，地址 0x40/0x42，共用 GPIO1 复位；PongAudio.cpp 使用 SE13 0xa94000、GPIO48/49、TFA 地址 0x34/0x35。", "GeniI2c 底层有多字节收发入口，但现有功放包装和寄存器写入是 TFA9873 专用，不能仅改地址。"]
-completion = ["扬声器能出声"]
-limits = ["没有 CS35L41 驱动；公开提取 DT 尚未与本机 live DT 再核对，未有音频设备启动或声音证据。"]
-next_action = ["先核对本机 live DT 的 SE15 时钟、引脚、复位与 IRQ；隔离配置只读 CS35L41 身份，再核对调音/固件与 ADSP 路由，逐段上机验证。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "记录了音频不启动的原因和空功放表。"}, {kind = "source", reference = "https://github.com/sm8450-mainline/fdt/blob/3e347601d9e91dd2f1f48e51499823225f7bc0bc/zizhan.dts", result = "公开提取的 zizhan Android DT 给出 SE15、GPIO56/57、CS35L41 地址和复位/IRQ；本机尚待 live DT 复核。"}, {kind = "source", reference = "docs/progress/2026-11-03-audio-board-audit.md", result = "逐项对照 PongAudio.cpp，列出隔离探针的前置条件和未验证边界。"}]
+inputs = ["Two CS35L41 amplifiers at 0x40/0x42. Public zizhan Android DT gives SE15 I2C 0x880000, GPIO56/57 SDA/SCL, GPIO88/118 IRQ and shared GPIO1 reset. Recheck the live phone DT before enabling; Pong uses TFA9873 with different bus/pins/addresses."]
+configuration = ["pong_audio=0; without tfa98xx.cnt build an empty amplifier table."]
+procedure = ["Keep audio off; audit live DT and I2C prerequisites, run an isolated read-only identity probe, then implement CS35L41 initialization and ADSP playback routing."]
+findings = ["Pong TFA9873 initialization cannot be reused by changing addresses.", "PongAudio.cpp uses SE13 0xa94000, GPIO48/49 and addresses 0x34/0x35, unlike the public zizhan SE15 description.", "GeniI2c supports multi-byte transfers but amplifier wrappers and writes remain TFA9873-specific."]
+completion = ["Play audible sound through the speakers."]
+limits = ["No CS35L41 driver. Public extracted DT still needs live-device revalidation; no audio device-boot or playback evidence."]
+next_action = ["Verify live SE15 clocks, pins, reset and IRQ, then read CS35L41 identity in an isolated config. Audit tuning/firmware and ADSP routing before staged device tests."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "Reason audio stays disabled and empty-amplifier-table behavior."},
+  {kind = "source", reference = "https://github.com/sm8450-mainline/fdt/blob/3e347601d9e91dd2f1f48e51499823225f7bc0bc/zizhan.dts", result = "Public extracted Android DT describes SE15, GPIO56/57, CS35L41 addresses, reset and IRQ; live-phone recheck pending."},
+  {kind = "source", reference = "docs/progress/2026-11-03-audio-board-audit.md", result = "PongAudio.cpp comparison, isolated-probe prerequisites and unverified boundaries."},
+]
 
 [[area]]
 id = "power"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["drivers/PongPower/**", "configs/pong-power-sm8475.json", "userland/sleepserver/**", "scripts/build-pong-power-native.py", "tools/zizhan/mdt2mbn.py"]
-inputs = ["ADSP 固件：/vendor/firmware_mnt/image/adsp.mdt 和 b00..b25，用 mdt2mbn.py 合并为 adsp.mbn（不进仓库）", "UniXNU-sheng 的 ShengBattmgr 协议"]
-configuration = ["CONFIG_XNU_PONG_POWER=y", "boot-arg pong_adsp=2 启动 DSP 和电池，1 只做映射和调查，0 关闭"]
-procedure = ["PongAdsp 用 zizhan 的 carveout 加载并认证启动 ADSP，经 PMIC GLINK 读取电池。", "ShengBattmgr 改用小米的属性编号（12 之后后移一位），温度单位已经是 0.01 °C。", "不编 Wi-Fi 时由 PongRpmh.cpp 提供共享的 RPMh 投票。"]
-findings = ["g206 的读数与 Android sysfs 一致：电量 100 %、4444 mV、充电 426 mA、34.40 °C、满充 3507 mAh、设计 4500 mAh、循环 907 次。", "电池服务类名改为 AppleSmartBattery：PerfPowerServices 的 PLBatteryAgent（hasAppleSmartBattery）和 powerd 的电池健康计算都按这个类名找电池；另外发布 Serial、BatteryData 和 MaximumCapacityPercent。「设置 › 电池 › 电池健康」读到的最大容量为 78 %（3483/4500 mAh）。", "设置里电池健康的转圈由 batteryDataUnavailable 决定：管理状态来自 thermalmonitord 的 com.apple.thermalmonitor.ageAwareMitigationState（本移植上从不发布），服务状态来自 powerd 电源字典里的 Battery Service State（缺失）。", "USB 拔插时充电状态和电流方向（+300 mA / −520 mA）随之切换（v7）。", "电池认证：设置先问 MobileGestalt 的 D6/BMDrlb8V3WSiqL8gL+w，为真时要读电池下 AppleAuthCPRelay 的 isTrustedForUI；这块电池没有 Apple 认证芯片，ui_compat18.c 在 UI 进程里答 false（不适用），不伪造“正品”。"]
-completion = ["状态栏和「设置 › 电池」显示正确的电量，插拔充电器有变化；「设置 › 电池」能打开，不卡住"]
-limits = ["「电池健康」一直转圈（管理状态和服务状态缺失）；电池用量图表需要长时间使用才有数据；没有休眠和唤醒。"]
-next_action = ["让 thermalmonitord 发布 ageAwareMitigationState、让 powerd 写出 Battery Service State，不在设置里伪造“正常”。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "ADSP 启动阶段 1–13 全部通过，电池读数与 Android 一致。"}]
+inputs = ["Local ADSP /vendor/firmware_mnt/image/adsp.mdt and b00..b25, merged by mdt2mbn.py into adsp.mbn; not committed.", "UniXNU-sheng ShengBattmgr protocol."]
+configuration = ["CONFIG_XNU_PONG_POWER=y.", "pong_adsp=2 starts DSP and battery; 1 maps/investigates only; 0 disables."]
+procedure = ["PongAdsp loads/authenticates ADSP in the zizhan carveout and reads battery through PMIC GLINK.", "Shift ShengBattmgr Xiaomi property IDs by one after 12; temperature is already in 0.01 C.", "PongRpmh.cpp supplies shared RPMh votes when Wi-Fi is not built."]
+findings = ["g206 agreed with Android sysfs: 100%, 4444 mV, charging 426 mA, 34.40 C, full capacity 3507 mAh, design 4500 mAh and 907 cycles.", "Rename the battery service AppleSmartBattery because PerfPowerServices PLBatteryAgent and powerd health calculation select that class. Publish Serial, BatteryData and MaximumCapacityPercent. Settings Battery Health reported 78% (3483/4500 mAh).", "The health spinner follows batteryDataUnavailable: thermalmonitord never publishes com.apple.thermalmonitor.ageAwareMitigationState and powerd lacks Battery Service State.", "USB plug/unplug changes charge state and current direction (+300/-520 mA, v7).", "Settings checks MobileGestalt D6/BMDrlb8V3WSiqL8gL+w then AppleAuthCPRelay isTrustedForUI for battery authentication. This battery has no Apple authentication chip; ui_compat18.c reports the capability false, without inventing genuine-part status."]
+completion = ["Status bar and Settings Battery show accurate charge and plug/unplug changes; Battery opens without blocking."]
+limits = ["Battery Health still spins due to missing management/service state. Usage graphs need long-term collection. Sleep/wake is unsupported."]
+next_action = ["Implement thermalmonitord ageAwareMitigationState and powerd Battery Service State from actual services; do not fabricate a normal status in Settings."]
+evidence = [
+  {kind = "source", reference = "docs/progress/2026-11-01-battery.md", result = "ADSP startup stages 1-13 passed; battery readings agree with Android."},
+]
 
 [[area]]
 id = "packaging"
 status = "host-verified"
 components = ["PongPlatform24"]
 paths = ["scripts/build-ipados18*", "scripts/make-pong-adt-ipados18.py", "scripts/build-xnu-ipados18.sh", "patches/xnu-ipados18/**", "userland/build-ipados18.py", "scripts/build-pong-metal-bridge.py", "scripts/build-pong-metal-plugin.py", "scripts/build-pong-*-macos.py"]
-inputs = ["xnu-11417.140.69（Darwin 24.6.0）和 22H374 restore 的原始组件"]
-configuration = ["patches/xnu-ipados18/series", "PROFILE=zizhan_ipados18_gpu"]
-procedure = ["ci_prep.sh 准备依赖，ci_kernel.sh 构建内核，ci_boot_ufs.sh 预链接并打包成启动镜像。", "build-xnu-ipados18.sh 用 patch --forward 依次应用补丁，避免把看起来已应用的块反向撤销。"]
-findings = ["干净的 xnu-11417.140.69 按 series 依次应用全部补丁后，与实际构建用的工作树逐文件一致。", "新版 Xcode 的 clang 多了三个警告，在 -Werror 下需要关掉；Pong 脚本原来只允许 Intel 主机，现在也允许 arm64 主机。", "ADT 的 /chosen 必须有 unique-chip-id 和 chip-id：没有它们内核不发布 IOPlatformUUID，gethostuuid() 永久阻塞（timed → locationd → contextstored → PowerUIAgent → 「设置 › 电池」卡死）；build-ipados18-bootimg-local.py 传软件种子（不是 Apple 硬件标识）。", "fairplayd.A2 在本移植上启动即退出，launchd 握着 KeepAlive 端口，排队的请求永远没有回复；build-ipados18.py 的 EXCLUDED18 把它移出服务缓存。", "DarwinBoot24 命令行上限 1020 字节：等于默认值的 pong_ui_software=0、pong_software_ui=0、pong_ram_banks=1 不再写入（约 −54 字节）。", "ADT /product 的 udid-version 决定 MobileGestalt 怎么算 UniqueDeviceID：1 要 SerialNumber、ECID、WifiAddress、BluetoothAddress，Wi-Fi 关着时 WifiAddress 的回答让调用者等几秒（设置主线程卡在 -[ISDefaults init]，首屏 6.4 s）；有 /chosen 种子时改用 iPhone17,1 自己的 2（ChipID-ECID），首屏 1.2 s。", "11-02 为调查 Weather 卡住，从 g213 修改前镜像恢复当前 OS 的 fairplayd.A2 job/plist；g245 交接记录为 2560 帧、moving 2453 / 72.0 fps、fairplayd failed lookup 零行，但仍 respawn，功能恢复未验证。EXCLUDED18 仍排除它，全量重建会再移除。"]
-completion = ["从本仓库的提交构建出能上机的启动镜像"]
-limits = ["Apple 镜像、固件和 ABI 二进制都要在本机准备。", "job-restore.sh 泛化版仅做静态检查，尚未在 Mac / 设备运行；当前已安装镜像与全量重建的 fairplayd 策略不同。"]
-next_action = ["用这个版本打包启动镜像并上机跑一轮，记录设备结果。", "同镜像做 fairplayd 有/无对照并核对 Weather / 电池页，决定是否修改 EXCLUDED18；Mac 补做双配置内核及 plugin / UI 构建。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "构建链说明。"}, {kind = "host", command = "ZIZHAN_SRC=<work dir> ci_prep.sh && DEFCONFIG=zizhan_ipados18_gpu_defconfig JOBS=10 ci_kernel.sh", revision = "1ec1190f4e3467a36a7a7402bc766dfdf688adf1", reference = "docs/evidence/host-build-zizhan_ipados18_gpu.txt", result = "Mac Studio（Apple silicon，Xcode 26.6.0）从全新的构建目录完整编译出 DEVELOPMENT_ARM64_PONG 内核，18321080 字节；zizhan 的 boot-arg 字符串（pong_fts、pong_panel_hz、pong_dpu_flip 等）与上机使用的内核一致。"}, {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "区分当前镜像回填和源码 EXCLUDED18，记录 g245 现象及下一项验证，未增加 device-verified 证据。"}, {kind = "source", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Wi-Fi 本机输入路径、三配置构建和试验镜像打包记录；无设备结果。"}]
+inputs = ["xnu-11417.140.69 (Darwin 24.6.0) and stock 22H374 restore components."]
+configuration = ["patches/xnu-ipados18/series.", "PROFILE=zizhan_ipados18_gpu; local prelink/userdata inputs documented under migration/ipados18."]
+procedure = ["ci_prep.sh prepares dependencies; ci_kernel.sh builds; ci_boot_ufs.sh prelinks and creates the boot image.", "build-xnu-ipados18.sh uses patch --forward in series order to avoid reversing already-applied hunks."]
+findings = ["After the series is applied, clean xnu-11417.140.69 matches the actual build tree file by file.", "Disable three newer-clang warnings under -Werror; support both Intel and arm64 macOS hosts.", "ADT /chosen requires unique-chip-id and chip-id. Without IOPlatformUUID, gethostuuid blocks and timed/locationd/contextstored/PowerUIAgent lead to a frozen Battery page. build-ipados18-bootimg-local.py supplies a software seed, not an Apple hardware identity.", "fairplayd.A2 exits immediately in this port; launchd KeepAlive retains its port and queued requests have no response. EXCLUDED18 removes it on a full rebuild.", "The packer enforces 1020 command-line bytes. Omit default pong_ui_software=0, pong_software_ui=0 and pong_ram_banks=1 to save about 54 bytes.", "ADT /product udid-version=1 requires SerialNumber, ECID, WifiAddress and BluetoothAddress; disabled Wi-Fi stalls MobileGestalt and Settings ISDefaults. With a /chosen seed, use the stock iPhone17,1 version 2 (ChipID-ECID); first Settings screen fell from 6.4 to 1.2 seconds.", "On November 2, fairplayd was restored from pre-g213 OS for Weather diagnosis. g245 recorded 2560 frames, 2453 moving at 72.0 fps and no failed lookups, but respawn persisted. EXCLUDED18 still removes it on full rebuild.", "Read-only inspection found fairplayd cache/plist in current OS and g213, absent in f245. Kernel builds do not change that installed service state; use the same kernel and B1-A-B2 ordering for a device control.", "g279 installed a signed native DHCP helper/job into the 22H374 OS after old-window/block prechecks, then read back blocks against the manifest. The phone launched the service.", "The November 4 compliance audit found that the existing local and macOS build pipelines have not adopted the latest upstream templates/package.sh and package action. Record validity and successful builds do not establish compliance with that new packaging interface.", "Full 22H374 preparation copies stock InterfaceNamer bundle metadata into the overlay with its documented native 30/10-second fallback. The signed UI helper is opt-in; tests use local-only credential files, verified OS delta preflights and readbacks. No fake dynamic-store Quiet state is injected."]
+completion = ["Build a bootable image reproducibly from a published device revision and record host and device results separately."]
+limits = ["Apple images, firmware and ABI binaries are prepared locally.", "The generic job-restore.sh had static checking only. Installed fairplayd policy differs from full rebuild; no B1-A-B2 device comparison has completed.", "The latest unified scripts/package.sh and .github/workflows/package.yml are absent. Current CI builds the reduced kernel by default, not a clean end-to-end release or a full Wi-Fi/GPU image."]
+next_action = ["Migrate the fixed upstream package template, TOML-selected Darwin24 prelink/payload inputs and package action together; validate --check and a full local build before claiming adoption.", "Run the same-kernel fairplayd B1-A-B2 control and inspect exits, Weather and Battery independently of UI/plugin build success."]
+evidence = [
+  {kind = "host", command = "check-wifi-host.py; compile/sign native UI and wifi-service18; actual OS delta manifest/hash preflight and readback", revision = "92ef6d2de5419ce5c5aa8bfe36ab25a9fadeffb7", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Root and overlay staging passed with preserved stock metadata and wifid services. UI/helper built and signed; OS-only device deltas were checked before and after writing."},
+  {kind = "source", reference = "docs/progress/2026-10-29-xnu-bringup.md", result = "Build-chain description."},
+  {kind = "host", command = "ZIZHAN_SRC=<work dir> ci_prep.sh && DEFCONFIG=zizhan_ipados18_gpu_defconfig JOBS=10 ci_kernel.sh", revision = "1ec1190f4e3467a36a7a7402bc766dfdf688adf1", reference = "docs/evidence/host-build-zizhan_ipados18_gpu.txt", result = "A clean Apple-silicon Mac Studio build (Xcode 26.6.0) produced an 18321080-byte DEVELOPMENT_ARM64_PONG kernel with the same zizhan boot-argument strings as device trials."},
+  {kind = "source", reference = "docs/progress/2026-11-02-gpu-astc-and-fairplayd.md", result = "Installed-image fairplayd restoration is distinguished from EXCLUDED18 full-rebuild policy; no additional device-verified status."},
+  {kind = "source", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Local Wi-Fi inputs, three kernel builds and experimental-image packaging; no device result at that historical stage."},
+  {kind = "host", command = "Read-only mount current/g213/f245 OS; jobs-refresh.sh failure injection; ci_kernel.sh CI/GPU", revision = "06d28dbf2c30652b63ab3f24be6664fd790d275f", reference = "docs/progress/2026-11-03-fairplayd-baseline.md", result = "Current/g213 contained fairplayd; f245 did not. No-device, backup-conflict and missing-label paths refused safely. CI/GPU builds passed; device behavior unverified."},
+  {kind = "source", reference = "docs/progress/2026-11-04-upstream-ci-audit.md", result = "Current-upstream compliance audit identifies the unified packaging interface as pending; existing build evidence remains scoped to the recorded pipeline."},
+]
 
 [[area]]
 id = "diagnostics"
 status = "implemented"
 components = ["PongPlatform24"]
 paths = ["migration/ipados18/**", "scripts/pong_adt_contract.py", "userland/settings_compat18.c", "userland/init.c", "porting.toml", ".github/**", "tools/**", "docs/**", "patches/xnu-ipados18/0004-*"]
-inputs = ["ramoops（0x85200000）、logfs 分区、USB（adb 和 fastboot）"]
-configuration = ["pong_autoreset=<秒>（默认 300），pong_autoreset_sb", "pong_klog_4k：内核把 ramoops 区复制到 UFS 上的固定文件", "pong_gtrace、pong_gtrace_delay、pong_gtrace_ib、touch_lat：可定时启动的逐帧时间线"]
-procedure = ["cycle.sh：fastboot boot 镜像，等看门狗复位回 fastboot，再启动 RamoopsDump 把 ramoops 写进 logfs 并回到 Android，最后经 adb 取回日志。", "panic、长按电源键 3 秒和到点复位都会热复位到 fastboot，DRAM 里的日志保留。"]
-findings = ["整个流程不需要人按键。漏带 pong_autoreset 的轮次（g152 系列）曾被误判为总线冻结。", "连续多轮后手机发热，DRAM 里的 ramoops 几乎每行都有位翻转；pong_klog_4k 写到 UFS 的副本没有这个问题。", "带 pong_url=<秒> 的轮里，SpringBoard 打开 prefs:root=<pong_pane>（H = 电池健康），settings_compat18.c 在设置启动后 6/12/20/30 s 打印界面（标签、表格、cell 的 specifier id、转圈、SwiftUI 无障碍元素，非 ASCII 转义为 \\xHH），tools/zizhan/mac/settings-ui.py 解码；无人值守就能判断一个设置页的状态。", "手势采样器 gs_all=2（patches/xnu-ipados18/0005）也记录等待中的线程，tools/zizhan/mac/gsym.py 符号化整条栈；用它沿同步 XPC 一路查到 timed 卡在 gethostuuid()。", "pong_gtrace_delay 可把提交时间线移到 SpringBoard 后的指定秒数；deadline fence 年龄用于区分持续停滞与自动复位瞬间的在途提交。", "USB 枚举探测有 6 秒上限；fastboot boot 传输有 180 秒上限并保留失败状态，避免把未启动的轮次记为已启动。", "g268 USB 等待任务由用户图形域 launchd 托管，进程父级为 launchd，日志有定期心跳；手机尚未枚举。", "logfs 导出/拉取失败时轮次现在清除本机旧副本并停止，避免把同名历史镜像作为本轮取证。"]
-completion = ["每一轮都能自动回到 Android 并取回完整日志"]
-limits = ["日志位翻转与温度有关；cycle.sh 在每轮之前等电池降到 35 °C。", "11-02 display-link 诊断随 ui_compat18.c WIP 保存，touch_lat=1 打印调用方；未构建、未上机。", "g268 等待 USB 恢复，尚无这版自动轮次工具的设备返回证据。"]
-next_action = ["把 klog 作为默认日志来源。"]
-evidence = [{kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "免按键闭环的设计和轮次记录。"}, {kind = "source", reference = "docs/progress/2026-11-01-zero-copy-and-return-paths.md", result = "四条复位回路的修复。"}, {kind = "source", reference = "CLAUDE.md", result = "公开交接收录 Mac clone 工作流、诊断默认值和验证边界，旧主机同步流程退役。"}, {kind = "source", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "USB 无枚举导致 g265 未启动；fastboot 探测加 6 秒上限，when-back 支持指定试验镜像；主机模拟通过，设备回路尚待恢复。"}, {kind = "host", command = "adb-visible.sh 与 fastboot-boot.sh 模拟；CI、GPU、Wi-Fi 三配置构建", revision = "890ec93c136a23bbc0e857d0879c3119bf945b83", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "失败启动不再被记录为 booted；三配置构建成功。手机未枚举，设备轮次待运行。"}, {kind = "host", command = "launchctl submit g268 when-back；launchctl list 与日志检查", revision = "5eaa262d46cdb2c3d7a56de28805d57cea548185", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "等待进程由 launchd 托管并记录心跳；手机仍未枚举，无设备日志或截图。"}, {kind = "host", command = "pull-logfs.sh 失败注入四种情况；ci_kernel.sh CI/GPU/Wi-Fi 三配置", revision = "0a03bab9a4876f1490e453559a24244ffca76958", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "导出失败、拉取部分文件和空文件都删除旧副本并失败；成功保留新副本；三配置构建通过，设备尚未验证。"}]
+inputs = ["ramoops at 0x85200000, logfs and USB adb/fastboot."]
+configuration = ["pong_autoreset=<seconds> (default 300), pong_autoreset_sb.", "pong_klog_4k copies kernel logs into a fixed UFS file.", "pong_gtrace, pong_gtrace_delay, pong_gtrace_ib and touch_lat provide timed per-frame traces."]
+procedure = ["cycle.sh temporarily boots, waits for watchdog fastboot return, uses RamoopsDump to write logfs, returns to Android and pulls logs.", "Panic, a three-second power-key hold and deadline reset all return to fastboot while retaining DRAM logs."]
+findings = ["The loop needs no key presses. Missing pong_autoreset in g152 was mistaken for a bus freeze.", "Repeated hot trials cause bit flips in DRAM ramoops; the pong_klog_4k UFS copy avoids that corruption.", "pong_url and pong_pane open Settings; settings_compat18.c prints views/specifiers/spinners/accessibility at 6/12/20/30 seconds. settings-ui.py decodes escaped non-ASCII output.", "gs_all=2 in 0005 also samples waiting threads; gsym.py resolves complete stacks. This traced synchronous XPC to timed waiting in gethostuuid.", "pong_gtrace_delay moves capture after SpringBoard startup. Fence age separates persistent stalls from in-flight work at reset.", "USB enumeration probes have six-second limits; fastboot boot has a 180-second transfer limit and preserves failure instead of claiming boot.", "The old g268 waiter ran under user-domain launchd with heartbeats but no device enumeration; this is historical evidence.", "Failed logfs export/pull removes stale and partial local copies. Screenshot decode removes old PNGs when the new trial has none.", "Only matching current arm/successful-boot markers permit UFS klog readback; otherwise recover ramoops, preventing old pinned klog reuse.", "boot.sh checks device/image before reboot; adb reboot is bounded to 30 seconds. fastboot visibility requires a successful command.", "logfs export/pull are limited to 60/120 seconds and remove stale/partial outputs on failure.", "g272-retry through g275 completed temporary boots, deadline return and fresh UFS logs. g276 never booted after USB vanished in the fastboot transition.", "Rear USB-A passed 10/10 Android-fastboot-Android transitions without replug. After the matching companion-port action and three-second settle, a 100168 KB image transferred and booted once.", "The host replay uses -iquote so Darwin shim headers do not shadow glibc linux/errno.h. Record CI now uses the reviewed e67a79eb64012e8f30ba04c56ea37753bdb720a2 checker and compares committed paths against the push-before or PR-base SHA, in addition to structural validation. All matched owner areas must update findings/evidence. A separate Ubuntu/clang job replays the existing SMMU, WMI, DHCP and USB regressions against pinned Ath12kWifi headers without private inputs.", "g301-g303 stack sampling separated SpringBoard wifi_manager_open, wifid SystemConfiguration quiet waiting and normal configd run loops. The optional bounded Settings probe selects only the exact private SSID, uses native secure-text and Join handlers, logs no credentials and requires independent association/HTTPS evidence. UISwitch dumps report actual on/enabled state."]
+completion = ["Every trial automatically returns to Android and yields fresh complete logs."]
+limits = ["Direct USB-C can still fail enumeration and lacks supported host-port probing. Rear USB-A is the verified path. Port-state bits do not prove VBUS power-off; prefer current-trial UFS klog over corrupt ramoops."]
+next_action = ["Use rear USB-A for unattended trials; retry only once for an explicit USB write failure during transfer. Follow both record and kernel CI at the published SHA."]
+evidence = [
+  {kind = "device", command = "gesture sampler gs_proc=SpringBoard/wifid/configd; cycle.sh g307-g309; decode-shots.sh", revision = "92ef6d2de5419ce5c5aa8bfe36ab25a9fadeffb7", reference = "docs/evidence/2026-11-04-wifi-settings-and-roaming.txt", result = "Native service wait chain and actual Settings controls were observed. g307/g308 UI deadlines were failures; g309 native Join produced an actual association and HTTPS 200. Complete and incomplete screenshot extents are kept distinct."},
+  {kind = "device", command = "adb reboot bootloader / fastboot getvar product / fastboot reboot x10; usbkick.sh kick + g279-usba-settle", revision = "3f93d0cd7ee552fd580003abcf569984d9cc3373", reference = "docs/evidence/2026-11-04-g279-wifi-usb.txt", result = "Ten full mode transitions passed; after port settling the 100168 KB image sent once and booted."},
+  {kind = "source", reference = "docs/progress/2026-10-30-root-and-autoloop.md", result = "Unattended-loop design and trial history."},
+  {kind = "source", reference = "docs/progress/2026-11-01-zero-copy-and-return-paths.md", result = "Four reset/return path fixes."},
+  {kind = "source", reference = "CLAUDE.md", result = "Sanitized Mac clone workflow, diagnostic defaults and verification boundaries; retired old-host sync instructions."},
+  {kind = "source", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "USB absence prevented g265 boot. Six-second fastboot probing and explicit-image waiting passed host fixtures; device loop recovery was then pending."},
+  {kind = "host", command = "adb-visible.sh and fastboot-boot.sh fixtures; CI/GPU/Wi-Fi kernel builds", revision = "890ec93c136a23bbc0e857d0879c3119bf945b83", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Failed starts no longer report booted; three configs built. Phone absent, no device trial."},
+  {kind = "host", command = "launchctl submit g268 when-back; launchctl list and log inspection", revision = "5eaa262d46cdb2c3d7a56de28805d57cea548185", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "launchd owned the waiter and logs had heartbeats. Phone still absent; no device logs/screenshots."},
+  {kind = "host", command = "pull-logfs.sh four failure fixtures; ci_kernel.sh CI/GPU/Wi-Fi", revision = "0a03bab9a4876f1490e453559a24244ffca76958", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Export failure, partial pull and empty files removed stale copies and failed. Success retained fresh data. Three configs built; device unverified."},
+  {kind = "host", command = "decode-shots.sh g264 and no-screenshot replay; ci_kernel.sh CI/GPU", revision = "bcfaddf0e1ed31bed1ab99a29e4854e144d01801", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "g264 replay decoded six PNGs; a new same-name log without screenshots removed old PNGs. CI/GPU builds passed; g268 not booted."},
+  {kind = "host", command = "cycle.sh/cycle-resume.sh four klog-marker fixtures; ci_kernel.sh CI/GPU", revision = "2f1f10aea4b3d65691a7e0cd72c6f79d2623928a", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "No marker or mismatched marker selected ramoops; matching current marker selected klog. Failed boot left no success marker. CI/GPU builds passed; phone absent."},
+  {kind = "host", command = "boot.sh/fastboot-visible.sh isolated failure fixtures; ci_kernel.sh CI/GPU", revision = "1a2ec083bab2242f0da0247f17eae02104796491", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Absent phone, adb failure/timeout and missing image failed promptly. Missing image was rejected before device actions; nonzero fastboot did not count as visible. CI/GPU builds passed; g268 had no device result."},
+  {kind = "host", command = "pull-logfs.sh six failure fixtures; ci_kernel.sh CI/GPU", revision = "ee84c10b22da2f6bbf1382de3bac1874c15a2b52", reference = "docs/progress/2026-11-03-wifi-bringup.md", result = "Export/pull failure, timeout and empty outputs removed stale/partial images; success retained fresh data. CI/GPU builds passed; no device logs/screenshots."},
+  {kind = "source", reference = "docs/progress/2026-11-04-upstream-ci-audit.md", result = "Audit of checker version, push/PR comparison bases, public catalog revision and build-CI scope."},
+]
