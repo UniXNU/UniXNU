@@ -99,7 +99,10 @@ def resolve(ctx, modules):
     """Select catalog components while retaining explicit device sources."""
     from .feeds import Module
     ctx.component_specs = selected(ctx, modules)
-    result = {key: value for key, value in modules.items() if key[0] in ('refer', 'patch', 'package', 'script')}
+    entries = catalog(ctx)
+    result = {key: value for key, value in modules.items()
+              if key[0] in ('refer', 'patch', 'package', 'script') or
+              (value.origin == 'local (--local-module)' and key[1] not in entries)}
     for spec in ctx.component_specs:
         identifier, kind = spec['id'], spec['kind']
         key = (kind, identifier)

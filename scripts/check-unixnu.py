@@ -89,6 +89,21 @@ def main():
             expect(False, 'missing --local directory accepted')
         except Error:
             pass
+        # Explicit new modules remain available while their catalog entry is
+        # under development. Unselected catalog entries remain unselected.
+        (root / 'components.toml').write_text('[[component]]\nid = "Both"\nkind = "driver"\n')
+        parsed = cli.parser().parse_args(['status', '-D', str(root / 'dev'), '--out', str(root / 'out'),
+            '--local-module', f'driver:Draft={root / "one"}',
+            '--local-module', f'driver:Both={root / "one"}'])
+        ctx = Context(parsed)
+        ctx.schema_version = 2
+        ctx.root = root
+        ctx.board['components'] = {'include': []}
+        found = feeds.resolve(ctx)
+        expect(('driver', 'Draft') in found and found[('driver', 'Draft')].path == (root / 'one').resolve(),
+               'explicit new component survives format 2 selection')
+        expect(('driver', 'Both') not in found and ('driver', 'DevOnly') not in found,
+               'format 2 still filters unselected catalog and implicit modules')
     expect(payload.check_args(['-v', 'a=1', 'b=x,y']) == '-v a=1 b=x,y', 'kernel arguments')
     with tempfile.TemporaryDirectory() as name:
         root = Path(name)
