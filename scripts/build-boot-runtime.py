@@ -136,8 +136,8 @@ def addon_hashes(path, work):
     return sorted(set(hashes))
 
 
-def merge_launchd_cache(source, daemons, destination):
-    """Add owner jobs to the OS's precompiled launchd service dictionary."""
+def merge_launchd_cache(source, daemons, destination, job_environment=None):
+    """Add owner jobs and board-selected environment values to the OS launchd cache."""
     original = plistlib.loads(source.read_bytes())
     merged = plistlib.loads(source.read_bytes())
     jobs = merged['LaunchDaemons']
@@ -155,6 +155,13 @@ def merge_launchd_cache(source, daemons, destination):
         raise ValueError('no owner launchd jobs')
     assert all(merged[key] == value for key, value in original.items() if key != 'LaunchDaemons')
     assert all(jobs[key] == value for key, value in original['LaunchDaemons'].items())
+    for label, environment in (job_environment or {}).items():
+        matches = [jobs[key] for key, job in original['LaunchDaemons'].items() if job.get('Label') == label]
+        if len(matches) != 1:
+            raise ValueError(f'expected one OS launchd job for {label}, found {len(matches)}')
+        if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
+            raise ValueError(f'launchd environment values for {label} must be strings')
+        matches[0].setdefault('EnvironmentVariables', {}).update(environment)
     destination.parent.mkdir(parents=True, exist_ok=True)
     # This dictionary is consumed by launchd's private cached-plist parser.
     # Use the platform serializer for its binary representation.
@@ -164,7 +171,7 @@ def merge_launchd_cache(source, daemons, destination):
     return dict(source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
                 output_sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),
                 original_jobs=len(original['LaunchDaemons']), added_jobs=added,
-                original_entries_preserved=True, serializer='Apple plutil binary1')
+                original_entries_preserved=not job_environment, job_environment=job_environment or {}, serializer='Apple plutil binary1')
 
 
 def sign_launchd_cache(path):
@@ -224,7 +231,7 @@ def main():
                 cache_work.mkdir()
                 with os_mount(request['os_image'], cache_work) as mount:
                     cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
-                        wifi / 'daemons', wifi / 'xpc/launchd.plist')
+                        wifi / 'daemons', wifi / 'xpc/launchd.plist', request.get('launchd_job_environment'))
                 cache_report.update(sign_launchd_cache(wifi / 'xpc/launchd.plist'))
                 extra += ['xpc', wifi / 'xpc']
                 (out / 'wifi-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
