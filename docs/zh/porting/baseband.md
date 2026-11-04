@@ -53,7 +53,7 @@ modem 的 `kOnline` 表示无线电已上线。网络注册需要检查 NAS 注�
 
 `coachz_bb_data.h` 在第一个 WDS 客户端绑定前通过 DPM 打开 IPA 硬件端口，配置 WDA raw IP/QMAPv4。它将 WDS/QOS 的苹果 PCIe 端点 `{3, 4}` 转换为 embedded `{4, 1}`，为只带 mux id 的请求补上端点。随后将 WDS 会话绑定到 QMAP mux，再建立数据会话。把返回的地址、路由、DNS、MTU 接到 `pdp_ip`。按 mux 将数据送到对应网卡，按 DMA 完成结果归还缓冲区。依次验证发送、接收、断开、飞行模式和 modem 复位。eSIM 还需要 UIM/APDU 与 VINYL 流程。
 
-Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，冷启动后状态栏直接显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。SIM 已匹配运营商设置包，状态栏显示 LTE，蜂窝 IPv4 网页加载通过，PDP 重建后仍可用。固定版本的 CommCenter 在缺少 Apple postponement ticket 时阻塞 Internet 上下文，Trogdor-ipadOS 提供经哈希核对的补丁副本。IPv6 数据、APN 编辑和长时间连接待验收。EFS 写入仍保存在内存中，重启后重新加载原厂数据。
+Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已完成 LTE 漫游注册与 CS/PS 附着，冷启动后状态栏直接显示运营商和信号格。DPM/WDA 配置与 WDS/QOS 绑定已成功。SIM 已匹配运营商设置包，状态栏显示 LTE，蜂窝 IPv4 网页加载通过，PDP 重建后仍可用。固定版本的 CommCenter 在缺少 Apple postponement ticket 时阻塞 Internet 上下文，[`coachz_cellular_compat.py`](https://github.com/UniXNU/QcomBaseband/blob/main/platform/coachz/README.md#commcenter-compatibility-copy) 生成经哈希核对的补丁副本、签名和 trust cache；固件归档、ADT 摘要和 trust cache 集合携带它们。IPv6 数据、APN 编辑和长时间连接待验收。EFS 写入仍保存在内存中，重启后重新加载原厂数据。
 
 `coachz_bb_pdp.cpp` 由 `coachz_baseband.cpp` 包含，为 QMAP mux 1 至 4 注册 `pdp_ip0` 至 `pdp_ip3`，MTU 为 1492。WDS 绑定、IP family、启动、停止与状态应答分别控制各地址族。在 QRTR/IPA 所属线程实现 `QcomBaseband.h` 中的 `coachz_modem_data_send` 与 `coachz_modem_data_receiver`；Coachz 适配器已提供两者。接口需注册 `PF_INET` 与 `PF_INET6` 的 protocol plumber，使 CommCenter 卸载旧上下文后能重新挂接地址族，初始挂接复用同一回调。分别验证 IPv4、IPv6，以及停止一个地址族后另一个仍能通信。
 
