@@ -28,8 +28,19 @@
   - **Still on, could not remove:** `/var/local/tu-bo` (a directory: Turnip's BO lifetime log, phone/turnip/0002,
     one fflush'd line per BO alloc/free in backboardd; logs `tu-bo-<pid>.log`). The kernel file server's `rm`
     only unlinks files (ERR 1 on the directory) - needs an rmdir in sweet_files.c or a recovery step.
-  - Next for the blur: CoreAnimation's backdrop samples what lies behind the layer - check whether it reads back a
-    recently presented drawable or an intermediate surface (drawable hand-off timing again, 0244).
+  - **The blur, narrowed (15:15 boot, same 0247 image):** the bridge log (`/var/local/mtl2.log`) held 75 refused
+    "texture over buffer ... RowPitch { bytes_per_row: 4608, row_bytes: 9744 }" lines - all from OLDER boots (the
+    log accumulates). **Phone file changed (user OK'd):** `SweetMetal2.bundle/SweetMetal2` replaced by a build with
+    one more log line (descriptor + surface of a refused IOSurface texture, max 64), original kept as
+    `SweetMetal2.sweet-orig` (both read back). Built here from the unchanged sources
+    (`xnu-work/work/m2v-bridge-src/NativeBridgeMetalFrontend.mm` + the existing libnative_metal_bridge.a, xcrun
+    iPhoneOS 27.2 SDK, -target arm64-apple-ios16.0, same identifier; the phone's CodeResources already did not
+    match its dylib, so resource seals are not enforced). With the App Library opened several times: **no refusal,
+    no pipeline error** - the bridge drops nothing there. User: "the background randomly goes black and sometimes
+    it reappears but in the down left corner" - a SIZE/POSITION bug in the blur chain (a downscaled pass drawn 1:1,
+    flipped, or with a viewport / render area left from a target of another size), not coherence. Next: metal2vulkan's
+    per-encoder viewport / scissor / render-area state (`crates/metal2vulkan-runtime/src/render.rs`, EncoderState,
+    draw_viewports, layout.extent) for encoders whose attachments change size between passes.
 - **2026-11-04 0245: THE APP SWITCHER WAS A SURFACE LEAK; the UI is now clean on the GPU ("a little glitchy here and
   there but barely noticeable")** (patch `xnu/patches/0245-umi-surface-zombie-leak.patch`; boot
   **`shim/out/umi-0245b-zombiefix.img`** = 0238's line, 13:00, the current image).
