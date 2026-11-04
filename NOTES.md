@@ -35,6 +35,11 @@
     29-30 % (sys 17 %), bursts 92 % (sys 42 %); 0240c (page walk, partial ring) steady 21-24 % (sys 10 %);
     **0240d bursts 44-68 % (sys 18-28 %)**, steady not measured long (user stopped for the night). The earlier
     "backboardd ~64 %" (0233) was this boot's burst level.
+  - **0240e** (`shim/out/umi-0240e-nowalk.img`: 0240d's kernel, boot line with `sweetbtlog=1` swapped for
+    `sweetgpucheck=0`, 607 chars; 10:20): the walk off, the full ring clean kept -> user: "super glitchy like before".
+    So the walk is what keeps frames right, not the ring clean; 0240d stays. The phone's Turnip
+    (SweetMetal2.bundle/libvulkan_freedreno.dylib, read back) carries every log string of the current
+    tu_knl_darwin.cc, i.e. the build that maps BOs with kIOMapWriteCombineCache - not an old cached-mapping build.
   - **Open:** (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
     WC, Turnip's map WC) - fix that and the per-submit walk can go (0240b showed sys 3 %); suspects: the cacheable
     physmap alias and speculative fills, or another cached view of command BOs; (2) the same question for the ring
