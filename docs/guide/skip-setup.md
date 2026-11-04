@@ -83,17 +83,13 @@ These describe a development-fused, undemoted board. `mobileactivationd` reads t
 
 ## Jobs
 
-Setup depends on services that do not run on this platform. The board disables them with boot arguments:
+On sheng with iPadOS 27.0.1 (24A446), `sheng-lite=1` keeps `iconservicesagent` available on demand. IconRendering uses Metal. The job sets `FORCE_SOFTWARE_RENDERER=0` and `CI_ENABLE_METAL_GPU=0`. The stock J820 profile gives the agent a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.
+
+With `sheng-lite=2`, launchd disables the icon service. The Home Screen and Dock show icon backgrounds without app artwork. Settings still opens. To disable individual jobs, pass their launchd labels as a comma-separated list.
 
 ```
-sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent
+sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd
 ```
-
-On sheng running iPadOS 27.0.1 build 24A446, the icon services agent’s launchd job sets `FORCE_SOFTWARE_RENDERER=0` and `CI_ENABLE_METAL_GPU=0`. IconRendering can use Metal while CoreImage uses its software path. A 240-second diagnostic export identified the agent’s Adreno 740 device, eight completed buffers containing 149 draws, and zero agent faults or exits.
-
-For a sheng icon service comparison, `sheng-lite=2` extends the usual `sheng-lite=1` job list with `com.apple.iconservices.iconservicesagent`. The board writes the policy before launchd starts. On the tested iPadOS 27 boot, all app icon artwork was missing from the visible Home Screen and Dock. Settings still opened.
-
-`com.apple.CommCenter` is the cellular service. The list is board specific. Keep the services the userland needs and remove the ones that block the first boot.
 
 ## Output
 

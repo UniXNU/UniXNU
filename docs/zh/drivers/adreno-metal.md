@@ -43,6 +43,8 @@ python3 scripts/check-native-metal-frontend-host.py
 
 帧诊断保留分配、命令、完成处理及 GPU、显示时间线，像素抓取关闭。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
 
+启用 `sheng-gpu-trace=1` 后，内核事件 65 记录 `iconservicesagent` 获取的 Metal 设备和创建的命令队列。对于含绘制或计算任务的命令缓冲区，最多记录八条 `metal-work`，包含完成状态、绘制次数和计算派发次数。
+
 `sheng-wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
 
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。

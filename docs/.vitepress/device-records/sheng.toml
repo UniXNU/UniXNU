@@ -25,6 +25,38 @@ reference = "board.toml"
 result = "Implementation and configuration described in this section"
 
 
+[[area.evidence]]
+kind = "source"
+reference = "scripts/check-boot-watchdog-policy.py"
+result = "The sheng-lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the sheng-lite=1 jobs."
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot sch4.img"
+revision = "fe636ce2c24b5f5ef406e2dc70504d2573f00092"
+result = "Boot 50d4021e7 with sheng-lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms."
+
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "On 24A446, iconservicesagent runs on demand with FORCE_SOFTWARE_RENDERER=0 and CI_ENABLE_METAL_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit."
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot ico4.img"
+revision = "1c0d9770f6b3cf8de565ba793146c8d5427b979f"
+result = "On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export."
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot ico4-lock-fix.img"
+revision = "571fcc972a4ea3e8c402183ba98a0a8f67a4750a"
+result = "On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s."
+
+
 [[area]]
 id = "firmware"
 status = "implemented"
@@ -73,6 +105,13 @@ next_action = ["Attach per-CPU and interrupt observations for the selected firmw
 kind = "source"
 reference = "dts/sheng.dts"
 result = "Implementation and configuration described in this section"
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot sch3.img"
+revision = "948a8b8696e56c0ab74a4a1ee22753744ea462e3"
+result = "Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap."
 
 [[area]]
 id = "memory"
@@ -135,6 +174,11 @@ kind = "source"
 reference = "package/LegacyDisplayProbe.cpp"
 result = "Implementation and configuration described in this section"
 
+[[area.evidence]]
+kind = "source"
+reference = "package/LegacyDisplayProbe.cpp"
+result = "The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports."
+
 [[area]]
 id = "input"
 status = "implemented"
@@ -150,6 +194,18 @@ next_action = ["Attach contact and orientation observations when firmware or geo
 
 [[area.evidence]]
 kind = "source"
+reference = "package/BootDiagExport.c"
+result = "The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2."
+
+[[area.evidence]]
+kind = "host"
+reference = "https://github.com/UniXNU/ShengNovatekTouch/blob/3b44b1b7603eaadae942ea44ddc51bdcc48ad060/Test/touch-core.c"
+revision = "3b44b1b7603eaadae942ea44ddc51bdcc48ad060"
+command = "python3 scripts/check-touch-host.py"
+result = "Host replays cover adjacent-key taps, bottom-edge tip-down coordinates and four- and five-finger pinches with stable IDs."
+
+[[area.evidence]]
+kind = "source"
 reference = "package/TouchBoard.h"
 result = "Implementation and configuration described in this section"
 
@@ -159,6 +215,20 @@ reference = "reports/ipados26-source-drivers.json"
 command = "cd ../UniXNU && python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family"
 revision = "2ab05c11ae80e8b59dac2d312f627e78cacc0fca"
 result = "Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17."
+
+[[area.evidence]]
+kind = "device"
+reference = "package/TouchProbe.cpp"
+command = "fastboot boot sch1.img"
+revision = "8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87"
+result = "Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms."
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot sch2.img"
+revision = "8ec842f38c21ef1d73e12000fae16df7442e0c73"
+result = "Five fingers retained distinct IDs through a 250 ms pause. All 57 rapid typing contacts released. Both App Switcher gestures failed and rapid taps sometimes selected alternate characters."
 
 [[area]]
 id = "gpu"
@@ -179,6 +249,20 @@ reference = "reports/ipados27-gpu.md"
 command = "python3 scripts/check-native-adreno-scheduling.py"
 revision = "509bd695c4f58dab8d2d005d1b92f5ba85312595"
 result = "Address/undefined-behavior checks pass for ring packets, preemption power sequencing, per-ring tables, queue FIFO, fence-history rollover and CPU-table fallback. Kernel, board, Turnip and Metal bridge builds target arm64e iPadOS 27. Hardware qualification of these changes is pending."
+
+[[area.evidence]]
+kind = "device"
+reference = "package/GpuPowerProbe.cpp"
+command = "fastboot boot sch1.img"
+revision = "8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87"
+result = "iPadOS 27 build 24A446, capture 532856a9, panicked while idle on the home screen. The interrupted stack reached lck_mtx_unlock_contended from native_adreno_preempt_irq via gpuIrq. The board now queues preemption completion on a serialized thread call."
+
+[[area.evidence]]
+kind = "device"
+reference = "reports/ipados27-touch-frame-gaps.md"
+command = "fastboot boot sch2.img"
+revision = "8ec842f38c21ef1d73e12000fae16df7442e0c73"
+result = "Boot 5cfa7b18a recorded a responsive desktop through 360 s with deferred CP preemption and cross-core stack sampling disabled."
 
 [[area]]
 id = "network"
@@ -206,6 +290,11 @@ reference = "reports/ipados27-wifi-association.md"
 command = "fastboot boot build/wifi-mainline/fix9/boot.img"
 revision = "fa9af675a5c56e27e1aaf0693c77939a4641a3ef"
 result = "Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot."
+
+[[area.evidence]]
+kind = "source"
+reference = "scripts/check-wifi-launchd.py"
+result = "The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied."
 
 [[area]]
 id = "audio"
@@ -285,6 +374,11 @@ command = "fastboot boot boot.img (sheng-cpufreq=4 sheng-gpu-dcvs=1); python3 sc
 revision = "a338c71a6f83809c84686b4996478f1c4cd3f3ab"
 result = "CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy."
 
+[[area.evidence]]
+kind = "source"
+reference = "package/GpuPowerProbe.cpp"
+result = "The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex."
+
 [[area]]
 id = "packaging"
 status = "implemented"
@@ -343,12 +437,16 @@ kind = "source"
 reference = ".github/workflows/package.yml"
 result = "The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references."
 
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache."
 
 [[area]]
 id = "diagnostics"
 status = "implemented"
 components = []
-paths = ["scripts/decode-*", "scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/sheng-latency-report.py", "scripts/prepare-*", "scripts/data/**", "scripts/build-boot-progress.py", "scripts/patch-xnu-entry-probe.py", "scripts/xnu-panic-screen.c", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**", "unixnu.lock"]
+paths = ["scripts/decode-*", "scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/sheng-latency-report.py", "scripts/sheng-springboard-profile.py", "scripts/prepare-*", "scripts/data/**", "scripts/build-boot-progress.py", "scripts/patch-xnu-entry-probe.py", "scripts/xnu-panic-screen.c", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**", "unixnu.lock"]
 inputs = ["Serial or framebuffer diagnostics, panic region, boot checkpoints and a recovery path."]
 configuration = ["boot-progress=2 enables checkpoints; source and image revisions accompany every log.", "On the iPadOS 27 native source path, sheng-log=1 plus boot-ui-trace=1 starts a separate process-capture worker. boot-ui-focus3=chronod adds the display-query client to backboardd and SpringBoard. Arm64e return-address PAC is stripped for diagnostic stacks."]
 procedure = ["Run the existing check for the changed area and keep its command, output and input revision.", "Record the last completed checkpoint and the first failing operation; link the captured output."]
@@ -362,6 +460,23 @@ kind = "source"
 reference = "scripts/read-sheng-log.py"
 result = "Implementation and configuration described in this section"
 
+
+[[area.evidence]]
+kind = "source"
+reference = "package/BootUiTraceProbe.c"
+result = "CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window."
+
+[[area.evidence]]
+kind = "host"
+reference = "scripts/check-boot-ui-trace.py"
+command = "python3 scripts/check-boot-ui-trace.py"
+revision = "571fcc972a4ea3e8c402183ba98a0a8f67a4750a"
+result = "The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH_WAIT | TH_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address."
+
+[[area.evidence]]
+kind = "source"
+reference = "scripts/sheng-springboard-profile.py"
+result = "With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time."
 
 [[area]]
 id = "arm64e-os"
@@ -403,3 +518,8 @@ reference = "https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/
 command = "parse LC_FILESET_ENTRY, LC_DYLD_CHAINED_FIXUPS and kext __TEXT_EXEC branches of the decompressed kernelcache"
 revision = "4ed86f68213ed7dc83726987c2d3a78b7c16114a"
 result = "298 entries, base 0xfffffe0007004000, 585131 fixups in pointer format 8, 0 symbols in every entry. For the 31 prelink roots (30 with code, 7 kernel resources): 1864 kernel targets, 47807 pointer sites, 42027 branch sites."
+
+[[area.evidence]]
+kind = "source"
+reference = "patches/xnu-12377/sheng-main-thread-profile.patch"
+result = "The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling."

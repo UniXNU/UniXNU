@@ -62,7 +62,7 @@ CPU 事件使用内核 uptime。GPU pass 时间戳使用硬件时钟，可在该
 
 `sheng-gpu-perf=1` 启用 19 个 A7XX BR 计数器、GPU 调频和诊断。差值只使用有效区间。计数器描述全局 GPU 区间，pass 耗时提供负载上下文。
 
-sheng 使用 `sheng-cpufreq=4` 时，可按内核运行时间把 `kernel.cpufreq.bin` 中的调频目标和 EPSS 读回值与翻屏对齐。CPU 0–2、3–6 和 7 分属三个调频域。`kernel.client.bin` 中 peer 为 −2 表示在目标核上中断正在运行的线程，取得了当时的用户态 PC 和 LR。当 CLI1 头部标志位 1 置位时，这些样本的 wait 字段保存实际执行的 CPU 编号。旧版精确样本没有核编号。`cs-exact=0` 关闭跨核采样。同时设置 `cs-exact=1 cs-profile=1` 时，跨核采样只中断 SpringBoard 主线程。板级采样使用两个空闲的 Arm PMUv3 计数器记录当前核心的 EL0 退休指令数和周期数，XNU 通用 CPU 计数器仍关闭。日志区分未暴露 PMU、寄存器访问陷入、事件不足和计数器已占用。计算每周期指令数时，只使用同一线程在同一核心上、上下文切换计数相同的相邻样本。
+sheng 使用 `sheng-cpufreq=4` 时，可按内核运行时间把 `kernel.cpufreq.bin` 中的调频目标和 EPSS 读回值与翻屏对齐。CPU 0 至 2、3 至 6 和 7 分属三个调频域。`kernel.client.bin` 中 peer 为 −2 表示在目标核上中断正在运行的线程，取得了当时的用户态 PC 和 LR。当 CLI1 头部标志位 1 置位时，这些样本的 wait 字段保存实际执行的 CPU 编号。旧版精确样本没有核编号。`cs-exact=0` 关闭跨核采样。同时设置 `cs-exact=1 cs-profile=1` 时，跨核采样只中断 SpringBoard 主线程。板级采样使用两个空闲的 Arm PMUv3 计数器记录当前核心的 EL0 退休指令数和周期数，XNU 通用 CPU 计数器仍关闭。日志区分未暴露 PMU、寄存器访问陷入、事件不足和计数器已占用。计算每周期指令数时，只使用同一线程在同一核心上、上下文切换计数相同的相邻样本。
 
 该配置还记录 SpringBoard 主线程耗时至少 250 µs 的 Mach 调用，包括目标 PID、消息 ID、接收开始时间和返回状态。普通接收没有指定发送者。导出时仍未返回的调用会单独标记。使用 `python3 scripts/sheng-springboard-profile.py kernel.latency.bin` 解码这些记录和采样耗时。
 
