@@ -70,9 +70,9 @@ def prepare(ctx, kernel_build=False):
                    data_ramdisk=str(seed), init_data=init,
                    gpu_addon=str(Path(addon).expanduser().resolve()) if addon else None,
                    trust_cache=str(Path(trust).expanduser().resolve()) if trust else None)
-    if not seed.is_file() or not trust or not addon or spec.get('wifi_tool'):
+    if not seed.is_file() or not trust or not addon or spec.get('wifi_tool') or spec.get('bluetooth_tool'):
         source = Ipsw(ctx)
-        if not seed.is_file() or not addon or spec.get('wifi_launchd_cache'):
+        if not seed.is_file() or not addon or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool'):
             request['os_image'] = str(source.disk_image('OS'))
         if not trust:
             request['trust_modules'] = [str(source.extract(name)) for name in spec['trust_components']]

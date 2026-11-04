@@ -53,6 +53,27 @@ class RuntimeInputs(unittest.TestCase):
             self.assertEqual(Path(ctx.args.data_ramdisk).read_bytes(), before)
             self.assertEqual(runtime.seed_uuid(ROOT, Path(ctx.args.data_ramdisk)), IDENTITY)
 
+    def test_bluetooth_rebuilds_explicit_runtime_with_original_seed(self):
+        with tempfile.TemporaryDirectory() as td:
+            ctx = self.context(Path(td))
+            ctx.logs = ctx.work / 'logs'
+            ctx.logs.mkdir()
+            ctx.board['payload']['runtime']['bluetooth_tool'] = 'scripts/build-bluetooth-userspace.py'
+            original_seed = Path(ctx.args.data_ramdisk).read_bytes()
+            captured = {}
+            def build(command, **kwargs):
+                request = json.loads(Path(command[-1]).read_text())
+                captured.update(request)
+                result = dict(data_ramdisk=request['data_ramdisk'], gpu_addon=request['gpu_addon'],
+                              trust_cache=request['trust_cache'])
+                (Path(request['output']) / 'generated.json').write_text(json.dumps(result))
+            with patch.object(runtime, 'Ipsw') as source, patch.object(runtime, 'run', side_effect=build):
+                source.return_value.disk_image.return_value = Path('/original-os.dmg')
+                runtime.prepare(ctx, kernel_build=True)
+            self.assertEqual(captured['os_image'], '/original-os.dmg')
+            self.assertFalse(captured['init_data'])
+            self.assertEqual(Path(ctx.args.data_ramdisk).read_bytes(), original_seed)
+
     def test_missing_cache_requires_first_install(self):
         with tempfile.TemporaryDirectory() as td:
             ctx = self.context(Path(td), explicit=False)
