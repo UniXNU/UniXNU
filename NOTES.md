@@ -56,7 +56,19 @@
     (`sweetgpudelay=N` us, walk off) to confirm, then find the reuse in tu_knl_darwin.cc's retire logic (BO frees
     deferred to "the newest submitted fence"; one 32-bit fence for every client) and metal2vulkan's
     command-buffer / ring-buffer reuse.
-  - **Open:** (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
+  - **0242** (`xnu/patches/0242-umi-gpu-uche-invalidate.patch`; boot **`shim/out/umi-0242e-gpu.img`** = 0238's line,
+    11:47, the current image): every submission now starts with CP_EVENT_WRITE CACHE_INVALIDATE (0x31, A6XX: the
+    GPU's UCHE), as Linux does on every context switch (a6xx_set_pagetable) - here every submission can come from
+    another task on the one ring and page table. Idea from ios-apollo's notes (stale draw-state table read through
+    the cache, "kInvalidateBeforeStateLoads", MIT). Ring-room count fixed (11 + 4n words, was 6 + 4n). With the walk
+    still on: **user "small glitch here and there but we're like 90% good"**, backboardd 12-39 % normal rounds, up to
+    97 % (sys 30 %) animating. Experiments, each booted with the walk OFF (sweetgpucheck=0), all still glitchy:
+    invalidate alone ("really improved"), invalidate between CP_WAIT_FOR_IDLEs (`sweetgpuinval=2`, apollo's form),
+    a one-time clean of each new BO through the cacheable physmap at BoAlloc (`sweetgpuphysclean=1`, 0242c), a plain
+    3 ms sleep before the doorbell (`sweetgpucheck=3`, 0242d). SMMU side checked in the code: every map/unmap cleans
+    all table pages and TLBIASID+TLBSYNC. **So the walk does something none of these do; what is open.**
+  - **Open:** (0) what the per-submit walk fixes (not cache mode, write buffers, UCHE, zero-fill lines or delay - see
+    0241/0242); (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
     WC, Turnip's map WC) - fix that and the per-submit walk can go (0240b showed sys 3 %); suspects: the cacheable
     physmap alias and speculative fills, or another cached view of command BOs; (2) the same question for the ring
     (why an incremental clean is not enough); (3) ~12 % of a core of user time per frame in CA / metal2vulkan /

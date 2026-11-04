@@ -93,7 +93,7 @@
 | ⚙️ Power-up | GMU / RPMh, zap shader authenticated by TrustZone | ✅ |
 | 🧾 Command streams | The command processor runs our streams | ✅ |
 | 🎨 Metal | Over Mesa's turnip (`sweetmtl`), fence interrupts; per-submit cache walk still costs CPU | ⚠️ |
-| 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; backboardd still 20-70 % of a core | ⚠️ |
+| 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; ~90 % clean (small glitches), backboardd 12-40 % of a core, more when animating | ⚠️ |
 
 ## 🧠 CPU and performance
 
