@@ -69,18 +69,19 @@ concurrent registration and UART/audio clock ownership. UART14, ArmCpu, touch,
 audio and boot-log sources compile for the selected target; the build recipe
 compiles eight protocol and SoC objects into the board archive inputs.
 
-The version-locked native routing stage selects controller type zero, clears
-vendor hooks and retains standard HCI initialization. Optional command 0x0c5b
-uses its real support bit. H4 pre-stop skips its empty extension while retaining
-native close. The patch passes 76 AArch64 instruction cases at two
-ASLR slides; PAC operations are modeled without device keys. The inspector reads
-USERLAND24 fixups and identifies ten native capability slots. The generated
-stage reports `adapter_ready=false` until capability publication is
-integrated.
+The version-locked iPadOS 27 adapter selects controller type zero and retains
+standard HCI initialization. Capabilities follow Supported Commands and LE
+Features, including coded and 2M PHY. An asynchronous 0x203b query supplies
+advertising capacity, capped at the native array's six records. Model getters,
+configuration caches, lower flags and broadcaster mode receive the same values.
+Normal packet traffic stays in UART.SK and the native stack.
 
-Runtime payload installation and the iPadOS 27 native controller adapter remain
-in development. Hardware scanning, pairing, audio, power and
-Wi-Fi coexistence measurements are pending.
+The offline patch retains authenticated fixup metadata and PACIBSP entry pads.
+It passes 144 native instruction cases at two ASLR slides; PAC operations are
+modeled without device keys. The production publisher passes 58 ASan/UBSan HCI
+and policy cases. `tools/build-type0.py` builds and signs the arm64e library.
+Runtime installation and device scanning, pairing, audio, power and Wi-Fi
+coexistence measurements are pending.
 
 Sources: [Linux](https://github.com/ianchb/sm8550-mainline),
 [Debian sheng](https://github.com/ianchb/debian-sheng),
