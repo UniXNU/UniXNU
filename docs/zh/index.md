@@ -7,7 +7,7 @@ migration:
   link: /zh/porting/migration
 hero:
   text: 在非 Apple ARM64 硬件上运行 iOS 与 macOS
-  tagline: 类似 OpenCore 的通用 UEFI 环境和驱动加载系统，配合设备树平台、打过补丁的 XNU 内核和完整启动镜像。
+  tagline: 类似 OpenCore 的通用 UEFI 环境和驱动加载系统，配合设备树平台、针对 XNU 的补丁，以及可编译出可启动镜像的构建流程。
   image:
     src: /logo-light.svg
     alt: UniXNU 标志
