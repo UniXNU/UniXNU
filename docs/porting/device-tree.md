@@ -56,7 +56,7 @@ See the [device template](/porting/device-repository) and [SoC support](/porting
 | Property | Input | ADT representation |
 | --- | --- | --- |
 | `compatible`, `device_type`, `reg-names`, `interrupt-names`, `clock-names`, `method` | NUL-terminated strings | String bytes |
-| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency` | One big-endian cell | Little-endian u32 |
+| `phandle`, `linux,phandle`, `#interrupt-cells`, `#iommu-cells`, `clock-frequency`, `timebase-frequency`, `transport-encoding`, `transport-speed` | One big-endian cell | Little-endian u32 |
 | `redistributor-stride` | One or two cells | Little-endian u64 |
 | `interrupt-controller`, `dma-coherent` | Empty property | Empty property |
 | `reg` | Address/size tuples using the parent's cell widths | Translated physical u64 address/size pairs |
