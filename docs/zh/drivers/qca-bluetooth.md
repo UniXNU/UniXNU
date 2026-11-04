@@ -27,6 +27,10 @@ GENI SE6、中断 493 和 QUP2 DMA 流 0x423。SM8550 代码使用精确的 51.2
 与蓝牙的时钟票和 SMMU 分配。GPIO79 通过共享 TLMM 中断唤醒已关时钟的串口。
 UART 需要启动固件提供协议号为 2 的微码。
 
+板级代码在用户态启动前导出蓝牙设备树节点和同名 IOService。H4 UART.SK 编码及
+3.2 Mbaud 使用四字节小端属性，两者携带从平台标识派生的稳定私有地址。
+Linux 接口把网络顺序的地址转换为 bdaddr_t 顺序。
+
 工作线程保留 DMA 内存，每次处理有界批量，等待中断、队列空间或期限事件。
 硬件错误立即结束命令等待。启动日志的 `[bluetooth]` 行记录阶段、收发、休眠、
 供电归属和 SMMU 状态；`log-bluetooth=1` 增加初始化信息。
@@ -68,7 +72,16 @@ iPadOS 27 原生适配固定匹配目标二进制，选择控制器类型零并�
 离线补丁保留指针修正链的认证信息与 PACIBSP 入口。144 项原生指令模拟覆盖两种
 ASLR 偏移，PAC 操作按无设备密钥模型处理；生产能力发布代码通过 58 项 ASan/UBSan
 HCI 与策略测试。`tools/build-type0.py` 构建并签名 arm64e 能力发布库。
-运行时安装以及扫描、配对、音频、功耗和 Wi-Fi 共存的上机验证待完成。
+板级 `payload.runtime` 为 ios27 选择 `build-bluetooth-userspace.py`，打入已签名的
+BlueTool、bluetoothd、QcaBTType0.dylib 和固定版本固件。原生守护进程保留原有
+标识与权限。只读联合挂载暴露 /usr/lib 和 /usr/sbin 文件，先挂载库再挂载程序。
+BlueTool 保留原有 Mach 服务，以 root 身份运行并启用事务。Wi-Fi 和蓝牙共用一份
+签名启动缓存，其他原生任务保持原样；缺少的代码哈希追加到原有信任包。
+
+`check-bluetooth-runtime.py` 检查实际打包内容、签名、固件、启动任务、信任模块
+和原有 Data 种子。联合插件通过 45 个文件、3 个签名蓝牙程序及 716 个启动任务
+验证；宿主 libxpc 接受缓存，覆盖挂载补丁通过目标编译。组件注册、完整镜像重建
+以及扫描、配对、音频、功耗和共存的上机验证待完成。
 
 参考：[Linux](https://github.com/ianchb/sm8550-mainline)、
 [Debian sheng](https://github.com/ianchb/debian-sheng)、
