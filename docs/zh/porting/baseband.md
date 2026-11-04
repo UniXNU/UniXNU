@@ -65,6 +65,8 @@ Coachz 使用原厂 FSG 后显示 IMEI、ICCID 和 modem 固件。有效 SIM 已
 
 将 `QcomBaseband` 加入设备已有的组件选择。普通归档命令为 `component:QcomBaseband`；Coachz 的 IPA 接线使用内核归档命令 `build-qcom-baseband.py --coachz`。
 
+更新 QcomBaseband 时，将 `components.toml` 与主仓库的 `drivers/QcomBaseband` submodule 固定到同一个提交。
+
 XNU 构建完成后，在目标构建树运行：
 
 ```sh
