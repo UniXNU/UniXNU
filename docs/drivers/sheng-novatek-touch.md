@@ -131,6 +131,13 @@ volatile int native_touch_ids[NVT_SLOTS];
 
 The writer increments the sequence before and after the update, so the reader detects a torn snapshot. `ShengHidInput` reads the snapshot and emits digitizer reports.
 
+On sheng, enable `sheng-tlog=1` with diagnostic export to capture `kernel.touchpath.bin`.
+Run `python3 scripts/decode-sheng-touchpath.py kernel.touchpath.bin --jsonl paths.jsonl` from the device repository.
+Each row follows a physical contact from its first observed centroid in units of 0.1 panel pixel.
+It includes raw and filtered displacement, holds, release, edge classification and the HID submission result.
+The three uptime timestamps mark the most recent IRQ before reading, completion of the SPI read and return from publishing the contact set.
+They can be compared with display flips in `kernel.rings.txt`.
+
 ## Adapting the example
 
 1. Keep the pure processing layer separate from the bus.
