@@ -2,6 +2,33 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 night 0248: UI and CoreAnimation threads kept on the big cores; user: "it is way better"** (patch
+  `xnu/patches/0248-umi-big-cores.patch`, kernel commit 1abc78e; boot **`shim/out/umi-0248-bigcores.img`** = 0247's
+  line with `sweetbtlog=1` swapped for `sweetbigab=6` (604 chars), local kernel build, booted 22:37, the current image).
+  - **Cause:** `tools/mkadt.py` describes the eight cores as one homogeneous cluster (`cluster-type` 0) and the board
+    has one cluster, so XNU has no AMP: one pset, one clutch root and one realtime queue for all eight. A woken thread
+    waits on the shared queue and whichever core schedules first takes it - often a silver A55 (often the waker's own
+    core); nothing moves a running thread to a big core that came free. ios-s9's `sweetfast` (still uncommitted in
+    sched_prim.c, in this image too) only steers the choice of an *idle* core.
+  - **Fix (sched_clutch.c dispatch hooks, `sweetbig=MASK`, default 0xf):** for realtime threads and user threads at
+    priority >= `sweetbigpri` (46 = user-interactive; max of base and current): 1 place on an idle big core (prime
+    first) or displace a lesser thread from one; 2 leave silver at the next scheduling check when a big core can take
+    it (a big core going idle sends that check); 4 silver leaves them queued while free big cores can drain the queue
+    (realtime: at most 500 us); 8 no direct handoff onto silver while a big core is idle. `sweetbigmask` (0xf0),
+    `sweetbigprime` (0x80), `sweetbigab=N` (N sweettop rounds on / N off for the first 90 rounds, then on).
+  - **Logs:** `SWEET BIG (on|off): ... ms on silver/gold/prime: rt/ui/default/low/kernel` and a wait line every
+    sweettop round; `TOP thread ... pri B/C on S/G/P` = % of one core on silver/gold/prime.
+  - **Measured (same boot, sweetbigab=6, boot rounds skipped; 14 on vs 12 off rounds, user in the UI):**
+    backboardd + SpringBoard UI-priority threads on gold/prime 85 % off -> **93 % on**; UI threads started on silver
+    while a big core was idle, median per 10 s **245 -> 26**; worst UI wake-to-run per round, median **8.3 -> 3.2 ms**;
+    all UI-priority time on big 77 -> 80 % (the phone was busy and thermally capped: gold 1382 MHz, prime 1516 MHz).
+    Examples: SpringBoard main thread `on 1/44/12`, backboardd `coreanimation.display.primary` (pri 54) `on 0/9/1`.
+    CoreAnimation runs at 54 here, no realtime-queue threads were seen (`rt 0/0/0`).
+  - Kernel built locally only (with the ios-s9 WIP on top); the committed tree without it is not CI-built yet.
+    Log: session scratchpad `umi-0248.log` (UDP 5140, plain Python receiver); analysis script `ab.py` there too.
+  - **Next:** the ADT could describe two clusters (E = 0-3, P = 4-7) and enable XNU's own AMP/Edge scheduler instead
+    of these hooks; thermal caps limit the big cores now, worth a look with the cpufreq work.
+
 - **2026-11-04 evening: App Library blur NOT fixed - narrowed to one blur pass whose output decays to black with
   identical inputs; phone and sources restored** (same 0247 image; no patch).
   - User: the background goes black **while the App Library is in use**, sometimes coming back small in a corner.
