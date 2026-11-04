@@ -60,6 +60,13 @@ python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/assembled/tree
 模型检查中断分发、并发注册和串口与音频的时钟归属。UART14、ArmCpu、触摸、音频
 与启动日志代码通过目标编译，构建脚本为板级归档编译八个协议和 SoC 对象。
 
+原生路由补丁固定匹配目标二进制，选择控制器类型零，清除厂商钩子并保留标准 HCI
+初始化。可选命令 0x0c5b 根据真实支持位执行，H4 预关闭跳过空钩子并保留原生关闭。
+补丁通过两种 ASLR 偏移下的 76 项
+AArch64 指令模拟，PAC 操作按无设备密钥模型处理。检查器读取 USERLAND24 指针
+修正链，定位十个原生能力槽位。能力发布接通前，生成结果标记为
+`adapter_ready=false`。
+
 运行时安装和 iPadOS 27 控制器适配仍在开发。扫描、配对、音频、
 功耗及 Wi-Fi 共存等待上机验证。
 
