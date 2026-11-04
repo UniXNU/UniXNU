@@ -136,7 +136,7 @@ def addon_hashes(path, work):
     return sorted(set(hashes))
 
 
-def merge_launchd_cache(source, daemons, destination, job_environment=None):
+def merge_launchd_cache(source, daemons, destination, job_environment=None, job_overrides=None):
     """Add owner jobs and board-selected environment values to the OS launchd cache."""
     original = plistlib.loads(source.read_bytes())
     merged = plistlib.loads(source.read_bytes())
@@ -151,8 +151,8 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None):
             raise ValueError('OS launchd cache already owns ' + key)
         jobs[key] = job
         added.append(key)
-    if not added:
-        raise ValueError('no owner launchd jobs')
+    if not added and not job_environment and not job_overrides:
+        raise ValueError('no owner launchd jobs or selected OS job changes')
     assert all(merged[key] == value for key, value in original.items() if key != 'LaunchDaemons')
     assert all(jobs[key] == value for key, value in original['LaunchDaemons'].items())
     for label, environment in (job_environment or {}).items():
@@ -162,6 +162,20 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None):
         if not isinstance(environment, dict) or not all(isinstance(value, str) for value in environment.values()):
             raise ValueError(f'launchd environment values for {label} must be strings')
         matches[0].setdefault('EnvironmentVariables', {}).update(environment)
+    fields = {'UserName': str, 'EnableTransactions': bool, 'EnablePressuredExit': bool,
+              'ThrottleInterval': int}
+    for label, changes in (job_overrides or {}).items():
+        matches = [jobs[key] for key, job in original['LaunchDaemons'].items() if job.get('Label') == label]
+        if len(matches) != 1:
+            raise ValueError(f'expected one OS launchd job for {label}, found {len(matches)}')
+        if not changes or not isinstance(changes, dict) or not set(changes) <= fields.keys():
+            raise ValueError('unsupported OS launchd job override: ' + label)
+        for key, value in changes.items():
+            if type(value) is not fields[key] or (key == 'ThrottleInterval' and value < 0):
+                raise ValueError(f'invalid {key} for OS launchd job {label}')
+            if key == 'UserName' and not re.fullmatch('[a-z_][a-z0-9_-]*', value):
+                raise ValueError('invalid launchd user for ' + label)
+        matches[0].update(changes)
     destination.parent.mkdir(parents=True, exist_ok=True)
     # This dictionary is consumed by launchd's private cached-plist parser.
     # Use the platform serializer for its binary representation.
@@ -171,7 +185,8 @@ def merge_launchd_cache(source, daemons, destination, job_environment=None):
     return dict(source_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
                 output_sha256=hashlib.sha256(destination.read_bytes()).hexdigest(),
                 original_jobs=len(original['LaunchDaemons']), added_jobs=added,
-                original_entries_preserved=not job_environment, job_environment=job_environment or {}, serializer='Apple plutil binary1')
+                original_entries_preserved=not job_environment and not job_overrides,
+                job_environment=job_environment or {}, job_overrides=job_overrides or {}, serializer='Apple plutil binary1')
 
 
 def sign_launchd_cache(path):
@@ -219,6 +234,26 @@ def main():
                         candidate = combined
                     addon = out / 'gpuaddon.bin'
                     candidate.replace(addon)
+        bluetooth_report = None
+        if request.get('bluetooth_tool'):
+            bluetooth = work / 'bluetooth'
+            mount_work = work / 'bluetooth-os'
+            mount_work.mkdir()
+            with os_mount(request['os_image'], mount_work) as mount:
+                run(sys.executable, Path(request['device']) / request['bluetooth_tool'],
+                    bluetooth, request['bluetooth_target'], '--os-root', mount)
+            bluetooth_report = json.loads((bluetooth / 'report.json').read_text())
+            directories = []
+            for prefix, relative in bluetooth_report['directories'].items():
+                if (not prefix or Path(prefix).is_absolute() or '..' in Path(prefix).parts or
+                    Path(relative).is_absolute() or '..' in Path(relative).parts):
+                    raise ValueError('invalid Bluetooth runtime directory')
+                directories += [prefix, bluetooth / relative]
+            candidate = work / 'bluetooth-addon.bin'
+            script('addon-add-dir.py', addon, candidate, *directories)
+            addon = out / 'bluetooth-addon.bin'
+            candidate.replace(addon)
+            (out / 'bluetooth-service.json').write_bytes((bluetooth / 'report.json').read_bytes())
         if request.get('wifi_tool'):
             wifi = work / 'wifi'
             run(sys.executable, Path(request['device']) / request['wifi_tool'], wifi, request['wifi_target'])
@@ -226,12 +261,13 @@ def main():
             wifi_report = json.loads((wifi / 'report.json').read_text())
             if wifi_report.get('firmware_prefix'):
                 extra += [wifi_report['firmware_prefix'], wifi / 'firmware']
-            if request.get('wifi_launchd_cache'):
+            if request.get('wifi_launchd_cache') or bluetooth_report is not None:
                 cache_work = work / 'launchd-cache'
                 cache_work.mkdir()
                 with os_mount(request['os_image'], cache_work) as mount:
                     cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
-                        wifi / 'daemons', wifi / 'xpc/launchd.plist', request.get('launchd_job_environment'))
+                        wifi / 'daemons', wifi / 'xpc/launchd.plist', request.get('launchd_job_environment'),
+                        bluetooth_report['launchd_job_overrides'] if bluetooth_report else None)
                 cache_report.update(sign_launchd_cache(wifi / 'xpc/launchd.plist'))
                 extra += ['xpc', wifi / 'xpc']
                 (out / 'wifi-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
@@ -241,27 +277,42 @@ def main():
             addon = out / 'wifi-addon.bin'
             candidate.replace(addon)
             (out / 'wifi-service.json').write_bytes((wifi / 'report.json').read_bytes())
-            if trust is not None:
-                # Keep every original module intact. Append only absent hashes;
-                # rebuilding from a previously integrated addon stays idempotent.
-                hashes = addon_hashes(addon, work / 'signed-addon')
-                data = trust.read_bytes()
-                count = struct.unpack_from('<I', data)[0]
-                offsets = list(struct.unpack_from(f'<{count}I', data, 4)) + [len(data)]
-                known = set()
-                for index in range(count):
-                    module = data[offsets[index]:offsets[index + 1]]
-                    version, _, entries = struct.unpack_from('<I16sI', module)
-                    stride = {0: 20, 1: 22, 2: 24}.get(version)
-                    if stride is None or len(module) != 24 + entries * stride:
-                        raise SystemExit('invalid original trust module')
-                    known.update(module[24 + i * stride:44 + i * stride].hex() for i in range(entries))
-                missing = sorted(set(hashes) - known)
-                if missing:
-                    candidate = work / 'wifi-trust.bundle'
-                    script('trust-append-module.py', trust, candidate, *missing)
-                    trust = out / 'wifi-owner-trust.bundle'
-                    candidate.replace(trust)
+        elif bluetooth_report is not None:
+            daemons = work / 'empty-daemons'
+            daemons.mkdir()
+            cache_work = work / 'bluetooth-cache'
+            cache_work.mkdir()
+            cache = work / 'bluetooth-xpc/launchd.plist'
+            with os_mount(request['os_image'], cache_work) as mount:
+                cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
+                    daemons, cache, request.get('launchd_job_environment'), bluetooth_report['launchd_job_overrides'])
+            cache_report.update(sign_launchd_cache(cache))
+            candidate = work / 'bluetooth-cache-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'xpc', cache.parent)
+            addon = out / 'bluetooth-addon.bin'
+            candidate.replace(addon)
+            (out / 'bluetooth-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
+        if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None):
+            # Keep every original module intact. Append only absent hashes;
+            # rebuilding from a previously integrated addon stays idempotent.
+            hashes = addon_hashes(addon, work / 'signed-addon')
+            data = trust.read_bytes()
+            count = struct.unpack_from('<I', data)[0]
+            offsets = list(struct.unpack_from(f'<{count}I', data, 4)) + [len(data)]
+            known = set()
+            for index in range(count):
+                module = data[offsets[index]:offsets[index + 1]]
+                version, _, entries = struct.unpack_from('<I16sI', module)
+                stride = {0: 20, 1: 22, 2: 24}.get(version)
+                if stride is None or len(module) != 24 + entries * stride:
+                    raise SystemExit('invalid original trust module')
+                known.update(module[24 + i * stride:44 + i * stride].hex() for i in range(entries))
+            missing = sorted(set(hashes) - known)
+            if missing:
+                candidate = work / 'runtime-trust.bundle'
+                script('trust-append-module.py', trust, candidate, *missing)
+                trust = out / ('bluetooth-owner-trust.bundle' if bluetooth_report else 'wifi-owner-trust.bundle')
+                candidate.replace(trust)
         if trust is None:
             original = work / 'apple-trust.bundle'
             script('bundle-ipsw-trust.py', original, *request['trust_modules'])
