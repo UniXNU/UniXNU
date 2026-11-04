@@ -19,8 +19,13 @@
     there but barely noticeable".
   - The failed creates also explain part of the earlier "stale frames": a drawable or snapshot CoreAnimation could not
     get showed whatever was in its place.
-  - Next: the remaining small glitches; then test the walk off again on top of 0244+0245 (its CPU cost is most of the
-    kernel share while animating); release drawables on the latched CTL flush bit instead of 3 ticks.
+  - **The walk is still needed:** 0245b's kernel with `sweetgpucheck=0` (`shim/out/umi-0245c-nowalk.img`, 13:18): user
+    "again yet more glitch". So besides the release race (0244) and the surface leak (0245) there is a third,
+    timing-dependent cause that the walk's milliseconds per submit hide (its flush itself changes nothing, 0243b).
+  - Next: the remaining small glitches and that third cause (candidates: CoreAnimation reusing an offscreen /
+    intermediate surface before the GPU read of it finished - an IOSurface use count CA reads while a submission
+    that samples it is still queued; cross-process order of an app's GPU writes vs backboardd's reads); release
+    drawables on the latched CTL flush bit instead of 3 ticks.
 - **2026-11-04 0244: drawables go back to CoreAnimation 3 vsyncs after the flip; only the app switcher still
   glitches** (patch `xnu/patches/0244-umi-fb-drawable-release-delay.patch`; boot **`shim/out/umi-0244c-retire3-walk.img`**
   = 0238's line, 12:45, the current image).
