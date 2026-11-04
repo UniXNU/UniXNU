@@ -66,6 +66,7 @@ function taskSidebars(prefix: string, zh: boolean) {
       item('Touch and buttons', '触控与按键', 'porting/input'),
       item('GPU and Metal', 'GPU 与 Metal', 'porting/gpu'),
       item('Wi-Fi', 'Wi-Fi', 'porting/network'),
+      item('Bluetooth', '蓝牙', 'drivers/qca-bluetooth'),
       item('Baseband and cellular', '基带与移动网络', 'porting/baseband'),
       item('DSP, audio and power', 'DSP、音频与电源', 'porting/power'),
       item('Develop a driver', '开发驱动', 'drivers/overview'),
