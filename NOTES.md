@@ -2,6 +2,23 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 0247: text fixed - small GPU imports cleaned before every submit; only the App Library background
+  (a blur) still glitches** (patch `xnu/patches/0247-umi-gpu-small-import-clean.patch`; boot
+  **`shim/out/umi-0247-impclean.img`** = 0238's line, 13:41, the current image; 0246's direct/copy counter showed the
+  copy fallback is not the tearing: 2 of 770 presents).
+  - Small CoreAnimation layers (text, icons) reach backboardd as shared memory the app redraws in place, imported
+    into Turnip as host memory (BoImport). The kernel cleaned an import once at BoMap; Submit skips imports since
+    0179 (cleaning big render-target imports pushed stale lines over GPU frames, 0183). So in-place CPU redraws never
+    reached the GPU: stale glyphs in Settings, App Library icons. Now imports up to `sweetgpuimpclean` bytes
+    (default 2 MB, 0 = off) are cleaned before every submit; drawables (11 MB) keep the old rule. A line every 2000
+    submits gives the MB cleaned.
+  - User: **"text seems all good but app library still has issue with the background"**. backboardd 7 rounds
+    (mostly testing) min 10 / median 54 / max 93 %, kernel share median 17 %.
+  - The App Library background is a live blur (backdrop rendered by backboardd's GPU into intermediate textures,
+    then blurred in passes) - GPU-written, no import involved: points at a missing barrier / cache flush between
+    render passes inside one submission (metal2vulkan or Turnip). ios-apollo's notes have the same class on Gallium
+    (Chlorophyll fd6-fb-barrier-reorder: a blur read half-written pixels). Next: look at metal2vulkan's pass
+    barriers for render-target -> sampled-texture transitions (CCU flush + cache invalidate on A6xx).
 - **2026-11-04 0245: THE APP SWITCHER WAS A SURFACE LEAK; the UI is now clean on the GPU ("a little glitchy here and
   there but barely noticeable")** (patch `xnu/patches/0245-umi-surface-zombie-leak.patch`; boot
   **`shim/out/umi-0245b-zombiefix.img`** = 0238's line, 13:00, the current image).
