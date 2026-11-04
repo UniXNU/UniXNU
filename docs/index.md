@@ -7,7 +7,7 @@ migration:
   link: /porting/migration
 hero:
   text: Run iOS and macOS on non-Apple ARM64 hardware
-  tagline: A general UEFI environment and driver loading system, similar to OpenCore, with a device tree platform, a patched XNU kernel and a complete boot image.
+  tagline: A general UEFI environment and driver loading system, similar to OpenCore, with a device tree platform, patches for XNU and a build that produces a bootable image.
   image:
     src: /logo-light.svg
     alt: UniXNU logo
