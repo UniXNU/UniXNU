@@ -60,6 +60,15 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 实现能力前，搜索组件目录、[组件页面](/zh/drivers/repositories)、README 和源码，
 核对接口、硬件范围、OS 要求与板级输入。
 
+新组件发布到目录前，可以显式选择本地源码：
+
+```sh
+./unixnu tree -D /path/to/device --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+```
+
+新模块会链接到装配树，由使用它的板级代码提供集成步骤。目录中已有的组件仍需在
+配置中选中。
+
 ## 源码身份
 
 官方兼容名称根据目录记录的仓库身份解析。例如，官方 `UniXNU/NativeAdreno` 源码

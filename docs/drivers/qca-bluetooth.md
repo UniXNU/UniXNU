@@ -37,6 +37,10 @@ userland starts. H4 UART.SK encoding and 3.2 Mbaud use four-byte little-endian
 properties. Both carry the stable private address derived from the platform
 identity. The Linux boundary converts the public address to bdaddr_t order.
 
+The resolved QcaBluetooth checkout supplies both kernel and userland builds.
+UART clock-restore failures end the transport with the original error and stop
+forwarding and retries.
+
 The worker retains its DMA memory, services bounded batches and sleeps on IRQ,
 ring-space or deadline events. Hardware faults abort command waiters immediately.
 The `[bluetooth]` boot-log row records phase, transfers, sleep, power ownership
@@ -96,9 +100,21 @@ unchanged. Missing code hashes are appended to the preserved trust bundle.
 `check-bluetooth-runtime.py` validates the packed addon, signatures, firmware,
 launchd jobs, trust modules and original Data seed. The combined addon verifies
 45 files, three signed Bluetooth binaries and 716 launchd jobs. Host libxpc
-accepts the cache, and the overlay patch compiles for the target. Component
-registration, the complete image rebuild and device scanning, pairing, audio,
+accepts the cache. The complete kernel, fileset, FAT payload and temporary boot
+image build successfully with the explicit local component. The packed payload
+contains the Bluetooth exports, H4/baud properties, signed runtime and preserved
+Data seed, with automatic reset disabled. Device scanning, pairing, audio,
 power and coexistence measurements are pending.
+
+Before catalog publication, select the component from the UniXNU checkout:
+
+```sh
+./unixnu build kernel payload -D /path/to/UniXNU-sheng --os 27 \
+  --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+```
+
+Supply the preserved installation inputs from [Runtime inputs](/porting/packaging#runtime-inputs-for-ios-27),
+then follow [Boot image](/concepts/payload) for temporary device startup.
 
 Sources: [Linux](https://github.com/ianchb/sm8550-mainline),
 [Debian sheng](https://github.com/ianchb/debian-sheng),

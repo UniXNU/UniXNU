@@ -31,6 +31,9 @@ UART 需要启动固件提供协议号为 2 的微码。
 3.2 Mbaud 使用四字节小端属性，两者携带从平台标识派生的稳定私有地址。
 Linux 接口把网络顺序的地址转换为 bdaddr_t 顺序。
 
+内核与用户态构建使用同一份已解析的 QcaBluetooth 源码。串口时钟恢复失败时，
+驱动结束当前传输并保留硬件错误，停止转发和重试。
+
 工作线程保留 DMA 内存，每次处理有界批量，等待中断、队列空间或期限事件。
 硬件错误立即结束命令等待。启动日志的 `[bluetooth]` 行记录阶段、收发、休眠、
 供电归属和 SMMU 状态；`log-bluetooth=1` 增加初始化信息。
@@ -80,8 +83,19 @@ BlueTool 保留原有 Mach 服务，以 root 身份运行并启用事务。Wi-Fi
 
 `check-bluetooth-runtime.py` 检查实际打包内容、签名、固件、启动任务、信任模块
 和原有 Data 种子。联合插件通过 45 个文件、3 个签名蓝牙程序及 716 个启动任务
-验证；宿主 libxpc 接受缓存，覆盖挂载补丁通过目标编译。组件注册、完整镜像重建
-以及扫描、配对、音频、功耗和共存的上机验证待完成。
+验证，宿主 libxpc 接受缓存。显式选择本地组件后，完整内核、fileset、FAT 载荷和
+临时启动镜像均构建成功。实际载荷包含蓝牙入口、H4/波特率属性、签名运行时和
+原有 Data 种子，并关闭自动重启。扫描、配对、音频、功耗和共存的上机验证待完成。
+
+组件发布到目录前，在 UniXNU 仓库显式选择本地源码：
+
+```sh
+./unixnu build kernel payload -D /path/to/UniXNU-sheng --os 27 \
+  --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+```
+
+按[运行时输入](/zh/porting/packaging#ios-27-运行输入)提供原有安装输入，再按
+[启动载荷](/zh/concepts/payload)封装临时启动镜像。
 
 参考：[Linux](https://github.com/ianchb/sm8550-mainline)、
 [Debian sheng](https://github.com/ianchb/debian-sheng)、
