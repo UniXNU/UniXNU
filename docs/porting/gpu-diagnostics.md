@@ -56,6 +56,8 @@ python3 scripts/decode-sheng-latency.py RUN/diag/files/kernel.latency.bin --out 
 
 LAT1 is a 16-byte header followed by 72-byte records. Events 35 and 36 are an unnest's range, user registers and kernel callers; its user stack follows as fault events 8, 9 and 12 with the same ID. Client sampler records carry the sampled role in state bits 12-13 (1 render, 2 encode, 3 completion).
 
+The sheng sampler walks a remote kernel stack only while the target is waiting, off the run queue and past switch-out, with its scheduler lock held. An empty kernel stack in a sample can mean the thread was switching out or its saved registers were unavailable. The wait event and thread state remain available.
+
 CPU events use kernel uptime. GPU pass timestamps use a hardware clock; their duration can be measured within that clock, while absolute alignment to CPU events requires calibration.
 
 `sheng-gpu-perf=1` enables the 19-counter A7XX BR capture with GPU DCVS and diagnostics. Derived deltas use valid intervals only. These counters describe global GPU intervals; pass timing supplies workload context.
