@@ -40,6 +40,22 @@
     So the walk is what keeps frames right, not the ring clean; 0240d stays. The phone's Turnip
     (SweetMetal2.bundle/libvulkan_freedreno.dylib, read back) carries every log string of the current
     tu_knl_darwin.cc, i.e. the build that maps BOs with kIOMapWriteCombineCache - not an old cached-mapping build.
+  - **0241** (`xnu/patches/0241-umi-gpu-coherence-diag.patch`, kernel commit after 7a5f177; 2026-11-04 morning):
+    why does the walk fix frames? (a) `sweetgpucoh=1` (`shim/out/umi-0241c-wimg.img`): every command / draw-state
+    page the walk visits, its WIMG from pmap_cache_attributes: **~3 million page visits, all 0x6 (write-combined),
+    none cached** - Turnip does not write commands through a cached mapping. (The first two builds compared memory
+    through an extra uncached mapping and panicked: a 4 KB unmap on this 16 KB-page kernel, then unmapping
+    ml_io_map's permanent entry - photos from the user.) The walk visits up to 300000 pages a second while the UI
+    animates: that is backboardd's 34-38 % kernel time in those rounds. (b) `sweetgpudsb=1` (all cores DSB SY by
+    cross-call before the doorbell), walk off (`shim/out/umi-0241d-dsb-nowalk.img`): user "really glitchy as hell"
+    - not a write-buffer race either; the barrier stays, off by default. Busy rounds without the walk: backboardd
+    51-79 % with only 9-11 % in the kernel.
+    **So the walk most likely helps by slowing the submitting thread down** (milliseconds per submit): the stale
+    frames look like a CPU-GPU race in user space - Turnip / metal2vulkan rewriting or freeing a buffer (command
+    stream, draw state, a suballocation) the GPU has not consumed yet. Next: a pure delay per submit
+    (`sweetgpudelay=N` us, walk off) to confirm, then find the reuse in tu_knl_darwin.cc's retire logic (BO frees
+    deferred to "the newest submitted fence"; one 32-bit fence for every client) and metal2vulkan's
+    command-buffer / ring-buffer reuse.
   - **Open:** (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
     WC, Turnip's map WC) - fix that and the per-submit walk can go (0240b showed sys 3 %); suspects: the cacheable
     physmap alias and speculative fills, or another cached view of command BOs; (2) the same question for the ring
