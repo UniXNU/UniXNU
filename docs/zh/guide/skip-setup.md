@@ -89,6 +89,8 @@ Setup 依赖的服务在这个平台上不运行。板级文件用启动参数�
 sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd,com.apple.CommCenter,com.apple.iconservices.iconservicesagent
 ```
 
+在 sheng 的 iPadOS 27.0.1（24A446）上，图标服务的 launchd 任务设置了 `FORCE_SOFTWARE_RENDERER=0` 和 `CI_ENABLE_METAL_GPU=0`。IconRendering 可以使用 Metal，CoreImage 保留软件渲染。第 240 秒导出的真机日志记录了该服务取得的 Adreno 740 设备，前 8 个完成的命令缓冲区共有 149 次绘制，服务的故障和退出记录均为 0。
+
 在 sheng 上对比图标服务时，`sheng-lite=2` 会在 `sheng-lite=1` 的作业名单中额外停用 `com.apple.iconservices.iconservicesagent`。板级代码在 launchd 启动前写入策略。在 iPadOS 27 真机测试中，当前主屏页面和 Dock 上的应用图标图案全部缺失，「设置」仍可打开。
 
 `com.apple.CommCenter` 是蜂窝服务。列表是板级配置。保留用户态需要的服务，移除阻塞首次启动的服务。
