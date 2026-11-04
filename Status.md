@@ -29,7 +29,7 @@
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
 | 🧭 Sensor | Ambient light only | ⚠️ |
-| 🎆 GPU | Adreno 650 runs our command streams; rendering not reliable yet, UI mostly on the CPU | ⚠️ |
+| 🎆 GPU | Adreno 650 draws the UI (CoreAnimation through Metal / turnip); CPU overhead still high | ⚠️ |
 | 🎬 Video decode | No hardware decoder, videos do not play | ❌ |
 | 📷 Camera | | ❌ |
 | 🔦 Camera Flash | | ❌ |
@@ -92,8 +92,8 @@
 |---|---|---|
 | ⚙️ Power-up | GMU / RPMh, zap shader authenticated by TrustZone | ✅ |
 | 🧾 Command streams | The command processor runs our streams | ✅ |
-| 🎨 Metal | Over Mesa's turnip, experimental (`sweetmtl`); fence timeouts | ⚠️ |
-| 🖼️ CoreAnimation on the GPU | Mostly renders on the CPU | ❌ |
+| 🎨 Metal | Over Mesa's turnip (`sweetmtl`), fence interrupts; per-submit cache walk still costs CPU | ⚠️ |
+| 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; backboardd still 20-70 % of a core | ⚠️ |
 
 ## 🧠 CPU and performance
 
@@ -131,6 +131,6 @@
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,
   haptics on the Actuator
 * **Video**: hardware decode (VideoToolbox / AVD)
-* **GPU**: reliable rendering, so CoreAnimation can move off the CPU
+* **GPU**: drop the per-submit cache walk (make Turnip's write-combined command memory coherent without it), less CPU per frame
 * **Wi-Fi**: 5 GHz, HT / VHT rates, WPA3
 * **Cellular**, **GPS**, **Fingerprint**, **Face ID / SEP**, **NFC**, **Wireless charging**

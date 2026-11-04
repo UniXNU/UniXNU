@@ -1,0 +1,242 @@
+From 7a5f177c291f9205ec73356a0407e2fd63322d9b Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 01:47:00 +0100
+Subject: [PATCH] umi: cheaper per-submit GPU page walk (a page at a time), no
+ per-frame scanout flush; GPU method times in sweettop
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c                | 77 +++++++++++++++++++++++----
+ iokit/Kernel/arm/SweetAdreno.cpp      | 41 ++++++++++++--
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 26 ++++++++-
+ 3 files changed, 128 insertions(+), 16 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 2d5a060..e3dee94 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -2692,6 +2692,7 @@ sa_fence_wait(uint32_t seqno, uint32_t ms)
+ }
+ 
+ /* One line every sweettop round (sweet_sample.c): what the GPU's waiters did since the last one. */
++extern void sweet_adreno_method_top(void);       /* iokit/Kernel/arm/SweetAdreno.cpp */
+ void sweet_adreno_top(uint32_t secs);
+ void
+ sweet_adreno_top(uint32_t secs)
+@@ -2708,6 +2709,7 @@ sweet_adreno_top(uint32_t secs)
+ 	    sa_stat.slept - sa_stat_last.slept, ns / NSEC_PER_MSEC, sa_stat.sleeps - sa_stat_last.sleeps,
+ 	    sa_stat.irqs - sa_stat_last.irqs, sa_irq_on ? "on" : "off");
+ 	sa_stat_last = sa_stat;
++	sweet_adreno_method_top();
+ }
+ 
+ static bool
+@@ -3375,25 +3377,72 @@ sa_gpu_words(uint64_t va, uint32_t words[8])
+ 	return ok;
+ }
+ 
+-/* One dword of GPU memory, through sa_gpu_words' 32-byte reads (the last line read is kept). */
++/*
++ * One dword of GPU memory, a 4 KB page at a time (0240): the page is translated once through the
++ * core's page tables (sa_gpu_words' checks), cleaned+invalidated once through the kernel's
++ * cacheable alias, and then read from it. This walk is not only a diagnostic: pushing out the
++ * CPU's lines of the command and draw-state pages the CP is about to fetch is what keeps frames
++ * right - 0240's first build skipped the walk and the panel showed stale frames (user: "a lot of
++ * previous frame showing"). Per 32 bytes (a mutex, a table walk, a flush) it cost backboardd's
++ * display thread ~15 % of a core; per page it is a fraction of that.
++ */
+ struct sa_word_cache {
+-	uint64_t line;
++	uint64_t line;                  /* the page, despite the name (1: none yet) */
+ 	bool ok;
+-	uint32_t w[8];
++	vm_offset_t kva;
+ };
+ 
++static vm_offset_t
++sa_gpu_page_kva(uint64_t va)
++{
++	vm_offset_t kva = 0;
++	if (va >> 39) {
++		return 0;
++	}
++	va &= ~4095ull;
++	sa_service_take_lock();
++	uint64_t *table = sa_core_space.table_count ? sa_core_space.table[0] : NULL;
++	for (int shift = 30; table != NULL && shift > 12; shift -= 9) {
++		uint64_t entry = table[(va >> shift) & 0x1ff];
++		table = NULL;
++		if ((entry & 3) != PTE_TABLE) {
++			break;
++		}
++		for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
++			if (sa_core_space.table_phys[i] == (entry & PTE_ADDRESS)) {
++				table = sa_core_space.table[i];
++				break;
++			}
++		}
++	}
++	if (table != NULL) {
++		uint64_t entry = table[(va >> 12) & 0x1ff];
++		uint64_t pa = entry & PTE_ADDRESS;
++		if ((entry & 3) == PTE_PAGE && pmap_valid_address(pa) && pmap_valid_address(pa + 4095)) {
++			vm_offset_t k = phystokv(pa);
++			if (sa_phys(k) == pa) {
++				flush_dcache64((addr64_t)k, 4096, FALSE);
++				kva = k;
++			}
++		}
++	}
++	sa_service_drop_lock();
++	return kva;
++}
++
+ static bool
+ sa_gpu_word(struct sa_word_cache *c, uint64_t va, uint32_t *word)
+ {
+-	uint64_t line = va & ~31ull;
+-	if (c->line != line) {
+-		c->line = line;
+-		c->ok = sa_gpu_words(line, c->w);
++	uint64_t page = va & ~4095ull;
++	if (c->line != page) {
++		c->line = page;
++		c->kva = sa_gpu_page_kva(page);
++		c->ok = c->kva != 0;
+ 	}
+-	if (!c->ok) {
++	if (!c->ok || (va & 3)) {
+ 		return false;
+ 	}
+-	*word = c->w[(va & 31) / 4];
++	*word = *(volatile const uint32_t *)(c->kva + (va & 4095));
+ 	return true;
+ }
+ 
+@@ -3543,7 +3592,15 @@ sa_ib_walk(uint32_t seqno, uint32_t index, const char *what, uint32_t group, uin
+ static void
+ sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
+ {
+-	if (dwords > 8192 || sa_ib_check_logged >= 32) {
++	/* (0240) sweetgpucheck=0 turns the walk off - which shows stale frames (see sa_gpu_word): the walk
++	 * cleans the command and draw-state pages the CP will fetch. Default on, a page at a time. */
++	static int check = -1;
++	if (check < 0) {
++		uint32_t v = 1;
++		(void)PE_parse_boot_argn("sweetgpucheck", &v, sizeof(v));
++		check = v != 0;
++	}
++	if (!check || dwords > 8192 || sa_ib_check_logged >= 32) {
+ 		return;
+ 	}
+ 	(void)sa_ib_walk(seqno, index, "top", 0, start, dwords, 0);
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index c9dcc35..6efc1d0 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -524,17 +524,50 @@ SweetAdrenoUserClient::v2Release(SweetAdrenoUserClient::BO *bo)
+ 	bzero(bo, sizeof(*bo));
+ }
+ 
++/* (0240) Calls and kernel time per v2 method, all clients, printed every sweettop round (sweet_adreno_top). */
++#define SA_METHODS 17
++static uint64_t sa_method_calls[SA_METHODS], sa_method_abs[SA_METHODS], sa_method_last[2][SA_METHODS];
++
++extern "C" void sweet_adreno_method_top(void);
++extern "C" void
++sweet_adreno_method_top(void)
++{
++	static const char *const names[SA_METHODS] = { "?", "query", "alloc", "map", "free", "submit", "wait",
++		                                       "timestamp", "status", "setmeta", "getmeta", "newqueue", "closequeue", "cpumap",
++		                                       "cpuunmap", "devinfo", "import" };
++	char line[400];
++	int n = snprintf(line, sizeof(line), "SWEET ADRENO: methods (calls / ms):");
++	for (uint32_t m = 1; m < SA_METHODS && n < (int)sizeof(line) - 40; m++) {
++		uint64_t calls = sa_method_calls[m] - sa_method_last[0][m], ns;
++		absolutetime_to_nanoseconds(sa_method_abs[m] - sa_method_last[1][m], &ns);
++		sa_method_last[0][m] = sa_method_calls[m];
++		sa_method_last[1][m] = sa_method_abs[m];
++		if (calls != 0) {
++			n += snprintf(line + n, sizeof(line) - n, " %s %llu/%llu", names[m], calls, ns / 1000000);
++		}
++	}
++	IOLog("%s\n", line);
++}
++
+ /* A WaitFence can block for long and touches no client state; every other method runs alone. */
+ IOReturn
+ SweetAdrenoUserClient::v2Locked(uint32_t method, const void *in, uint32_t inSize, void *out,
+     uint32_t *outSize)
+ {
++	IOReturn r;
++	uint64_t start = mach_absolute_time();
++
+ 	if (method == NativeAdrenoMethodWaitFence) {
+-		return v2Method(method, in, inSize, out, outSize);
++		r = v2Method(method, in, inSize, out, outSize);
++	} else {
++		IOLockLock(fLock);
++		r = v2Method(method, in, inSize, out, outSize);
++		IOLockUnlock(fLock);
++	}
++	if (method < SA_METHODS) {
++		OSIncrementAtomic64((volatile SInt64 *)&sa_method_calls[method]);
++		OSAddAtomic64((SInt64)(mach_absolute_time() - start), (volatile SInt64 *)&sa_method_abs[method]);
+ 	}
+-	IOLockLock(fLock);
+-	IOReturn r = v2Method(method, in, inSize, out, outSize);
+-	IOLockUnlock(fLock);
+ 	return r;
+ }
+ 
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 38e4dd5..fbd1656 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -1124,6 +1124,20 @@ sweet_fb_gpu_pixel(uint32_t x, uint32_t y)
+ 	return *(volatile uint32_t *)va;
+ }
+ 
++/* sweetfb_scanflush=1: clean+invalidate the scanned-out surface on every direct present (before 0240). */
++static bool
++sweet_fb_scanflush(void)
++{
++	static int flush = -1;
++
++	if (flush < 0) {
++		uint32_t v = 0;
++		(void)PE_parse_boot_argn("sweetfb_scanflush", &v, sizeof(v));
++		flush = v != 0;
++	}
++	return flush != 0;
++}
++
+ /*
+  * A frame that is exactly one full-screen surface from the scanout pool is
+  * shown by pointing the pipe at its panel window. Returns false for the copy
+@@ -1168,12 +1182,20 @@ AppleCLCD::directPresent(const uint8_t *rec)
+ 		uintptr_t va = s->kernelAddress();
+ 		if ((pa & 0xf) == 0 && pa + len <= (1ull << 32) && off + len <= s->allocSize && va != 0 &&
+ 		    s->bytesPerRow <= 0xffff) {
+-			sweet_dcache_flush(va + off, len);
++			/* (0240) No cache maintenance per frame: the GPU writes the surface and the panel reads
++			 * memory; the CPU's writes to it are cleaned at IOSurface write-unlock (0185). Flushing the
++			 * whole scanned range (11 MB, ~171000 dc civac) on every present cost backboardd's display
++			 * thread ~45 % of a core in the kernel at 25 fps (0239's thread top). It is still flushed
++			 * before the sampling below reads it, and on every present with sweetfb_scanflush=1. */
++			bool sample = sweet_fb_direct_ok_logged < 2 || (sweet_fb_present_count % 128) == 0;
++			if (sample || sweet_fb_scanflush()) {
++				sweet_dcache_flush(va + off, len);
++			}
+ 			scanFrom(pa, s->bytesPerRow);
+ 			ok = true;
+ 			/* sampled on every 128th present (the first two log the whole-allocation walk):
+ 			 * left/middle/right of nine rows - the content's geometry at present time */
+-			if (sweet_fb_direct_ok_logged < 2 || (sweet_fb_present_count % 128) == 0) {
++			if (sample) {
+ 				sweet_fb_direct_ok_logged++;
+ 				IOLog("SWEET FB: direct present ok: surface %u %ux%u bpr %u scanout %#llx+%#llx "
+ 				    "[present %llu]\n", id, s->width, s->height, s->bytesPerRow, s->scanoutPhys,
+-- 
+2.54.0 (Apple Git-157)
+

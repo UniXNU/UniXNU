@@ -2,6 +2,44 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-04 0239-0240: GPU FENCE INTERRUPTS; backboardd's kernel time per GPU submit cut; the "fence timeouts" were
+  log noise** (patches `xnu/patches/0239-umi-gpu-fence-irq.patch` kernel 206fdec, `0240-umi-gpu-submit-cost.patch`
+  kernel 7a5f177; boot `shim/out/umi-0240d-fullring.img` = 0238's line unchanged, made with the new
+  `tools/umi-swap-payload.py BASE.img PAYLOAD.bin OUT.img` - the shim's cross gcc is not on this Mac).
+  - **The "fence timeouts ⚠️" were not failures:** every WaitFence that returned "not yet" was IOLogged, including
+    Turnip's 0 ns status polls and its 100 ms wait slices (~12000 lines per 1.5 MB of log). The hang itself was fixed
+    at 0200. Now only waits of 1 s or more that time out are logged. CoreAnimation already composited through Metal ->
+    metal2vulkan -> Turnip -> the A650 and direct-presented (`direct present ok`); the cost was CPU around it.
+  - **0239:** every fence is CACHE_FLUSH_TS | CP_EVENT_WRITE_0_IRQ (Linux a6xx_submit); RBBM_INT_0_MASK =
+    CP_CACHE_FLUSH_TS (clear 0x37 / mask 0x38, a6xx.xml); the GPU's SPI 300 (dt kgsl_3d0_irq, level) is enabled and
+    routed by `sweet_gic_spi_enable()` (pe_fiq.c, new; sleh_irq calls `sweet_gic_spi_handle()` first). Waiters sleep on
+    an event until the interrupt (4 ms safety slice) instead of `delay_for_interval(100 us)`, which blocks on a timer
+    here (cpu_idle_latency 0) = 10000 wake-ups a second per waiter. Boot: `test fence 9 signalled, 1 interrupt(s), mask
+    0x100000, status 0`; then ~1 interrupt per fence, no storm. `sweetgpuirq=0` = old polling.
+    sweettop now gives each process's kernel share (`TOP backboardd[57] 30% (sys 17%)`), the 8 busiest threads
+    (`TOP thread backboardd/com.apple.coreanimation.display.primary#603 ...`, `sweettopthreads=N`; idea from
+    ios-apollo xnu 0155, MIT, own code in osfmk/kern/exception.c) and `SWEET ADRENO: 10 s:` fence-wait counters.
+  - **The thread top found it:** backboardd's load is its `coreanimation.display.primary` thread, mostly in the kernel,
+    ~1.7 ms per submit (~100 submits / s on a steady screen) - fence waits only ~0.1 s per 10 s after 0239.
+  - **0240** (four builds, each booted): (a) directPresent no longer cleans+invalidates the whole 11 MB scanned surface
+    per frame (only before the every-128th pixel sample; `sweetfb_scanflush=1` = old) - no measurable change alone;
+    (b) a per-method line every round, `SWEET ADRENO: methods (calls / ms): submit 100/5 wait ...`; (c) **the 0194
+    submit check (walks every IB and draw-state group through the GPU page tables) is NOT just a diagnostic**: turned
+    off (0240b) backboardd fell to 14-16 % (sys 3 %) steady, but the user saw stale frames ("a lot of previous frame
+    showing") - its clean+invalidate of each command / draw-state line through the cacheable physmap alias before the
+    doorbell is what keeps Turnip's command memory right. Now it walks a 4 KB page at a time (one translation, one
+    flush per page, then plain reads); `sweetgpucheck=0` = off (stale frames). (d) 0240b/c also cleaned only the new
+    ring words: still some glitches (0240c, "less glitches but still some"); the full 32 KB ring clean is back (0240d:
+    user "all good now").
+  - **Numbers (TOP, backboardd, % of one core):** 0238 steady 32 %; 0239 bursts 65-82 % (sys 42-48 %); 0240 steady
+    29-30 % (sys 17 %), bursts 92 % (sys 42 %); 0240c (page walk, partial ring) steady 21-24 % (sys 10 %);
+    **0240d bursts 44-68 % (sys 18-28 %)**, steady not measured long (user stopped for the night). The earlier
+    "backboardd ~64 %" (0233) was this boot's burst level.
+  - **Open:** (1) why the GPU needs the CPU caches cleaned for memory every mapping of which is write-combined (BoAlloc
+    WC, Turnip's map WC) - fix that and the per-submit walk can go (0240b showed sys 3 %); suspects: the cacheable
+    physmap alias and speculative fills, or another cached view of command BOs; (2) the same question for the ring
+    (why an incremental clean is not enough); (3) ~12 % of a core of user time per frame in CA / metal2vulkan /
+    Turnip, more in animations; (4) a long steady-state measurement of 0240d.
 - **2026-11-04: ad daemons out of launchd's job list (ios-s9's fix, user OK'd)**: no kernel change, not booted yet.
   - Phone file changed: `/System/Library/xpc/launchd.plist`, jobs `com.apple.ap.adprivacyd` and
     `com.apple.ap.promotedcontentd` removed (532 -> 530 LaunchDaemons, every other job and section identical), made with
