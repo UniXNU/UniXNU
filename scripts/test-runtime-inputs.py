@@ -59,6 +59,9 @@ class RuntimeInputs(unittest.TestCase):
             ctx.logs = ctx.work / 'logs'
             ctx.logs.mkdir()
             ctx.board['payload']['runtime']['bluetooth_tool'] = 'scripts/build-bluetooth-userspace.py'
+            selected = ctx.work / 'selected-QcaBluetooth'
+            selected.mkdir()
+            ctx.modules = {('driver', 'QcaBluetooth'): argparse.Namespace(path=selected)}
             original_seed = Path(ctx.args.data_ramdisk).read_bytes()
             captured = {}
             def build(command, **kwargs):
@@ -71,6 +74,7 @@ class RuntimeInputs(unittest.TestCase):
                 source.return_value.disk_image.return_value = Path('/original-os.dmg')
                 runtime.prepare(ctx, kernel_build=True)
             self.assertEqual(captured['os_image'], '/original-os.dmg')
+            self.assertEqual(captured['bluetooth_component'], str(selected.resolve()))
             self.assertFalse(captured['init_data'])
             self.assertEqual(Path(ctx.args.data_ramdisk).read_bytes(), original_seed)
 
