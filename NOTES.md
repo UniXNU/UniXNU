@@ -17,8 +17,19 @@
   - The App Library background is a live blur (backdrop rendered by backboardd's GPU into intermediate textures,
     then blurred in passes) - GPU-written, no import involved: points at a missing barrier / cache flush between
     render passes inside one submission (metal2vulkan or Turnip). ios-apollo's notes have the same class on Gallium
-    (Chlorophyll fd6-fb-barrier-reorder: a blur read half-written pixels). Next: look at metal2vulkan's pass
-    barriers for render-target -> sampled-texture transitions (CCU flush + cache invalidate on A6xx).
+    (Chlorophyll fd6-fb-barrier-reorder: a blur read half-written pixels).
+  - **Not a barrier:** the phone had `TU_DEBUG=flushall,noubwc` in `/var/local/mtl2-tu-debug` all along (Turnip
+    flushes + invalidates around every command), and the blur glitched anyway. **Phone file changed (user OK'd):**
+    `/var/local/mtl2-tu-debug` = `noubwc` (original kept as `mtl2-tu-debug.sweet-orig`, both read back). Boot 13:56
+    (0247 again, log shows `TU_DEBUG=noubwc` for backboardd and SpringBoard): user "still the same glitch in app
+    library, performance similar" - so flushall did nothing useful and stays off. backboardd 11 rounds min 9 /
+    median 25 / max 86 %, kernel share median 16 %; 0 failed creates. The import clean costs ~1.8 MB per submit
+    (3687 MB per 2000) - narrow it to imports a submission uses later.
+  - **Still on, could not remove:** `/var/local/tu-bo` (a directory: Turnip's BO lifetime log, phone/turnip/0002,
+    one fflush'd line per BO alloc/free in backboardd; logs `tu-bo-<pid>.log`). The kernel file server's `rm`
+    only unlinks files (ERR 1 on the directory) - needs an rmdir in sweet_files.c or a recovery step.
+  - Next for the blur: CoreAnimation's backdrop samples what lies behind the layer - check whether it reads back a
+    recently presented drawable or an intermediate surface (drawable hand-off timing again, 0244).
 - **2026-11-04 0245: THE APP SWITCHER WAS A SURFACE LEAK; the UI is now clean on the GPU ("a little glitchy here and
   there but barely noticeable")** (patch `xnu/patches/0245-umi-surface-zombie-leak.patch`; boot
   **`shim/out/umi-0245b-zombiefix.img`** = 0238's line, 13:00, the current image).
