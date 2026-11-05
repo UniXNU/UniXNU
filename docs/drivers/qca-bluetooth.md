@@ -111,8 +111,15 @@ Data seed, with automatic reset disabled. Device scanning, pairing, audio,
 power and coexistence measurements are pending.
 
 The current device boot reaches the overlays, then launchd reports `No service cache`.
-Bluetooth DMA allocation reports ENOSPC before UART startup; startup repair
-precedes device feature and performance measurements.
+The loader trusts and sends both the Bluetooth cache and the Wi-Fi baseline;
+launchd rejects both at its cache parser. All 715 system jobs remain present.
+The opt-in `sheng-cache-log=1` diagnostic records the actual parser input length
+and hash on a matched 24A446 failure stack.
+
+Bluetooth DMA allocation reports context-bank ENOSPC with 98 free stream slots.
+The allocator accepts disabled banks by SCTLR.M and retains selection evidence
+without extra MMIO scans. Register simulation and target compilation pass;
+device startup, feature and performance measurements remain pending.
 
 Select the local component from the UniXNU checkout:
 
