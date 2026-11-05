@@ -42,7 +42,12 @@
     `bl _fprintf` in `dw_bo_log`, the BO lifetime log (phone/turnip 0002), which is on because `/var/local/tu-bo`
     exists (the file server cannot rmdir it). The phone's Turnip = `work/turnip/build-ios` (UUID 6104CB41, exact
     symbols). Why fprintf faults there (far just below a stack guard) is not known.
-  - **phone/turnip/0004** (not on the phone yet): the log also needs `TU_DARWIN_BO_LOG=1`. Built in a fresh
+  - **0004 ON THE PHONE (user OK'd, 19:0x same boot):** `SweetMetal2.bundle/libvulkan_freedreno.dylib` = the 0004 build
+    (read back, sha256 7d9f8ddf...), previous kept as `libvulkan_freedreno.dylib.sweet-pre-0004` (read back). Safari
+    closed and reopened: **WebKit.GPU started once and stayed up, no crash** (device in 572 ms). backboardd and
+    SpringBoard still run the old Turnip until a reboot. Meanwhile CommCenter crash-loops (SIGABRT / SIGSEGV, ~10 in a
+    few minutes; not in launchd.plist per the 2026-10-30 note, so something spawns it) - unrelated, costs CPU.
+  - **phone/turnip/0004**: the log also needs `TU_DARWIN_BO_LOG=1`. Built in a fresh
     `work/turnip/build-ios-272`: the old `build-ios` could not regenerate, its cross file named the removed iPhoneOS
     27.1 SDK (`ios16.cross` now names 27.2, old one `ios16.cross.sdk271`; needs `mesa/venv/bin` on PATH for Python 3.10+;
     in zsh pass the meson options unquoted, not as one `$opts`). Same size, imports and weak imports as the phone's
