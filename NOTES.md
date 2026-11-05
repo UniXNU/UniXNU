@@ -2,6 +2,27 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-05 evening: 0249 GPU memory per client, 0250 GPU window reclaim, Metal for every process (`*`)**
+  (patches `xnu/patches/0249-umi-gpu-memory-per-client.patch` kernel b5b9b84, `0250-umi-gpu-window-reclaim.patch`
+  kernel 81079a4; images `shim/out/umi-0249-gpumem.img` (booted 19:5x) and `shim/out/umi-0250-gpuwindows.img` (not
+  booted yet) = 0248's boot line and ADT (pulled out of the 0248 image) with the kernel swapped).
+  - **0249:** `SWEET ADRENO: memory (10 s|alloc failed): NAME[pid] [CLOSED] A MB/n (imp I MB/m, peak P MB); ... total;
+    wired, free, failed allocs` (the UDP log splits it in two lines), a failed BoAlloc names its step (descriptor /
+    kernel map / prepare-wire) and process, `v2 client NAME[pid] freed (...), peak, left` at client free.
+  - **0249 Safari session (user: "good enough"), 69 rounds, no failed alloc:** backboardd 48 -> 184 MB (peak 298),
+    SpringBoard 48 MB (peak 72), WebKit.GPU up to 134 MB (**peak 452 MB**); GPU total up to 452 MB; wired 256 -> 769 MB;
+    **free RAM down to 25 MB** (the kernel has 4044 MB). So the freeze was the whole phone's RAM running out (GPU BOs
+    are wired), not a GPU-only cap. Next if it returns: a per-client cap (WebKit.GPU) so the browser fails instead of
+    backboardd.
+  - **0250:** GPU address windows (4 GB each per process) were keyed by task pointer and never given back (32 max):
+    with Metal for every process, poster/widget restarts (AegirPoster 56 a boot) would use them up and then even a
+    restarted backboardd gets no GPU. Now keyed by process unique id, counted per open client, and a window whose
+    process exited with no client left is reused (`SWEET ADRENO: GPU window ... of exited pid ... goes to pid`);
+    64 windows (8 GB + 256 GB < 39 bits). Not booted yet.
+  - **Phone file changed (user asked for GPU on the whole OS):** `/var/local/mtl2-clients` = `*` (read back); the
+    previous `backboardd,SpringBoard,com.apple.WebKit.GPU` kept as `mtl2-clients.sweet-pre-all` (read back). Undo:
+    put that back. Watch: free RAM and failed allocs in the memory lines, crash loops of newly Metal processes.
+
 - **2026-11-05: ios-apollo's metal2vulkan bridge series ported - BUILT AND HOST-TESTED, NOT ON THE PHONE YET**
   (`phone/metal2/bridge-patches/`, `phone/metal2/bridge-alias-writes.diff`, `phone/metal2/README.md`).
   - Compared with aTechGeekDev/ios-apollo (Mi 10T, same SM8250 / A650 / Turnip / metal2vulkan stack). We had its
