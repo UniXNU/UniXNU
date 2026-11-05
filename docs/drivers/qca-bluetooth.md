@@ -110,7 +110,11 @@ contains the Bluetooth exports, H4/baud properties, signed runtime and preserved
 Data seed, with automatic reset disabled. Device scanning, pairing, audio,
 power and coexistence measurements are pending.
 
-Before catalog publication, select the component from the UniXNU checkout:
+The current device boot reaches the overlays, then launchd reports `No service cache`.
+Bluetooth DMA allocation reports ENOSPC before UART startup; startup repair
+precedes device feature and performance measurements.
+
+Select the local component from the UniXNU checkout:
 
 ```sh
 ./unixnu build kernel payload -D /path/to/UniXNU-sheng --os 27 \
