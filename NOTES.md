@@ -34,6 +34,20 @@
   - **Safari black: `com.apple.WebKit.GPU` is refused Metal** (`MTL2[... com.apple.WebKit.GPU]: not listed
     (/var/local/mtl2-clients)`; the file holds `backboardd,SpringBoard`). Next: add it to mtl2-clients. Also 56
     AegirPoster processes refused in one boot (a respawn loop, apollo's README notes the same for Metal wallpapers).
+  - **Safari draws (same boot, no reboot; phone file changed, user OK'd):** `/var/local/mtl2-clients` =
+    `backboardd,SpringBoard,com.apple.WebKit.GPU` (old list kept as `mtl2-clients.sweet-pre-webkit`, both read back).
+    After closing and reopening Safari, WebKit.GPU got a Metal device (371-580 ms). User: **"mostly works"; address
+    bar a bit glitched, status bar white.** WebKit.GPU crashed twice first (SIGSEGV, the third instance stayed up):
+    `nmb_texture_release` -> metal2vulkan Image drop -> `tu_FreeMemory` -> `darwin_bo_finish+216` = right after
+    `bl _fprintf` in `dw_bo_log`, the BO lifetime log (phone/turnip 0002), which is on because `/var/local/tu-bo`
+    exists (the file server cannot rmdir it). The phone's Turnip = `work/turnip/build-ios` (UUID 6104CB41, exact
+    symbols). Why fprintf faults there (far just below a stack guard) is not known.
+  - **phone/turnip/0004** (not on the phone yet): the log also needs `TU_DARWIN_BO_LOG=1`. Built in a fresh
+    `work/turnip/build-ios-272`: the old `build-ios` could not regenerate, its cross file named the removed iPhoneOS
+    27.1 SDK (`ios16.cross` now names 27.2, old one `ios16.cross.sdk271`; needs `mesa/venv/bin` on PATH for Python 3.10+;
+    in zsh pass the meson options unquoted, not as one `$opts`). Same size, imports and weak imports as the phone's
+    build. Stripped + signed: `m2v-bridge-src/out-apollo/libvulkan_freedreno.dylib` (sha256 7d9f8ddf...); phone's
+    current one is sha256 9fffc9b4... (copy in `m2v-bridge-src/out/libvulkan_freedreno.6104cb41.dylib` unstripped).
   - **To test (needs USB networking, user's OK for the phone file):** replace
     `SweetMetal2.bundle/SweetMetal2` with out-apollo's (keep the current one as `.sweet-orig` - the phone's
     `.sweet-orig` already holds the pre-0247 original, so name this backup `.sweet-pre-apollo`), boot 0248, compare
