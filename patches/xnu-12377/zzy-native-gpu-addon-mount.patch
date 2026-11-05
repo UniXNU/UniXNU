@@ -2,7 +2,7 @@ diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
 index 9969eb6f..166272c7 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -8123,6 +8123,321 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
+@@ -8123,6 +8123,323 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
  uint8_t native_owner_data_seed_sha256[32];
  char native_owner_data_device_path[64];
  
@@ -169,6 +169,8 @@ index 9969eb6f..166272c7 100644
 +		struct vnode_attr va;
 +		VATTR_INIT(&va);
 +		VATTR_SET(&va, va_mode, mode);
++		/* Kernel vnode_open does not finish O_TRUNC on the non-compound path. */
++		VATTR_SET(&va, va_data_size, size);
 +		error = vnode_setattr(vp, &va, ctx);
 +	}
 +	if (!error) {

@@ -2,7 +2,7 @@ diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
 index a5ff474..4704203 100644
 --- a/bsd/kern/kern_exec.c
 +++ b/bsd/kern/kern_exec.c
-@@ -7193,6 +7193,321 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
+@@ -7193,6 +7193,323 @@ uint64_t native_owner_data_seed_base, native_owner_data_seed_size;
  uint8_t native_owner_data_seed_sha256[32];
  char native_owner_data_device_path[64];
  
@@ -169,6 +169,8 @@ index a5ff474..4704203 100644
 +		struct vnode_attr va;
 +		VATTR_INIT(&va);
 +		VATTR_SET(&va, va_mode, mode);
++		/* Kernel vnode_open does not finish O_TRUNC on the non-compound path. */
++		VATTR_SET(&va, va_data_size, size);
 +		error = vnode_setattr(vp, &va, ctx);
 +	}
 +	if (!error) {
@@ -371,7 +373,7 @@ diff --git a/bsd/miscfs/bindfs/bind_vnops.c b/bsd/miscfs/bindfs/bind_vnops.c
 index 8609009..0c659c7 100644
 --- a/bsd/miscfs/bindfs/bind_vnops.c
 +++ b/bsd/miscfs/bindfs/bind_vnops.c
-@@ -105,6 +105,14 @@ bindfs_getattr(struct vnop_getattr_args * args)
+@@ -105,5 +105,13 @@ bindfs_getattr(struct vnop_getattr_args * args)
  		vnode_put(lowervp);
 
  		if (error == 0) {
@@ -390,7 +392,7 @@ diff --git a/bsd/miscfs/bindfs/bindfs.h b/bsd/miscfs/bindfs/bindfs.h
 index c3bebc8..4555530 100644
 --- a/bsd/miscfs/bindfs/bindfs.h
 +++ b/bsd/miscfs/bindfs/bindfs.h
-@@ -81,6 +81,9 @@
+@@ -81,4 +81,7 @@
  //#define BINDFS_DEBUG 0
 
  #define BINDM_CACHE 0x0001
