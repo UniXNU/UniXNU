@@ -493,6 +493,26 @@ build = []
 outputs = []
 
 [[component]]
+id = "QcaBluetooth"
+repository_id = 1447347374
+kind = "driver"
+function = "Qualcomm Bluetooth over GENI UART for Apple's native stack"
+scope = "controller"
+repository = "https://github.com/UniXNU/QcaBluetooth.git"
+revision = "22ff97f93416452335bb61badb14c762da653487"
+path = "drivers/QcaBluetooth"
+hardware = ["Qualcomm WCN7850 UART controller", "Qualcomm GENI UART"]
+os_abi = ["ipados-27.0.1-24A446"]
+board_dependencies = ["WCN power, clocks, pins and IRQs", "mapped DMA addresses", "firmware files"]
+verified_devices = ["sheng"]
+dependencies = []
+source_files = ["include/qbt.h", "include/qbt_geni.h", "include/qbt_transport.h"]
+runtime_identifiers = ["qbt_transport", "com.apple.uart.sk.bluetooth", "kern.qbt_boot", "kern.qbt_power_on", "kern.qbt_firmware"]
+build_stage = "embedded"
+build = []
+outputs = []
+
+[[component]]
 id = "ShengPreflight"
 kind = "driver"
 function = "sheng firmware preflight"
