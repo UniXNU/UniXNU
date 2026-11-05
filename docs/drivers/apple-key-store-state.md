@@ -8,6 +8,8 @@ AppleKeyStore state queries and state hooks for the selected userland ABI.
 
 The component handles AppleKeyStore selectors and the state callbacks used by the selected OS profile. Its runtime service and symbols are recorded in the catalog.
 
+Key wrapping is software: the device key derives from the identity the board returns through `native_aks_device_id`, and the keychain uses it to store and read items. This is not hardware data protection. Reference key operations and device lock are unsupported.
+
 ## Integration
 
 The catalog records implementation scope, hardware and OS requirements, board dependencies, revision, build stage, outputs, and runtime identifiers. The selected profile orders build commands by dependency.

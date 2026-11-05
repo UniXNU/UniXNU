@@ -1,143 +1,107 @@
 # QcaBluetooth
 
 QcaBluetooth connects a Qualcomm WCN7850 UART controller to Apple's Bluetooth
-stack. Board integration lives in `UniXNU-sheng`; the component is under
-`drivers/QcaBluetooth` during development.
+stack.
+
+[Source repository](https://github.com/UniXNU/QcaBluetooth).
+
+## Status
+
+Device: Xiaomi Pad 6S Pro (sheng), iPadOS 27.0.1 (24A446).
+
+| State | Features |
+| --- | --- |
+| Working | Pairing, reconnection after reboot, power toggle, A2DP playback, AirPods noise control and battery, use alongside Wi-Fi |
+| Not tested | Calls and microphone (HFP/SCO), sleep and wake |
+| Unavailable | Features that need Apple vendor commands |
 
 ## Layers
 
-The board supplies WCN power ownership, clocks, pins, DMA mappings and IRQs.
-`WcnPower.h` exposes independent Wi-Fi and Bluetooth votes over the shared
-six supplies. The last owner releases them; Bluetooth-only startup skips the
-PCIe bus vote. Wi-Fi's startup uses this ownership path.
 The driver runs the locked Linux `btqca.c` initialization, H4 framing and IBS.
-UART.SK/Skywalk carries H4 bytes to `bluetoothd`; BlueTool requests controller
-startup through `kern.sheng_bt_control`. Apple's stack owns scanning, pairing,
-keys, BLE and audio profiles.
+UART.SK/Skywalk carries H4 bytes to `bluetoothd`. Apple's stack owns scanning,
+pairing, keys, BLE and audio profiles.
 
-GENI uses four 2048-byte RX buffers and one 4096-byte TX buffer. Hard IRQ
-masks its line and wakes the worker. RX backpressure retains buffer ownership
-and stops RFR when full. TX completion checks DMA and wire drain. IBS control
-bytes enter only between complete H4 packets. Physical clock-off requires
-completed RX quiescence and an armed hardware wake source.
+GENI uses four 2048-byte RX buffers and one 4096-byte TX buffer. Hard IRQ masks
+its line and wakes the worker. RX backpressure retains buffer ownership and stops
+RFR when full. TX completion checks DMA and wire drain. IBS control bytes enter
+only between complete H4 packets. Clock-off requires RX quiescence and an armed
+hardware wake source.
 
-The board stages hashed firmware under `firmware/qca` in the Data addon.
-`package/BluetoothFirmware.h` defines the same path used by
-`scripts/stage-bluetooth-firmware.py`. VFS reads wait for addon installation.
+| Sysctl | Meaning |
+| --- | --- |
+| `kern.qbt_boot` | Controller state |
+| `kern.qbt_power_on` | Reading starts the controller and returns the result |
+| `kern.qbt_firmware` | Loaded firmware name |
 
-`sheng-bluetooth=1` starts the UART14 worker after addon installation. The board
-binds GENI SE6 at 0x898000, IRQ 493 and QUP2 DMA SID 0x423. SM8550 operations
-select the exact 51.2 MHz source for 3.2 Mbaud. The board maps its 32 KiB DMA
-buffers through the firmware-managed bypass bank shared with touch and audio,
-using 64-bit physical addresses. Configuration locks coordinate clock votes and SMMU
-allocation with touch and audio. GPIO79 wakes the gated UART through the shared
-TLMM IRQ. The UART requires protocol-2 microcode from the boot firmware.
+All three are read-only because BlueTool's sandbox denies sysctl writes.
+Connecting to UART.SK also starts a stopped controller.
 
-The board exports a Bluetooth device-tree node and a matching IOService before
-userland starts. H4 UART.SK encoding and 3.2 Mbaud use four-byte little-endian
-properties. Both carry the stable private address derived from the platform
-identity. The Linux boundary converts the public address to bdaddr_t order.
+## Board integration
 
-The resolved QcaBluetooth checkout supplies both kernel and userland builds.
-UART clock-restore failures end the transport with the original error and stop
-forwarding and retries.
+The board supplies WCN power, clocks, pins, DMA mappings, IRQs and firmware.
+`WcnPower.h` keeps independent Wi-Fi and Bluetooth votes over the shared supplies;
+the last owner releases them.
 
-Controller shutdown and faults wake both UART.SK rings. Their synchronization
-callbacks return the controller error before moving data. Notifications retain
-the rings until completion so disconnect can drain them.
+On sheng, `sheng-bluetooth=1` starts the UART14 worker after the Data addon
+installs. It binds GENI SE6 at 0x898000, IRQ 493 and QUP2 DMA SID 0x423. An exact
+51.2 MHz source gives 3.2 Mbaud. DMA buffers use the firmware-managed bypass bank
+shared with touch and audio. GPIO79 wakes the gated UART. The UART needs
+protocol-2 microcode from the boot firmware.
 
-The worker retains its DMA memory, services bounded batches and sleeps on IRQ,
-ring-space or deadline events. Hardware faults abort command waiters immediately.
-The `[bluetooth]` boot-log row records phase, transfers, sleep, power ownership
-and SMMU status. `log-bluetooth=1` adds initialization messages.
+The board exports `/arm-io/bluetooth` and a matching IOService before userland
+starts, with H4 encoding, baud rate and a stable private address.
+
+## Native adapter
+
+The iPadOS 27 adapter is locked to one `bluetoothd` binary:
+
+- Every product runs as controller type zero with standard HCI initialization.
+- Capabilities follow Supported Commands and LE Features. Advertising capacity
+  comes from 0x203b, capped at six sets.
+- Extended scanning uses 0x2041 and 0x2042. Random addresses are sent before a
+  scan or an advertising set starts.
+- The patch keeps authenticated fixups and PACIBSP entry pads.
+
+`payload.runtime` selects `build-bluetooth-userspace.py`, which stages signed
+BlueTool, `bluetoothd` and `QcaBTType0.dylib` with pinned firmware. Read-only
+unions expose them under `/usr/lib` and `/usr/sbin`. Wi-Fi and Bluetooth share
+one signed launchd cache.
+
+Pairing keys need the keychain, which needs [AppleKeyStoreState](/drivers/apple-key-store-state)
+key wrapping.
+
+## Audio
+
+The audio overlay hides the system HAL plug-in directory. List
+`BTAudioHALPlugin.driver` in `audio_system_plugins` under `payload.runtime`, and
+the runtime builder copies the unchanged bundle from the OS image.
 
 ## Build and checks
-
-From the component checkout:
 
 ```sh
 python3 tools/test-runtime.py
 python3 tools/test-geni.py
-python3 tools/check-kernel.py /path/to/assembled/tree
 python3 tools/build-bluetool.py
+python3 tools/build-type0.py
+python3 tools/check-kernel.py /path/to/tree --record <kernel source compile record> \
+    --extra-source <board source> --board-export <symbol>
 ```
 
-Runtime and DMA simulations pass ASan/UBSan. The protocol, Linux adapter,
-original `btqca.c`, DMA engine, Skywalk transport and board firmware reader
-compile with the iPadOS 27 arm64e kernel command. Their references exist in the
-selected kernel. BlueTool compiles and passes code-signature verification.
-The board power check covers both radio startup orders, independent release,
-idempotent votes and failed transitions; the Wi-Fi consumer compiles for arm64e.
-
-From the workspace root, board checks are:
+Run these from the component checkout. `native-ios27.md` lists the native adapter
+checks. From the workspace root, the sheng board checks are:
 
 ```sh
 python3 UniXNU-sheng/scripts/check-bluetooth-platform.py
 python3 UniXNU-sheng/scripts/check-bluetooth-shared.py
-python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/assembled/tree
+python3 UniXNU-sheng/scripts/check-bluetooth-board.py /path/to/tree
+python3 UniXNU-sheng/scripts/check-bluetooth-runtime.py
 ```
 
-The platform model checks frequency ratios, DFS handoff, independent DMA tables,
-ASID conflicts and timeout bounds. The shared-resource model checks IRQ dispatch,
-concurrent registration and UART/audio clock ownership. UART14, ArmCpu, touch,
-audio and boot-log sources compile for the selected target; the build recipe
-compiles eight protocol and SoC objects into the board archive inputs.
+`log-bluetooth=1` adds initialization messages to the boot log's `[bluetooth]`
+rows, and `log-bluetooth=2` adds process and controller output rows.
 
-The version-locked iPadOS 27 adapter selects controller type zero and retains
-standard HCI initialization. Capabilities follow Supported Commands and LE
-Features, including coded and 2M PHY. An asynchronous 0x203b query supplies
-advertising capacity, capped at the native array's six records. Model getters,
-configuration caches, lower flags and broadcaster mode receive the same values.
-Normal packet traffic stays in UART.SK and the native stack.
-
-The offline patch retains authenticated fixup metadata and PACIBSP entry pads.
-It passes 144 native instruction cases at two ASLR slides; PAC operations are
-modeled without device keys. The production publisher passes 58 ASan/UBSan HCI
-and policy cases. `tools/build-type0.py` builds and signs the arm64e library.
-The board's `payload.runtime` selects `build-bluetooth-userspace.py` for ios27.
-It stages signed BlueTool, bluetoothd and QcaBTType0.dylib with pinned firmware.
-The native daemon keeps its original identifier and entitlements. Read-only
-unions expose /usr/lib and /usr/sbin entries, with the library mounted first.
-BlueTool keeps its Mach service and runs as root with transactions enabled.
-Wi-Fi and Bluetooth share one signed launchd cache; other native jobs remain
-unchanged. Missing code hashes are appended to the preserved trust bundle.
-
-`check-bluetooth-runtime.py` validates the packed addon, signatures, firmware,
-launchd jobs, trust modules and original Data seed. The combined addon verifies
-45 files, three signed Bluetooth binaries and 716 launchd jobs. Host libxpc
-accepts the cache. The complete kernel, fileset, FAT payload and temporary boot
-image build successfully with the explicit local component. The packed payload
-contains the Bluetooth exports, H4/baud properties, signed runtime and preserved
-Data seed, with automatic reset disabled. Device scanning, pairing, audio,
-power and coexistence measurements are pending.
-
-The device reaches the overlays, then launchd reports `No service cache`.
-The complete parser, system-path and Data-path copies contain the packed cache
-followed by 55 stale bytes. The addon writer explicitly sets the replacement
-file size after successful writes. The ASan/UBSan writer fixture reproduces the
-tail and verifies truncation; device verification is pending.
-
-The firmware-managed UART DMA route and protocol-2 microcode are confirmed.
-The initial version request reports a line error before TX. The board starts RX
-after controller reset release, and GENI clears reset-time IRQ status before
-arming RX. Live fault IRQ values are retained for one error report. This keeps
-16 KiB of private tables and shared-bank polling out of the path. Target
-compilation and the GENI model pass; native features, power and coexistence
-measurements remain pending.
-
-`sheng-cache-log=1` captures the loader log and exports bounded parser and
-filesystem cache snapshots on a matched 24A446 failure. GPU and latency capture
-stay disabled.
-
-Select the local component from the UniXNU checkout:
-
-```sh
-./unixnu build kernel payload -D /path/to/UniXNU-sheng --os 27 \
-  --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
-```
-
-Supply the preserved installation inputs from [Runtime inputs](/porting/packaging#runtime-inputs-for-ios-27),
-then follow [Boot image](/concepts/payload) for temporary device startup.
+Supply the installation inputs from [Runtime inputs](/porting/packaging#runtime-inputs-for-ios-27),
+then follow [Boot image](/concepts/payload).
 
 Sources: [Linux](https://github.com/ianchb/sm8550-mainline),
 [Debian sheng](https://github.com/ianchb/debian-sheng),

@@ -67,7 +67,7 @@ OS requirements, and board inputs.
 A new component can use an explicit local source before catalog publication:
 
 ```sh
-./unixnu tree -D /path/to/device --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+./unixnu tree -D /path/to/device --local-module driver:MyDriver=/path/to/MyDriver
 ```
 
 The new module is linked into the assembled tree. Its consuming board supplies

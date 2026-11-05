@@ -23,6 +23,7 @@
 | ShengNovatekTouch | [UniXNU/ShengNovatekTouch](https://github.com/UniXNU/ShengNovatekTouch) | XNU 触控 | [ShengNovatekTouch](/zh/drivers/sheng-novatek-touch) |
 | XnuPrelink | [UniXNU/XnuPrelink](https://github.com/UniXNU/XnuPrelink) | 内核工具 | [XnuPrelink](/zh/drivers/xnu-prelink) |
 | Ath12kWifi | [UniXNU/Ath12kWifi](https://github.com/UniXNU/Ath12kWifi) | XNU Wi-Fi | [Ath12kWifi](/zh/drivers/ath12k-wifi) |
+| QcaBluetooth | [UniXNU/QcaBluetooth](https://github.com/UniXNU/QcaBluetooth) | XNU Bluetooth | [QcaBluetooth](/zh/drivers/qca-bluetooth) |
 | ArmCpu | [UniXNU/ArmCpu](https://github.com/UniXNU/ArmCpu) | XNU CPU 和 GIC | [ArmCpu](/zh/drivers/arm-cpu) |
 | ArmDTPlatform | [UniXNU/ArmDTPlatform](https://github.com/UniXNU/ArmDTPlatform) | XNU 平台专家 | [ArmDTPlatform](/zh/drivers/arm-dt-platform) |
 | ArmVirtPlatform | [UniXNU/ArmVirtPlatform](https://github.com/UniXNU/ArmVirtPlatform) | XNU 平台 | [ArmVirtPlatform](/zh/drivers/arm-virt-platform) |
