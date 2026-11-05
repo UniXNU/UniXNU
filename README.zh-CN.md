@@ -13,6 +13,8 @@
   <a href="https://x.com/UniXNU_new"><img alt="X" src="https://img.shields.io/badge/X-@UniXNU__new-000000?logo=x&logoColor=white"></a>
 </p>
 
+**本项目始终免费、自由、开源，且不分发 Apple 和任何厂商的私有二进制以合规。请不要通过盈利性质的网盘分发或销售预编译镜像。若您执意如此，请[参见](https://baidu.ma/?q=5a2k5YS/5oCO5LmI5Yqe55CG5oi35Y+j5pys)。**
+
 <p align="center">
   <a href="README.md">English</a> | 简体中文
 </p>
