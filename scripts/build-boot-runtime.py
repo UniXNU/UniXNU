@@ -91,9 +91,7 @@ def build_plugin(target):
     return ROOT / 'build' / ('adreno-metal-plugin27' if target == 'ios27' else 'adreno-metal-plugin')
 
 
-def verified_cdhash(path, detached=None):
-    options = ['--detached', str(detached)] if detached else []
-    run('codesign', '--verify', '--strict', *options, path)
+def bundle_cdhash(path, options=()):
     detail = subprocess.run(['codesign', '--display', '--verbose=4', *options, str(path)],
                             check=True, capture_output=True, text=True).stderr
     match = re.search(r'^CDHash=([0-9a-f]{40})$', detail, re.M)
@@ -102,11 +100,19 @@ def verified_cdhash(path, detached=None):
     return match[1]
 
 
-def addon_hashes(path, work):
+def verified_cdhash(path, detached=None):
+    options = ['--detached', str(detached)] if detached else []
+    run('codesign', '--verify', '--strict', *options, path)
+    return bundle_cdhash(path, options)
+
+
+def addon_hashes(path, work, system_bundles=()):
     data = path.read_bytes()
     if data[:8] != b'NGPUADD2' or len(data) < 24 or struct.unpack_from('<Q', data, 16)[0] != len(data):
         raise SystemExit('invalid GPU addon')
-    at, executables = 24, []
+    at, executables, system = 24, [], []
+    # Unchanged OS bundles keep Apple's signature, which the host's strict check calls obsolete.
+    system_prefixes = tuple(f'audio/{name}/' for name in system_bundles)
     for _ in range(struct.unpack_from('<I', data, 8)[0]):
         length, mode, size, packed = struct.unpack_from('<IIQQ', data, at)
         at += 24
@@ -123,10 +129,11 @@ def addon_hashes(path, work):
         output.write_bytes(body)
         output.chmod(mode & 0o777)
         if body[:4] in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'):
-            executables.append(output)
+            (system if name.startswith(system_prefixes) else executables).append(output)
     if at != len(data) or not executables:
         raise SystemExit('invalid addon length or no executables')
     hashes = [verified_cdhash(executable) for executable in executables]
+    hashes += [bundle_cdhash(executable) for executable in system]
     cache = work / 'xpc/launchd.plist'
     if cache.is_file():
         signature = cache.with_suffix('.plist.sig')
@@ -230,7 +237,12 @@ def main():
                         audio = work / 'audio'
                         run(sys.executable, Path(request['device']) / request['audio_tool'], audio, request['audio_target'])
                         combined = work / 'combined.bin'
-                        script('addon-add-dir.py', candidate, combined, 'audio/ShengAudio.driver', audio / 'ShengAudio.driver')
+                        bundles = ['audio/ShengAudio.driver', audio / 'ShengAudio.driver']
+                        # The overlay hides the system's plug-in directory from the audio server's listing,
+                        # so a system plug-in the board needs is listed by carrying its unchanged bundle.
+                        for name in request.get('audio_system_plugins', []):
+                            bundles += [f'audio/{name}', Path(mount) / 'System/Library/Audio/Plug-Ins/HAL' / name]
+                        script('addon-add-dir.py', candidate, combined, *bundles)
                         candidate = combined
                     addon = out / 'gpuaddon.bin'
                     candidate.replace(addon)
@@ -297,7 +309,7 @@ def main():
         if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None):
             # Keep every original module intact. Append only absent hashes;
             # rebuilding from a previously integrated addon stays idempotent.
-            hashes = addon_hashes(addon, work / 'signed-addon')
+            hashes = addon_hashes(addon, work / 'signed-addon', request.get('audio_system_plugins', ()))
             data = trust.read_bytes()
             count = struct.unpack_from('<I', data)[0]
             offsets = list(struct.unpack_from(f'<{count}I', data, 4)) + [len(data)]
@@ -318,7 +330,7 @@ def main():
         if trust is None:
             original = work / 'apple-trust.bundle'
             script('bundle-ipsw-trust.py', original, *request['trust_modules'])
-            hashes = addon_hashes(addon, work / 'addon')
+            hashes = addon_hashes(addon, work / 'addon', request.get('audio_system_plugins', ()))
             candidate = work / 'owner-trust.bundle'
             script('trust-append-module.py', original, candidate, *hashes)
             trust = out / 'owner-trust.bundle'
