@@ -20,6 +20,20 @@
   - Host: metal2vulkan-runtime 883 tests pass, metal2vulkan-air 434 pass; bridge builds for aarch64-apple-ios with
     no warnings (toolchain: `~/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin` on PATH; `cargo` is not on the
     default PATH). Plugin: `xnu-work/work/m2v-bridge-src/out-apollo/SweetMetal2` (ad-hoc signed, sha256 88613fb7...).
+  - **BOOTED 2026-11-05 18:4x (0248 image unchanged; phone file changed, user OK'd):** `SweetMetal2.bundle/SweetMetal2`
+    = out-apollo's (read back, sha256 88613fb7...), the previous one kept as `SweetMetal2.sweet-pre-apollo` (read back,
+    sha256 794bb384...; `.sweet-orig` untouched). User: **status bar flicker fixed**, "a bit slower", App Library blur
+    still black (expected), Safari still black. Same-day A/B (old plugin boot first, both 0248): backboardd busy rounds
+    old 36-100 % (sys 14-41 %), new 55-86 % (sys 20-38 %); idle 5-9 % vs 2-18 %; presents per 10 s 105-323 vs 110-314:
+    no clear CPU change. backboardd's device took **5764 ms** to create (665 ms the boot before): 0005's new profile
+    fingerprints invalidated `/var/local/m2v-cache`, so this first boot recompiled pipelines - likely the "slower";
+    re-check on the next boot. This boot's bridge log: no DeviceLost (the ~130000 DeviceLost lines in mtl2.log are
+    older boots), 428 HostMemory no-copy refusals (482 before), 22 "texture over buffer RowPitch 4608/9744" (rotated
+    2436x1125 descriptor over the 1125x2436 frame, seen before too). Logs: session scratchpad `umi-baseline-oldplugin.log`,
+    `umi-apollo-2.log`, `mtl2-new.log` (this boot = from line 150693).
+  - **Safari black: `com.apple.WebKit.GPU` is refused Metal** (`MTL2[... com.apple.WebKit.GPU]: not listed
+    (/var/local/mtl2-clients)`; the file holds `backboardd,SpringBoard`). Next: add it to mtl2-clients. Also 56
+    AegirPoster processes refused in one boot (a respawn loop, apollo's README notes the same for Metal wallpapers).
   - **To test (needs USB networking, user's OK for the phone file):** replace
     `SweetMetal2.bundle/SweetMetal2` with out-apollo's (keep the current one as `.sweet-orig` - the phone's
     `.sweet-orig` already holds the pre-0247 original, so name this backup `.sweet-pre-apollo`), boot 0248, compare
