@@ -1,0 +1,302 @@
+diff --git a/crates/metal2vulkan-runtime/src/binding.rs b/crates/metal2vulkan-runtime/src/binding.rs
+index 000794d..df2525f 100644
+--- a/crates/metal2vulkan-runtime/src/binding.rs
++++ b/crates/metal2vulkan-runtime/src/binding.rs
+@@ -1457,7 +1457,24 @@ pub(super) fn command_uses(
+     index: Option<(&Buffer, u64)>,
+     indirect: Option<(&Buffer, u64)>,
+ ) -> Result<CommandUses, Error> {
+-    let mut uses = Vec::new();
++    command_uses_in(Vec::new(), call, plan, command, tables, index, indirect)
++}
++
++/// [`command_uses`], its uses listed in `room` (emptied first): a list an earlier command's
++/// uses were in ([`CommandUses::into_room`]).
++pub(super) fn command_uses_in(
++    mut room: Vec<Use<ResourceKey>>,
++    call: &'static str,
++    plan: &BindingPlan,
++    command: &Command<'_>,
++    tables: &Tables<'_>,
++    index: Option<(&Buffer, u64)>,
++    indirect: Option<(&Buffer, u64)>,
++) -> Result<CommandUses, Error> {
++    // At most one use for each resource use of the plan and the command.
++    room.clear();
++    room.reserve(plan.uses.len() + command.uses.len());
++    let mut uses = room;
+     // The keys of the buffers made resident the command reaches through the resident set, by
+     // address; every other use names its resource (a descriptor, a root table's static, a view).
+     // Those it names are gathered once it reaches one so: until then each use names its key.
+@@ -1625,6 +1642,13 @@ impl CommandUses {
+     pub(super) fn resident(&self) -> &BTreeSet<ResourceKey> {
+         &self.resident
+     }
++
++    /// The list the uses were in, emptied, for a later command's ([`command_uses_in`]).
++    pub(super) fn into_room(self) -> Vec<Use<ResourceKey>> {
++        let mut uses = self.uses;
++        uses.clear();
++        uses
++    }
+ }
+ 
+ impl Deref for CommandUses {
+diff --git a/crates/metal2vulkan-runtime/src/render.rs b/crates/metal2vulkan-runtime/src/render.rs
+index 4400378..110c428 100644
+--- a/crates/metal2vulkan-runtime/src/render.rs
++++ b/crates/metal2vulkan-runtime/src/render.rs
+@@ -1123,6 +1123,11 @@ pub struct RenderCommandEncoder {
+     quiet_bound_values: Option<QuietBoundValues>,
+     /// The last draw's commands, whose lists the next draw's fill again.
+     draw_commands: Option<DrawCommands>,
++    /// The list the last draw's uses were in, emptied, for the next draw's
++    /// (`binding::command_uses_in`).
++    uses_room: Vec<Use<ResourceKey>>,
++    /// The list the last draw's argument samplers were in, emptied (`Device::argument_samplers_into`).
++    argument_samplers_room: Vec<SamplerState>,
+     /// The views and sampler descriptions its draws' binds made or found (`binding::BindMemo`).
+     bind_memo: binding::BindMemo,
+     /// What its last draw retained of its own ([`LastRetained`]).
+@@ -1394,6 +1399,8 @@ impl CommandBuffer {
+             log,
+             quiet_bound_values: None,
+             draw_commands: None,
++            uses_room: Vec::new(),
++            argument_samplers_room: Vec::new(),
+             bind_memo: binding::BindMemo::default(),
+             last_retained: LastRetained::default(),
+         })
+@@ -5845,7 +5852,10 @@ impl RenderCommandEncoder {
+         let max = pipeline.base().graphics.max_vertex_amplification_count;
+         // The device's sampler states, less those at IDs no set-1 sampler array of the variant
+         // holds (`heap_sets::fit_samplers`).
+-        let mut argument_samplers = self.core.device().argument_samplers();
++        let mut argument_samplers = std::mem::take(&mut self.argument_samplers_room);
++        self.core
++            .device()
++            .argument_samplers_into(&mut argument_samplers);
+         let function_tables = pipeline.function_tables();
+         let mut unlisted = None;
+         let reads_tile_memory = pipeline.reads_tile_memory();
+@@ -6402,7 +6412,8 @@ impl RenderCommandEncoder {
+             mesh: mesh_work.as_ref().map(mesh::MeshWork::regions),
+         };
+         let (index, indirect) = (buffers.index.as_ref(), buffers.indirect.as_ref());
+-        let mut uses = binding::command_uses(
++        let mut uses = binding::command_uses_in(
++            std::mem::take(&mut self.uses_room),
+             call,
+             &plan,
+             &command,
+@@ -7311,8 +7322,13 @@ impl RenderCommandEncoder {
+         }
+         if capture.is_some() {
+             self.capture_uses(uses);
++        } else {
++            self.uses_room = uses.into_room();
+         }
+         self.draw_commands = Some(commands);
++        // The states go; the list stays for the next draw's.
++        argument_samplers.clear();
++        self.argument_samplers_room = argument_samplers;
+         Ok(())
+     }
+ 
+diff --git a/crates/metal2vulkan-runtime/src/render/executions.rs b/crates/metal2vulkan-runtime/src/render/executions.rs
+index e026402..768c128 100644
+--- a/crates/metal2vulkan-runtime/src/render/executions.rs
++++ b/crates/metal2vulkan-runtime/src/render/executions.rs
+@@ -2095,6 +2095,8 @@ impl RenderExecution {
+             log: None,
+             quiet_bound_values: None,
+             draw_commands: None,
++            uses_room: Vec::new(),
++            argument_samplers_room: Vec::new(),
+             bind_memo: crate::binding::BindMemo::default(),
+             last_retained: Default::default(),
+         }
+diff --git a/crates/metal2vulkan-runtime/src/resource_ids.rs b/crates/metal2vulkan-runtime/src/resource_ids.rs
+index b3dc480..d5881f3 100644
+--- a/crates/metal2vulkan-runtime/src/resource_ids.rs
++++ b/crates/metal2vulkan-runtime/src/resource_ids.rs
+@@ -464,6 +464,11 @@ impl ResourceIds {
+ 
+     /// The live holders of sampler IDs, in ID order: the states a sampler table lists.
+     pub(super) fn samplers(&self) -> Vec<Arc<SamplerShared>> {
++        self.live_samplers().collect()
++    }
++
++    /// [`samplers`](Self::samplers), one at a time.
++    pub(super) fn live_samplers(&self) -> impl Iterator<Item = Arc<SamplerShared>> + '_ {
+         self.samplers
+             .slots
+             .values()
+@@ -471,7 +476,6 @@ impl ResourceIds {
+                 Holder::Sampler(state) => state.upgrade(),
+                 _ => None,
+             })
+-            .collect()
+     }
+ }
+ 
+diff --git a/crates/metal2vulkan-runtime/src/sampler.rs b/crates/metal2vulkan-runtime/src/sampler.rs
+index 2498ec2..9116a99 100644
+--- a/crates/metal2vulkan-runtime/src/sampler.rs
++++ b/crates/metal2vulkan-runtime/src/sampler.rs
+@@ -470,6 +470,13 @@ impl Device {
+         let states = lock(&self.shared().resource_ids).samplers();
+         states.into_iter().map(SamplerState).collect()
+     }
++
++    /// [`argument_samplers`](Self::argument_samplers), listed in `out` (emptied first).
++    pub(super) fn argument_samplers_into(&self, out: &mut Vec<SamplerState>) {
++        out.clear();
++        let ids = lock(&self.shared().resource_ids);
++        out.extend(ids.live_samplers().map(SamplerState));
++    }
+ }
+ 
+ impl SamplerState {
+diff --git a/crates/metal2vulkan-runtime/src/tracker.rs b/crates/metal2vulkan-runtime/src/tracker.rs
+index 0b532a0..58ccac6 100644
+--- a/crates/metal2vulkan-runtime/src/tracker.rs
++++ b/crates/metal2vulkan-runtime/src/tracker.rs
+@@ -957,10 +957,54 @@ pub(super) struct EncoderUses<K> {
+ /// The uses of one part of an encoder.
+ struct Part<K> {
+     /// The tracked uses so far, one per range, at most [`ENTRIES_PER_KEY`] per resource.
+-    tracked: HashMap<K, Vec<Use<K>>>,
++    tracked: HashMap<K, KeyUses<K>>,
+     stages: vk::PipelineStageFlags2,
+ }
+ 
++/// One resource's tracked uses in a part, in the order they were first recorded: the first held
++/// in place, as a part mostly uses a resource over one range.
++enum KeyUses<K> {
++    One(Use<K>),
++    Many(Vec<Use<K>>),
++}
++
++impl<K> KeyUses<K> {
++    fn as_slice(&self) -> &[Use<K>] {
++        match self {
++            KeyUses::One(used) => std::slice::from_ref(used),
++            KeyUses::Many(uses) => uses,
++        }
++    }
++
++    fn as_mut_slice(&mut self) -> &mut [Use<K>] {
++        match self {
++            KeyUses::One(used) => std::slice::from_mut(used),
++            KeyUses::Many(uses) => uses,
++        }
++    }
++
++    /// Add `used` after the others.
++    fn push(&mut self, used: Use<K>) {
++        match self {
++            KeyUses::Many(uses) => uses.push(used),
++            KeyUses::One(_) => {
++                let KeyUses::One(first) = std::mem::replace(self, KeyUses::Many(Vec::new())) else {
++                    unreachable!("matched above")
++                };
++                *self = KeyUses::Many(vec![first, used]);
++            }
++        }
++    }
++
++    /// The uses, appended to `out` in order.
++    fn append_to(self, out: &mut Vec<Use<K>>) {
++        match self {
++            KeyUses::One(used) => out.push(used),
++            KeyUses::Many(uses) => out.extend(uses),
++        }
++    }
++}
++
+ impl<K> Part<K> {
+     fn new() -> Part<K> {
+         Part {
+@@ -1025,16 +1069,28 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+             .iter()
+             .filter(|used| used.tracked && !used.is_nothing())
+         {
+-            let ranges = part.tracked.entry(used.key).or_default();
+-            match ranges.iter_mut().find(|known| known.range == used.range) {
++            let ranges = match part.tracked.entry(used.key) {
++                std::collections::hash_map::Entry::Vacant(vacant) => {
++                    vacant.insert(KeyUses::One(used.clone()));
++                    continue;
++                }
++                std::collections::hash_map::Entry::Occupied(occupied) => occupied.into_mut(),
++            };
++            match ranges
++                .as_mut_slice()
++                .iter_mut()
++                .find(|known| known.range == used.range)
++            {
+                 Some(known) => {
+                     known.read = known.read.union(used.read);
+                     known.write = known.write.union(used.write);
+                 }
+                 None => ranges.push(used.clone()),
+             }
+-            if ranges.len() > ENTRIES_PER_KEY {
+-                coalesce_uses(ranges);
++            if let KeyUses::Many(ranges) = ranges {
++                if ranges.len() > ENTRIES_PER_KEY {
++                    coalesce_uses(ranges);
++                }
+             }
+         }
+     }
+@@ -1050,6 +1106,7 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+                 self.parts.iter().any(|part| {
+                     part.tracked.get(&read.key).is_some_and(|known| {
+                         known
++                            .as_slice()
+                             .iter()
+                             .any(|k| !k.write.is_empty() && k.range.overlaps(&read.range))
+                     })
+@@ -1068,7 +1125,9 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+                 self.parts.iter().any(|part| {
+                     part.tracked
+                         .get(&write.key)
+-                        .is_some_and(|known| known.iter().any(|k| k.range.overlaps(&write.range)))
++                        .is_some_and(|known| {
++                            known.as_slice().iter().any(|k| k.range.overlaps(&write.range))
++                        })
+                 })
+             })
+     }
+@@ -1077,7 +1136,7 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+     pub(super) fn tracked_in(&self, stages: vk::PipelineStageFlags2) -> Vec<Use<K>> {
+         self.parts
+             .iter()
+-            .flat_map(|part| part.tracked.values().flatten())
++            .flat_map(|part| part.tracked.values().flat_map(KeyUses::as_slice))
+             .filter(|known| (known.read.stages | known.write.stages).intersects(stages))
+             .cloned()
+             .collect()
+@@ -1090,7 +1149,7 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+             self.parts.iter().any(|part| {
+                 part.tracked
+                     .get(&used.key)
+-                    .is_some_and(|known| known.iter().any(|k| touches(k, used, stages)))
++                    .is_some_and(|known| known.as_slice().iter().any(|k| touches(k, used, stages)))
+             })
+         })
+     }
+@@ -1149,7 +1208,10 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+         let mut summaries: Vec<Summary<K>> = parts
+             .into_iter()
+             .map(|part| {
+-                let mut uses: Vec<Use<K>> = part.tracked.into_values().flatten().collect();
++                let mut uses: Vec<Use<K>> = Vec::with_capacity(part.tracked.len());
++                for known in part.tracked.into_values() {
++                    known.append_to(&mut uses);
++                }
+                 uses.sort_by_key(|used| used.key);
+                 Summary {
+                     uses,

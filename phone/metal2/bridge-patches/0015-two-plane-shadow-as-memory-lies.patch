@@ -1,0 +1,42 @@
+diff --git a/crates/metal2vulkan-runtime/src/texture.rs b/crates/metal2vulkan-runtime/src/texture.rs
+index 6e86ce4..11e9b7c 100644
+--- a/crates/metal2vulkan-runtime/src/texture.rs
++++ b/crates/metal2vulkan-runtime/src/texture.rs
+@@ -3288,7 +3288,8 @@ impl Device {
+     /// its storage mode: a heap texture's in memory of its own where its bytes in the heap are no
+     /// layout of its texels (`texture/heap.rs`, `AliasRoute::Lossless`), as a heap's textures hold
+     /// what their bytes held; and the shadow of a texture over a buffer whose copy in writes every
+-    /// texel of every aspect before any command reads it (`storage_over_buffer`).
++    /// texel of every aspect before any command reads it (`storage_over_buffer`, and a two-plane
++    /// texture's over a surface's planes, `texture/surface_two_planes.rs`).
+     fn new_image_as_it_lies(
+         &self,
+         plan: ImagePlan,
+diff --git a/crates/metal2vulkan-runtime/src/texture/surface_two_planes.rs b/crates/metal2vulkan-runtime/src/texture/surface_two_planes.rs
+index 44931f5..3042919 100644
+--- a/crates/metal2vulkan-runtime/src/texture/surface_two_planes.rs
++++ b/crates/metal2vulkan-runtime/src/texture/surface_two_planes.rs
+@@ -58,6 +58,7 @@ use crate::degradation::Degradation;
+ use crate::error::{Error, RuntimeGap};
+ use crate::image_plan::plan_image;
+ use crate::linear_plan::{BufferLayout, LINEAR_ALIGNMENT};
++use crate::resource::Identity;
+ use crate::shadow::{ShadowBuffer, ShadowCopies, ShadowSource, ShadowTarget};
+ use crate::texture_descriptor::{texture_usage, TextureDescriptor, TextureLayout};
+ use crate::tracker::UseRange;
+@@ -206,7 +207,14 @@ impl Device {
+             return Err(Error::NotImplemented(RuntimeGap::Textures));
+         }
+         let hazard = texels.options().hazard_tracking_mode()?;
+-        let image = self.new_image(plan, layout, descriptor, hazard)?;
++        // Its copy in writes every texel of its one aspect before any command reads it, or a pass
++        // that clears it whole does (`shadow.rs`, `render/shadows.rs`), so it starts as its memory
++        // lies, as the other shadows of a buffer's bytes do (`storage_over_buffer`): zeros there
++        // would never be read, and the host's zeros copied into a full-screen surface's image
++        // were most of its making on a phone's render server.
++        let identity = Identity::new(hazard, false);
++        let image =
++            self.new_image_as_it_lies(plan, layout, descriptor, identity, Device::runtime_owner)?;
+         let (raw, start) = texels.buffer.at(color.offset);
+         let staging = HeapPlaneCopies::staging(self, &planes, start, hazard)?;
+         let moves = Box::new(HeapPlaneCopies::new(self, &staging, &planes, hazard)?);

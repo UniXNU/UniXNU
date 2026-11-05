@@ -2,6 +2,33 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-05: ios-apollo's metal2vulkan bridge series ported - BUILT AND HOST-TESTED, NOT ON THE PHONE YET**
+  (`phone/metal2/bridge-patches/`, `phone/metal2/bridge-alias-writes.diff`, `phone/metal2/README.md`).
+  - Compared with aTechGeekDev/ios-apollo (Mi 10T, same SM8250 / A650 / Turnip / metal2vulkan stack). We had its
+    0001-0006 + 0100 and our own 0101. Added its 0007-0016 + 0102 on 720ef1ce (all apply in order, no edits):
+    per-draw CPU cuts (0010 fewer allocations per draw, 0011/0012 keep draw commands / lists between frames,
+    0013 skip unchanged rebinds, 0014 tracker keys, 0009 keep final pass, 0003/0005 already in), 0007/0015
+    two-plane surfaces, 0102 linked specialized function names.
+  - **Our 0101 (every padded writer aliased) is replaced** by apollo's 0008 + 0016 + 0101: `AliasWrites` aliases a
+    padded IOSurface writer only where a 16x4 GMEM tile store stays inside the row pitch and the buffer
+    (`tile_store_fits`), else it shadows. Ours aliased e.g. 284-wide (not a multiple of 16) or 611-high (not a
+    multiple of 4) render targets too, whose tile stores spill into the neighbour's bytes - a candidate for the App
+    Library blur (pooled targets of odd quarter/eighth sizes), unproven. Old patch kept in
+    `xnu-work/work/m2v-bridge-src/patches-old/`, old tree diff in `m2v-bridge-src/metal2vulkan-before-apollo-series.diff`
+    (and `git stash` in xnu-work/work/metal2vulkan), old bridge source `NativeMetalObjects.rs.before-apollo`.
+  - Bridge: `padded_reads = AliasWrites`, `refuse_rebinds = true` (apollo's NativeMetalObjects.rs lines).
+  - Host: metal2vulkan-runtime 883 tests pass, metal2vulkan-air 434 pass; bridge builds for aarch64-apple-ios with
+    no warnings (toolchain: `~/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin` on PATH; `cargo` is not on the
+    default PATH). Plugin: `xnu-work/work/m2v-bridge-src/out-apollo/SweetMetal2` (ad-hoc signed, sha256 88613fb7...).
+  - **To test (needs USB networking, user's OK for the phone file):** replace
+    `SweetMetal2.bundle/SweetMetal2` with out-apollo's (keep the current one as `.sweet-orig` - the phone's
+    `.sweet-orig` already holds the pre-0247 original, so name this backup `.sweet-pre-apollo`), boot 0248, compare
+    backboardd TOP rounds (0248 baseline: median ~20-25 %) and check the App Library background.
+  - Not ported (need kernel work first): apollo Turnip 0101 (skip CPU waits on already-submitted syncs, keeps the GPU
+    busy between chained submits) relies on a CP_WAIT_FOR_IDLE + flush at the end of every kernel submission, which
+    our `sweet_adreno_submit_v2` does not emit; Turnip 0102 (real VK_SYNC_WAIT_PENDING) conflicts with our
+    tu_knl_darwin.cc and needs a hand port. Turnip 0100 (`TU_FETCH_GMEM_MIN_DRAWS`) applies cleanly, untried.
+
 - **2026-11-04 night 0248: UI and CoreAnimation threads kept on the big cores; user: "it is way better"** (patch
   `xnu/patches/0248-umi-big-cores.patch`, kernel commit 1abc78e; boot **`shim/out/umi-0248-bigcores.img`** = 0247's
   line with `sweetbtlog=1` swapped for `sweetbigab=6` (604 chars), local kernel build, booted 22:37, the current image).

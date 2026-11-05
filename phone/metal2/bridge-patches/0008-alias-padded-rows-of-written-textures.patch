@@ -1,0 +1,29 @@
+diff --git a/crates/metal2vulkan-runtime/src/linear_plan.rs b/crates/metal2vulkan-runtime/src/linear_plan.rs
+index a0a2cbc..fdb8233 100644
+--- a/crates/metal2vulkan-runtime/src/linear_plan.rs
++++ b/crates/metal2vulkan-runtime/src/linear_plan.rs
+@@ -819,7 +819,7 @@ pub(super) fn holding(
+         return Ok(Holds::Texels);
+     };
+     let reads = only_reads(usage);
+-    if reads && policy == PaddedReadsPolicy::Alias {
++    if policy == PaddedReadsPolicy::AliasWrites || (reads && policy == PaddedReadsPolicy::Alias) {
+         return Ok(Holds::Padding);
+     }
+     let writers = if usage.contains(TextureUsage::RENDER_TARGET) {
+diff --git a/crates/metal2vulkan/src/device/policy.rs b/crates/metal2vulkan/src/device/policy.rs
+index 29b0667..7b4fe50 100644
+--- a/crates/metal2vulkan/src/device/policy.rs
++++ b/crates/metal2vulkan/src/device/policy.rs
+@@ -359,6 +359,11 @@ pub enum PaddedReadsPolicy {
+     /// the validation lane checks per driver (docs/FAST-PATHS.md, its known gaps).
+     #[default]
+     Alias,
++    /// [`PaddedReadsPolicy::Alias`] for every texture, a render target and a texture a shader
++    /// writes too: the driver's layout transitions and a render pass's load and store operations
++    /// may then write the bytes between the rows, which a program that keeps nothing there (a
++    /// window server's padded framebuffers) never reads. No copy in or out of a shadow image.
++    AliasWrites,
+     /// The runtime's shadow image of the texels, copied in from the buffer before each use: the
+     /// copies address the texels alone, so no byte between the rows is ever read or written
+     /// through an image.

@@ -1,0 +1,66 @@
+diff --git a/crates/metal2vulkan-runtime/src/tracker.rs b/crates/metal2vulkan-runtime/src/tracker.rs
+index 58ccac6..8350242 100644
+--- a/crates/metal2vulkan-runtime/src/tracker.rs
++++ b/crates/metal2vulkan-runtime/src/tracker.rs
+@@ -909,7 +909,7 @@ fn coalesce(entries: &mut Vec<Entry>) {
+ /// The uses one per key and range, sorted by key, without the ones that touch nothing.
+ fn merged<S: Copy + Ord + Hash>(uses: impl IntoIterator<Item = Use<S>>) -> Vec<Use<S>> {
+     let mut merged: Vec<Use<S>> = Vec::new();
+-    let mut index: HashMap<(S, UseRange), usize> = HashMap::new();
++    let mut index: KeyMap<(S, UseRange), usize> = KeyMap::default();
+     for used in uses {
+         if used.is_nothing() {
+             continue;
+@@ -945,7 +945,7 @@ pub(super) struct EncoderUses<K> {
+     /// Whether Metal runs the commands in encoded order (blit encoders, serial compute encoders).
+     ordered: bool,
+     /// The accesses of the current part's commands so far, for that order.
+-    inside: HashMap<Class<K>, Vec<Entry>>,
++    inside: KeyMap<Class<K>, Vec<Entry>>,
+     /// The parts, in order: the last is the current one. Never empty.
+     parts: Vec<Part<K>>,
+     /// The fences waited for: before the encoder's first part.
+@@ -957,7 +957,7 @@ pub(super) struct EncoderUses<K> {
+ /// The uses of one part of an encoder.
+ struct Part<K> {
+     /// The tracked uses so far, one per range, at most [`ENTRIES_PER_KEY`] per resource.
+-    tracked: HashMap<K, KeyUses<K>>,
++    tracked: KeyMap<K, KeyUses<K>>,
+     stages: vk::PipelineStageFlags2,
+ }
+ 
+@@ -1008,7 +1008,7 @@ impl<K> KeyUses<K> {
+ impl<K> Part<K> {
+     fn new() -> Part<K> {
+         Part {
+-            tracked: HashMap::new(),
++            tracked: KeyMap::default(),
+             stages: vk::PipelineStageFlags2::NONE,
+         }
+     }
+@@ -1019,7 +1019,7 @@ impl<K: Copy + Ord + Hash> EncoderUses<K> {
+     pub(super) fn new(ordered: bool) -> EncoderUses<K> {
+         EncoderUses {
+             ordered,
+-            inside: HashMap::new(),
++            inside: KeyMap::default(),
+             parts: vec![Part::new()],
+             waits: Vec::new(),
+             updates: Vec::new(),
+@@ -1247,14 +1247,14 @@ impl<K> fmt::Debug for EncoderUses<K> {
+ /// commands after them. One entry per range, at most [`ENTRIES_PER_KEY`] per resource, merged
+ /// as [`EncoderUses`] merges its own, which claims more and stays exact.
+ pub(super) struct UnorderedWrites<K> {
+-    writes: HashMap<K, Vec<Use<K>>>,
++    writes: KeyMap<K, Vec<Use<K>>>,
+ }
+ 
+ impl<K: Copy + Ord + Hash> UnorderedWrites<K> {
+     /// No writes.
+     pub(super) fn new() -> UnorderedWrites<K> {
+         UnorderedWrites {
+-            writes: HashMap::new(),
++            writes: KeyMap::default(),
+         }
+     }
+ 

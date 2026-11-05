@@ -1,0 +1,115 @@
+diff --git a/crates/metal2vulkan/src/device/profile.rs b/crates/metal2vulkan/src/device/profile.rs
+index 58c79ce..2684ba6 100644
+--- a/crates/metal2vulkan/src/device/profile.rs
++++ b/crates/metal2vulkan/src/device/profile.rs
+@@ -342,7 +342,30 @@ impl DeviceProfile {
+     /// The rendering streams into the hash: every compile takes the fingerprint for its key, and a
+     /// materialized rendering of a profile with a format table is tens of kilobytes that no
+     /// input-scaled ledger charge accounts for.
++    ///
++    /// Every compile takes it, and rendering a profile with a format table cost a twentieth of a
++    /// pipeline's translation, so the last few profiles' fingerprints are kept and found again by
++    /// equality of the fields, which is a structural comparison and holds under any mutation.
+     pub fn fingerprint(&self) -> Hash256 {
++        static KEPT: std::sync::Mutex<Vec<(ProfileFields, Hash256)>> =
++            std::sync::Mutex::new(Vec::new());
++        {
++            let kept = KEPT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
++            if let Some((_, h)) = kept.iter().find(|(f, _)| *f == self.fields) {
++                return *h;
++            }
++        }
++        let h = self.render_fingerprint();
++        let mut kept = KEPT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
++        if kept.len() >= 4 {
++            kept.remove(0);
++        }
++        kept.push((self.fields.clone(), h));
++        h
++    }
++
++    /// [`DeviceProfile::fingerprint`], rendered.
++    fn render_fingerprint(&self) -> Hash256 {
+         use sha2::{Digest, Sha256};
+         use std::fmt::Write as _;
+         struct Hashing(Sha256);
+diff --git a/crates/metal2vulkan/src/pipeline/compile.rs b/crates/metal2vulkan/src/pipeline/compile.rs
+index 6a67add..c448dca 100644
+--- a/crates/metal2vulkan/src/pipeline/compile.rs
++++ b/crates/metal2vulkan/src/pipeline/compile.rs
+@@ -1803,8 +1803,7 @@ fn specialize_one(r: &Request<'_>, m: &mut Meter) -> Result<Specialized, Error>
+         let kept = entries.specialized(fd, r.inputs.call_stack_depth(), m)?;
+         return Ok(Specialized::clone(&kept));
+     }
+-    let air_hash = container::sha256(r.bitcode);
+-    let mut decoded = air::decode(r.bitcode, m)?;
++    let (air_hash, mut decoded) = decode_kept(r.bitcode, m)?;
+     if let Some(f) = r.container {
+         decoded.abi.check_container(&decoded.module, f, m)?;
+     }
+@@ -1828,6 +1827,65 @@ fn specialize_one(r: &Request<'_>, m: &mut Meter) -> Result<Specialized, Error>
+     })
+ }
+ 
++/// The smallest module [`decode_kept`] keeps: below it a decode costs less than the copy.
++const KEPT_DECODE_BYTES: usize = 32 << 10;
++/// The modules [`decode_kept`] keeps, the most recently used first. A decoded QuartzCore uber
++/// module is 2.25 MB charged, so four bound the process's cost near 9 MB.
++const KEPT_DECODES: usize = 4;
++
++/// A module [`decode_kept`] decoded: its bytes, their SHA-256, the decode, and the ledger bytes the
++/// decode left charged.
++struct KeptDecode {
++    bytes: Arc<[u8]>,
++    sha: Hash256,
++    decoded: Arc<air::Decoded>,
++    charged: u64,
++}
++
++static KEPT: std::sync::Mutex<VecDeque<KeptDecode>> = std::sync::Mutex::new(VecDeque::new());
++
++/// The SHA-256 of `bitcode` and its decode. A process specializes the same few large modules over
++/// and over (an uber-shader's every variant: QuartzCore's `fixed_frag` modules, 113 KB of bitcode
++/// each, one per pipeline its render server makes), and decoding one was a sixth of a
++/// specialization. A module of at least [`KEPT_DECODE_BYTES`] is decoded once per process and
++/// kept (the last [`KEPT_DECODES`]), found again by its exact bytes; a later request takes a copy
++/// of the decode and charges `m` the bytes the first decode left charged, so the ledger stands as
++/// after a decode of its own. The decode is a pure function of the bytes.
++fn decode_kept(bitcode: &[u8], m: &mut Meter) -> Result<(Hash256, air::Decoded), Error> {
++    if bitcode.len() < KEPT_DECODE_BYTES {
++        return Ok((container::sha256(bitcode), air::decode(bitcode, m)?));
++    }
++    let found = {
++        let mut kept = KEPT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
++        kept.iter()
++            .position(|k| *k.bytes == *bitcode)
++            .and_then(|at| kept.remove(at))
++            .map(|k| {
++                let found = (k.sha, Arc::clone(&k.decoded), k.charged);
++                kept.push_front(k);
++                found
++            })
++    };
++    if let Some((sha, decoded, charged)) = found {
++        m.charge(usize::try_from(charged).unwrap_or(usize::MAX))?;
++        return Ok((sha, air::Decoded::clone(&decoded)));
++    }
++    let before = m.ledger();
++    let decoded = air::decode(bitcode, m)?;
++    let charged = m.ledger().saturating_sub(before);
++    let sha = container::sha256(bitcode);
++    let entry = KeptDecode {
++        bytes: Arc::from(bitcode),
++        sha,
++        decoded: Arc::new(decoded.clone()),
++        charged,
++    };
++    let mut kept = KEPT.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
++    kept.push_front(entry);
++    kept.truncate(KEPT_DECODES);
++    Ok((sha, decoded))
++}
++
+ /// [`specialize_one`], then Metal's grouping of multiply chains (`lower::arith::regroup`) and of
+ /// fast-math sums (`lower::arith::reassoc`), and the order Apple's simdgroup lockstep gives
+ /// threadgroup accesses made explicit for `p`: the entry selection reads, whose instruction indices

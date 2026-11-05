@@ -1,0 +1,140 @@
+diff --git a/crates/metal2vulkan-runtime/src/device/mod.rs b/crates/metal2vulkan-runtime/src/device/mod.rs
+index 00a6e55..8842010 100644
+--- a/crates/metal2vulkan-runtime/src/device/mod.rs
++++ b/crates/metal2vulkan-runtime/src/device/mod.rs
+@@ -63,7 +63,7 @@ use super::memory::Memory;
+ use super::mipmap_scratch::MipmapScratch;
+ use super::owned_kernel::OwnedKernels;
+ use super::render_state::{depth_bias_command, DepthBiasCommand};
+-use super::render_target::KeptCompatible;
++use super::render_target::{KeptCompatible, KeptFinal};
+ use super::resource_ids::{ResourceIds, SamplerIdReads};
+ use super::sample_planes::PlanesObjects;
+ use super::sampler::{SamplerCount, SamplerKey, SamplerShared};
+@@ -305,6 +305,8 @@ pub(super) struct DeviceShared {
+     pub(super) attachmentless: Mutex<KeptPasses>,
+     /// The compatible passes it keeps, by shape (`render_target::shared_compatible_pass`).
+     pub(super) compatible_passes: Mutex<KeptCompatible>,
++    /// The final passes it keeps, by what they are made of (`render_target::kept_final_pass`).
++    pub(super) final_passes: Mutex<KeptFinal>,
+     /// The caller's images that move between layouts, and the events' timeline semaphores
+     /// (`interop.rs`).
+     pub(super) interop: Interop,
+@@ -498,6 +500,7 @@ impl Drop for DeviceShared {
+         lock(&self.depth_stencil_resolves).destroy(self.vk());
+         lock(&self.attachmentless).destroy(self.vk());
+         lock(&self.compatible_passes).destroy(self.vk());
++        lock(&self.final_passes).destroy(self.vk());
+         // What released variants left (`pipeline/kept.rs`).
+         lock(&self.kept).destroy(self);
+         // The graphics pipeline libraries, after every pipeline they linked: each linked
+@@ -1272,6 +1275,7 @@ impl Device {
+             depth_stencil_resolves: Mutex::new(DepthStencilResolveObjects::default()),
+             attachmentless: Mutex::default(),
+             compatible_passes: Mutex::default(),
++            final_passes: Mutex::default(),
+             interop: Interop::default(),
+             heap_keys: Default::default(),
+             rebinds: Default::default(),
+diff --git a/crates/metal2vulkan-runtime/src/render_target.rs b/crates/metal2vulkan-runtime/src/render_target.rs
+index 0310edd..e7f7391 100644
+--- a/crates/metal2vulkan-runtime/src/render_target.rs
++++ b/crates/metal2vulkan-runtime/src/render_target.rs
+@@ -299,7 +299,7 @@ pub(super) fn later_steps(layout: &PassLayout) -> impl Iterator<Item = &ResolveS
+ }
+ 
+ /// One attachment's operations: of its color or depth aspect, then of its stencil aspect.
+-#[derive(Clone, Copy)]
++#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+ struct Ops {
+     load: vk::AttachmentLoadOp,
+     store: vk::AttachmentStoreOp,
+@@ -742,17 +742,81 @@ pub(super) fn final_pass(
+             .filter(|c| subpass_resolve(c.as_ref()).is_some())
+             .count()
+     ];
+-    create(
++    kept_final_pass(
+         device,
+-        shape,
+-        &colors,
+-        depth_stencil,
+-        &resolves,
+-        subpass_step(layout).map(step_ops),
+-        at.last,
++        FinalMakings {
++            shape: shape.clone(),
++            colors,
++            depth_stencil,
++            resolves,
++            depth_stencil_resolve: subpass_step(layout).map(step_ops),
++            resolving: at.last,
++        },
+     )
+ }
+ 
++/// The most final passes a device keeps ([`kept_final_pass`]): a program's passes take a few
++/// shapes, each with a few sets of load and store operations.
++const KEPT_FINALS: usize = 256;
++
++/// What a final pass is made of: [`create`]'s arguments past the device.
++#[derive(Clone, PartialEq, Eq, Hash)]
++pub(super) struct FinalMakings {
++    shape: PassShape,
++    colors: Vec<Ops>,
++    depth_stencil: Option<Ops>,
++    resolves: Vec<Ops>,
++    depth_stencil_resolve: Option<Ops>,
++    resolving: bool,
++}
++
++/// The final passes a device keeps, by what they are made of ([`kept_final_pass`]).
++#[derive(Default)]
++pub(super) struct KeptFinal(HashMap<FinalMakings, vk::RenderPass>);
++
++impl KeptFinal {
++    /// Destroy every kept pass; the device is idle, and is destroyed next.
++    pub(super) fn destroy(&self, raw: &ash::Device) {
++        for &pass in self.0.values() {
++            // SAFETY: the device is idle, so no pending command uses the pass, and no framebuffer
++            // made with it is left (each goes with the command buffer that began it).
++            unsafe { release::object(raw, pass) };
++        }
++    }
++}
++
++/// The device's final pass of `makings`, made now where it keeps none. A render pass is immutable,
++/// so one serves every instance made of the same: made and destroyed for every instance, as
++/// before, it cost a `vkCreateRenderPass2` (where Turnip lays out its attachments in GMEM for
++/// every tile layout) and a `vkDestroyRenderPass` each time a pass ended, 19 times a frame of
++/// iOS's compositor. Past [`KEPT_FINALS`] a pass is made for its instance alone, as before.
++fn kept_final_pass(device: &Device, makings: FinalMakings) -> Result<RenderPassObject, Error> {
++    let kept = &device.shared().final_passes;
++    if let Some(&raw) = lock(kept).0.get(&makings) {
++        return Ok(RenderPassObject::kept(device, raw));
++    }
++    let pass = create(
++        device,
++        &makings.shape,
++        &makings.colors,
++        makings.depth_stencil,
++        &makings.resolves,
++        makings.depth_stencil_resolve,
++        makings.resolving,
++    )?;
++    let mut passes = lock(kept);
++    // Another encoder's may have come first: its pass serves, and this one goes unused.
++    if let Some(&raw) = passes.0.get(&makings) {
++        return Ok(RenderPassObject::kept(device, raw));
++    }
++    if pass.owner == Owner::Holders && passes.0.len() < KEPT_FINALS {
++        let raw = pass.into_kept();
++        passes.0.insert(makings, raw);
++        return Ok(RenderPassObject::kept(device, raw));
++    }
++    Ok(pass)
++}
++
+ /// The operations of color attachment `color` in an instance at `at`, the sample planes'
+ /// `anchor` or not, its `DontCare` `dont_care`'s, but the image a texture over a buffer keeps for
+ /// a pass that does not store it, which nothing reads after the pass (`kept_bytes.rs`). An

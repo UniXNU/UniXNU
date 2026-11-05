@@ -1,0 +1,390 @@
+diff --git a/crates/metal2vulkan-runtime/README.md b/crates/metal2vulkan-runtime/README.md
+index c6dc9f6..f756943 100644
+--- a/crates/metal2vulkan-runtime/README.md
++++ b/crates/metal2vulkan-runtime/README.md
+@@ -139,6 +139,7 @@ Vulkan-side choices Metal has no counterpart for:
+ | `announce_each` | Degradation kinds to announce at every occurrence instead of once. |
+ | `metal_level` | The macOS release whose Metal the device answers as (the host's by default). |
+ | `record_executions` | Keep, per command buffer, which pipeline each dispatch and draw ran (`CommandBuffer::executions`). Off by default. |
++| `refuse_rebinds` | Refuse every `rebind_bytes_no_copy` (`RebindProblem::Refused`), so the encoders log no calls to encode again while no-copy buffers live. Off by default. |
+ 
+ While a handle lives, equal options give the same device for a physical device, as Metal has one
+ `MTLDevice` per GPU. Nothing is read from the environment but the platform's default cache
+diff --git a/crates/metal2vulkan-runtime/src/blit.rs b/crates/metal2vulkan-runtime/src/blit.rs
+index 2af641b..9db0e67 100644
+--- a/crates/metal2vulkan-runtime/src/blit.rs
++++ b/crates/metal2vulkan-runtime/src/blit.rs
+@@ -160,7 +160,7 @@ impl CommandBuffer {
+             core: EncoderCore::open(self, "blit_command_encoder", true)?,
+             pattern: None,
+             shadows: Vec::new(),
+-            log: self.device().shared().rebinds.any().then(CallLog::new),
++            log: self.device().shared().logs_calls().then(CallLog::new),
+         })
+     }
+ }
+diff --git a/crates/metal2vulkan-runtime/src/buffer_descriptor.rs b/crates/metal2vulkan-runtime/src/buffer_descriptor.rs
+index 902a821..5d07264 100644
+--- a/crates/metal2vulkan-runtime/src/buffer_descriptor.rs
++++ b/crates/metal2vulkan-runtime/src/buffer_descriptor.rs
+@@ -539,6 +539,10 @@ impl Device {
+         if self.is_lost() {
+             return Err(Error::DeviceLost);
+         }
++        // Its encoders logged nothing to encode again (`DeviceOptions::refuse_rebinds`).
++        if self.shared().refuse_rebinds {
++            return Err(invalid(call, Problem::Rebind(RebindProblem::Refused)));
++        }
+         let key = buffer.identity().key;
+         let encoded = || invalid(call, Problem::Rebind(RebindProblem::EncodedUses));
+         if self.rebind_pending(key) {
+diff --git a/crates/metal2vulkan-runtime/src/compute.rs b/crates/metal2vulkan-runtime/src/compute.rs
+index 0863fd5..92894bd 100644
+--- a/crates/metal2vulkan-runtime/src/compute.rs
++++ b/crates/metal2vulkan-runtime/src/compute.rs
+@@ -226,7 +226,7 @@ impl CommandBuffer {
+             indirect_stage_in: None,
+             residency: self.inherited_residency(false),
+             captures: Captures::default(),
+-            log: self.device().shared().rebinds.any().then(CallLog::new),
++            log: self.device().shared().logs_calls().then(CallLog::new),
+             dispatches: 0,
+         })
+     }
+diff --git a/crates/metal2vulkan-runtime/src/device/adopt.rs b/crates/metal2vulkan-runtime/src/device/adopt.rs
+index 73f84ba..4262d65 100644
+--- a/crates/metal2vulkan-runtime/src/device/adopt.rs
++++ b/crates/metal2vulkan-runtime/src/device/adopt.rs
+@@ -266,6 +266,8 @@ impl Device {
+             gpu_times_from_host: raw.gpu_times_from_host,
+             // An adopted device keeps no execution record: validation makes its own devices.
+             record_executions: false,
++            // An adopted device's rebinds go as a made device's do by default.
++            refuse_rebinds: false,
+             announce_each: raw.announce_each,
+             view_reinterpretation,
+             generated_commands: false,
+diff --git a/crates/metal2vulkan-runtime/src/device/create.rs b/crates/metal2vulkan-runtime/src/device/create.rs
+index 76a0d07..77ac8af 100644
+--- a/crates/metal2vulkan-runtime/src/device/create.rs
++++ b/crates/metal2vulkan-runtime/src/device/create.rs
+@@ -169,6 +169,14 @@ pub struct DeviceOptions {
+     /// No Metal counterpart.
+     #[doc(hidden)]
+     pub record_executions: bool,
++    /// Refuse every `rebind_bytes_no_copy`, of a buffer and of a heap (`Invalid`,
++    /// [`RebindProblem::Refused`](crate::RebindProblem::Refused)), for a consumer that never moves
++    /// the host pages of what it made with `new_buffer_with_bytes_no_copy` or
++    /// `new_heap_with_bytes_no_copy`. Off by default. The device's compute, blit and render
++    /// encoders then log no calls (`replay.rs`): a log is read only to encode its encoder again at
++    /// a rebind, so a draw pays nothing for a log no one reads. `detach_backing` is unchanged. No
++    /// Metal counterpart.
++    pub refuse_rebinds: bool,
+ }
+ 
+ /// One setting of an instance layer (`VkLayerSettingEXT`).
+@@ -1248,6 +1256,7 @@ fn create_on(
+         gpu_times_from_host: options.gpu_times_from_host,
+         announce_each: options.announce_each.clone(),
+         record_executions: options.record_executions,
++        refuse_rebinds: options.refuse_rebinds,
+         view_reinterpretation,
+         generated_commands,
+         host_image_copy,
+@@ -1356,6 +1365,7 @@ fn same_options(a: &DeviceOptions, b: &DeviceOptions) -> bool {
+         announce_each,
+         metal_level,
+         record_executions,
++        refuse_rebinds,
+     } = a;
+     *policy == b.policy
+         && *layers == b.layers
+@@ -1374,6 +1384,7 @@ fn same_options(a: &DeviceOptions, b: &DeviceOptions) -> bool {
+         && *announce_each == b.announce_each
+         && *metal_level == b.metal_level
+         && *record_executions == b.record_executions
++        && *refuse_rebinds == b.refuse_rebinds
+ }
+ 
+ /// The group of `made` for `options`: the live one, or a new one on a new instance. Its index.
+diff --git a/crates/metal2vulkan-runtime/src/device/mod.rs b/crates/metal2vulkan-runtime/src/device/mod.rs
+index 8842010..81304a0 100644
+--- a/crates/metal2vulkan-runtime/src/device/mod.rs
++++ b/crates/metal2vulkan-runtime/src/device/mod.rs
+@@ -366,6 +366,9 @@ pub(super) struct DeviceShared {
+     /// Its command buffers keep execution records (`DeviceOptions::record_executions`): where
+     /// not, its encoders build none (`EncoderCore::executed`).
+     pub(crate) record_executions: bool,
++    /// It refuses every rebind (`DeviceOptions::refuse_rebinds`): its encoders log no calls
++    /// ([`DeviceShared::logs_calls`]).
++    pub(crate) refuse_rebinds: bool,
+     /// Counts the times an image of the device let its views go, under its views lock (a
+     /// rebind's or a storage form's new `VkImage`, a detach's stand-in, a reattach): a view kept
+     /// by what it was made of (`binding::BindMemo`) is current while this holds.
+@@ -373,6 +376,13 @@ pub(super) struct DeviceShared {
+ }
+ 
+ impl DeviceShared {
++    /// Whether an encoder opened now logs its calls (`replay.rs`): where the device has a buffer
++    /// over host pages, unless it refuses every rebind, the only reader of a log
++    /// (`DeviceOptions::refuse_rebinds`).
++    pub(crate) fn logs_calls(&self) -> bool {
++        !self.refuse_rebinds && self.rebinds.any()
++    }
++
+     /// What `create` makes with the `VkPipelineCache` it is handed, its `vkCreate*Pipelines` call:
+     /// a cache of the making's own, seeded from the record `making` names
+     /// (`ShaderCache::make_pipelines`, `shader_cache/driver.rs`). On a pool's thread the exit waits
+@@ -754,6 +764,8 @@ pub(super) struct Parts {
+     pub(super) announce_each: BTreeSet<Degradation>,
+     /// Its command buffers keep execution records (`DeviceOptions::record_executions`).
+     pub(super) record_executions: bool,
++    /// It refuses every rebind (`DeviceOptions::refuse_rebinds`).
++    pub(super) refuse_rebinds: bool,
+     /// Its views may reinterpret an image's components ([`DeviceShared`]'s field), outside
+     /// `enabled`'s vocabulary.
+     pub(super) view_reinterpretation: bool,
+@@ -821,6 +833,7 @@ impl Device {
+             gpu_times_from_host,
+             announce_each,
+             record_executions,
++            refuse_rebinds,
+             view_reinterpretation,
+             generated_commands,
+             host_image_copy,
+@@ -1219,6 +1232,7 @@ impl Device {
+             properties,
+             announced: Announced::new(&announce_each),
+             record_executions,
++            refuse_rebinds,
+             views_epoch: AtomicU64::new(0),
+             device_address,
+             upload_alignment,
+diff --git a/crates/metal2vulkan-runtime/src/rebind.rs b/crates/metal2vulkan-runtime/src/rebind.rs
+index 2bce8e6..e8a8d2c 100644
+--- a/crates/metal2vulkan-runtime/src/rebind.rs
++++ b/crates/metal2vulkan-runtime/src/rebind.rs
+@@ -77,6 +77,9 @@ pub enum RebindProblem {
+     /// a resource placed in it, or has an encoder open that used one (or one committed whose
+     /// commands the runtime records only once earlier work completed): commit or drop it first.
+     EncodedUses,
++    /// The device refuses every rebind (`DeviceOptions::refuse_rebinds`): its encoders log no
++    /// calls to encode again.
++    Refused,
+ }
+ 
+ /// The device's buffers over host pages, by their hazard-tracking key, with the command buffers
+@@ -721,7 +724,8 @@ impl Buffer {
+     /// (`NotImplemented(RebindTextures)`: the texture's copies, views and aliasing image are
+     /// planned at that offset), or where the device cannot make a texture's aliasing image again
+     /// over the new memory (`NotImplemented(RebindTextures)`, which says when); memory the device
+-    /// cannot import exactly, as `new_buffer_with_bytes_no_copy` refuses it; a lost device.
++    /// cannot import exactly, as `new_buffer_with_bytes_no_copy` refuses it; a lost device; a
++    /// device made with `DeviceOptions::refuse_rebinds` (`Invalid`, [`RebindProblem::Refused`]).
+     ///
+     /// # Safety
+     ///
+@@ -777,7 +781,8 @@ impl Heap {
+     /// [`RebindProblem::EncodedUses`]); memory whose first byte is off the import's unit
+     /// (`Invalid`, `HeapProblem::HostMemoryAlignment`); memory the device cannot import exactly;
+     /// an image the device cannot make again there (as `new_texture_at_offset` refuses it); a
+-    /// lost device.
++    /// lost device; a device made with `DeviceOptions::refuse_rebinds` (`Invalid`,
++    /// [`RebindProblem::Refused`]).
+     ///
+     /// # Safety
+     ///
+diff --git a/crates/metal2vulkan-runtime/src/render.rs b/crates/metal2vulkan-runtime/src/render.rs
+index 110c428..5cd377c 100644
+--- a/crates/metal2vulkan-runtime/src/render.rs
++++ b/crates/metal2vulkan-runtime/src/render.rs
+@@ -1273,8 +1273,7 @@ impl CommandBuffer {
+         let log = match again {
+             None => device
+                 .shared()
+-                .rebinds
+-                .any()
++                .logs_calls()
+                 .then(|| RenderLog::new(descriptor)),
+             Some(_) => None,
+         };
+diff --git a/crates/metal2vulkan-runtime/src/replay.rs b/crates/metal2vulkan-runtime/src/replay.rs
+index f514934..d39f82d 100644
+--- a/crates/metal2vulkan-runtime/src/replay.rs
++++ b/crates/metal2vulkan-runtime/src/replay.rs
+@@ -13,7 +13,8 @@
+ //!   over where their buffers lie now. A call refused at its first encoding is refused again,
+ //!   which leaves the encoder as it was encoded first ([`Replay::run`] fails, and the encoder is
+ //!   not encoded again). The log starts at the encoder's open where the device has a buffer over
+-//!   host pages (`Rebinds::any`); else nothing is logged. It costs one push per
++//!   host pages (`Rebinds::any`) and does not refuse every rebind (`DeviceOptions::refuse_rebinds`,
++//!   `DeviceShared::logs_calls`); else nothing is logged. It costs one push per
+ //!   call; a slice of buffers, offsets, textures or bytes goes into one of the log's arenas, so
+ //!   the common calls allocate nothing of their own.
+ //! - **What is kept.** The command buffer keeps an ended encoder's log only where a command of
+diff --git a/crates/metal2vulkan-runtime/src/tests/mod.rs b/crates/metal2vulkan-runtime/src/tests/mod.rs
+index 998d7f8..f579adc 100644
+--- a/crates/metal2vulkan-runtime/src/tests/mod.rs
++++ b/crates/metal2vulkan-runtime/src/tests/mod.rs
+@@ -97,6 +97,8 @@ mod private_properties;
+ mod queue;
+ mod range;
+ mod rate_map;
++#[cfg(any(m2v_gpu, m2v_cpu_icd))]
++mod refuse_rebinds;
+ mod resource;
+ mod resource_ids;
+ mod rotated;
+diff --git a/crates/metal2vulkan-runtime/src/tests/refuse_rebinds.rs b/crates/metal2vulkan-runtime/src/tests/refuse_rebinds.rs
+new file mode 100644
+index 0000000..07ea7e2
+--- /dev/null
++++ b/crates/metal2vulkan-runtime/src/tests/refuse_rebinds.rs
+@@ -0,0 +1,147 @@
++//! A device made with `DeviceOptions::refuse_rebinds`: its encoders log no calls while it has a
++//! buffer over host pages (`replay.rs`, `DeviceShared::logs_calls`), and it refuses a rebind
++//! (`Invalid`, `RebindProblem::Refused`), dropping the deallocator unrun; a device made without it
++//! logs while it has one, as before.
++//!
++//! A device test: compiled only under the validation crate's GPU safety cfgs (`m2v_gpu`,
++//! `m2v_cpu_icd`), on the kind of device the cfg selects.
++
++use crate::{
++    Buffer, Deallocator, Device, DeviceKind, DeviceOptions, Error, HostMemory, Invalid, Problem,
++    RebindProblem, ResourceOptions, ShaderCacheOptions,
++};
++use std::alloc::Layout;
++use std::path::{Path, PathBuf};
++use std::ptr::NonNull;
++use std::sync::atomic::{AtomicUsize, Ordering};
++use std::sync::Arc;
++use std::time::{Duration, Instant};
++
++/// The no-copy buffers' bytes and alignment.
++const NO_COPY: usize = 64 << 10;
++const NO_COPY_ALIGN: usize = 64 << 10;
++
++/// The longest a released buffer's deallocator may take to run.
++const WAIT: Duration = Duration::from_secs(10);
++
++/// A scratch directory for the device's shader cache, removed when dropped.
++struct Scratch(PathBuf);
++
++impl Scratch {
++    fn new(name: &str) -> Scratch {
++        let path = std::env::temp_dir().join(format!(
++            "m2v-refuse-rebinds-{name}-{}",
++            std::process::id()
++        ));
++        std::fs::create_dir_all(&path).unwrap();
++        Scratch(path)
++    }
++}
++
++impl Drop for Scratch {
++    fn drop(&mut self) {
++        let _ = std::fs::remove_dir_all(&self.0);
++    }
++}
++
++/// The device the cfg selects, refusing rebinds where `refuse`, its shader cache in `cache`.
++fn device(cache: &Path, refuse: bool) -> Device {
++    let options = DeviceOptions {
++        kinds: match cfg!(m2v_cpu_icd) {
++            true => vec![DeviceKind::Cpu],
++            false => vec![
++                DeviceKind::Discrete,
++                DeviceKind::Integrated,
++                DeviceKind::Virtual,
++            ],
++        },
++        shader_cache: ShaderCacheOptions {
++            directory: Some(cache.to_owned()),
++            ..ShaderCacheOptions::default()
++        },
++        refuse_rebinds: refuse,
++        ..DeviceOptions::default()
++    };
++    Device::system_default_with(&options).unwrap()
++}
++
++/// Memory of the test's, zeroed, and the deallocator that frees it, counting its runs in `runs`.
++fn memory(runs: &Arc<AtomicUsize>) -> (NonNull<u8>, Deallocator) {
++    let layout = Layout::from_size_align(NO_COPY, NO_COPY_ALIGN).unwrap();
++    // SAFETY: the layout's size is not zero.
++    let memory = NonNull::new(unsafe { std::alloc::alloc_zeroed(layout) }).unwrap();
++    let runs = Arc::clone(runs);
++    let deallocator: Deallocator = Box::new(move |pointer, _| {
++        // SAFETY: the pointer is the memory allocated above with `layout`, freed once.
++        unsafe { std::alloc::dealloc(pointer.as_ptr(), layout) };
++        runs.fetch_add(1, Ordering::SeqCst);
++    });
++    (memory, deallocator)
++}
++
++/// A `Shared` buffer over memory of the test's, whose deallocator counts into `runs`, and the
++/// memory.
++fn no_copy(device: &Device, runs: &Arc<AtomicUsize>) -> (Buffer, NonNull<u8>) {
++    let (memory, deallocator) = memory(runs);
++    // SAFETY: the memory is the test's, mapped and writable, aligned to 64 KiB, until the
++    // deallocator frees it once the buffer's last reference goes.
++    let buffer = unsafe {
++        device.new_buffer_with_bytes_no_copy(
++            HostMemory::new(memory),
++            NO_COPY as u64,
++            ResourceOptions::shared(),
++            Some(deallocator),
++        )
++    }
++    .unwrap();
++    (buffer, memory)
++}
++
++/// Wait for `runs` to reach one.
++#[track_caller]
++fn ran_once(runs: &AtomicUsize) {
++    let start = Instant::now();
++    while runs.load(Ordering::SeqCst) == 0 && start.elapsed() < WAIT {
++        std::thread::sleep(Duration::from_millis(5));
++    }
++    assert_eq!(runs.load(Ordering::SeqCst), 1, "the deallocator's runs");
++}
++
++/// Without the option, a device with a no-copy buffer logs its encoders' calls; with it, it logs
++/// none, and refuses the buffer's rebind without running the new memory's deallocator (that
++/// memory leaks), the buffer still over its own memory, which is freed when the buffer goes.
++#[test]
++fn a_device_that_refuses_rebinds_logs_no_calls() {
++    let scratch = Scratch::new("default");
++    let plain = device(&scratch.0, false);
++    assert!(!plain.shared().logs_calls(), "no buffer over host pages yet");
++    let plain_runs = Arc::new(AtomicUsize::new(0));
++    let (kept, _) = no_copy(&plain, &plain_runs);
++    assert!(plain.shared().logs_calls());
++    drop(kept);
++    ran_once(&plain_runs);
++
++    let scratch = Scratch::new("refusing");
++    let refusing = device(&scratch.0, true);
++    let runs = Arc::new(AtomicUsize::new(0));
++    let (buffer, own) = no_copy(&refusing, &runs);
++    assert!(refusing.shared().rebinds.any());
++    assert!(!refusing.shared().logs_calls());
++    let new_runs = Arc::new(AtomicUsize::new(0));
++    let (new, deallocator) = memory(&new_runs);
++    // SAFETY: the new memory holds the buffer's length; the call is refused and keeps nothing.
++    let rebound =
++        unsafe { buffer.rebind_bytes_no_copy(HostMemory::new(new), Some(deallocator), None) };
++    assert_eq!(
++        rebound,
++        Err(Error::Invalid(Invalid::new(
++            "rebind_bytes_no_copy",
++            Problem::Rebind(RebindProblem::Refused)
++        )))
++    );
++    assert_eq!(new_runs.load(Ordering::SeqCst), 0);
++    assert_eq!(buffer.contents(), Some(own));
++    drop(buffer);
++    ran_once(&runs);
++    assert_eq!(new_runs.load(Ordering::SeqCst), 0);
++}

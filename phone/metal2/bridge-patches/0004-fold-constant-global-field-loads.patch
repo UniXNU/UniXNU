@@ -1,0 +1,328 @@
+diff --git a/crates/metal2vulkan-air/src/canon/const_loads.rs b/crates/metal2vulkan-air/src/canon/const_loads.rs
+index 7b3dfd7..98976df 100644
+--- a/crates/metal2vulkan-air/src/canon/const_loads.rs
++++ b/crates/metal2vulkan-air/src/canon/const_loads.rs
+@@ -1,4 +1,4 @@
+-//! Pointers loaded from fields of constant globals.
++//! Values loaded from fields of constant globals.
+ //!
+ //! A constant global whose initializer is known once function constants are bound and the static
+ //! initializers have run may hold pointers: a program-scope `constexpr sampler` taken by value is
+@@ -9,18 +9,28 @@
+ //! constant and threadgroup spaces, so such a module was refused, under the values that made the
+ //! select one global.
+ //!
++//! The same holds for every other first-class field. An uber-shader takes its whole configuration
++//! as one struct of function constants that a static initializer copies into an internal
++//! `constant` global (QuartzCore's `fc_fragment_shader_config`, read field by field after a
++//! function-constant `select` between it and a buffer). SCCP folds that select to the global but
++//! not the field loads, so every branch the configuration decides survived: QuartzCore's
++//! `fixed_frag` became about 46000 SPIR-V instructions where its specialized form is a few
++//! hundred, and the driver compiled each such pipeline for about a second. Metal's compiler
++//! specializes these reads away, so a module that reads them is translated as Metal compiles it.
++//!
+ //! This pass reads such a load as the initializer's constant at the field: a non-volatile,
+-//! non-atomic load of a pointer whose address is a field of a constant global at constant indices
+-//! (a `getelementptr` instruction or constant expression over the global's own value type, its
+-//! first index 0), where the field's type is the load's. A copy LLVM made through an integer (a
+-//! load of the field as an integer of the pointer's size, then `inttoptr` to the field's type)
+-//! reads the same constant at its `inttoptr`. The global is never written (it is `constant`, and
+-//! initialized by no one else), so every run reads that constant: the address of the sampler
+-//! state, which the sampler family reads as the sampler it names. Only pointers are read this
+-//! way: a load of any other type from a constant global is lowered from the global's form (its
+-//! typed private copy, or the constant blob), and reading it here would change those modules
+-//! without changing what they compute. SCCP then runs again over a body this pass changed, so
+-//! what the constants decide (an aggregate of them, a phi of them, a member of either) folds too.
++//! non-atomic load of a scalar, vector or pointer whose address is a field of a constant global at
++//! constant indices (a `getelementptr` instruction or constant expression over the global's own
++//! value type, its first index 0), where the field's type is the load's. A copy LLVM made through
++//! an integer (a load of a pointer field as an integer of the pointer's size, then `inttoptr` to
++//! the field's type) reads the same constant at its `inttoptr`. The global is never written (it
++//! is `constant`, and initialized by no one else), so every run reads that constant: for a
++//! pointer, the address of the sampler state, which the sampler family reads as the sampler it
++//! names. An aggregate load, a load of another type than the field's, and a field the initializer
++//! leaves `undef` (an unsupplied constant's) are left to the global's lowered form. SCCP then runs
++//! again over a body this pass changed, so what the constants decide (a branch, an aggregate of
++//! them, a phi of them, a member of either) folds too, and the two alternate until a round folds
++//! nothing: a decided branch can expose a further select of the global.
+ 
+ use crate::budget::Meter;
+ use crate::error::Error;
+@@ -29,9 +39,9 @@ use crate::ir::{InstId, InstKind, ModuleParts, Type, TypeId, Value};
+ 
+ use super::rewrite::{apply, scoped, BodyEdit};
+ 
+-/// Read every load of a pointer from a field of a constant global in `body`, and every
+-/// `inttoptr` of such a field's integer copy, as the field's constant (module docs), and say
+-/// whether there was one. Returns `body` itself when there is none.
++/// Read every first-class load from a field of a constant global in `body`, and every `inttoptr`
++/// of a pointer field's integer copy, as the field's constant (module docs), and say whether there
++/// was one. Returns `body` itself when there is none.
+ pub(super) fn fold(
+     body: Body,
+     parts: &mut ModuleParts,
+@@ -61,8 +71,8 @@ pub(super) fn fold(
+     }
+ }
+ 
+-/// Each instruction of `body` that reads a pointer field of a constant global (module docs), with
+-/// the field's constant.
++/// Each instruction of `body` that reads a first-class field of a constant global (module docs),
++/// with the field's constant.
+ fn find(
+     body: &Body,
+     parts: &mut ModuleParts,
+@@ -71,24 +81,27 @@ fn find(
+ ) -> Result<(), Error> {
+     for (id, inst) in body.insts.iter() {
+         m.tick(1)?;
+-        let Some(space) = parts.types.ptr_space(inst.ty) else {
+-            continue;
+-        };
+-        if !matches!(parts.types.get(inst.ty), Some(Type::Ptr { .. })) {
+-            continue;
+-        }
++        let first_class = parts
++            .types
++            .get(inst.ty)
++            .is_some_and(|t| t.is_sized() && !t.is_aggregate());
++        let pointer = matches!(parts.types.get(inst.ty), Some(Type::Ptr { .. }));
+         let ptr = match inst.kind {
+             InstKind::Load {
+                 ptr,
+                 volatile: false,
+                 atomic: None,
+                 ..
+-            } => ptr,
++            } if first_class => ptr,
+             // `inttoptr` of an integer load of the pointer's size: a copy through an integer.
+             InstKind::Cast {
+                 op: CastOp::IntToPtr,
+                 v: Value::Inst(l),
+-            } => match body.insts.get(l).map(|l| (&l.kind, l.ty)) {
++            } if pointer => {
++                let Some(space) = parts.types.ptr_space(inst.ty) else {
++                    continue;
++                };
++                match body.insts.get(l).map(|l| (&l.kind, l.ty)) {
+                 Some((
+                     &InstKind::Load {
+                         ptr,
+@@ -104,7 +117,8 @@ fn find(
+                     ptr
+                 }
+                 _ => continue,
+-            },
++                }
++            }
+             _ => continue,
+         };
+         let Some((g, path)) = field_address(body, parts, ptr) else {
+diff --git a/crates/metal2vulkan-air/src/canon/mod.rs b/crates/metal2vulkan-air/src/canon/mod.rs
+index bd05d94..de7b8e6 100644
+--- a/crates/metal2vulkan-air/src/canon/mod.rs
++++ b/crates/metal2vulkan-air/src/canon/mod.rs
+@@ -484,6 +484,7 @@ pub fn specialize_dynamic(
+     let emap = erase::erase_consts(&mut parts.consts, m)?;
+     erase::erase_globals(parts.globals.values_mut(), &emap);
+     erase_functions(&mut parts, &emap, m)?;
++    prune_entry(&mut parts, func, &fcs, &name, m)?;
+     // The entry block always runs: a value use there of an unsupplied constant is SCCP's first
+     // refusal, known before the inlined body is built.
+     let entry_refusal = |consts: &ConstTable, m: &mut Meter| {
+@@ -567,11 +568,17 @@ pub fn specialize_dynamic(
+     };
+     body.release(m);
+     let body = solved;
+-    // A pointer loaded from a field of a constant global is the field's constant: a `constexpr
+-    // sampler` that SCCP's folded select picked is its sampler state. SCCP runs again over a body
+-    // that changed, to fold what those constants decide.
+-    let (body, folded) = const_loads::fold(body, &mut parts, m)?;
+-    let body = if folded {
++    // A value loaded from a field of a constant global is the field's constant: a `constexpr
++    // sampler` that SCCP's folded select picked is its sampler state, and an uber-shader's
++    // configuration struct of function constants is its members. SCCP runs again over a body that
++    // changed, to fold what those constants decide; the two alternate until a round folds nothing.
++    let mut body = body;
++    loop {
++        let (next, folded) = const_loads::fold(body, &mut parts, m)?;
++        if !folded {
++            body = next;
++            break;
++        }
+         let solved = {
+             let mut cx = sccp::Context {
+                 folder: fold::Folder {
+@@ -583,13 +590,11 @@ pub fn specialize_dynamic(
+                 fcs: &fcs,
+                 name: name.clone(),
+             };
+-            sccp::run(&body, &mut cx, m)?
++            sccp::run(&next, &mut cx, m)?
+         };
+-        body.release(m);
+-        solved
+-    } else {
+-        body
+-    };
++        next.release(m);
++        body = solved;
++    }
+     matmul2d::refuse_left(&body, &parts, &ep.stage, &name, m)?;
+     post_check(&body, &parts, &stubs, &name, &control_points(ep), m)?;
+     // Rasterization-rate maps: each `float2` map call becomes Apple's GPU decoder of the parameter
+@@ -783,6 +788,70 @@ fn erased_entry(
+ }
+ 
+ /// Erase every defined function's body in place, one at a time, each body replaced freed.
++/// The entry's own blocks that its function constants leave unreachable, and its loads from
++/// fields of constant globals (`const_loads`), folded before the entry is inlined, so the inliner
++/// copies no callee only a dead block calls. An uber-shader's entry is most of the module and
++/// branches on the constants into every effect it has: QuartzCore's `fixed_frag` entries inlined
++/// 15,700 instructions of which SCCP kept 300, and building, solving and rebuilding the rest was
++/// most of a specialization.
++///
++/// Its calls are opaque here, so what it proves unreachable is unreachable whatever they return,
++/// and the SCCP after inlining reaches the fixed point it reached over the whole body. It runs
++/// only when every declared constant is supplied: an unsupplied constant's taint refuses a use
++/// that only inlining shows is dead (a call argument the callee never reads). Any other refusal
++/// here (a branch on `undef` that a call's constant result would have made dead) leaves the entry
++/// as it was, for the SCCP after inlining to judge; a budget, cancellation or limit is final.
++fn prune_entry(
++    parts: &mut ModuleParts,
++    func: FuncId,
++    fcs: &HashMap<GlobalId, sccp::FcState>,
++    name: &DiagName,
++    m: &mut Meter,
++) -> Result<(), Error> {
++    if fcs.is_empty() || fcs.values().any(|s| !s.supplied) {
++        return Ok(());
++    }
++    let Some(entry) = parts.funcs.get_mut(func).and_then(|f| f.body.take()) else {
++        return Ok(());
++    };
++    let solve = |body: &Body, parts: &mut ModuleParts, m: &mut Meter| {
++        let mut cx = sccp::Context {
++            folder: fold::Folder {
++                types: &parts.types,
++                consts: &mut parts.consts,
++                held: 0,
++            },
++            globals: &parts.globals,
++            fcs,
++            name: name.clone(),
++        };
++        sccp::run(body, &mut cx, m)
++    };
++    let pruned = solve(&entry, parts, m).and_then(|mut body| loop {
++        let (next, folded) = const_loads::fold(body, parts, m)?;
++        if !folded {
++            return Ok(next);
++        }
++        let solved = solve(&next, parts, m);
++        next.release(m);
++        body = solved?;
++    });
++    let kept = match pruned {
++        Ok(body) => {
++            entry.release(m);
++            body
++        }
++        Err(e @ (Error::Budget(_) | Error::Cancelled | Error::LimitExceeded(_))) => return Err(e),
++        Err(_) => entry,
++    };
++    parts
++        .funcs
++        .get_mut(func)
++        .ok_or_else(|| invariant("entry out of range"))?
++        .body = Some(kept);
++    Ok(())
++}
++
+ fn erase_functions(
+     parts: &mut ModuleParts,
+     emap: &[crate::ir::ConstId],
+diff --git a/crates/metal2vulkan-air/src/canon/tests.rs b/crates/metal2vulkan-air/src/canon/tests.rs
+index fb0dad5..93edc0a 100644
+--- a/crates/metal2vulkan-air/src/canon/tests.rs
++++ b/crates/metal2vulkan-air/src/canon/tests.rs
+@@ -1658,7 +1658,18 @@ fn a_deeply_nested_written_global_is_rebuilt_on_a_small_stack() {
+         static_init(&mut m, "init", |f| store(f, five, gaddr));
+         let fty = m.fn_ty(void, &[dev]);
+         let mut f = m.define("k", fty);
+-        let v = load(&mut f, i32t, gaddr);
++        // A volatile read keeps the global: a plain one now reads the rebuilt initializer's leaf
++        // as its constant, and the unused global is pruned.
++        let v = f.push(
++            i32t,
++            InstKind::Load {
++                ptr: gaddr,
++                align: Align::from_bytes(4),
++                volatile: true,
++                atomic: None,
++                range: None,
++            },
++        );
+         store(&mut f, v, arg(0));
+         f.ret(None);
+         let k = f.finish();
+@@ -2359,9 +2370,12 @@ fn a_pointer_loaded_from_a_constant_globals_field_is_the_fields_constant() {
+             assert!(text.contains(kept) && !text.contains(gone), "{text}");
+         }
+     }
+-    // A field of any other type is left to the memory plan: its load stays.
+-    let text = body_text(&picked_field(Some(1), 1).unwrap());
+-    assert!(text.contains("getelementptr"), "{text}");
++    // A field of any other first-class type reads the same way: the picked struct's own `i64`.
++    for (flag, kept, gone) in [(1, "333", "444"), (0, "444", "333")] {
++        let text = body_text(&picked_field(Some(flag), 1).unwrap());
++        assert!(!text.contains("getelementptr") && !text.contains("load"), "{text}");
++        assert!(text.contains(kept) && !text.contains(gone), "{text}");
++    }
+     // Unsupplied, the select stays undecided, as before.
+     assert_eq!(
+         picked_field(None, 0).unwrap_err(),
+diff --git a/crates/metal2vulkan/src/tests/engine_arena.rs b/crates/metal2vulkan/src/tests/engine_arena.rs
+index b138b07..6b1202f 100644
+--- a/crates/metal2vulkan/src/tests/engine_arena.rs
++++ b/crates/metal2vulkan/src/tests/engine_arena.rs
+@@ -1366,7 +1366,7 @@ fn struct_dag_kernel(depth: u32, constant: bool) -> String {
+     let read = if constant {
+         types +=
+             &format!("@g = internal addrspace(2) constant %e{depth} zeroinitializer, align 4\n");
+-        "  %x = load i32, ptr %a, align 4\n  %y = load i32, ptr addrspace(2) @g, align 4\n  %v0 = add i32 %x, %y"
++        "  %x = load i32, ptr %a, align 4\n  %y = load volatile i32, ptr addrspace(2) @g, align 4\n  %v0 = add i32 %x, %y"
+     } else {
+         "  %v0 = load i32, ptr %a, align 4"
+     };
+@@ -1437,7 +1437,8 @@ fn a_struct_dag_is_planned_in_linear_work() {
+ }
+ 
+ /// A struct DAG within the function's room is typed, and keeps its values: `a`'s two words read
+-/// back what was stored, and `@g` (all zero) adds nothing. At 14 levels `@g` (planned first) takes
++/// back what was stored, and `@g` (all zero, read volatile so it
++/// stays in memory) adds nothing. At 14 levels `@g` (planned first) takes
+ /// the room and `a` has its place in the private arena; at 15 levels neither fits, so `@g` is in
+ /// the constant blob too. Each passes L3, and the values are the same typed (3 levels) and untyped
+ /// (15 levels). The CPU interpreter walks a struct type's every path to lay it out, so it does not
+@@ -1501,6 +1502,7 @@ fn a_struct_dag_keeps_its_values_typed_or_untyped() {
+ /// `%e13`) and `%big`'s `32,767 + extra`: with 17 extra members exactly `alloca::MAX_UNSHARED`
+ /// (65,536), with 18 one more. With `constant`, `%big` is the type of `@g`, a closed constant whose
+ /// DAG halves are zero and whose extra member `i` is `i + 1`, and `v0 = t + @g.2`, `v1 = @g.18`;
++/// (volatile reads, so the constant-load fold leaves `@g` in memory and the layout is what is tested);
+ /// otherwise of the alloca `a`, which stores `t` at byte 0 and 7 in member 2 (byte 65,536) and
+ /// reads them back as `v0` and `v1`.
+ fn room_kernel(extra: u32, constant: bool) -> String {
+@@ -1518,10 +1520,10 @@ fn room_kernel(extra: u32, constant: bool) -> String {
+             "@g = internal addrspace(2) constant %big {{ %e13 zeroinitializer, %e13 zeroinitializer{ints} }}, align 4\n"
+         );
+         r#"  %p2 = getelementptr inbounds %big, ptr addrspace(2) @g, i32 0, i32 2
+-  %g2 = load i32, ptr addrspace(2) %p2, align 4
++  %g2 = load volatile i32, ptr addrspace(2) %p2, align 4
+   %v0 = add i32 %t, %g2
+   %q = getelementptr inbounds %big, ptr addrspace(2) @g, i32 0, i32 18
+-  %v1 = load i32, ptr addrspace(2) %q, align 4"#
++  %v1 = load volatile i32, ptr addrspace(2) %q, align 4"#
+             .to_string()
+     } else {
+         r#"  %a = alloca %big, align 4

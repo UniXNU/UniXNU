@@ -1,0 +1,59 @@
+diff --git a/crates/metal2vulkan-air/src/canon/sccp.rs b/crates/metal2vulkan-air/src/canon/sccp.rs
+index e47e683..f89e2fc 100644
+--- a/crates/metal2vulkan-air/src/canon/sccp.rs
++++ b/crates/metal2vulkan-air/src/canon/sccp.rs
+@@ -995,6 +995,30 @@ impl<'b> Solver<'b> {
+         self.set(i, new, m, held)
+     }
+ 
++    /// Whether `v` is an aggregate built by `insertvalue` chains whose only unsupplied-constant
++    /// taint sits in individual inserted members, so those members alone can become `undef`
++    /// (Metal leaves an unsupplied optional constant's value indeterminate) while the rest of
++    /// the aggregate keeps its computed members.
++    fn leafwise(&self, v: Value) -> bool {
++        let mut cur = v;
++        loop {
++            if !matches!(self.lat(cur), Lat::Fc(_)) {
++                return true;
++            }
++            let Value::Inst(i) = cur else { return false };
++            let Some(inst) = self.body.insts.get(i) else {
++                return false;
++            };
++            let InstKind::InsertValue { agg, val, .. } = &inst.kind else {
++                return false;
++            };
++            if matches!(self.lat(*val), Lat::Fc(_)) && !matches!(val, Value::Inst(_)) {
++                return false;
++            }
++            cur = *agg;
++        }
++    }
++
+     /// After the fixpoint: every reachable non-pure use of an unsupplied constant needs the
+     /// caller's value, and a reachable branch on a literal `undef`/`poison` is refused.
+     fn check(&self, cx: &Context<'_>) -> Result<(), Error> {
+@@ -1031,6 +1055,11 @@ impl<'b> Solver<'b> {
+                         )));
+                     }
+                 }
++                if let InstKind::Ret(Some(v)) = &inst.kind {
++                    if self.leafwise(*v) {
++                        continue;
++                    }
++                }
+                 let mut needs = None;
+                 inst.kind.for_each_value(|v| {
+                     if let Lat::Fc(index) = self.lat(v) {
+@@ -1070,7 +1099,11 @@ impl<'b> Solver<'b> {
+                 let deletable = is_pure(&inst.kind)
+                     || is_normalize(&inst.kind)
+                     || is_defined_arg(&inst.kind, cx.folder.consts, cx.fcs).is_some();
++                let leaf_chain = matches!(inst.kind, InstKind::InsertValue { .. })
++                    && matches!(lat, Lat::Fc(_))
++                    && self.leafwise(Value::Inst(i));
+                 match (&inst.kind, lat) {
++                    _ if leaf_chain => {}
+                     (_, Lat::Const(c)) if deletable => edit.replace(i, Value::Const(c)),
+                     (_, Lat::Fc(_)) if deletable => {
+                         let undef = cx.folder.consts.intern(

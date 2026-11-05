@@ -1,0 +1,16 @@
+diff --git a/crates/metal2vulkan-runtime/src/linear_plan.rs b/crates/metal2vulkan-runtime/src/linear_plan.rs
+index acf8ae7..2fd9878 100644
+--- a/crates/metal2vulkan-runtime/src/linear_plan.rs
++++ b/crates/metal2vulkan-runtime/src/linear_plan.rs
+@@ -839,6 +839,11 @@ pub(super) fn holding(
+         return Ok(Holds::Texels);
+     };
+     let reads = only_reads(usage);
++    // SweetMetal2 (Turnip on Adreno 640 / RMX1931): `AliasWrites` aliases padded IOSurface writers in place
++    // when `tile_store_fits` holds (CA's 1125x2436 BGRA8 frame, rows 4608 bytes apart: 1125 rounded to 16 is
++    // 4544 <= 4608 and 2436 % 4 == 0, avoiding an 11.5 MB shadow copy in and out every frame); when a 16x4 GMEM
++    // tile store would spill past `row_pitch` or the buffer's end (e.g. an odd-height two-plane `_RB4` widget
++    // surface), `texture.rs` downgrades `policy` to `Alias` so writers safely shadow instead of clobbering plane 1.
+     if policy == PaddedReadsPolicy::AliasWrites || (reads && policy == PaddedReadsPolicy::Alias) {
+         return Ok(Holds::Padding);
+     }
