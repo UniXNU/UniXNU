@@ -47,6 +47,16 @@
     closed and reopened: **WebKit.GPU started once and stayed up, no crash** (device in 572 ms). backboardd and
     SpringBoard still run the old Turnip until a reboot. Meanwhile CommCenter crash-loops (SIGABRT / SIGSEGV, ~10 in a
     few minutes; not in launchd.plist per the 2026-10-30 note, so something spawns it) - unrelated, costs CPU.
+  - **FREEZE ~19:00 (same boot): GPU memory ran out.** With Safari busy (a com.apple.WebKit process 87-94 % of a core,
+    backboardd 66-101 %), the kernel refused 735 v2 BoAllocs of 25165824 bytes (`SweetAdreno.cpp` BoAlloc:
+    IOBufferMemoryDescriptor create/map/prepare failed - which one is not logged; prepare wires the pages, so likely the
+    wired limit). backboardd[57] (old Turnip) then crashed SIGSEGV far 0 in `tu_emit_subpass_begin+864` <-
+    `tu_CmdBeginRenderPass2` <- metal2vulkan `RenderCommandEncoder::end_pass` (render.rs:4008): a render pass begun after
+    a failed allocation. The relaunched backboardd (683, new Turnip) got `device refused: OutOfMemory(Device)` 15+
+    times: no compositor, frozen screen. User rebooted to fastboot; 0248 booted again 19:0x (WebKit.GPU still listed).
+    Log: scratchpad `umi-freeze-1.log`. **Missing:** per-process GPU memory totals (no line says who holds what), and
+    whether a dead client's BOs are freed at once. Next: log per-client BO bytes every 10 s and at the first failed
+    BoAlloc; then a cap per client, and metal2vulkan/Turnip must not record a pass after an allocation fails.
   - **phone/turnip/0004**: the log also needs `TU_DARWIN_BO_LOG=1`. Built in a fresh
     `work/turnip/build-ios-272`: the old `build-ios` could not regenerate, its cross file named the removed iPhoneOS
     27.1 SDK (`ios16.cross` now names 27.2, old one `ios16.cross.sdk271`; needs `mesa/venv/bin` on PATH for Python 3.10+;
