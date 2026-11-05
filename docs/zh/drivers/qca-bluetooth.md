@@ -90,7 +90,10 @@ BlueTool 保留原有 Mach 服务，以 root 身份运行并启用事务。Wi-Fi
 临时启动镜像均构建成功。实际载荷包含蓝牙入口、H4/波特率属性、签名运行时和
 原有 Data 种子，并关闭自动重启。扫描、配对、音频、功耗和共存的上机验证待完成。
 
-组件发布到目录前，在 UniXNU 仓库显式选择本地源码：
+当前设备启动已完成覆盖挂载，随后 launchd 报 `No service cache`。蓝牙 DMA
+分配在 UART 启动前报 ENOSPC，需先修复启动，再测功能和性能。
+
+在 UniXNU 仓库显式选择本地源码：
 
 ```sh
 ./unixnu build kernel payload -D /path/to/UniXNU-sheng --os 27 \
