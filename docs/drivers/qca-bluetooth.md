@@ -27,8 +27,9 @@ The board stages hashed firmware under `firmware/qca` in the Data addon.
 
 `sheng-bluetooth=1` starts the UART14 worker after addon installation. The board
 binds GENI SE6 at 0x898000, IRQ 493 and QUP2 DMA SID 0x423. SM8550 operations
-select the exact 51.2 MHz source for 3.2 Mbaud and map a 32 KiB DMA aperture
-with native 4 KiB pages. Configuration locks coordinate clock votes and SMMU
+select the exact 51.2 MHz source for 3.2 Mbaud. The board maps its 32 KiB DMA
+buffers through the firmware-managed bypass bank shared with touch and audio,
+using 64-bit physical addresses. Configuration locks coordinate clock votes and SMMU
 allocation with touch and audio. GPIO79 wakes the gated UART through the shared
 TLMM IRQ. The UART requires protocol-2 microcode from the boot firmware.
 
@@ -110,16 +111,17 @@ contains the Bluetooth exports, H4/baud properties, signed runtime and preserved
 Data seed, with automatic reset disabled. Device scanning, pairing, audio,
 power and coexistence measurements are pending.
 
-The current device boot reaches the overlays, then launchd reports `No service cache`.
-The loader trusts and sends both the Bluetooth cache and the Wi-Fi baseline;
-launchd rejects both at its cache parser. All 715 system jobs remain present.
-The opt-in `sheng-cache-log=1` diagnostic records the actual parser input length
-and hash on a matched 24A446 failure stack.
+The device reaches the overlays, then launchd reports `No service cache`.
+Its parser input is 55 bytes longer than the packed cache and has a different
+hash; all 715 system jobs remain present in the packed dictionary. Under
+`sheng-cache-log=1`, the matched 24A446 failure stack publishes a bounded
+snapshot. A cache-only diagnostic export contains that input, both filesystem
+cache paths and the loader log. GPU and latency capture stay disabled.
 
-Bluetooth DMA allocation reports context-bank ENOSPC with 98 free stream slots.
-The allocator accepts disabled banks by SCTLR.M and retains selection evidence
-without extra MMIO scans. Register simulation and target compilation pass;
-device startup, feature and performance measurements remain pending.
+The UART uses the board's shared firmware bypass route after private-context
+register readback fails. This removes 16 KiB of private tables and shared-bank
+fault polling. The shared-bank fixture and target compilation pass. Device
+UART startup, native features, power and coexistence measurements are pending.
 
 Select the local component from the UniXNU checkout:
 
