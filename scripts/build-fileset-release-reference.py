@@ -131,7 +131,7 @@ def main():
     # the authenticated pointer of an undefined weak symbol fails the link. The private copy stubs them: this
     # comparison kernel never runs, the prelink step reads its layout.
     build_log = (output / f'{mode}-build.log').read_text()
-    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_log_rounds))"', build_log, re.M)))
+    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_log_rounds|boot_cache_input_capture))"', build_log, re.M)))
     if stub_names:
         (output / 'native-stubs.c').write_text(''.join(f'long {name[1:]};\n' for name in stub_names))   # the linker names carry the leading underscore
         iphoneos = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
