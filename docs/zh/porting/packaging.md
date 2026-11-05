@@ -119,6 +119,10 @@ GPU 和音频更新放在 addon 中，不修改 seed。构建会检查 APFS 卷 
 本次生成的内核配置，并把输入 SHA-256 写入打包清单。只打包 payload 时，若 UUID
 与内核配置不同则报错，要求重新编译内核。
 
+内核插件写入器显式设置替换后的文件长度与权限，较短的更新会截掉旧尾巴，内容
+相同的文件跳过写入。`python3 scripts/check-addon-writer.py` 使用 VFS 模拟及
+ASan/UBSan 检查该路径。
+
 **首次安装**可用 `scripts/package.sh --os 27 --init-data`，从 IPSW 的初始
 `private/var` 生成 APFS seed，采用设备配置的 `data_gib` 和 Setup 偏好，并把新
 UUID 写入内核配置。该命令只写本机构建文件，不擦除或刷写设备。此后应一直保留

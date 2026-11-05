@@ -112,16 +112,22 @@ Data seed, with automatic reset disabled. Device scanning, pairing, audio,
 power and coexistence measurements are pending.
 
 The device reaches the overlays, then launchd reports `No service cache`.
-Its parser input is 55 bytes longer than the packed cache and has a different
-hash; all 715 system jobs remain present in the packed dictionary. Under
-`sheng-cache-log=1`, the matched 24A446 failure stack publishes a bounded
-snapshot. A cache-only diagnostic export contains that input, both filesystem
-cache paths and the loader log. GPU and latency capture stay disabled.
+The complete parser, system-path and Data-path copies contain the packed cache
+followed by 55 stale bytes. The addon writer explicitly sets the replacement
+file size after successful writes. The ASan/UBSan writer fixture reproduces the
+tail and verifies truncation; device verification is pending.
 
-The UART uses the board's shared firmware bypass route after private-context
-register readback fails. This removes 16 KiB of private tables and shared-bank
-fault polling. The shared-bank fixture and target compilation pass. Device
-UART startup, native features, power and coexistence measurements are pending.
+The firmware-managed UART DMA route and protocol-2 microcode are confirmed.
+The initial version request reports a line error before TX. The board starts RX
+after controller reset release, and GENI clears reset-time IRQ status before
+arming RX. Live fault IRQ values are retained for one error report. This keeps
+16 KiB of private tables and shared-bank polling out of the path. Target
+compilation and the GENI model pass; native features, power and coexistence
+measurements remain pending.
+
+`sheng-cache-log=1` captures the loader log and exports bounded parser and
+filesystem cache snapshots on a matched 24A446 failure. GPU and latency capture
+stay disabled.
 
 Select the local component from the UniXNU checkout:
 
