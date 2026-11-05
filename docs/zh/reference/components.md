@@ -63,7 +63,7 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 新组件发布到目录前，可以显式选择本地源码：
 
 ```sh
-./unixnu tree -D /path/to/device --local-module driver:QcaBluetooth=/path/to/QcaBluetooth
+./unixnu tree -D /path/to/device --local-module driver:MyDriver=/path/to/MyDriver
 ```
 
 新模块会链接到装配树，由使用它的板级代码提供集成步骤。目录中已有的组件仍需在
