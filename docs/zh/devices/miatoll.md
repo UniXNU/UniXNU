@@ -6,7 +6,7 @@
 
 Redmi Note 9S family \(miatoll, SM7125\) on the iPadOS 17.7.11 profile through Mu-Silicium and DarwinBoot. First-console stage: nothing is device-verified yet.
 
-源记录: [porting.toml](https://github.com/qdizax-w/UniXNU-miatoll/blob/fdff52769120e0b6469b14ef4c00bf08de2a5193/porting.toml), `fdff52769120e0b6469b14ef4c00bf08de2a5193`.
+源记录: [porting.toml](https://github.com/qdizax-w/UniXNU-miatoll/blob/6a5ac0e2d3a0c9a48d36050cf533eed22f60c492/porting.toml), `6a5ac0e2d3a0c9a48d36050cf533eed22f60c492`.
 
 本页按设备记录自动生成。
 

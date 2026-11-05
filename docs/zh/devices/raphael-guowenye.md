@@ -1,0 +1,577 @@
+# Independent Redmi K20 Pro port; compile-only default with separately gated native handset bring-up \(guowenye\)
+
+[guowenye/UniXNU-raphael](https://github.com/guowenye/UniXNU-raphael)
+
+<div v-pre>
+
+Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/SystemOS, launchd and display-service progress; visible desktop incomplete and historical raw verification logs private.
+
+源记录: [porting.toml](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/porting.toml), `4a4ca3e2301f8c6a5901786fc88206942607e0bd`.
+
+本页按设备记录自动生成。
+
+| 部分 | 状态 |
+| --- | --- |
+| [配置](#configuration) | `implemented` |
+| [固件与启动](#firmware) | `implemented` |
+| [CPU 与中断](#cpu) | `implemented` |
+| [内存与 DMA](#memory) | `implemented` |
+| [存储与根卷](#storage) | `implemented` |
+| [显示](#display) | `implemented` |
+| [输入](#input) | `planned` |
+| [GPU](#gpu) | `planned` |
+| [网络](#network) | `planned` |
+| [音频](#audio) | `planned` |
+| [电源](#power) | `implemented` |
+| [镜像组装](#packaging) | `implemented` |
+| [诊断](#diagnostics) | `implemented` |
+
+## 配置 {#configuration}
+
+`implemented`
+
+组件: `ArmDTPlatform`.
+
+### 硬件与依赖
+
+- SM8150 from this handset and Xiaomi raphael-p-oss 663db50e195a8a54c8565ac4ab0c6d9ba7d80db0; arm64 and ipados-17.7.11-21H461 profiles.
+
+### 配置
+
+- Format2; soc\_source=sm8150; kit=raphael; canonical raphael\_defconfig plus arch:common.config and soc:sm8150.config. Arrays replace inherited lists. Local SoC/XNU/edk2 overrides are in ignored local.toml.
+
+### 操作步骤
+
+- From workspace: python3 scripts/check\_repository\_layout.py; run unixnu defconfig raphael\_defconfig, status --json and tree with -D UniXNU-raphael --out artifacts/layout-check; run scripts/porting-record.py check --device UniXNU-raphael from UniXNU.
+
+### 开发经验
+
+- The default intentionally disables unqualified hardware. Explicit handset wrapper adds SoftwareAES, VirtioMmioBlock and VerifiedRoot, handset-storage.series and native-diagnostic.series, storage/root/UFS recipes. ArmCpu upstream is not linked; independent SoC archive occupies its integration slot. Publication20261105 splits device and SoC repositories; feeds and lock pin guowenye/UniXNU-sm8150-common at c77321d82010250d6f100d7c17d7e721c17782bf. Public workspace orchestration, tests and source locks are retained under development/; no private inputs or generated images are included.
+- License publication20261105 adds the full upstream BSD-2-Clause-Patent text, preserves existing file notices and pins the SoC at its licensed source commit c77321d82010250d6f100d7c17d7e721c17782bf. Only licensing, documentation and source references changed; no build or handset result is added.
+
+### 完成条件
+
+- All profile roots, source pins, overrides, component closure and patch order resolve; package maps to kits/raphael.
+
+### 当前范围
+
+- Shared SoC is published and pinned in feeds.toml and unixnu.lock. Default config is not handset qualification; complete production recipes remain incomplete.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Published device source includes preserved workspace scripts, tests and source locks under development/. Keep the reviewed SoC commit pinned and collect new immutable public verification evidence separately.
+
+### 证据
+
+- `source`: [Canonical board and ordered static bootstrap inputs.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/board.toml)
+- `source`: [Explicit handset development configuration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/configs/raphael_handset_storage_defconfig)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 固件与启动 {#firmware}
+
+`implemented`
+
+组件: `DarwinBoot`.
+
+### 硬件与依赖
+
+- Observed Android boot header v1/pagesize4096; current modified Android image, pinned Mu Basecore and DarwinBoot; EL1 handoff and observed FDT.
+
+### 配置
+
+- Diagnostic DSC/FDF and PCD gates live in package/firmware/RaphaelPkg. PSCI SMC and RAM policy come from observed inputs; entry return and watchdog are explicit diagnostic operations.
+
+### 操作步骤
+
+- Use workspace scripts/build\_sec\_dxe.py or build\_handset\_sec\_dxe.py through the frozen handoff procedure; inspect the FD and image before any fastboot boot.
+
+### 开发经验
+
+- Bounded SEC/DXE and Darwin entry supply native XNU; success does not make vendor UEFI protocols generally reusable. Canonical source is now inside the board package.
+
+### 完成条件
+
+- Complete reproducible firmware/payload recipe, verified input inventory, entry and recovery evidence for the selected image.
+
+### 当前范围
+
+- No production firmware table or automatic blob extraction recipe is declared. Owner keys, binary images and device identity remain private; local frozen paths are workspace inputs.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Declare a standard firmware recipe only after the diagnostic resource/gate contracts can be represented without bypasses.
+
+### 证据
+
+- `source`: [Diagnostic platform configuration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Diagnostic.dsc)
+- `source`: [Diagnostic firmware integration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Diagnostic.fdf)
+- `source`: [Existing private source hashes and use boundaries.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/proprietary-files.txt)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## CPU 与中断 {#cpu}
+
+`implemented`
+
+### 硬件与依赖
+
+- Observed affinities0..0x700; GICD0x17a00000/0x10000,GICR0x17a60000/0x100000; physical timer19.2MHz/INTID18.
+
+### 配置
+
+- Independent SoC kits/Sm8150Platform CPU/GIC provider; one enabled boot CPU. Generic ArmCpu source is not linked. Explicit CPU profile enables architectural timer.
+
+### 操作步骤
+
+- Build with workspace scripts/build\_native\_bootstrap.py --cpu --native-diagnostic; inspect real XNU ABI compile and bounded IRQ/EOI/return telemetry.
+
+### 开发经验
+
+- Latest successful native phone run recorded1493 timer IRQs and1493 EOIs; IPI0. Timer-backed BSD sleep/wake preceded APFS/PID1 execution.
+
+### 完成条件
+
+- Native timer delivery, scheduler progress and recovery reproducible within the bounded single-CPU contract; SMP needs distinct evidence.
+
+### 当前范围
+
+- No SMP, secondary-core startup, IPI or global interrupt ownership qualification.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Continue original PID1 execution under the existing timer/watchdog contract; qualify other cores separately.
+
+### 证据
+
+- `source`: [Independent CPU archive recipe and XNU ABI use.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-cpu.py)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 内存与 DMA {#memory}
+
+`implemented`
+
+### 硬件与依赖
+
+- Observed RAM \[0x80000000,0xbbb00000\),\[0xc0000000,0x180000000\),\[0x180000000,0x280000000\), fixed reservations and diagnostic ownership records.
+
+### 配置
+
+- Canonical DTS includes SoC resources; only generated handset ADT/policies grant diagnostic owned spans. UFS DMA gate validates bounded owned buffers and restores controller state.
+
+### 操作步骤
+
+- Compile DTS with dtc and compare memory/reservation/CPU/GIC resources; run read-only extent/DMA host validators and inspect handoff policies.
+
+### 开发经验
+
+- 171336Z704MiB handset contrast:initial VM1801664KiB pages,378 independent UFS records,dropped0,complete360s snapshot;599 frames/0 transfer errors,22 watchdog checkins/0 failures,no recorded pressure kill or panic,3.70GiB reads versus512MiB5.12GiB.SpringBoard still waits for LS seeding;lsd parses application Info.plist.Android/root/transient cleanup verified;full return failed/null,no desktop.Next retains704MiB and uses qualified720/780s observer contract.
+- 512MiB rootless QEMU qualified all39 checks after alignment-aware one-L1 placement and exact bootstrap-table bound256; captured real512MiB tables and corrupted-descriptor rejection also pass ASan/UBSan. Handset185720Z confirms real\_phys\_size536870912 and original launchd main with restored snapshots and Android cleanup; same critical tzinit status30 panic rejects full checkpoint. No new RAM ownership generalization.
+- Explicit512MiB allocation candidate retains audited handset RAM/guards and one-L1 exact recovery mapping;39 host boundary/negative checks pass. Same frozen240s kernel; subsequent185720Z independently confirms actual allocation and recovery.
+- DT-described RAM is not free RAM. Firmware, native mappings, signed extent plans and DMA ownership are separate contracts; dynamic Linux pools are not allocated by inspection DTS.
+
+### 完成条件
+
+- Every touched span has explicit owner/lifetime/translation/cache and DMA policy; failures retain buffers until safe restoration.
+
+### 当前范围
+
+- No general SMMU takeover, complete RAM ownership or arbitrary concurrent DMA qualification.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Preserve diagnostic allocations; extend ownership only with measured ranges and a recovery test.
+
+### 证据
+
+- `source`: [Board RAM and fixed reservations; inspection-only.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/dts/raphael.dts)
+- `source`: [Sanitized observed resource inputs.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/hardware-observations.json)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 存储与根卷 {#storage}
+
+`implemented`
+
+组件: `VirtioMmioBlock`, `VerifiedRoot`, `SoftwareAES`.
+
+### 硬件与依赖
+
+- Observed UFS controller/LUN/GPT, owned DMA, inherited initialized PHY/clocks/reset/SMMU state, immutable unencrypted OS/SystemOS extents, signed per-block owner/root policies and original storage ABI.
+
+### 配置
+
+- SoC RaphaelUfsBlock is the actual handset provider. VirtioMmioBlock contributes audited original storage bindings, not a claim of phone VirtIO. Read-only requests are restricted to authorized extents; no cold controller/PHY initialization.
+
+### 操作步骤
+
+- Use explicit --handset-ufs --native-diagnostic build with frozen storage-audit, storage-candidate and root-policy reports; run QEMU gate and controlled handset return procedure only with matching policies.
+
+### 开发经验
+
+- 165251Z CommCenter-focus run:375 independent UFS records,305200 bytes,dropped0,complete360s snapshot and RETURNING;2 display frames,no transfer error,watchdog18 checkins/0 failures,no panic reason recorded.SpringBoard still waits for LS database;lsd in original signature scan;CommCenter main in CFRunLoop with active workers,no fixed deadlock proven.Android/root/new boot ID/transient cleanup verified;full return remains failed/null,no desktop.Next704MiB memory contrast retains360/420s contract and original service policy.
+- 704MiB exact boot-grant option implemented in producer,SEC,MMU/pmap recovery,decoder and image checker after confirmed vm-pageshortage. Production C transition tables match independent Python decoder for256/512/704MiB;three rejection cases andASan/UBSan pass. Original loader already supports this aligned capacity. ADT changes only memory-size. New payload ready;old extent identity rejected beforeQEMU. No704MiB handset orQEMU success yet;current handset remains frozen512MiB CommCenter snapshot.
+- 163051Z automatic return and cleanup:429 UFS log records,98309 bytes,dropped0. Original watchdogd reason persisted before unchanged panic and matches independently CRC-verified static text:CommCenter four induced crashes and180s without checkin;backboardd and other listed services healthy. Full delta overflow remains failed/null. Original vm-pageshortage kills observed. Next diagnostic samples CommCenter in existing8 slots at qualified360/420s contract before observed368/500s panics;no desktop or baseband root-cause claim.
+- 102222Z handset confirms RAM Data isssd1. Automatic Android return and normal cleanup completed;297 independent UFS records,81044 bytes,dropped0. Original watchdogd selector2 requested panic before planned snapshot;1MiB delta overflow keeps full report failed/null. Independent7/8 mutable CRC ranges prove panic source but not its text. Next candidate persists original2048-byte selector2 reason through existing UFS log before unchanged panic; no desktop verified.
+- 095342Z independent UFS snapshot:724 records/no loss,2349 retired frames,58 watchdog checkins/no failure, no desktop. lsd progressed from IconServices sync wait to original signing scan; IconServices ISStoreMapTable faults in original throttle\_lowpri\_io. OS/SystemOS report isssd1 while RAM Data reports isssd0. NativeRamBlock now publishes the standard solid-state medium dictionary before family startup, covering RAM and optional UFS flash store; original throttle policy,512MiB and720/780s bounds retained. Build and handset qualification pending.
+- Sparse Data first all-zero writes now leave missing pages unallocated using serialized4KiB staging. Partial/short copies, existing-page zero writes and optional write-through zero commits preserved.4000 differential operations plus zero/short/OOM, existing overlay/direct and extracted production batching tests pass ASan/UBSan. Memory/desktop effect awaits handset.
+- UFS-backed immutable volumes now publish standard Device Characteristics / Medium Type = Solid State before storage-family startup. Phone040940Z reported isssd0 while backboardd remained in dyld ObjC fixups and SpringBoard waited for BKSDisplayGetMainScreenInfo. Phone043333Z persisted325 records/288724 bytes with zero drops and complete service snapshot after manual Android recovery. OS/SystemOS report isssd1, confirming the property; display clients/frames remain0 and backboardd is still in dyld selector fixups. Existing counters show roughly15MiB/s early and5MiB/s in service startup with zero read errors; full recovery checkpoint and desktop remain rejected. A subsequent candidate batches contiguous native reads up to16KiB across five owned DMA pages while retaining each original4KiB authentication before publishing the whole chunk. Extent37, real UFS-model45 and actual-controller-method10 ASan/UBSan cases pass; full887-record kernel, prelink/payload and39 recovery-QEMU checks pass. Handset045614Z independently persisted371 records/297594 bytes with zero drops and a complete snapshot after manual Android recovery; early throughput reaches about21MiB/s with roughly3.95 blocks/command, service startup remains about5MiB/s with roughly1.2 blocks/command and zero read errors. Display clients4/frames0;11 watchdog checkins without failure. Full checkpoint remains failed. Preallocation with Android fallocate then in-place dd fixes the observed final-log-block fragmentation without relaxing the original contiguous-allocation gate.
+- The native XNU provider now exposes a kernel-only synchronous diagnostic write entry with lifecycle/I/O serialization, aligned policy copy, exact capacity/preimage checks, immutable OS/SystemOS extent exclusion, explicit permission revocation and error quiescence. Default profiles do not invoke it or expose it to userspace. An explicit private --native-ufs-write-policy diagnostic links an owned8256-byte policy and one normal-thread observer caller, waits for controller readiness, stops after one terminal result, and requires exact preflight and post-reboot readback. The complete887-record XNU build and prelink pass; one linked caller and exact policy bytes are checked in both images. Handset100353Z fully passed native once-only write,63 stages,result/OCS0,revoked permission,nonce/full checkpoint,normal-reboot file/raw-media/guards and Android cleanup. The10-poll observer recorded1402.405ms/3 pets;205.900s automatic Android return. First094934Z independently wrote/persisted but failed the unchanged &gt;=2-pet checkpoint gate after208ms; preserved failed report. Explicit --ufs-console-log-report now links a nonblocking original-console queue and one bounded append session over a newly allocated immutable plaintext log file. Each4096-byte record contains a private boot identifier, sequence, physical counter and CRC; normal-thread flushes use WRITE10/FUA, SYNCHRONIZE CACHE and readback. Android extraction does not require a matching FDT return. Host queue/append ASan/UBSan and decoder tests pass. Phone030111Z followed by manual Android recovery independently qualifies191 persistent sequential records/60664 bytes/917 lines, zero reported drops, increasing counters, no invalid tail and unchanged guards. The original FDT checkpoint remains rejected; the log reaches service snapshot completion/RETURNING with clients/frames0.
+- SEC C++ now explicitly inherits -mstrict-align: the frozen write candidate merged Completion initialization into an unaligned64-bit store at Transport+0x26c before the first command. AArch64 MMU-off validation with explicit SCTLR.A reproduces the old alignment fault and passes with strict alignment; complete firmware/recovery QEMU passes21 checks. The repaired candidate20261102T012856Z passed nonce, write/FUA/flush/readback and post-reboot media/guard checks; the two previous runs returned no native record and their media remained unchanged after Android recovery.
+- Explicit diagnostic UFS write transport now implements WRITE10/FUA and exact-range SYNCHRONIZE CACHE10. Real QEMU8.2.2 UFS model passes68 cases plus40 cases after process restart, including actual firmware preimage gate, unchanged bytes outside the allocation, direction/FUA encoding, range/LUN/partial-block denial and residual/SCSI/OCS failures without retries. Handset20261102T012856Z independently passed all63 write-stage bits, ordinary Android reboot and exact file/raw-media readback with unchanged guards and full root/FDT cleanup. This qualifies one SEC diagnostic block, not native XNU writes or persistent Data. A new plaintext immutable12KiB project allocation grants only its middle4KiB, with both surrounding blocks preserved; firmware checks preimage before writing. Existing4392-byte FDT record is reused as version6 and normal Android reboot is followed by exact file/raw-media readback.
+- Handset190907Z fully passed: original APFS Data stage4/status0/readonly0;226 seed entries and611715 bytes written/read back;RamBlock130 writes/zero failures/1437696 resident bytes. Original launchd early boot complete and SpringBoard PID26 observed;6677 PID1 syscalls. Data remains ephemeral; immutable OS/SystemOS UFS stays read-only. See evidence/native-ephemeral-data.json.
+- Handset20261101T175421Z:120.098s,204 syscalls,1489957888 UFS bytes, zero transport/signature failures. Handset182129Z qualified owned DMA Normal-NC with both page AT/PAR guards,246 syscalls,1872835584 UFS bytes andzero errors; registers remain Device. Full132-page/135462-byte pmap plus recovery/cleanup passed.
+- Local phone root disk1s1 and SystemOS union mounted;2159 reads/30929920 bytes/zero hardware failures. One terminal diagnostic abort explains final errno16. Apple autherr80 is not Apple seal success.
+
+### 完成条件
+
+- Persistent read-only OS/SystemOS supply root and original PID1; sustained reads and bounded handback have evidence. Writable persistent Data and service boot need separate acceptance.
+
+### 当前范围
+
+- The SEC and explicit native XNU single-block diagnostics have handset persistence proof; this does not qualify generic writable storage or continuous logs; new explicit diagnostic-window WRITE10/FUA and bounded SYNCHRONIZE CACHE10 implementation passes the isolated UFS model; generic writable volumes and persistent Data remain unverified. No GPT modification, cold PHY/clock/reset management, generic LUN access or persistent Data qualification. Owner authentication is not the Apple seal.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Preserve successful SEC and100353Z native write/persistence evidence. The used preimages are spent. Prepare a fresh owned policy before any new write and implement bounded boot-ID/sequence/CRC log records, synchronization and Android extraction separately. Keep OS/SystemOS read-only.
+
+### 证据
+
+- `source`: [Independent handset storage build and original ABI binding.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-ufs.py)
+- `source`: [Read-only controller integration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/patches/xnu/raphael-ufs-controller.patch)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 显示 {#display}
+
+`implemented`
+
+### 硬件与依赖
+
+- Phone Samsung EA8076 command-mode panel1080x2340; framebuffer physical address/stride/format/lifetime and display power still require a native handoff contract.
+
+### 配置
+
+- Board display adapter is packaged under kits/raphael. Explicit handset-display candidate adds original-family display to qualified ephemeral Data, gated by exact chosen unixnu,diagnostic-display=1. Firmware already backs up the full inherited framebuffer. Original358-slot ABI and dynamic Boot\_Video mapping remain checked.192545Z full887-record build and explicit193342Z QEMU opt-in branch passed:family/IOSurface/metaclass0,headless zero frames.193023Z handset fully passed original display startup and1080x2340 framebuffer mapping/full2527200-pixel restore with zero mismatch;clients/frames0,SpringBoard27 observed. No native UI frame yet. Next read-only selected-service saved-state capture keeps the240s budget.
+
+### 操作步骤
+
+- Compile the board adapter with its audited original display ABI; run existing QEMU display cycles; establish phone scanout/pixel evidence independently.
+
+### 开发经验
+
+- The handset ADT omitted the resource-free direct arm-io display-subsystem and chosen display-scale enumeration policy already required by the same original userland in QEMU. The new generator adds the inherited framebuffer declaration and one logical pixel per physical pixel; strict normalization rejects extra MMIO/IRQ and preserves all qualified hardware bytes. Nine local host guards, staging QEMU and240s unchanged-kernel phone155924Z passed with full restoration and Android cleanup. Display clients/frames remain0 and original SpringBoard waits for both cfprefsd roles; backboardd is not observed. The360s comparison161209Z recovered matching-nonce CRC-verified globals with3 display clients and backboardd startup, still0 submissions/frames; original watchdogd critical exit panic rejects the full checkpoint. Android return520.653s, full framebuffer restore and reboot/root/transient cleanup passed. No desktop claim.
+- QEMU display state and firmware GOP/pixel diagnostics cannot establish a handset XNU frame or SpringBoard desktop. The migrated recipe builds 358 original ABI slots plus the offline keystore. A pinned XNU allocation macro omits trailing kt\_zshared: allow that warning category with -Werror retained, matching the existing UFS recipe.
+
+### 完成条件
+
+- Visible native handset XNU frame, correct format/stride/lifetime, refresh and brightness recovery; desktop milestone additionally requires real system UI.
+
+### 当前范围
+
+- No handset desktop/display-presentation qualification; full panel timing/backlight/power hooks remain open.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Build and gate the explicit handset display candidate on the qualified512MiB/Data/240s contract, then require original-family service/frame counters and independent visible-frame observation; no keystore or panel-MMIO policy change.
+
+### 证据
+
+- `source`: [Board display development adapter.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/drivers/RaphaelDesktopDisplay.cpp)
+- `source`: [Audited ABI recipe using assembled package.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-desktop-display.py)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 输入 {#input}
+
+`planned`
+
+### 硬件与依赖
+
+- Observed qpnp\_pon/gpio-keys and Goodix GT9889 binding; sensor bus, pins/IRQ, protocol, firmware, touch IDs and coordinate transform need device-specific validation.
+
+### 配置
+
+- Firmware PMIC key diagnostics are separate from an XNU HID/Goodix driver; no other-board touch component selected.
+
+### 操作步骤
+
+- Inventory pinned Xiaomi Goodix driver and current-device binding; measure a read-only transaction, then design bounded IRQ/event/coordinate handling.
+
+### 开发经验
+
+- Firmware keys do not demonstrate native OS touch or reliable desktop interaction.
+
+### 完成条件
+
+- Native HID events with stable contact IDs and correct1080x2340 coordinates; press/move/release and key recovery visible in system UI.
+
+### 当前范围
+
+- No native handset touch/HID implementation or interaction proof.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Pin the matching Goodix protocol/firmware and board interrupt/pin inputs before implementing a native input provider.
+
+### 证据
+
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## GPU {#gpu}
+
+`planned`
+
+### 硬件与依赖
+
+- SM8150 GPU/GMU resources, exact firmware, power sequencing, SMMU streams, command/fence protocol and selected Darwin frontend ABI.
+
+### 配置
+
+- CONFIG\_XNU\_NATIVE\_ADRENO=n. Upstream Adreno740/SM8550 parameters are not selected or copied to raphael.
+
+### 操作步骤
+
+- Inspect this handset and pinned Xiaomi GPU/GMU sources; establish firmware and memory ownership before any submission.
+
+### 开发经验
+
+- No transferable A740 qualification exists for this SM8150 target; QEMU framebuffer rendering is not GPU proof.
+
+### 完成条件
+
+- Validated power/firmware start, bounded command submission/fences and native presentation with recovery.
+
+### 当前范围
+
+- No handset GPU/Metal acceleration; exact firmware/power/IOMMU contract remains pending.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Inventory the actual GPU/GMU revisions and firmware hashes, then define an owned-memory submission experiment.
+
+### 证据
+
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 网络 {#network}
+
+`planned`
+
+### 硬件与依赖
+
+- Current-device Wi-Fi/BT controller identity, bus, firmware, IRQ/DMA and supported Darwin network interface ABI.
+
+### 配置
+
+- No wireless component is selected in board.toml; upstream Ath12k support is not a target-device compatibility claim.
+
+### 操作步骤
+
+- Collect pinned primary board connectivity bindings and firmware identity; define transport/IRQ/DMA operations before choosing a component.
+
+### 开发经验
+
+- Android connectivity does not demonstrate an XNU network stack or target transport.
+
+### 完成条件
+
+- Native link establishment, packet transmit/receive, reconnect and recovery with measured DMA bounds.
+
+### 当前范围
+
+- No native phone Wi-Fi/BT implementation or packet evidence.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Identify target bus/controller/firmware and map the OS network interface before implementing transport.
+
+### 证据
+
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 音频 {#audio}
+
+`planned`
+
+### 硬件与依赖
+
+- Target ADSP/codec, clocks, firmware services, regulators and playback/capture routes from handset and pinned source.
+
+### 配置
+
+- No audio component or native audio route is selected.
+
+### 操作步骤
+
+- Inventory codec/DSP topology and firmware ownership; define clock/service and PCM-buffer contracts.
+
+### 开发经验
+
+- No current native playback/capture evidence; firmware presence does not provide the required OS service ABI.
+
+### 完成条件
+
+- Native playback and recording with correct routing/clocking, bounded DMA and power/recovery transitions.
+
+### 当前范围
+
+- No native audio implementation; codec/service/route contracts remain pending.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Record the exact DSP/codec topology and required IPC/services before audio driver work.
+
+### 证据
+
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 电源 {#power}
+
+`implemented`
+
+### 硬件与依赖
+
+- Observed watchdog register/clock contract and inherited firmware power state; regulators, battery units, display/GPU/DSP clocks and suspend ownership remain separate inputs.
+
+### 配置
+
+- Hardware watchdog20s; explicit version1 pet budget60000ms with physical40000ms observer is locally qualified. Version2 selects180000ms pet budget/120000ms observer; handset20261101T175421Z qualified120097.983ms and235 pets; minimum pet interval500ms. Version3 is a pending240s physical observer/300s pet-budget candidate; hardware20s remains fixed. Original100 polls measured13.1421009896s.
+
+### 操作步骤
+
+- Use exact readback/restore checks and physical counter telemetry; reject mismatched watchdog values before XNU. Keep terminal handback bounded.
+
+### 开发经验
+
+- Explicit watchdog-method-checkpoint diagnostic preserves original method/hardware checks and360s/420s v4 bounds, but stops after the first completed original daemon method and at least10 polls. Default builds do not select it. Full887-record build162658Z and QEMU39 gates passed; phone163215Z fully passed first selector0 result0,3 method calls,1 checkin,no failure/exception,231300.639ms/437pets. Android return452.986s/full restore and cleanup passed. This early return is not full360s observer qualification. Next entry checkpoint164851Z had no Android/native return through665.674s; xnu\_executed=null, physical recovery pending, unchanged rerun prohibited. Its marker2 initially-zero client status cannot prove completed return. Marker3 sets NotReady before entry and publishes actual parent return afterward; full887-record165046Z kernel/prelink/payload prepared, no handset boot.
+- V33/223537Z returned matching native records and complete Android cleanup;3 opens/2 closes but no externalMethod entry. Corrected v32/v33 original-executable symbolication resolves BRK0x10000b160 and callers0x100009ef8/0x10000895c, not selector0 failure. The daemon first requires IOService with IOPropertyMatch IOPMUPrimary numeric1. Candidate exposes that diagnostic registry handle on the bounded watchdog service and verifies the actual original property-matching path; inherited setProperties remains unsupported, no PMU hardware or metadata persistence acknowledged.20s hardware and360s/420s bounds unchanged. Full887-record build and real original-property-match QEMU passed. Phone225501Z accepted temporary boot but USB return absent through664.258s; native execution unknown. User confirmed black screen and forced reboot; independent Android/root/new-boot-ID/no-transient-FDT recovery check passed on20261102T004239Z. Do not rerun that image. V35 keeps all hardware/method checks, selecting the already supported v2 physical120s observer/180s absolute pet contract in a new ADT and1200poll kernel limit. The first frozen3600poll candidate was rejected by the unchanged handset build budget gate before any boot; client admission permits only exact v2 or v4 contracts. Same-run deadline and return evidence remain required.
+- Original watchdogd first exception in phone211750Z resolves to missing IOWatchdog service. v30 was rejected before handset execution by QEMU duplicate metaclass panic. New candidate inherits the supplied248-byte/171-slot abstract class with complete compiled-slot audit and late registration; original Apple private initialization/hardware callbacks are excluded. Root/type1/exclusive-owner client uses the existing bounded hardware pet backend;20s missed-checkin and420s absolute limit remain. Full887-record build and QEMU39 gates passed, including real original-module load, subclass ancestry and service publication with hardware unavailable. Phone215950Z automatic Android return/cleanup passed but normal checkpoint rejected: original protobox explicitly denies iokit-open-service RaphaelDiagnosticWatchdog; service published/hardware armed but0 opens/checkins. V32/221554Z cleared that denial and reached3 opens/2 closes; the original pre-method primary-registry lookup fails,0 method entries/checkins, originalproc\_exit panic. Full Android cleanup passed. Next candidate adds first actual external-method argument/result telemetry only; request validation and watchdog behavior stay unchanged.
+- The rootless QEMU DT-policy fixture has an explicit40s counter deadline before the original missing-root timeout; this is not handset120s coverage.
+- Local run20261101T171229Z cleared the original AMFI PMGR dependency using the original ApplePMGRNub unsupported-AON branch, with no hardware PMGR claim; 40.104766s/77pets and full recovery passed. Same-window scalar DMA-copy run20261101T172012Z reached78syscalls/494388224 UFS bytes with zero failures. Hardware thresholds remain20s; explicit longer pet budgets require their own qualification.
+
+### 完成条件
+
+- Bounded diagnostic return remains reproducible; full power acceptance additionally requires measured battery units, regulator/clock state changes and suspend/resume.
+
+### 当前范围
+
+- Only diagnostic watchdog/return is implemented; no general PMGR, battery, sleep/wake or peripheral power qualification.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Continue original dyld/PID1 after the qualified120s physical observation/180s pet budget, and inventory actual board power interfaces separately.
+
+### 证据
+
+- `source`: [Watchdog readback and restoration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Drivers/DiagnosticReturnDxe/NativeWatchdog.c)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+
+## 镜像组装 {#packaging}
+
+`implemented`
+
+组件: `XnuPrelink`, `RamBlock`, `AppleKeyStoreState`.
+
+### 硬件与依赖
+
+- XNU d8b80295118ef25ac3a784134bcf95cd8e88109f; selected iPadOS17.7.11/21H461 profile; original kernelcache, original trust caches, storage/display ABI audit and owner-signed read-only policy.
+
+### 配置
+
+- Ordered arch/SoC/selected OS bootstrap/device patches; wrapper appends explicit storage/diagnostic series. Package is linked as kits/raphael. RamBlock belongs to explicit QEMU or handset ephemeral Data candidates; AppleKeyStoreState remains QEMU-only.
+
+### 操作步骤
+
+- Run python3 scripts/check-packaging.py, then scripts/package.sh --no-deps --check --os 17 with an isolated --out. The fixed upstream launcher invokes release: deps, preflight, patches, build, pack, verify; --check stops before build. Diagnostic handset execution still follows the separate handoff gate chain.
+
+### 开发经验
+
+- Handset182935Z original initproc\_spawned=1 and original launchd boot tasks establish main; critical child tzinit exited30 on readonly var and triggered original proc\_exit panic. Full experiment rejected; Android ordinary reboot/root/cleanup passed. See evidence/native-launchd-main.json.
+- The package launcher is copied unchanged from UniXNU c96b29975645b711dc06bc435c3ad27321ce817c. Only ipados-17.7.11-21H461 is configured; default and OS17 checks resolve 62 patches. A separate local runtime leaves the frozen handset backend unchanged. Manual macOS workflows check the layout or gate full builds on complete recipes; no remote run or full package build is claimed.
+- Original launchd exec and22 syscalls are observed locally; dyld completion and launchd main are not. Ephemeral offline keystore/scratch Data do not establish secure or persistent phone services. Explicit --offline-keystore may now accompany the handset diagnostic scratch-Data/display profile, using its owned display opt-in rather than an implicit handset boot argument. The pinned generic state component and selector semantics remain unchanged; host boundary, full887-record build and rootless QEMU39 checks pass. Phone032503Z fully passes native checkpoint, automatic Android return and cleanup: state service stage2/opens2/calls4; original MKB\_INIT completes without the fatal recovery request. UFS log79 records/48962 bytes/zero drops persists independently. Display clients/frames remain0; no desktop.
+- License publication20261105 adds the full upstream BSD-2-Clause-Patent text, preserves existing file notices and pins the SoC at its licensed source commit c77321d82010250d6f100d7c17d7e721c17782bf. Only licensing, documentation and source references changed; no build or handset result is added.
+
+### 完成条件
+
+- Reproducible source-pinned kernel/package/firmware/payload and temporary image; original services and desktop require additional device evidence.
+
+### 当前范围
+
+- No standalone production firmware/payload recipe; private Apple inputs and workspace orchestration remain required. Original trust cache is not a full Apple authentication chain.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Translate the existing diagnostic ownership, recovery, storage ABI and owner-policy gates into qualified firmware/payload/bootimg recipes; pin a publishable SoC source and official firmware input metadata, then run full release on a clean checkout. Keep 26/27 unqualified until their ABI and defconfigs are implemented.
+
+### 证据
+
+- `source`: [Package ownership, static recipes and firmware startup contracts.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/README.md)
+- `source`: [Ordered board patch selection.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/patches/xnu/series)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Unmodified upstream templates/package.sh; all board selection is in TOML.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/package.sh)
+- `source`: [Sanitized local adoption checks, explicit incomplete release recipe and no handset claim.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/packaging-20261102.json)
+
+## 诊断 {#diagnostics}
+
+`implemented`
+
+### 硬件与依赖
+
+- Nonce-bound returned FDT, native checkpoints/PC and syscalls, exact frozen image IDs, bounded timer/watchdog and Android cleanup records.
+
+### 配置
+
+- Only temporary fastboot boot, no flash/erase or partition edits. QEMU uses emulator resources and is a separate gate. runtime-only results do not assert a new full boot-partition hash comparison.
+
+### 操作步骤
+
+- Check source/config/ABI and gates; run one changed variable; decode matching returned records; verify Android/root/cleanup. Never rerun an unreadable unchanged image.
+
+### 开发经验
+
+- Explicit v6 cold-start contract adds1800s observer/1860s absolute pet while retaining20s hardware threshold,old contracts and704MiB grant. Only this selected root\_limit18000 samples one lsd process/eight referenced threads every120 physical seconds,up to16 independent named UFS sections,without consuming final eight slots.Actual C interval/lifetime/sample-bound tests and watchdog boundary/rejection cases pass ASan/UBSan;old snapshot decode identical,new progress roundtrip passes. Kernel/prelink/payload build,39 recovery-QEMU checks and handset image structure inspection passed for artifacts/desktop-ls-scan-window/20261104T182635Z. Contract v6 confirms1800000/1860000ms and704MiB. User requested stop after build;handset\_boot\_attempted=false,desktop\_verified=false;no new handset experiment.
+- 180247Z MCM receiver sampling:727 independent UFS records,360463 bytes,dropped0,complete720s snapshot,2237 frames and55 watchdog checkins without transfer or heartbeat failure,no pressure kill/panic recorded.Both MCM receivers captured;one CFRunLoop,other actively creates metadata after SetDataProtection.lsd98 progressed beyond sync signing reply into original plugin registration.SpringBoard still waits for seeding.Android/root/transient cleanup verified;full return failed/null,no desktop.Next samples LS progress every120s during one explicit1800s cold boot.
+- 173412Z704MiB/720s independent UFS recovery:727 records,358407 bytes,dropped0,complete snapshot and RETURNING;2299 retired frames,0 transfer errors,55 watchdog checkins,0 failures,no recorded pressure kill or panic.SpringBoard still waits for LS seeding;lsd99 synchronously waits for MCM code-signing update.Two containermanager processes64/92 omitted by eight-slot priorities.Next prioritizes MCM receivers with original memory,budgets and service behavior.Android/root/transient cleanup verified;full return remains failed/null,no desktop.
+- 092714Z:720101.807ms observer completed in independent UFS log;731 records/no loss,2107 frames/zero transfer errors,58 watchdog checkins/no failure. Original full checkpoint failed; manual Android recovery; onsite loading bar then black, no desktop. Renderer continued and sampled ledger below limit. SpringBoard waits for LS database; lsd synchronously awaits IconServices cache invalidation; receiver iconservicesagen112 omitted by prior sampler. Next candidate prioritizes receiver without service-policy changes.
+- 085854Z zero-write candidate skipped225280 bytes, resident142708736; one valid nonblack frame and18 watchdog checkins, no recorded service exits, onsite progress bar then black. Renderer kernel return identifies private thread CPU ledger blocking; duration unknown. Explicit v5 extends observer360s-&gt;720s and absolute pet420s-&gt;780s with original20s hardware threshold. Old/default contracts retained; spare128-word thread tail samples existing CPU ledger, without policy changes. Host exact-contract/physical-boundary tests pass; device pending.
+- 080848Z independent UFS logs captured451 validated/submitted/retired nonblank compositor frames, zero transfer errors and22 watchdog checkins without recorded service exits; onsite loading bar then black, no desktop. Small-read median4.99-&gt;6.97MiB/s after redundant SMMU scan removal. SpringBoard waits for LS database; original libmis calls online-auth-agent148, plus container service wait. Followup samples these receivers and existing sparse Data resident counters, with original service policy retained.
+- 074823Z manual recovery returned363 valid continuous records/298301 bytes, zero drops. Original watchdogd52 terminated BackBoard57 for ping send failure and516s without checkin. Replacement106 reached WindowServer/PUIProgressWindow; lsd registering bundles. Frames0. Next single behavior change removes redundant read-time SMMU full scan under existing exclusive single-CPU ownership; admission, write gates and authentication retained; host checks pass, handset effect pending.
+- Phone072550Z full recovery timed out, but manual Android recovery returned375 independent UFS records/305557 bytes with zero drops and13 complete snapshot sections. BackBoard57/120 exited with status9, OS\_REASON\_WATCHDOG20/code1/flags5 approximately59s apart; current134 entered WindowServer and waits for original migration while SpringBoard27 waits for LaunchServices. Clients6/kicks2/frames0: no desktop. A read-only followup reports original reason descriptions and syscall sender and prioritizes the actual com.apple.datami, lsd and watchdogd process names. Two actual-selector ASan/UBSan cases and reason formatting pass; its new full build and handset run are pending. Original service policy and bounds are unchanged.
+- Phone045614Z has backboardd PID109 after original PID57, but earlier PID-selected samples exhaust the eight slots before109. Source now retains the eight-slot ABI and replaces lower-priority samples for late display services, clears evicted process-slot links and old thread tails, and reports committed original exit status/reason plus periodic VM counters. Three actual-selection ASan/UBSan replays, three exit formatter cases, existing8 capture/14 rejection/4 decoder regressions and final887-record kernel with zero undefined symbols pass. This followup is host-only, with no new boot image or handset execution; the actual BackBoard exit cause and black screen are unresolved. User requested stop after local repair.
+- 2026-11-04 service-wait comparison redecodes both frozen returned snapshots with identical old/new results. SpringBoard waits for CFPrefs while a keybagd thread is already inside CFPrefsDaemon source-message handling;41 proxies have no thread samples, so root cause remains unknown. Explicit service-spawn-waits adds up to64 one-thread proxy snapshots at the unchanged first-method marker1 stop, keeping the named-service ABI. Host8 ASan/UBSan cases,14 decoder rejections and4 compatibility cases,887-record build/zero undefined symbols, prelink/payload,39 rootless-QEMU checks and image review passed. QEMU has zero proxy processes. Handset180921Z accepted the sole temporary boot after live preflight, but had no Android/native return within665.449s: passed=false,xnu\_executed=null. Independent manual recovery182112Z verified Android/root/new boot/no transient FDT; failed report preserved. Menu timeout0/default exit verified from actual FAT/frozen source and same-source QEMU, requiring no key, but no handset menu-return telemetry. No same-image retry or desktop proof.
+- 2026-11-04 first-method-plus-5s candidate adds a separate physical-counter record and marker4; the frozen first-method patch is restored byte-for-byte. Hardware20s, observer360s, absolute pet420s and original method guards stay unchanged. Actual C ASan/UBSan, decoder rejection cases, full887-record build with zero undefined symbols, prelink/payload checks and39 recovery-QEMU checks pass. The selected display source matches the frozen successful baseline; the live status-recording fix is preserved. Handset165957Z accepted one temporary marker4 boot after live Android/root/FDT/extent preflight and onsite recovery confirmation, but no Android/native return arrived within664.924s. passed=false and XNU execution remains unknown; the physical5s window is not qualified. Independent manual recovery171923Z passed Android/root/new-boot/FDT cleanup without matching native telemetry; the failed experiment is preserved and the same image must not be retried. Frozen163215Z contains68 processes/41 xpcproxy, not four total processes; original backboardd plist has RunAtLoad/KeepAlive and no session constraint. Comparison161209Z console contains both cfprefsd and backboardd; startup-time root cause remains unknown.
+- Runtime-only late-return collection can resume one already accepted temporary boot after USB absence, preserving the failed source report and checking the returned nonce before cleanup. It never calls fastboot boot and does not claim USB observation time as Android boot duration. Host control-flow checks cover no-reboot on nonce mismatch and no-image-boot on resume.
+- Explicit service-observer candidate adds bounded original pid1..255 names and8 selected services/8 referenced threads each at the unchanged240s deadline. Original proc\_lock/uthread list and preemption exclusion preserve sampling lifetime; no service behavior, memory grant or keystore policy changes. v4 full887-record build and200137Z QEMU39 checks passed, including actual original kernel-task thread saved-stack capture in the rootless fixture. Phone200315Z automatically returned and cleaned up, but rejected checkpoint: ordinary EL0 BRK1 was intercepted before the service deadline. Remove only the lower-EL diagnostic hook so original XNU handles user BRKs; retain EL1 diagnostic/panic bridge and strict checkpoint acceptance. Phone202022Z fixed EL0 routing and fully passed normal checkpoint, read-only services and cleanup: SpringBoard27 waits at ipc\_mqueue\_receive\_continue; backboardd absent,display clients/frames0. Phone204217Z fully passed resident-only user-stack capture, UUID-matched cache symbolication and Android cleanup: SpringBoard waits for original CFPrefs system/user cfprefsd reply; no cfprefsd/backboardd or display frames. Phone210023Z with360s observer proved originalcfprefsd90/93 andbackboardd57 startup in restored console; SpringBoard repeatedly crashes and criticalwatchdogd95 exits signal5, causing originalproc\_exit panic. Normal checkpoint rejected, Android cleanup passed; no frames. V29 adds first-exception records for four key services, retains original handling and360s/420s bounds; host actualC ASan/UBSan and final original-triage branch checks pass. No further blind extension. Resident-only user-stack frames and actual cached task slide hold a pmap reference and reject all physical addresses outside admitted RAM; host7 ASan/UBSan guards and6 v2 decoder cases pass. Host decoder now reads original PID1-only initproc\_spawned and CRC-verified original msgbuf; old frozen reports remain unchanged. 182935Z is execution progress with rejected checkpoint, not a passed240s observer.
+- Handset180628Z reached the compiled checkpoint but its active pmap graph exceeded128KiB after109 pages; experiment rejected and Android cleanup passed. Increase producer/serializer/receiver/decoder bound to512KiB and return FDT to4MiB; actual libfdt validates full1MiB delta plus512KiB pmap and all other maximum records; full table validation remains mandatory.
+- Latest normal handset checkpoint163215Z completed the original watchdog method and one check-in, with display clients/frames0. Later170735Z required manual recovery. Latest165957Z also had no returned native telemetry; XNU execution stays unknown; independent manual recovery171923Z passed Android/root/new-boot/FDT cleanup. Historical APFS/SystemOS/PID1 progress and QEMU AMFI failures remain separate evidence.
+- Phone034350Z observer-bound attempt did not establish Android return within665.169s; original full-checkpoint report remains failed with xnu\_executed=null. After user power recovery, independent UFS console yielded210 records/65721 bytes/zero drops through SERVICE SNAPSHOT DONE; RETURNING. Last tick2011 recorded5 display clients but0 frames. Detailed service stacks and the physical360s deadline were not returned; no desktop or normal checkpoint claim.
+- Existing bounded service snapshots and display/watchdog counters now optionally serialize through the qualified UFS console from the original observer, before handback. The actual C serializer with ASan/UBSan roundtrips13 sections/126284 bytes from the original032503Z returned memory; existing service and exception decoders match exactly and a truncated section is not accepted. Full887-record kernel, rootless recovery QEMU39 checks and new image pass; phone040940Z timed out in full recovery, then manual Android recovery yielded322 valid UFS records and a complete13-section independent service snapshot. It covers360046.222ms with6 watchdog checkins and0 failures; display clients/validations/kicks/frames remain0. Full checkpoint and desktop remain unverified; no budget/service-policy change.
+
+### 完成条件
+
+- Image/source/firmware identified, matching native checkpoint returned, recovery verified and milestone evidence readable.
+
+### 当前范围
+
+- Public immutable logs/full source commit and remote CI remain missing. No desktop or reliable completion ETA.
+- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+
+### 下一步
+
+- Handset180921Z proxy snapshot returned no native telemetry and manual recovery182112Z passed. Qualify an independent pre-reset phase readout before another service-window/proxy handset experiment; firmware QR logs alone do not cover post-handoff native snapshots. Preserve unreadable experiments and do not retry the same image. Service cause, first frame and sustained display still require handset evidence.
+
+### 证据
+
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Returned diagnostic ABI and bounded records.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Include/RaphaelDiagnostic.h)
+- `source`: [Sanitized local watchdog exit observation and focused read-only followup; no desktop claim.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/native-service-watchdog.json)
+
+</div>
