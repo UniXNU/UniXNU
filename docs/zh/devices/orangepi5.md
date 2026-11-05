@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, running the iPadOS 17.7.11 userland on a source-built XNU, started from edk2-rk3588 firmware \(uefi-orangepi5\). Shared SoC support is in UniXNU-rk3588-common, which the EVB10 port already proved on hardware. Observed on the board \(2026-11-03\): U-Boot starts the firmware from the NVMe ESP, the console kernel finds the drive, publishes the root windows and a persistent Data window, and launchd runs. No display, GPU, input, audio or network driver exists yet.
+Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, running the iPadOS 17.7.11 userland on a source-built XNU, started from edk2-rk3588 firmware \(uefi-orangepi5\). Shared SoC support is in UniXNU-rk3588-common, which the EVB10 port already proved on hardware. Observed on the board \(2026-11-03..05\): U-Boot starts the firmware from the NVMe ESP; NVMe root and persistent Data mount; SpringBoard and Mali Metal compose over HDMI0 through the shared RK3588 VOP2 direct scanout \(iommu paging, no CPU GOP copy\). Network and audio drivers are not started yet; DVFS is not hooked; physical USB input is not brought up \(a software HID digitizer stand-in is linked\).
 
-源记录: [porting.toml](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/porting.toml), `4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a`.
+源记录: [porting.toml](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/porting.toml), `f96d273b526254d700bd42bfeadef0359a1d3c46`.
 
 本页按设备记录自动生成。
 
@@ -17,9 +17,9 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 | [CPU 与中断](#cpu) | `implemented` |
 | [内存与 DMA](#memory) | `device-verified` |
 | [存储与根卷](#storage) | `device-verified` |
-| [显示](#display) | `host-verified` |
-| [输入](#input) | `not-applicable` |
-| [GPU](#gpu) | `host-verified` |
+| [显示](#display) | `device-verified` |
+| [输入](#input) | `implemented` |
+| [GPU](#gpu) | `device-verified` |
 | [网络](#network) | `planned` |
 | [音频](#audio) | `planned` |
 | [电源](#power) | `planned` |
@@ -52,7 +52,8 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 - The kernel now carries the NVMe driver: board.toml archives build-orangepi5-drivers.py Rk3588Nvme and bind-nvme-storage.py, the defconfig force-loads libRk3588Nvme.a, and the build script verifies the bound addresses against the kernel \(18 addresses inside the audited IOStorageFamily\).
 - board.toml \[userdata\] is the layout of the 128 GB drive: userdata at LBA 526336..134744063 behind a 256 MiB ESP at LBA 2048; the boot arguments are the EVB10 ones with the storage names of the NVMe driver \(nvme=4, nvme-root-trust=1, nvme-data-size=2048, nvme-data-persist=1\).
 - board.toml payload.dram\_size and payload.adt.owned\_memory\_size are 0xF8000000 \(3.875 GiB, in the 4 GiB bank at 0x100000000\) now, the window measured on the board \(memory area, evidence/device-memory-20261103.txt\); the old 4 GiB and 2 GiB values were EVB10 placeholders.
-- The kernel is built in two passes now and carries the GOP-backed legacy display \(board.toml archive build-orangepi5-display.py, component GopFramebuffer, the offline-legacy-\* and sheng-\* arguments; evidence/host-display-build-20261103.txt\) and the Mali-G610 driver \(archives build-mali-firmware.py and build-orangepi5-drivers.py Mali, libMali.a force-loaded by both defconfigs, no mali argument in the list; evidence/host-gpu-build-20261103.txt\). Both link on the host; neither has run on the board.
+- The kernel is built in two passes now and carries the GOP-backed legacy display \(board.toml archive build-orangepi5-display.py, component GopFramebuffer, the offline-legacy-\* and sheng-\* arguments; evidence/host-display-build-20261103.txt\) and the Mali-G610 driver \(archives build-mali-firmware.py and build-orangepi5-drivers.py Mali, libMali.a force-loaded by both defconfigs, no mali argument in the list; evidence/host-gpu-build-20261103.txt\). Both link on the host.
+- board.toml now defaults mali=8 mali-metal=1 evb10-gpu-addon=1, rk3588-vop-direct=1 with esmart=2/vp=2/fence=1, opi5-hid-input and sheng-touch-hid, and thin-bezel=1; feeds.toml pins UniXNU-rk3588-common at b5f5d94 \(Rk3588VopDirect\). Observed on the board with that list \(evidence/device-vop-direct-20261105.txt\).
 
 ### 完成条件
 
@@ -60,22 +61,22 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 当前范围
 
-- Display and GPU are linked but have not run on the board; input, network and audio have no driver and no archive yet \(docs/bring-up.md\).
+- Network and audio still have no driver; DVFS is not started from the Orange Pi 5 probe; physical USB HID is not brought up; the default menu entry is still xnu-probe.
 
 ### 下一步
 
-- Add the mali arguments to board.toml once the Mali bring-up steps \(mali=1, 2, 3, 8\) have run on the board.
+- DEFAULT\_ENTRY=xnu MENU\_TIMEOUT=3 rewrite of esp.img; hook RK3588 DVFS from the display probe; Ethernet or Wi-Fi.
 
 ### 证据
 
-- `source`: [Board configuration of the console kernel](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/board.toml)
-- `host`: [The two-pass kernel with the display and the Mali driver links \(51658752 bytes, sha256 9281cf98...\); nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-gpu-build-20261103.txt)
+- `source`: [Board configuration of the console kernel](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/board.toml)
+- `host`: [The two-pass kernel with the display and the Mali driver links \(51658752 bytes, sha256 9281cf98...\); nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-gpu-build-20261103.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `ce6c6fb8d6f31b3c0a87dd4ead1f6d444c79f366`.
-- `host`: [The kernel with the NVMe driver links and the bound-address check passes \(51154944 bytes, sha256 76ba878c...\); nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-nvme-storage-20261101.txt)
+- `host`: [The kernel with the NVMe driver links and the bound-address check passes \(51154944 bytes, sha256 76ba878c...\); nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-nvme-storage-20261101.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `5cbaf4236c5f0a850a62daa341b1195956b4a63f`.
-- `host`: [defconfig, fetch, status, tree and the full console kernel build complete on the host; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-kernel-build-20261101.txt)
+- `host`: [defconfig, fetch, status, tree and the full console kernel build complete on the host; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-kernel-build-20261101.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `f4bb6e952e915f4f837547f11981ca26b61a5c46`.
-- `device`: [The board.toml memory values boot the kernel to launchd: the 3.875 GiB window at 0x100000000 \(400 s, no panic\); 3.5 GiB and 4094 MiB boot too](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-memory-20261103.txt)
+- `device`: [The board.toml memory values boot the kernel to launchd: the 3.875 GiB window at 0x100000000 \(400 s, no panic\); 3.5 GiB and 4094 MiB boot too](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-memory-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; REBUILD=1 tools/board/make-bundle.sh; capture as in the memory area</code>. Revision: `1cbc693ca1c335720f0c4ae48665320e05390b4d`.
 
 ## 固件与启动 {#firmware}
@@ -126,12 +127,12 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `host`: [Launcher volume builds without the SPI NOR variable store; the stub's instructions equal the EVB10 stub that ran on a board; boot.scr equals mkimage's output byte for byte; the ESP with launcher and boot.scr passes fsck.vfat; the disk files install and read back. Nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-launcher-20261103.txt)
+- `host`: [Launcher volume builds without the SPI NOR variable store; the stub's instructions equal the EVB10 stub that ran on a board; boot.scr equals mkimage's output byte for byte; the ESP with launcher and boot.scr passes fsck.vfat; the disk files install and read back. Nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-launcher-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; ./build.sh -b DEBUG -L &amp;&amp; REBUILD=1 tools/board/make-bundle.sh &amp;&amp; tools/board/make-disk-image.sh</code>. Revision: `34fb4cfa4fa32f5e1a0e8eaa341724ad72abb000`.
-- `source`: [Boot flow and milestones M0 to M4](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
-- `device`: [Launcher, firmware and DarwinBoot on the Orange Pi 5 from U-Boot's boot.scr: 8192 MB RAM, PCIe link up again after U-Boot, payload read from the NVMe ESP, kernel hand-off with the 640x480 GOP frame buffer, menu key through the serial port \(captures auto1 and xnu1\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-first-boot-20261103.txt)
+- `source`: [Boot flow and milestones M0 to M4](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
+- `device`: [Launcher, firmware and DarwinBoot on the Orange Pi 5 from U-Boot's boot.scr: 8192 MB RAM, PCIe link up again after U-Boot, payload read from the NVMe ESP, kernel hand-off with the 640x480 GOP frame buffer, menu key through the serial port \(captures auto1 and xnu1\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-first-boot-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh auto1 330 (reset typed at the U-Boot prompt); CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh xnu1 480</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
-- `device`: [xnu-hdmi: the kernel log scrolls on the HDMI monitor \(reported\), launchd up with vc\_mirror=1; the board resets and runs again after the kernel stops feeding the watchdog \(inferred, the adapter dropped at that moment\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-hdmi-watchdog-20261103.txt)
+- `device`: [xnu-hdmi: the kernel log scrolls on the HDMI monitor \(reported\), launchd up with vc\_mirror=1; the board resets and runs again after the kernel stops feeding the watchdog \(inferred, the adapter dropped at that moment\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-hdmi-watchdog-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:2" tools/board/capture-remote.sh hdmi3 1500 /dev/serial/by-id/ADAPTER</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
 
 ## CPU 与中断 {#cpu}
@@ -173,7 +174,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Board device tree on top of the shared SoC description](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/dts/orangepi5.dts)
+- `source`: [Board device tree on top of the shared SoC description](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/dts/orangepi5.dts)
 
 ## 内存与 DMA {#memory}
 
@@ -218,10 +219,10 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Memory node memory@100000000: the window's worth of the 4 GiB bank the kernel's memory comes from](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/dts/orangepi5.dts)
-- `device`: [The firmware's memory maps \(MEMMAP log\) before and after the ACPI and PCD fixes, the refused and the accepted window sizes, the 2.5 GiB boot and the 3.5 GiB, 4094 MiB and 3.875 GiB boots from the 4 GiB bank to launchd, and the PPTT cause of the two AcpiTableDxe crashes](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-memory-20261103.txt)
+- `source`: [Memory node memory@100000000: the window's worth of the 4 GiB bank the kernel's memory comes from](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/dts/orangepi5.dts)
+- `device`: [The firmware's memory maps \(MEMMAP log\) before and after the ACPI and PCD fixes, the refused and the accepted window sizes, the 2.5 GiB boot and the 3.5 GiB, 4094 MiB and 3.875 GiB boots from the 4 GiB bank to launchd, and the PPTT cause of the two AcpiTableDxe crashes](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-memory-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:1 --send 'U-Boot v' ctrl-c --stop '&lt;INTERRUPT&gt;' 1 'at the U-Boot prompt'" tools/board/capture-remote.sh memN 700 (ESP files written through U-Boot with uboot-put.py; docs/first-boot.md)</code>. Revision: `1cbc693ca1c335720f0c4ae48665320e05390b4d`.
-- `device`: [The memory the firmware reports on the 8 GiB board and the kernel booting with the 2 GiB window of the first runs \(capture auto1, section 2\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-first-boot-20261103.txt)
+- `device`: [The memory the firmware reports on the 8 GiB board and the kernel booting with the 2 GiB window of the first runs \(capture auto1, section 2\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-first-boot-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh auto1 330 (reset typed at the U-Boot prompt); CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh xnu1 480</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
 
 ## 存储与根卷 {#storage}
@@ -255,6 +256,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 - Design debts: the storage code is duplicated between Rk3588Emmc and Rk3588Nvme \(a fix to the shared parts goes into both\); the headers Gpt.h, RootManifest.h and StorageCommon.h are copies with the namespace renamed; the first round keeps the 2 GiB Data container of the existing seed.
 - Second and later boots \(evidence/device-memory-20261103.txt, section 8\): the Data window's header is found again \('version 1 state 2 ... formatted 1 times'\) and Data mounts writable on /dev/disk3s1, the OS window as the read-only root, with the new ADT of the memory change \(memory node memory@40000000, 2.5 GiB window\); the driver does not read the memory node.
 - scripts/build-orangepi5-drivers.py also builds the display objects and the Mali driver now \(components NativeLegacyDisplay, NativeGOPPresenter, NativeKeyStoreEvents, Mali\); the Rk3588Nvme entry and its bind step are unchanged and the bound-address check still passes on the two-pass kernel \(18 addresses inside the audited IOStorageFamily, evidence/host-display-build-20261103.txt and host-gpu-build-20261103.txt\).
+- When wdt-kick expires, NativeNvme also writes CRU\_GLB\_SRST\_FST \(0xFDB9\) so the board soft-resets to U-Boot if the hardware watchdog does not fire \(observed while deploying the VOP kernel\).
 
 ### 完成条件
 
@@ -272,40 +274,38 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Driver structure, host checks and the list of unverified hardware assumptions](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/package/Rk3588Nvme/README.md)
-- `host`: [Host tests, -Werror build, vtable binding, kernel link, payload and a full install of the NVMe image into a 128 GB sparse file with read-back; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-nvme-storage-20261101.txt)
+- `source`: [Driver structure, host checks and the list of unverified hardware assumptions](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/package/Rk3588Nvme/README.md)
+- `host`: [Host tests, -Werror build, vtable binding, kernel link, payload and a full install of the NVMe image into a 128 GB sparse file with read-back; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-nvme-storage-20261101.txt)
   Command: <code>g++ -std=c++17 -Wall -Wextra -Werror -O1 -I package/Rk3588Nvme package/Rk3588Nvme/tests/test-nvme-host.cpp -o /tmp/test-nvme-host &amp;&amp; /tmp/test-nvme-host</code>. Revision: `5cbaf4236c5f0a850a62daa341b1195956b4a63f`.
-- `device`: [NVMe drive found over PCIe, GPT and SHNGROOT read, root windows published, Data window formatted and used, launchd running for 400 s without a panic \(captures auto1 with nvme=1 and xnu1 with nvme=4\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-first-boot-20261103.txt)
+- `device`: [NVMe drive found over PCIe, GPT and SHNGROOT read, root windows published, Data window formatted and used, launchd running for 400 s without a panic \(captures auto1 with nvme=1 and xnu1 with nvme=4\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-first-boot-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh auto1 330 (reset typed at the U-Boot prompt); CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh xnu1 480</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
-- `device`: [Root and Data mount again on later boots with the 2.5 GiB window \(memI\) and the 3.875 GiB window \(memN\): the Data header is found \('formatted 1 times'\), no reformat](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-memory-20261103.txt)
+- `device`: [Root and Data mount again on later boots with the 2.5 GiB window \(memI\) and the 3.875 GiB window \(memN\): the Data header is found \('formatted 1 times'\), no reformat](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-memory-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh memN 700 (unixnu.toml with wdt-kick=400)</code>. Revision: `1cbc693ca1c335720f0c4ae48665320e05390b4d`.
 
 ## 显示 {#display}
 
-`host-verified`
+`device-verified`
 
 组件: `GopFramebuffer`.
 
 ### 硬件与依赖
 
-- HDMI0 from VOP2 \(the firmware uses video port 2 and Esmart window 2; the EVB10 drives a panel through video port 2 too, with its own DSI/panel values\), the UEFI GOP frame buffer, monitor mode chosen by EDID.
+- HDMI0 from VOP2 \(firmware VP2 + Esmart2, 1920x1080p60\), the UEFI GOP frame buffer as the boot surface, monitor mode from EDID.
 
 ### 配置
 
-- The first milestone uses the GOP frame buffer DarwinBoot publishes \(component GopFramebuffer, offline-legacy-gop=1\); a VOP2 scanout driver on the Esmart window of video port 0 follows for frame rate.
+- offline-legacy-\* / sheng-\* bind IOMobileFramebufferLegacy to NativeLegacyDisplay \(package/Opi5Display, force primary and IOMFBDisplayRefresh at sheng-vsync&gt;=60\).
+- rk3588-vop-direct=1 uses UniXNU-rk3588-common Rk3588VopDirect: VOP IOMMU identity maps compositor surfaces and Esmart2 fetches them \(rk3588-vop-esmart=2 rk3588-vop-vp=2\); rk3588-vop-fence=1 waits for Mali before the flip. GOP CPU blit remains the fallback when iommu init fails.
 
 ### 操作步骤
 
-- Boot the kernel with the GOP frame buffer and look at the monitor; then adapt the EVB10 VOP2 code to video port 0 and the monitor timing.
+- Build the two-pass display kernel, esp-put kernel/ADT/unixnu.toml, boot entry xnu, read opi5: display and rk3588: vop-direct lines.
 
 ### 开发经验
 
-- Observed \(evidence/device-display-firmware-20261103.txt\): the firmware detects HDMI0, reads the EDID \(2 blocks, preferred mode 1920 x 1080 @ 60 Hz\), sets VOP2 video port 2 with Esmart window 2 to 1920x1080p60 \(VOP VP2 enable Esmart2\[1920x1080-&gt;1920x1080@0x0\] fmt\[0\] addr\[0xE73D0000\]; HDPTX PHY locked, DwHdmiQp in HDMI mode\) and DarwinBoot hands the kernel the frame buffer 'video base=0xE73D0000 display=1 row=7680 width=1920 height=1080 depth=32' \(8294400 bytes inside the 'runtime data' run 0xE73D0000-0xE7BC0000 of the memory map\).
-- Reported by the user \(evidence/device-hdmi-watchdog-20261103.txt, not photographed\): with vc\_mirror=1 \(entry xnu-hdmi\) the kernel log scrolls as text on the monitor, so the kernel can write to that frame buffer; no display driver is in the kernel.
-- Host-verified: the kernel built for this board already carries the original IOMobileGraphicsFamily, IOSurface and IOGPUFamily \(kernel.json original\_executable\_sha256\), which the EVB10's display pass needs as its reference candidate.
-- The EVB10 display stack is a two-pass kernel build \(configs/evb10\_defconfig, then evb10\_display\_defconfig with CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y; scripts/build-evb10-display.py, build-display-abi.py, build-native-legacy-display.py, build-link-stubs.py, build-evb10-hid.py\) plus a board display backend \(package/Evb10Display/NativeLegacyDisplay.cpp with a VOP2 direct-scanout path\) and a 1040-line probe \(package/LegacyDisplayProbe.cpp\) that also starts HID, touch, Wi-Fi, audio, DVFS and the Mali; its VOP2 values are for the EVB10's panel \(host reading of the sources\).
-- Host-verified \(evidence/host-display-build-20261103.txt, device repository f2831c1\): configs/orangepi5\_display\_defconfig and the two-pass scripts/build-orangepi5-kernel.sh build the display kernel with UniXNU's own drivers/GopFramebuffer backend \(NativeLegacyDisplay with the GOP presenter: the UI is copied into the frame buffer DarwinBoot hands over, 1920x1080x32 at 0xE73D0000\) bound to the unchanged original IOMobileFramebufferLegacy \(358 virtual entries: 24 own, 154 inherited native, 7 guarded backend leaves, 193 symbols bound into the original executable, original\_instructions\_modified false\), with package/LegacyDisplayProbe.cpp reduced to the display \(no touch, Wi-Fi, audio, DVFS, Mali; opi5-hid=1 loads only the original IOHIDFamily and IOHIDEventDriver\). kernel.macho 51286016 bytes, sha256 2425c31b..., the NVMe bound-address check passes, the payload carries the display arguments \(553 of 1000 bytes\).
-- configs/orangepi5\_display\_defconfig force-loads libMali.a besides libRk3588Nvme.a, and the late probe \(package/LegacyDisplayProbe.cpp\) calls mali\_start\(\) after the HID start; the call returns at once without mali=N, so the display trial is not changed by it \(gpu area, evidence/host-gpu-build-20261103.txt; the display kernel is then 51658752 bytes, crc32 of the payload copy 7bec4f41\).
+- Firmware HDMI0 / GOP hand-off as in evidence/device-display-firmware-20261103.txt.
+- GOP CPU copy path reached SpringBoard on the board \(landscape 1920x1080\) but cost about 53 ms per 8294400-byte frame.
+- Shared VOP2 direct scanout \(SoC b5f5d94\) fixed page-table allocation for owned RAM above 4 GiB \(40-bit IOMMU PA\). On the board \(evidence/device-vop-direct-20261105.txt, kernel crc32 6612adcc\): vop direct iommu 1, flips 24, copy fallbacks 0, CPU copies 0; SpringBoard stayed up with Mali Metal.
 
 ### 完成条件
 
@@ -313,60 +313,63 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 当前范围
 
-- Nothing of the display kernel has run on the board: the build links, but whether the display classes load, the original IOMobileFramebufferLegacy initialises, the copy into the frame buffer shows a picture and SpringBoard comes up without a GPU is unknown. The trial kernel, ADT and unixnu.toml are on the ESP, the kernel file is not verified \(the crc32 over it aborted U-Boot, see docs/first-boot.md section 9\) and the board hung there, waiting for its power to be cycled.
-- The pixel order of the frame buffer and the VOP2 registers the firmware leaves were not read \(only its log lines\).
+- Person at the monitor has not re-confirmed the picture after the VOP switch \(serial only\).
+- Flips stop once the lock screen is static; fence often waits on GPU work at first swaps.
+- DVFS is not started from this probe.
 
 ### 下一步
 
-- After the power cycle: stop at the U-Boot prompt, read the kernel back at 0xa000000 and compare crc32 f7215c41 over 0x30e9000, boot entry xnu-hdmi \(key 2\) with the serial capture, read the 'opi5: display' lines, ask the person at the monitor what it shows; later a VOP2 scanout of its own on video port 2 for frame rate.
+- Ask for a look at HDMI after VOP; measure frame rate under a gesture; start DVFS from the probe.
 
 ### 证据
 
-- `source`: [Display milestones](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
-- `host`: [The display kernel \(pass B of scripts/build-orangepi5-kernel.sh\) links: 51286016 bytes, sha256 2425c31b..., the display archive 95175c9f..., the NVMe bound-address check passes; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-display-build-20261103.txt)
+- `source`: [Display milestones](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
+- `host`: [The display kernel \(pass B of scripts/build-orangepi5-kernel.sh\) links: 51286016 bytes, sha256 2425c31b..., the display archive 95175c9f..., the NVMe bound-address check passes; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-display-build-20261103.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `f2831c1b913f29d664727a73847853a15450c4f3`.
-- `device`: [The firmware drives HDMI0 at 1920x1080p60 \(VOP2 video port 2, Esmart 2\) and DarwinBoot hands the kernel a 1920x1080 32-bit frame buffer at 0xE73D0000, row 7680](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-display-firmware-20261103.txt)
+- `device`: [The firmware drives HDMI0 at 1920x1080p60 \(VOP2 video port 2, Esmart 2\) and DarwinBoot hands the kernel a 1920x1080 32-bit frame buffer at 0xE73D0000, row 7680](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-display-firmware-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:1 --send 'U-Boot v' ctrl-c --stop '&lt;INTERRUPT&gt;' 1 'at the U-Boot prompt'" tools/board/capture-remote.sh memN 700 (lines of the firmware and DarwinBoot)</code>. Revision: `1cbc693ca1c335720f0c4ae48665320e05390b4d`.
+- `device`: [VOP2 direct scanout on HDMI0: iommu 1, flips 24, copy fallbacks 0, CPU copies 0 \(kernel crc32 6612adcc\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-vop-direct-20261105.txt)
+  Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/esp-put.sh out/bundle/.../kernel.macho EFI/UniXNU/Payloads/kernel.macho; tools/board/capture-remote.sh vop2b 420</code>. Revision: `7b6f63f2b1ef4016636b3c55b00e48815bae471b`.
 
 ## 输入 {#input}
 
-`not-applicable`
+`implemented`
 
 ### 硬件与依赖
 
-- The first round is display only: no keyboard, mouse or touch device is attached.
+- No on-board digitizer; software HID keyboard/digitizer stand-in \(EVB10 NativeHidInput\) so backboardd and SpringBoard have a digitizer node.
 
 ### 配置
 
-- No input driver is configured; xHCI on USB host 0 and 2 \(and a HID class driver\) join later.
+- opi5-hid=1 loads IOHIDFamily; opi5-hid-input=1 and sheng-touch-hid=1 start the owned HID input; libOpi5Hid.a is force-loaded by orangepi5\_display\_defconfig.
 
 ### 操作步骤
 
-- None in this round.
+- Boot with the display kernel and read whether IOHIDEventDriver and the owned HID publish; real USB HID waits on xHCI.
 
 ### 开发经验
 
-- The Orange Pi 5 has no on-board input device; input means a USB keyboard or mouse through xHCI, which the EVB10 port does not cover \(its touch controller sits on I2C\).
+- The Orange Pi 5 has no panel touch; the stand-in is enough for SpringBoard to run. Physical USB keyboard/mouse needs xHCI, not started.
 
 ### 完成条件
 
-- Not applicable until USB input is requested.
+- SpringBoard runs with a digitizer node published.
 
 ### 当前范围
 
-- Out of scope of the current milestones.
+- No real pointer or keyboard on the board; scripted touch is not wired like EVB10's GT911 path.
 
 ### 下一步
 
-- Plan an xHCI and HID driver after the display works.
+- xHCI + USB HID after the display path is stable.
 
 ### 证据
 
-- `source`: [Input is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
+- `source`: [Input is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
 
 ## GPU {#gpu}
 
-`host-verified`
+`device-verified`
 
 组件: `GopFramebuffer`.
 
@@ -376,16 +379,15 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 配置
 
-- package/Mali \(submodule, the EVB10's commit 9dd949a\) is linked into the display kernel \(libMali.a force-loaded by both defconfigs, build-orangepi5-drivers.py Mali, scripts/build-mali-firmware.py from .cache/firmware/mali\_csffw.bin, which scripts/extract-files.py fills from proprietary-files.txt\); the late display probe calls mali\_start\(\), which returns at once unless the boot argument mali=N is given, and board.toml carries no mali argument yet. The Metal stack of the EVB10 port is board independent apart from the rail table.
+- package/Mali linked; board.toml defaults mali=8 mali-metal=1 evb10-gpu-addon=1; uefi-orangepi5 make-bundle.sh switches to the owner trust cache and carries NativeMaliMetal.addon when those args are set.
 
 ### 操作步骤
 
-- After the display kernel has run: boot with EXTRA\_KERNEL\_ARGS="mali=1" \(power domain, clocks, GPU\_ID\), then mali=2 \(firmware and MCU\), 3 \(command stream\), 8 \(the IOKit service with its user client\) plus mali-metal=1, reading the 'mali:' lines of the serial console at each step; then the composition path of the EVB10 and a measured frame.
+- Boot the display+VOP kernel with mali=8 mali-metal=1; read mali: lines and SpringBoard composition.
 
 ### 开发经验
 
-- The EVB10 port reached about 15 ms per heavy command buffer with the GPU at 750 MHz; the Orange Pi 5 uses the same SoC and rail, so the same driver is expected to work.
-- Host-verified \(evidence/host-gpu-build-20261103.txt, device repository ce6c6fb\): the driver compiles against this kernel and links \(kernel.macho 51658752 bytes, sha256 9281cf98..., the NVMe bound-address check passes\); the strong mali\_gpu\_addon / mali\_test\_file replace the NVMe driver's weak ones. The Mali.cpp header and README name the SoC's own registers only \(PMU 0xfd8d8000, CRU 0xfd7c0000, GPU 0xfb000000, power domain 12\): nothing in them is EVB10 specific; the GPU clock is left at the 198 MHz default unless mali-pll / mali-div / mali-npll say otherwise \(750 MHz needs the 0.75 V rail of the firmware's default build, whether this board's firmware sets it is not known\).
+- On the board with mali=8 mali-metal=1 \(same runs as the VOP evidence\): mali user status shows SpringBoard and poster extensions composing \(vkpipe failed=0\); VOP flips the Metal surfaces without a CPU copy.
 
 ### 完成条件
 
@@ -393,17 +395,19 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 当前范围
 
-- Nothing of the driver has run on the board: whether the GPU powers up, the rail and clocks the firmware leaves, the CSF firmware start and the Metal stack in this board's root image are unknown. The first display trial runs with mali off.
+- Frame rate under gesture not measured on this board; GPU rail/clock may still be the firmware default \(\~198 MHz\) unless DVFS or mali-npll is set; 5 GHz Wi-Fi and audio unrelated.
 
 ### 下一步
 
-- After the display trial: mali=1, then 2, 3 and 8 \(one boot each, serial only\), then mali-metal=1 and the frame measurement.
+- Gesture frame measurement; optional mali-npll / DVFS for higher clocks.
 
 ### 证据
 
-- `source`: [GPU milestone](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
-- `host`: [The kernel with package/Mali links: 51658752 bytes, sha256 9281cf98..., libMali.a 00ef7ebe..., the NVMe bound-address check passes; mali\_start\(\) returns without mali=N; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-gpu-build-20261103.txt)
+- `source`: [GPU milestone](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
+- `host`: [The kernel with package/Mali links: 51658752 bytes, sha256 9281cf98..., libMali.a 00ef7ebe..., the NVMe bound-address check passes; mali\_start\(\) returns without mali=N; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-gpu-build-20261103.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `ce6c6fb8d6f31b3c0a87dd4ead1f6d444c79f366`.
+- `device`: [mali=8 mali-metal=1 with SpringBoard composing; VOP direct flips surfaces \(same capture as display\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-vop-direct-20261105.txt)
+  Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh vop2b 420</code>. Revision: `7b6f63f2b1ef4016636b3c55b00e48815bae471b`.
 
 ## 网络 {#network}
 
@@ -439,7 +443,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Network is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
+- `source`: [Network is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
 
 ## 音频 {#audio}
 
@@ -475,7 +479,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Audio is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/docs/bring-up.md)
+- `source`: [Audio is deferred](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/docs/bring-up.md)
 
 ## 电源 {#power}
 
@@ -495,8 +499,9 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 开发经验
 
-- The board has no reset controller: a hung kernel ends in the watchdog reset \(about 89 seconds without wdt-kick\), a hung firmware needs a manual power cycle.
-- Not yet observed on the board.
+- The board has no remote reset controller; wdt-kick feeds the hardware watchdog.
+- When the feed window ends, NativeNvme also writes CRU\_GLB\_SRST\_FST \(0xFD7C0A00 = 0xFDB9\) so the board returns to U-Boot without a pull-plug \(observed: soft reset then U-Boot banner\).
+- DVFS tables from the SoC repository are not started from the Orange Pi 5 probe yet.
 
 ### 完成条件
 
@@ -504,15 +509,15 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 当前范围
 
-- The DVFS probe of the EVB10 is started from its display probe; the Orange Pi 5 needs its own start hook.
+- DVFS is still not hooked on this board; soft reset is not a substitute for a remote reset controller during firmware hangs.
 
 ### 下一步
 
-- Observe the first boot, then enable DVFS.
+- Start Rk3588Dvfs from the display probe \(board rail table\).
 
 ### 证据
 
-- `source`: [wdt-kick and the firmware watchdog hand-off](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/board.toml)
+- `source`: [wdt-kick and the firmware watchdog hand-off](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/board.toml)
 
 ## 镜像组装 {#packaging}
 
@@ -541,6 +546,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 - The SoC repository is pinned in feeds.toml; local.toml can point at a checkout during development.
 - The kernel is now built in two passes \(configs/orangepi5\_defconfig, then orangepi5\_display\_defconfig\) and the payload comes from the second one: package/LegacyDisplayProbe.cpp, KeyStoreProbe.cpp and LinkStubs.c are the display pass's device code, tools/board/make-bundle.sh of uefi-orangepi5 selects the kernel by KERNEL\_CONFIG \(default the display kernel\), and board.toml carries the display archive, the GopFramebuffer component and the offline-legacy-\* / sheng-\* arguments \(553 of 1000 bytes\). Host-verified in evidence/host-display-build-20261103.txt; the ADT of a payload build differs from build to build while the kernel does not.
 - package/Mali is a submodule now \(Ken-u/Mali, the EVB10's commit 9dd949a; the pointer is staged with the change that adds it, otherwise unixnu resets it to the index\). The payload of the Mali-linked display kernel is kernel.macho 51658752 bytes crc32 7bec4f41, ADT crc32 970b5293 \(the ADT differs per payload build\), trust cache e3343405 and unixnu.toml fe909e88 unchanged; the ESP of the board still holds the display kernel without Mali \(f7215c41, written, not verified\).
+- Later esp-put \(tools/board/esp-put.sh\) verified kernel.macho crc32 6612adcc \(VOP+Mali+HID display kernel\), ADT and unixnu.toml on the NVMe ESP; make-bundle.sh carries the GPU addon and owner trust when evb10-gpu-addon=1.
 
 ### 完成条件
 
@@ -550,22 +556,22 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 - The vendored EVB10 patches keep the EVB10 names and drift when the EVB10 repository changes \(scripts/check-vendored-patches.sh shows it\).
 - The payload was started from U-Boot through the launcher only; the SPI NOR route has not run.
-- The display payload has not been started: its 51286016-byte kernel went to the ESP in pieces and the check of the whole file hung U-Boot \(docs/first-boot.md section 9\), so the file on the ESP is unverified until the board is power-cycled.
+- Default menu entry is still xnu-probe.
 
 ### 下一步
 
-- Write the next esp.img with xnu as the default entry \(DEFAULT\_ENTRY=xnu MENU\_TIMEOUT=3 tools/board/make-bundle.sh\).
+- DEFAULT\_ENTRY=xnu MENU\_TIMEOUT=3 tools/board/make-bundle.sh and rewrite esp.img.
 
 ### 证据
 
-- `source`: [Kernel build driver](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/scripts/build-orangepi5-kernel.sh)
-- `host`: [Pass B of the kernel build \(display\) links and the payload of the display kernel assembles with the display arguments; the ADT differs between payload builds, the kernel does not; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-display-build-20261103.txt)
+- `source`: [Kernel build driver](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/scripts/build-orangepi5-kernel.sh)
+- `host`: [Pass B of the kernel build \(display\) links and the payload of the display kernel assembles with the display arguments; the ADT differs between payload builds, the kernel does not; nothing ran on the board](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-display-build-20261103.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh &amp;&amp; cd ../uefi-orangepi5 &amp;&amp; REBUILD=1 tools/board/make-bundle.sh</code>. Revision: `f2831c1b913f29d664727a73847853a15450c4f3`.
-- `host`: [The payload assembles \(256 MiB FAT volume with kernel, ADT, trust cache and Data seed\) and the bundle installs into a 128 GB image with read-back; the board has not started it](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-nvme-storage-20261101.txt)
+- `host`: [The payload assembles \(256 MiB FAT volume with kernel, ADT, trust cache and Data seed\) and the bundle installs into a 128 GB image with read-back; the board has not started it](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-nvme-storage-20261101.txt)
   Command: <code>cd UniXNU &amp;&amp; host/in-ns.sh ./unixnu build payload -D ../UniXNU-orangepi5 --unique-chip-id ID --trust-cache original-static-system.bundle --data-ramdisk owner-data-2048.trim.img</code>. Revision: `5cbaf4236c5f0a850a62daa341b1195956b4a63f`.
-- `host`: [The console kernel linked to a 51019776-byte arm64 Mach-O executable with the first board patch series \(superseded by the NVMe kernel above\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-kernel-build-20261101.txt)
+- `host`: [The console kernel linked to a 51019776-byte arm64 Mach-O executable with the first board patch series \(superseded by the NVMe kernel above\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-kernel-build-20261101.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh</code>. Revision: `f4bb6e952e915f4f837547f11981ca26b61a5c46`.
-- `device`: [The payload on the NVMe ESP was started by the firmware, the kernel with the NVMe driver booted to launchd \(capture xnu1\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-first-boot-20261103.txt)
+- `device`: [The payload on the NVMe ESP was started by the firmware, the kernel with the NVMe driver booted to launchd \(capture xnu1\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-first-boot-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh xnu1 480</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
 
 ## 诊断 {#diagnostics}
@@ -593,6 +599,7 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 - The firmware's memory map is in the serial log \(MEMMAP lines of UniXNUMemMapDxe: before the menu, when it changes, and at ExitBootServices\); capture-remote.sh can type Ctrl-C at the U-Boot banner \(--send 'U-Boot v' ctrl-c,...\) and stop on the prompt, so a run starts and ends without anyone at the board.
 - evidence/device-display-firmware-20261103.txt is cut from the same capture as the memory evidence \(memN\); the EDID dump is left out of it because it carries the monitor's serial number \(the lines about the EDID stay\).
 - The host records of the display and Mali builds \(evidence/host-display-build-20261103.txt, host-gpu-build-20261103.txt\) state which checksums were written to the ESP over U-Boot and which were verified; the file written last \(the display kernel without Mali, f7215c41\) is the one whose read back aborted U-Boot and is unverified.
+- evidence/device-vop-direct-20261105.txt is an excerpt of capture vop2b after esp-put verified kernel crc32 6612adcc: VOP direct iommu 1 with zero CPU copies.
 
 ### 完成条件
 
@@ -608,12 +615,14 @@ Orange Pi 5 \(Rockchip RK3588S\) with an HDMI display and an M.2 NVMe drive, run
 
 ### 证据
 
-- `source`: [Repository overview and status](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/README.md)
-- `device`: [The first serial logs of the board, excerpted](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-first-boot-20261103.txt)
+- `source`: [Repository overview and status](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/README.md)
+- `device`: [The first serial logs of the board, excerpted](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-first-boot-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh auto1 330 (reset typed at the U-Boot prompt); CAPTURE_ARGS="--send 'menu: shown' text:1" tools/board/capture-remote.sh xnu1 480</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
-- `device`: [HDMI text mirror, the watchdog reset and the adapter that drops off the bus, excerpted](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/device-hdmi-watchdog-20261103.txt)
+- `device`: [HDMI text mirror, the watchdog reset and the adapter that drops off the bus, excerpted](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-hdmi-watchdog-20261103.txt)
   Command: <code>cd uefi-orangepi5 &amp;&amp; CAPTURE_ARGS="--send 'menu: shown' text:2" tools/board/capture-remote.sh hdmi3 1500 /dev/serial/by-id/ADAPTER</code>. Revision: `b1d3c18fc1ba985101e5d3c372d18e59d0378df4`.
-- `host`: [Checksums of the Mali-linked display kernel and its payload \(kernel crc32 7bec4f41\), and what the ESP holds](https://github.com/Ken-u/UniXNU-orangepi5/blob/4a581c0a9bd12fa1c28afeb69cb46cbaa548c24a/evidence/host-gpu-build-20261103.txt)
+- `host`: [Checksums of the Mali-linked display kernel and its payload \(kernel crc32 7bec4f41\), and what the ESP holds](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/host-gpu-build-20261103.txt)
   Command: <code>source host/env.sh &amp;&amp; cd UniXNU-orangepi5 &amp;&amp; scripts/build-orangepi5-kernel.sh &amp;&amp; cd ../uefi-orangepi5 &amp;&amp; REBUILD=1 tools/board/make-bundle.sh</code>. Revision: `ce6c6fb8d6f31b3c0a87dd4ead1f6d444c79f366`.
+- `device`: [Serial excerpt after VOP direct kernel on the ESP \(iommu 1, zero CPU copies\)](https://github.com/Ken-u/UniXNU-orangepi5/blob/f96d273b526254d700bd42bfeadef0359a1d3c46/evidence/device-vop-direct-20261105.txt)
+  Command: <code>cd uefi-orangepi5 &amp;&amp; tools/board/capture-remote.sh vop2b 420</code>. Revision: `7b6f63f2b1ef4016636b3c55b00e48815bae471b`.
 
 </div>

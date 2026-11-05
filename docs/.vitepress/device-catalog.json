@@ -775,6 +775,11 @@
     "title_zh": "小米平板 8 Pro（piano）"
   },
   {
+    "name": "piano-xiaomi-pad-8-pro-development",
+    "title": "Xiaomi Pad 8 Pro: first XNU boot from RAM (OnePlus 13T base) (xiaomi-pad-8-pro-development)",
+    "title_zh": "Xiaomi Pad 8 Pro: first XNU boot from RAM (OnePlus 13T base) (xiaomi-pad-8-pro-development)"
+  },
+  {
     "name": "picasso",
     "title": "Redmi K30 5G (picasso)",
     "title_zh": "Redmi K30 5G（picasso）"
@@ -893,6 +898,11 @@
     "name": "raphael",
     "title": "Redmi K20 Pro / Mi 9T Pro (raphael)",
     "title_zh": "Redmi K20 Pro / Mi 9T Pro（raphael）"
+  },
+  {
+    "name": "raphael-guowenye",
+    "title": "Independent Redmi K20 Pro port; compile-only default with separately gated native handset bring-up (guowenye)",
+    "title_zh": "Independent Redmi K20 Pro port; compile-only default with separately gated native handset bring-up (guowenye)"
   },
   {
     "name": "raphael-jackyhowh",
@@ -1233,6 +1243,11 @@
     "name": "umi-neowiseq",
     "title": "Xiaomi Mi 10 / SM8250 UniXNU bring-up (neowiseq)",
     "title_zh": "Xiaomi Mi 10 / SM8250 UniXNU bring-up (neowiseq)"
+  },
+  {
+    "name": "unicorn",
+    "title": "Xiaomi 12S Pro (unicorn, SM8475): UniXNU UEFI bring-up",
+    "title_zh": "Xiaomi 12S Pro (unicorn, SM8475): UniXNU UEFI bring-up"
   },
   {
     "name": "unisoc",
