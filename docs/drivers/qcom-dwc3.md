@@ -28,6 +28,30 @@ The board supplies the eUSB2 repeater, QMP PHY, retimer, rails and SMMU context.
 
 `AppleUSBXDCI` has no personality, so the driver loads the kext before registering its subclass. The prelink roots add the device and host stacks and leave out `AppleOnboardSerial` and `AppleSMC`, which the host stack only names in a metaclass comparison.
 
+## Configuration
+
+| Boot argument | Effect |
+| --- | --- |
+| `sheng-usb=1` | Runs the driver |
+| `sheng-usb=2` | Adds register sampling |
+| `sheng-usb=3` | Also takes the controller off the bus and back once |
+| `sheng-usb-host=<s>` | Forces host mode after a delay |
+| `sheng-usb-back=<s>` | Returns to the cable's role after that |
+| `log-sys=1` | Adds the `[usb]` rows of `native_usb_stats` to the boot log |
+
+## Adapting to another board
+
+1. Supply the repeater, PHY, retimer and rail sequences, and the eUSB2 reference rate. With a wrong rate chirp passes and high-speed data fails.
+2. Give the controller's stream a coherent stage 1 context.
+3. Provide `qcom_dwc3_vbus()` and the UCSI channel.
+4. Add the USB stacks to the OS profile's prelink roots.
+5. After a kernelcache change, regenerate the class layouts with `scripts/gen-usb27-abi.py` and `scripts/gen-usb27-host-abi.py`.
+
+Keep these two overrides when the layouts change:
+
+- Slot 179 of `AppleUSBXDCI` stays false without an `IOPort` transport object. True leaves `bNumConfigurations` at 0.
+- In host mode the xHCI subclass answers on for the family's desired power, and the device stack answers 0.
+
 ## Pairing with a Mac
 
 A Mac and `lockdownd` need these system answers:
