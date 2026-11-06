@@ -66,6 +66,8 @@ lsl x2, x2, #(ARM_PGSHIFT - TTE_SHIFT)
 
 Apple 4K profile 在 1 GiB 以上切换到 16 KiB，native 构建在任何大小下保持 4 KiB。
 
+xnu-8796 的 `arm_init.c` 在这段策略之前包含 `apple_arm64_common.h`，该头文件定义了 `APPLE_ARM64_ARCH_FAMILY`。native 判断因此不成立，内存超过 1 GiB 的设备会选择 16 KiB 页，pmap 在 `write_pte_fast` 报 PTE 写入未对齐并 panic。在 xnu-8796 上需要在该包含之前确定页大小。
+
 ## 用户地址空间
 
 补丁修改用户 map 策略：
