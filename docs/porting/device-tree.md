@@ -95,7 +95,8 @@ sleep-disabled = 1
 
 Supported property types are `string`, `strings`, `u32`, `u64`, and hex `bytes`.
 The tables populate `root`, `chosen`, `defaults`, `options`, `product`, and
-`buttons`. The common generator creates CHRP NVRAM, a fresh 64-byte random seed,
+`buttons`. `[adt.manifest_properties]` fills `/chosen/manifest-properties`,
+which is empty without it; AppleImage4 on iOS 16.5 reads `BNCH` there. The common generator creates CHRP NVRAM, a fresh 64-byte random seed,
 platform identity, root matching, and payload memory-map placeholders.
 
 ## Standalone conversion

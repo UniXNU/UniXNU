@@ -92,6 +92,7 @@ sleep-disabled = 1
 
 支持 `string`、`strings`、`u32`、`u64` 和十六进制 `bytes`。
 这些表填充 `root`、`chosen`、`defaults`、`options`、`product` 和 `buttons`。
+`[adt.manifest_properties]` 填充 `/chosen/manifest-properties`，未设置时该节点为空；iOS 16.5 的 AppleImage4 从这里读取 `BNCH`。
 共享生成器创建 CHRP NVRAM、64 字节随机种子、平台身份、根卷匹配和 payload 内存映射占位属性。
 
 ## 独立转换
