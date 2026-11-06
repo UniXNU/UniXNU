@@ -13,13 +13,14 @@
 |---|---|---|
 | 🥾 Boot | Stock bootloader → `fastboot boot` of our shim → XNU | ✅ |
 | 🧠 CPU | All 8 cores; clocks follow the load (EPSS governor, 75 °C limit) | ✅ |
+| 🧮 RAM | 6.66 GB of the 8 GB for iOS (one range, 0xd6000000-0x280000000); the rest is firmware or our DSP / Wi-Fi buffers | ✅ |
 | 💾 UFS | Own host driver, HFS+ root in `userdata`, read/write | ✅ |
 | 🖥️ Display | 1080×2340 AMOLED, presented as the iPhone X panel | ✅ |
 | 🔆 Brightness | Slider, Control Center, auto-brightness, Night Shift | ✅ |
 | 👆 Touch | ST FTM5 | ✅ |
 | 🔘 Buttons | Power, volume up/down | ✅ |
 | 🔋 Battery | Real percentage, voltage, current, charging state | ✅ |
-| 🔌 Type-C Charge | Charges; no charger control or fast-charge negotiation from iOS | ⚠️ |
+| 🔌 Type-C Charge | Charges, but slower than iOS uses power on a computer's USB port (68 → 44 % in an evening): use a wall charger, don't leave it on iOS unattended; no charger control or fast charge | ⚠️ |
 | ⚡ Wireless charge | | ❌ |
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
@@ -29,7 +30,7 @@
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
 | 🧭 Sensor | Ambient light only | ⚠️ |
-| 🎆 GPU | Adreno 650 draws the UI (CoreAnimation through Metal / turnip); CPU overhead while animating still high | ✅ |
+| 🎆 GPU | Adreno 650 draws the UI and every app that uses Metal (through turnip); Safari on the GPU; per-app GPU memory caps | ✅ |
 | 🎬 Video decode | No hardware decoder, videos do not play | ❌ |
 | 📷 Camera | | ❌ |
 | 🔦 Camera Flash | | ❌ |
@@ -92,7 +93,10 @@
 |---|---|---|
 | ⚙️ Power-up | GMU / RPMh, zap shader authenticated by TrustZone | ✅ |
 | 🧾 Command streams | The command processor runs our streams | ✅ |
-| 🎨 Metal | Over Mesa's turnip (`sweetmtl`), fence interrupts; a per-submit command walk still costs CPU | ✅ |
+| 🎨 Metal | Over Mesa's turnip (`sweetmtl`) and the metal2vulkan bridge (ios-apollo's series), fence interrupts; a per-submit command walk still costs CPU | ✅ |
+| 📱 Metal for every app | `/var/local/mtl2-clients` = `*`: SpringBoard, posters, widgets, Safari and any app get a Metal device; the AegirPoster crash loop is gone | ✅ |
+| 🧭 Safari | Pages draw on the GPU (WebKit.GPU); the address bar glitches, the status bar is white, a link tap sometimes does nothing | ⚠️ |
+| 🧮 GPU memory | Wired RAM, reported per app every 10 s; caps (kernel 0251): 768 MB per app, 1536 MB for all apps, 1 GB of RAM kept free; backboardd and SpringBoard uncapped. GPU address windows given back when a process exits (0250) | ✅ |
 | 🖼️ CoreAnimation on the GPU | Composites through Metal on the GPU and scans out directly; only the App Library background blur still glitches; backboardd median ~20 % of a core, more when animating | ✅ |
 
 ## 🧠 CPU and performance
@@ -131,6 +135,8 @@
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,
   haptics on the Actuator
 * **Video**: hardware decode (VideoToolbox / AVD)
-* **GPU**: drop the per-submit cache walk (make Turnip's write-combined command memory coherent without it), less CPU per frame
+* **GPU**: Safari's address bar / white status bar and link taps; the App Library blur; apps that hit the memory caps (check what they do with a nil buffer); drop the per-submit cache walk (make Turnip's write-combined command memory coherent without it), less CPU per frame
+* **RAM**: ~7 GB by moving our DSP / Wi-Fi buffers into free low RAM (0x92700000-0xb03fffff) and starting iOS at 0xc0000000
+* **Charging**: charge faster than iOS drains (charger control on the PM8150B)
 * **Wi-Fi**: 5 GHz, HT / VHT rates, WPA3
 * **Cellular**, **GPS**, **Fingerprint**, **Face ID / SEP**, **NFC**, **Wireless charging**

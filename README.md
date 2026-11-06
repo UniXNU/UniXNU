@@ -4,7 +4,7 @@
 
 This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Xiaomi Mi 10 (`umi`, Qualcomm SM8250 / Snapdragon 865). On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd, SpringBoard and the stock apps.
 
-As of **2026-10-31** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks), the brightness slider and auto-brightness work, the battery shows its real charge, and the Adreno 650 GPU is being brought up.
+As of **2026-11-06** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks), Bluetooth pairing, the speaker, the brightness slider and auto-brightness work, the battery shows its real charge, the **Adreno 650 GPU draws the UI and every Metal app** (Safari included), and iOS has **6.66 GB of the phone's 8 GB of RAM**.
 
 > Experimental bring-up, not a usable phone OS. Many things are missing or stubbed (see below), and Apple's security model is mostly switched off. It installs into the `userdata` partition and so **erases Android's user data**.
 
@@ -15,7 +15,8 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | Area | State |
 | --- | --- |
 | Boot | Stock Xiaomi bootloader → `fastboot boot` of our shim → XNU. The shim image can also be flashed to `boot` so iOS starts on its own |
-| CPU | All 8 cores (4× Cortex-A55, 3× A77, 1× A77 prime) via PSCI, 16K pages, GICv3 interrupts, timers |
+| CPU | All 8 cores (4× Cortex-A55, 3× A77, 1× A77 prime) via PSCI, 16K pages, GICv3 interrupts, timers; clocks follow the load; UI threads kept on the big cores |
+| RAM | 6.66 GB for iOS (0xd6000000–0x280000000, one range as XNU needs); the rest is firmware carve-outs and our DSP / Wi-Fi buffers |
 | Storage | Own UFS host driver; the iOS root is a journaled HFS+ volume in `userdata`, read/write |
 | iOS userland | Real iPhone X 16.7.16 root filesystem and shared cache; launchd, the system daemons and the 31 removable stock apps |
 | Display | Kernel IOSurface + IOMobileFramebuffer (`AppleCLCD`) services; CoreAnimation frames go to the 1080×2340 AMOLED panel. Presented to iOS as an iPhone X panel (1125×2436) |
@@ -29,18 +30,20 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | Audio | The ADSP (booted by the kernel, APR to its AFE / ASM / ADM services) plays through tertiary MI2S (SD1) into the two CS35L41 amps; iOS's audio server reaches it through our `SweetAudio.driver` HAL plug-in and `/dev/sweet-audio` (`sweetadsp=1 sweetamp=1 sweetaudio=1`); ringtones and system sounds play from the speaker, ~3.5 min after boot |
 | Location | Works: Wi-Fi positioning (Weather shows the city for My Location; Maps asks for permission), since fairplayd.H2 was taken out of launchd's job list. No GPS receiver yet |
 | USB | ECM gadget (USB Ethernet) with a live kernel log and a small kernel file server for development |
-| GPU | Adreno 650 powered through GMU/RPMh, zap shader authenticated by TrustZone, command processor running our command streams; a Metal path over Mesa's turnip is experimental (`sweetmtl`) |
+| GPU | Adreno 650 powered through GMU/RPMh, zap shader authenticated by TrustZone; Metal over Mesa's turnip and a metal2vulkan bridge for CoreAnimation and every app that asks (`/var/local/mtl2-clients` = `*`), Safari included; per-app GPU memory caps |
+| Bluetooth | QCA6390 over UART: scan, connect and pair in Settings (more in [`Status.md`](Status.md)) |
 | Device identity | iPhone X (`iPhone10,3` / `D22AP`): no Home button, gesture UI |
 | Activation | Native "Hactivation" path of mobileactivationd, chosen through device-tree security status. No Apple servers involved |
 
 ## What does not work (yet)
 
-- **No Bluetooth, cellular, camera, motion sensors or SEP / Face ID**, and no GPS receiver (location itself works, from Wi-Fi). Daemons for them start and fail or keep relaunching.
+- **No cellular, camera, motion sensors or SEP / Face ID**, and no GPS receiver (location itself works, from Wi-Fi). Daemons for them start and fail or keep relaunching. Bluetooth audio is untested.
 - **No True Tone**: the light sensor reports brightness only, not color.
 - **No microphones** yet, and the earpiece speaker is not used as a second channel.
 - **No hardware video decoding** (VideoToolbox / AVD), so videos do not play; music apps never reached the audio system in tests.
 - **Wi-Fi** is 2.4 GHz only, legacy rates, no WPA3.
-- **GPU** rendering is not reliable yet (fence timeouts); CoreAnimation mostly renders on the CPU.
+- **GPU**: Safari's address bar glitches and its status bar is white, the App Library blur glitches, and an app that hits its GPU memory cap gets no buffer (it may crash rather than freeze the phone).
+- **Charging** is slower than iOS uses power on a computer's USB port: use a wall charger and don't leave it running iOS unattended.
 - **No App Store, no Apple ID.**
 - **Security is off:** permissive code signing (AMFI) and sandbox policies, a stub AppleKeyStore, no data protection. Do not put anything personal on it.
 
@@ -177,6 +180,13 @@ Not in git: partition backups, live device trees, recovery images, Apple firmwar
 | 0201–0203 | Apple80211 for wifid (from ios-flame / HackiOS), the QCA6390 as wifid's station, WPA2-PSK |
 | 0204–0207 | File server LIST; backlight (CoreBrightness → DCS 0x51 over DSI); panel dark while the display is off; Night Shift through the MDP's PCC |
 | 0208–0214 | SLPI sensor DSP: firmware boot via TrustZone, SMEM/SMP2P/GLINK, QRTR and service locator, FastRPC config server, SEE ambient light client, Apple ALS HID service for auto-brightness |
+| 0215–0232 | Audio: ADSP boot, AFE / ASM / ADM over APR, audio PD over FastRPC, CS35L41 amps, `/dev/sweet-audio` for the `SweetAudio.driver` HAL plug-in |
+| 0233 | `sweettop`: per-thread CPU report in the log |
+| 0234–0237 | Bluetooth: QCA6390 over UART, RPMh rails, early start |
+| 0238 | CPU frequency governor (EPSS), thermal cap |
+| 0239–0247 | GPU and display: fence interrupts, cheaper submits, cache coherence fixes, stale frames, drawable and IOSurface leaks |
+| 0248 | UI and render threads on the big cores |
+| 0249–0251 | GPU memory per app in the log, GPU address windows given back, GPU memory caps |
 
 ## Key hardware facts (Mi 10)
 
