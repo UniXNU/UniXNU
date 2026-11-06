@@ -4,7 +4,7 @@
  * An AudioServerPlugIn (CoreAudio's documented user-space driver interface, header from the iPhoneOS SDK).
  * iOS's VirtualAudio.plugin builds its routes over physical devices it knows by UID, the ones an iPhone's own audio
  * plug-in publishes, and builds the speaker route only when all of them exist. So this publishes the iPhone set:
- *   "Speaker"   2 ch out (-> /dev/sweet-audio) + 2 ch silent in, a volume control (-48..0 dB)
+ *   "Speaker"   2 ch out (-> /dev/sweet-audio) + 2 ch silent in (iOS's software volume; SA_HW_VOLUME=1: a control)
  *   "Hawking"   1 ch silent in
  *   "Actuator"  1 ch out (haptics: discarded for now)
  *   "Codec"     1 ch silent in, a data-source control with the one source 'imic' ("Bottom")
@@ -61,8 +61,17 @@ struct sa_dev {
 	AudioObjectID control;                  /* 0 = none */
 	bool can_default;
 };
+/*
+ * No hardware volume control on the Speaker by default (2026-11-06): iOS runs this route with software volume
+ * (unified log 0231c: VirtualAudio scales the samples itself) and, a few minutes after boot when the DSP and route come
+ * up, set our control to 100 % - the one-time volume change the user saw. With no control there is nothing to reset;
+ * the node stays at unity gain. Build with -DSA_HW_VOLUME=1 for the old control (-48..0 dB).
+ */
+#ifndef SA_HW_VOLUME
+#define SA_HW_VOLUME            0
+#endif
 static const struct sa_dev sa_devs[] = {
-	{ kObjSpeaker, CFSTR("Speaker"), kObjSpeakerOut, kObjSpeakerIn, 2, 2, kObjVolume, true },
+	{ kObjSpeaker, CFSTR("Speaker"), kObjSpeakerOut, kObjSpeakerIn, 2, 2, SA_HW_VOLUME ? kObjVolume : 0, true },
 	{ kObjHawking, CFSTR("Hawking"), 0, kObjHawkingIn, 0, 1, 0, false },
 	{ kObjActuator, CFSTR("Actuator"), kObjActuatorOut, 0, 1, 0, 0, true },
 	{ kObjCodec, CFSTR("Codec"), 0, kObjCodecIn, 0, 1, kObjSource, false },
