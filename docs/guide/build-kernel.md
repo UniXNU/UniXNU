@@ -92,6 +92,8 @@ Each `CONFIG_XNU_<NAME>` line becomes `XNU_<NAME>` in the kernel build environme
 | `XNU_BOOT_PROGRESS` | Adds the boot progress layer | `build/boot-progress/libBootProgress.a` |
 | `XNU_SOURCE_MOCKFS` | Adds the mockfs test file | `build/mockfs-fixture/libmockfs_fixture.a` |
 
+A kernel built without `XNU_NATIVE_PAN` needs `SCTLR_EL1.SPAN` set. With SPAN clear the CPU sets `PSTATE.PAN` on every exception entry and that kernel never clears it, so the first `copyin` of a system call faults and is retried forever. On xnu-8796 `CFLAGS_EXTRA` does not reach the compile, and `-DXNU_NATIVE_PAN=1` passed that way is lost.
+
 `[kernel] archives` in `board.toml` lists the archive builders in order. Each entry is a script of the build tree and its arguments. For example:
 
 ```toml
