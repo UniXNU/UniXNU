@@ -51,6 +51,8 @@ The recipe checks pins in `scripts/data/adreno-inputs.json` and reads
 `.cache/firmware/sheng-gpu/`. Adapt the extraction paths and pins to the target's
 verified firmware; record provenance in `proprietary-files.txt`.
 
+Register sources number the GMU registers differently. The `a6xx_gmu.xml` that the reference recipe pins numbers them from the GPU base (`CM3_SYSRESET` 0x1f800); Linux v6.16 numbers them from the GMU block (0x5000), as `gmu_read()` uses them. Subtracting the GPU-to-GMU delta from v6.16 numbers puts every GMU write at the wrong offset, and the cold start stops early (on SM8650 at status 4, phase 1). After generating the register header, check one known register: `CM3_SYSRESET` is at byte 0x14000 of the GMU window.
+
 **Expected result:** board power inputs and firmware match the target GPU.
 Confirm GMU startup and HFI response before submitting commands.
 

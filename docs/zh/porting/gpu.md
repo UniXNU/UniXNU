@@ -45,6 +45,8 @@ Adreno740 实现 A740 内核接口。AdrenoMetal 使用该接口、Turnip、meta
 配方读取 `.cache/firmware/sheng-gpu/`，核对 `scripts/data/adreno-inputs.json` 中的固定值。
 按目标设备已确认的固件修改提取路径与固定值，在 `proprietary-files.txt` 中记录来源。
 
+不同寄存器来源对 GMU 寄存器的编号不同。参考配方固定的 `a6xx_gmu.xml` 从 GPU 基址起编号（`CM3_SYSRESET` 为 0x1f800），Linux v6.16 从 GMU 块起编号（0x5000），与 `gmu_read()` 的用法一致。对 v6.16 的编号再减去 GPU 到 GMU 的偏移，所有 GMU 写入都会落到错误位置，冷启动提前停止（SM8650 上停在 status 4、phase 1）。生成寄存器头文件后核对一个已知寄存器：`CM3_SYSRESET` 位于 GMU 窗口的字节偏移 0x14000。
+
 **预期结果：** 板级电源输入和固件匹配目标 GPU。提交命令前确认 GMU 启动和 HFI 响应。
 
 ## 3. 建立内存和命令提交路径
