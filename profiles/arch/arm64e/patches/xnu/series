@@ -36,6 +36,7 @@
 ../../../../../patches/xnu-12377/native-lookup-trace.patch
 ../../../../../patches/xnu-12377/native-union-getattrlistbulk.patch
 ../../../../../patches/xnu-12377/native-union-lower-directory.patch
+../../../../../patches/xnu-12377/native-union-statfs-fsid.patch
 ../../../../../patches/xnu-12377/native-work-interval-trace.patch
 ../../../../../patches/xnu-12377/offline-component-load-probes.patch
 ../../../../../patches/xnu-12377/offline-legacy-start.patch
