@@ -67,6 +67,10 @@ mtype -i out/<device>/<os_profile>/<config>/payload/payload.img ::/EFI/UniXNU/un
 | `sheng-touch-mode=<n>` | 强制触控 SPI 模式 |
 | `sheng-touch-hid=1` | 把触控点发布到 HID |
 | `sheng-aks=1` | 启用 AKS 路径 |
+| `sheng-aks-sls=<n>` | 选择上报的锁定状态；3 表示无密码 |
+| `sheng-usb=<n>` | 运行 QcomDwc3；2 增加寄存器采样，3 另外让总线断开重连一次 |
+| `sheng-usb-host=<s>` | 延时后强制进入 USB 主机模式 |
+| `sheng-usb-back=<s>` | 强制主机模式持续该时间后，回到线缆决定的角色 |
 | `sheng-gpu-power=<n>` | 选择 GPU 电源序列 |
 | `sheng-gpu-metal=1` | 启用 Metal 路径 |
 | `sheng-gpu-addon=1` | 挂载 GPU addon 内容 |

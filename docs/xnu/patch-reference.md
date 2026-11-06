@@ -83,6 +83,7 @@ Format 2 applies `[kernel] patch_series` in declared order. Series can reference
 | `native-priv-work-interval` | Grants `PRIV_WORK_INTERVAL` before policy evaluation |
 | `native-work-interval-soft-fail` | Soft-fails a refused CA client work interval |
 | `native-union-getattrlistbulk` | Continues a bulk directory read in the lower union directory |
+| `native-union-statfs-fsid` | Reports the root volume's file system number through `statfs64` for a union over the root |
 | `null-root-media` | Handles a null root in `IOService::setRootMedia` |
 | `published-freezer-condition` | Fixes the freezer default condition |
 

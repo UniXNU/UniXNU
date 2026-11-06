@@ -85,6 +85,7 @@
 | `native-priv-work-interval` | 在策略评估前授予 `PRIV_WORK_INTERVAL` |
 | `native-work-interval-soft-fail` | 被拒绝的 CA client work interval 软失败 |
 | `native-union-getattrlistbulk` | 批量目录读取继续到 union 下层目录 |
+| `native-union-statfs-fsid` | 对覆盖在根卷上的 union，`statfs64` 报告根卷的文件系统编号 |
 | `null-root-media` | 处理 `IOService::setRootMedia` 的空 root |
 | `published-freezer-condition` | 修正 freezer 默认条件 |
 
