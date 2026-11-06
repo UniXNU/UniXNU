@@ -513,6 +513,26 @@ build = []
 outputs = []
 
 [[component]]
+id = "QcomDwc3"
+repository_id = 1448436865
+kind = "driver"
+function = "Qualcomm DWC3 USB device and host controller for Apple's native stacks"
+scope = "controller"
+repository = "https://github.com/UniXNU/QcomDwc3.git"
+revision = "e4efe95c903a737e0f5955e5b50a8fb4d2a7d718"
+path = "drivers/QcomDwc3"
+hardware = ["Qualcomm DWC3 USB controller", "Synopsys eUSB2 PHY and PM8550B repeater", "QMP USB3/DP PHY", "PS5169 retimer"]
+os_abi = ["ipados-27.0.1-24A446"]
+board_dependencies = ["USB rails and clocks", "stage 1 SMMU context", "UCSI over the charger channel", "prelink roots for the USB stacks"]
+verified_devices = ["sheng"]
+dependencies = []
+source_files = ["QcomDwc3.cpp", "QcomEusb2Phy.h", "QcomQmpUsb3.h", "QcomUcsi.h"]
+runtime_identifiers = ["QcomDwc3Xdci", "QcomDwc3Xhci", "qcom_dwc3_bring_up", "qcom_dwc3_publish", "native_usb_stats"]
+build_stage = "embedded"
+build = []
+outputs = []
+
+[[component]]
 id = "ShengPreflight"
 kind = "driver"
 function = "sheng firmware preflight"
