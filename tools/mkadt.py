@@ -21,6 +21,11 @@ HIGH_MEM_SIZE = 0xfcc00000
 # 0x1_00000000..0x2_80000000 is one 6 GiB stretch with no reserved-memory in it (/proc/iomem System RAM
 # ffc20000-27fffffff; TWRP 2026-11-06). 0xc0000000..0xffc00000 stays unmanaged for the display/Wi-Fi/DSP pools.
 UMI_HIGH_MEM_SIZE = 0x180000000
+# (0253) and down into <0xc0000000 0xc0000000>: our fixed low-RAM pools (sweetfb 0xc0000000 x 6 x 16 MiB when direct,
+# Wi-Fi 0xd0000000, WLFW 0xd1000000, SLPI/FastRPC 0xd3000000-0xd4d00000, PCM 0xd3800000) all end below 0xd5000000,
+# so XNU takes 0xd6000000..0x2_80000000 (6.66 GiB). The 128 KiB at 0xffc00000 that Linux shows as not System RAM
+# is a dynamic reserved-memory pool Linux allocated itself (no fixed reg there): plain RAM under iOS.
+UMI_LOW_PHYS_BASE = 0xd6000000
 # /arm-io children are relative to this; it must not be 0 (serial_init bails)
 SOC_BASE = 0x01000000
 
@@ -88,7 +93,7 @@ def build(seed=None, qemu=False, highmem=False, board='sweet'):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
     phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
     if highmem and board == 'umi' and not qemu:
-        mem_size = UMI_HIGH_MEM_SIZE
+        phys_base, mem_size = UMI_LOW_PHYS_BASE, HIGH_PHYS_BASE + UMI_HIGH_MEM_SIZE - UMI_LOW_PHYS_BASE
     gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (GICD, GICR, TIMEBASE)
     b = BOARDS[board]
     seed = seed if seed is not None else os.urandom(64)

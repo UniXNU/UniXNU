@@ -2,6 +2,14 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-06: 0253 iOS gets 6.66 GB** (image `shim/out/umi-0253-6g6.img` = 0251 kernel + 0248 ADT with dram-base
+  0xd6000000, dram-size 0x1aa000000; `tools/mkadt.py --highmem --board umi` does the same). First boot with XNU's
+  RAM starting below 4 GB: our fixed low-RAM pools all end below 0xd5000000 (sweetfb 0xc0000000.., Wi-Fi 0xd0000000,
+  WLFW 0xd1000000, SLPI/FastRPC/PCM 0xd3000000-0xd4d00000); the 128 KiB Linux keeps at 0xffc00000 is a dynamic
+  pool of its own (plain RAM here). Booted 2026-11-06 ~20:1x: free 4335 MB early (0252: 3596), 3.6 GB with the GPU
+  at 167 MB, no panic, UFS fine, Wi-Fi to mission mode + en0, Metal clients as before. Whole 8 GB is not possible:
+  ~600 MB is firmware (even Linux has 7.4 GB) and XNU manages one range. Next step if wanted (~7 GB): move the pools
+  into free low-bank RAM 0x92700000-0xb03fffff and start at 0xc0000000.
 - **2026-11-06: 0252 iOS gets 6 GB of RAM (was 3.95 GB)** (image `shim/out/umi-0252-6gb.img` = 0251 kernel + the 0248
   ADT with /chosen dram-size 0x180000000; `tools/mkadt.py --highmem --board umi` now does the same). The 0xfcc00000
   size was sweet's (6 GB phone) and had never been checked on umi. TWRP (read-only, 2026-11-06): FDT memory
