@@ -49,6 +49,8 @@ IDs and contact count as one coherent frame for the HID consumer.
 5. Decode complete frames and map coordinates to the display's orientation.
 6. Check stable contact IDs, simultaneous contacts, edge behavior and release.
 
+A QUP serial engine can run SPI firmware with its FIFO interface disabled (`GENI_IF_DISABLE_RO` bit 0), which leaves only GSI DMA. `QcomGeniSpi` refuses such an engine with `GENI_ERR_NOTSUP` (-95) because its GPI DMA path is not implemented; `allow_fifo_disabled` tries FIFO mode anyway, the Linux fallback when no GPI channel exists. Read `GENI_IF_DISABLE_RO` before choosing the transport. Two SM8650 ports found the touch engine (QUP1 SE4) in this state and drive its pins as GPIO SPI from the TLMM instead; FIFO mode was not tried there.
+
 The Novatek processing core uses a 40 × 60 matrix. Verify geometry and bounds
 when adapting its firmware or processing core. Firmware extraction is owned by
 the device's `scripts/gen-touch-firmware.py` and proprietary-file inventory.

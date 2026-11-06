@@ -42,6 +42,8 @@
 5. 解码完整帧，将坐标变换到显示方向。
 6. 检查稳定接触 ID、多点、边缘行为和抬起事件。
 
+QUP 串行引擎可能加载了关闭 FIFO 接口的 SPI 固件（`GENI_IF_DISABLE_RO` bit 0），只剩 GSI DMA。`QcomGeniSpi` 没有实现 GPI DMA 路径，遇到这种引擎返回 `GENI_ERR_NOTSUP`（-95）；`allow_fifo_disabled` 会强行尝试 FIFO 模式，即 Linux 在没有 GPI 通道时的回退方式。选择传输方式前先读取 `GENI_IF_DISABLE_RO`。两个 SM8650 移植的触控引擎（QUP1 SE4）都是这种状态，改为通过 TLMM 以 GPIO 模拟 SPI；这两个移植没有尝试 FIFO 模式。
+
 Novatek 处理核心使用 40 × 60 矩阵。修改固件或处理核心时核对几何尺寸和边界。
 固件提取由设备的 `scripts/gen-touch-firmware.py` 与私有文件清单管理。
 
