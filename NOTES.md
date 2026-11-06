@@ -18,7 +18,15 @@
     with Metal for every process, poster/widget restarts (AegirPoster 56 a boot) would use them up and then even a
     restarted backboardd gets no GPU. Now keyed by process unique id, counted per open client, and a window whose
     process exited with no client left is reused (`SWEET ADRENO: GPU window ... of exited pid ... goes to pid`);
-    64 windows (8 GB + 256 GB < 39 bits). Not booted yet.
+    64 windows (8 GB + 256 GB < 39 bits). **Booted 2026-11-05 ~20:2x** (log to 21:23, 64 rounds; old session
+    scratchpad `umi-0250.log`) with `mtl2-clients` = `*`.
+  - **0250 + Metal for every process, results:** Metal devices made for backboardd, SpringBoard, WebKit.GPU, PosterBoard,
+    CollectionsPoster, AegirPoster, PridePosterExtension, chronod, FitnessWidget, MobileSlideShow. **AegirPoster's crash
+    loop is gone: 66 crashes on 0249 -> 0 on 0250** (it now gets Metal). GPU memory max 285 MB, free RAM never under
+    807 MB, 0 failed allocs; no window reuse needed yet (fewer than 64 GPU processes). Unchanged by Metal: the speech
+    synthesizers (SiriTTSSynthesizerAU, MacinTalkAUSP, KonaSynthesizer, 12 each on both boots) and CommCenter abort in
+    the same place (pc ...198 / lr ...5f8, SIGABRT); MobileSlideShow (Photos) aborted once with that same signature;
+    FitnessWidget 3, MusicWidgets 3 (5 on 0249). The user's visual verdict on 0250 is still missing.
   - **Phone file changed (user asked for GPU on the whole OS):** `/var/local/mtl2-clients` = `*` (read back); the
     previous `backboardd,SpringBoard,com.apple.WebKit.GPU` kept as `mtl2-clients.sweet-pre-all` (read back). Undo:
     put that back. Watch: free RAM and failed allocs in the memory lines, crash loops of newly Metal processes.
