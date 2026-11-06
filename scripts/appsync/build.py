@@ -23,6 +23,7 @@ SPRINGBOARD = 'System/Library/CoreServices/SpringBoard.app'
 SPRINGBOARD_COPY = 'coreservices/SpringBoard.app'
 PINS = {
     'usr/libexec/installd': ('libexec/installd', '5c80de3423681dec4c8c16dce4d8dd86d26039e8d29639b8b2cd1f53d187aac1'),
+    'usr/libexec/backboardd': ('libexec/backboardd', 'fbba7fd2925990dd859b24629ecab5cdbf6f2fac8c1c357ec0f9e412ded75559'),
     HELPER + '/com.apple.MobileInstallationHelperService':
         ('helper/com.apple.MobileInstallationHelperService', '154bb529fd044777c0f823740955f65b0ba96a169d3953df5d117e9b8b5e1914'),
     SPRINGBOARD + '/SpringBoard': ('coreservices/SpringBoard.app/SpringBoard', '85dfb1b386ee009dfc0b7eb914c66aa7646d062254d18881a99647b55d7ffaee'),
@@ -75,7 +76,7 @@ def build(os_root, output):
         sdk = run('xcrun', '--sdk', 'iphoneos', '--show-sdk-path', capture=True).stdout.strip()
         flags = ['-target', 'arm64e-apple-ios27.0', '-isysroot', sdk, '-fobjc-arc', '-O2',
                  '-Wall', '-Wextra', '-Werror', '-framework', 'Foundation']
-        run('xcrun', 'clang', *flags, '-dynamiclib', ROOT / 'AppSync.m', ROOT / 'Signing.m', '-install_name', DYLIB,
+        run('xcrun', 'clang', *flags, '-dynamiclib', ROOT / 'AppSync.m', ROOT / 'Signing.m', ROOT / 'BacklightMode.m', '-install_name', DYLIB,
             '-Wl,-reexport_framework,Foundation', '-Wl,-compatibility_version,3000',
             '-Wl,-current_version,5027.0.69',
             '-o', work / 'lib/UniXNUAppSync.dylib')
