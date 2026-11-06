@@ -2,7 +2,7 @@
 
 QcomDwc3 让苹果的 USB 设备栈和主机栈运行在高通 DWC3 控制器上。
 
-[源码](https://github.com/UniXNU/UniXNU-sheng/tree/main/drivers/QcomDwc3)。
+[源码仓库](https://github.com/UniXNU/QcomDwc3)。
 
 ## 状态
 
