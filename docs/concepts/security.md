@@ -48,6 +48,63 @@ The kernel patches `offline-owner-root-*` add the owner root checks used by the 
 | `offline-owner-systemos-mount` | Mounts the SystemOS cryptex |
 | `offline-owner-z-air-init` | Initializes the Z air path for the owner root |
 
+## User application installation
+
+The sheng iPadOS 27.0.1 (24A446) runtime adapts
+[AppSync Unified](https://github.com/akemin-dayo/AppSync)'s installation and
+FrontBoard launch handling for all user application bundles. There is no
+application list, bundle-ID policy or build-time executable hash enrollment.
+New applications and updates do not require rebuilding the boot image.
+
+Build once with the preserved Data seed and usual firmware inputs:
+
+```sh
+./unixnu build kernel payload -D ../UniXNU-sheng
+./unixnu bootimg -D ../UniXNU-sheng
+```
+
+After booting this image, transfer an IPA to the device and install it through
+MobileInstallation, for example:
+
+```sh
+/usr/libexec/unixnu-appinst /path/on/device/Example.ipa
+```
+
+Unsigned, fakesigned and expired packages are handled on device. The installation
+hook first uses the original validator; on rejection, it repairs signatures in
+the installation copy with the bundled ldid, preserves entitlements, regenerates
+resource seals and removes stale provisioning profiles, then validates again.
+The original IPA is retained.
+
+The installation hook selects the native ad-hoc path, disables the requirement
+for a preloaded trust hash and online authorization, and skips provisioning
+profile ID validation. FrontBoard trusts user bundles. User bundles are `.app`
+trees on Data, under `/private/var/` or `/var/`, including installation staging,
+embedded frameworks and app extensions. System paths retain their native handling.
+
+`sheng-appsync-user-trust.patch` registers the CodeDirectory hash when XNU loads
+a signature for code in those trees. Registration occurs after structural
+validation and before the original AMFI signature callback. It uses the same
+engineering trust-cache interface as the owner boot modules, deduplicates
+under the runtime lock, and retains registered hashes until reboot. On the next
+boot, mapping the app registers its code again. The signed runtime copies are
+still trusted by the boot payload; individual user apps are not build inputs.
+
+`payload.runtime.appsync = true` selects the runtime. `--kernel-arg appsync=0`
+disables both its mounts and automatic trust registration. The implementation
+bounds dynamically allocated modules to 65536 per boot and reports registration
+failures. Signature structure, resource validation and executable page hashes
+remain checked after automatic signing. FairPlay decryption and App Store account
+authorization are not provided. All apps still need a compatible iOS executable.
+
+`runtime/appsync-service.json` records `scope = "all-user-bundles"` and the
+runtime file hashes. Host tests cover unknown apps, updates, nested bundles,
+concurrent registration, disabled behavior and failure cleanup. Signing tests
+include unsigned nested code, fakesigned and expired identities, resource/profile
+repair, and preservation of entitlements. Device
+installation, launch and reboot persistence remain unverified. See
+`scripts/appsync/README.md` for source and test details.
+
 ## GPU client grant
 
 Adreno740 publishes `NativeSandboxGrantProcess` on its accelerator service. The patch `zzw-native-adreno-sandbox-grant` compares the opening process name with that property. The named process opens the user client past `mac_iokit_check_open_service` and `mac_iokit_check_open`. The render server is the named process.
