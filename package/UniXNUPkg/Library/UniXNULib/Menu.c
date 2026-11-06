@@ -125,6 +125,7 @@ UniXNUMenuRun (
   }
 
   UniXNUUiDrawFrame (Ui, Config);
+  Ui->ScrollFirst = (Selected >= Ui->VisibleRows) ? Selected - Ui->VisibleRows + 1 : 0;
   for (Index = 0; Index < Count; Index++) {
     UniXNUUiDrawEntry (Ui, Config, Index, Index == Selected);
   }
@@ -237,8 +238,20 @@ UniXNUMenuRun (
     }
 
     if (Selected != Previous) {
-      UniXNUUiDrawEntry (Ui, Config, Previous, FALSE);
-      UniXNUUiDrawEntry (Ui, Config, Selected, TRUE);
+      if (Selected < Ui->ScrollFirst) {
+        Ui->ScrollFirst = Selected;
+      } else if (Selected >= Ui->ScrollFirst + Ui->VisibleRows) {
+        Ui->ScrollFirst = Selected - Ui->VisibleRows + 1;
+      }
+
+      if (Ui->VisibleRows < Count) {
+        for (Index = 0; Index < Count; Index++) {
+          UniXNUUiDrawEntry (Ui, Config, Index, Index == Selected);
+        }
+      } else {
+        UniXNUUiDrawEntry (Ui, Config, Previous, FALSE);
+        UniXNUUiDrawEntry (Ui, Config, Selected, TRUE);
+      }
     }
   }
 
