@@ -2,7 +2,7 @@
 
 QcomDwc3 runs Apple's USB device and host stacks on a Qualcomm DWC3 controller.
 
-[Source](https://github.com/UniXNU/UniXNU-sheng/tree/main/drivers/QcomDwc3).
+[Source repository](https://github.com/UniXNU/QcomDwc3).
 
 ## Status
 
