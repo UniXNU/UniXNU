@@ -113,7 +113,7 @@ archives = [
 ## 构建顺序
 
 1. `unixnu fetch` 克隆 XNU、libpthread、corecrypto-2023 和 Apple 参考源码。
-2. `unixnu build kernel` 应用补丁并恢复缺失头文件。
+2. `unixnu build kernel` 应用补丁并恢复缺失头文件。补丁序列变化时重新克隆工作树，内容未变的文件保留原有时间戳，make 只重新编译补丁改动的源文件。
 3. 编译记录不存在时，先运行一次 XNU 生成记录。该轮可以在链接前停止。
 4. 按 `[kernel] archives` 的顺序运行静态库脚本。
 5. 构建并链接内核，然后与原始 kernelcache 预链接。

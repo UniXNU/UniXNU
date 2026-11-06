@@ -116,7 +116,7 @@ The kernel step prepares the public `IOStorageFamily` headers under `build/stora
 ## Build sequence
 
 1. `unixnu fetch` clones XNU, libpthread, corecrypto-2023 and the Apple references.
-2. `unixnu build kernel` applies the patches and restores the omitted headers.
+2. `unixnu build kernel` applies the patches and restores the omitted headers. A changed patch series re-clones the work tree; files whose bytes are unchanged keep their previous times, so make rebuilds only the sources a patch changed.
 3. When the compile records are absent, it runs one XNU pass for them. The pass may stop at the link.
 4. It runs the `[kernel] archives` builders in order.
 5. It builds and links the kernel with the archives, then prelinks it against the original kernelcache.
