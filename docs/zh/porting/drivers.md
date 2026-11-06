@@ -40,6 +40,7 @@ SoC 操作放入共享支持，板级连接和策略放入设备仓库，OS ABI 
 | 5 | GPU 与 Metal | [GPU](/zh/porting/gpu) | Adreno740、AdrenoMetal、Sm8550Platform、AdrenoFirmware、AdrenoPM4、AirNir |
 | 6 | Wi-Fi | [网络](/zh/porting/network) | Ath12kWifi、WifiProbe、WifiNet、MhiBoot |
 | 6 | 蓝牙 | [QcaBluetooth](/zh/drivers/qca-bluetooth) | Linux 初始化、GENI DMA、UART.SK、BlueTool |
+| 6 | USB | [QcomDwc3](/zh/drivers/qcom-dwc3) | AppleUSBXDCI、AppleUSBXHCI、UCSI、eUSB2、QMP PHY |
 | 6a | 基带与移动网络，有基带时适配 | [基带](/zh/porting/baseband) | QcomBaseband、modem 启动、QRTR、IPA/GSI |
 | 7 | DSP、音频、电池、CPU 调频、平台电源 | [DSP 与电源](/zh/porting/power) | AdspProbe、AudioProbe、ShengBattery、CpuFreqProbe、ShengPlatformPower |
 | 8 | OS 服务和打包 | [OS 集成](/zh/porting/platform#block-and-os-services)与[固件](/zh/porting/uefi-firmware) | SoftwareAES、AppleKeyStoreState、XnuPrelink、DarwinBoot、ShengPreflight |
