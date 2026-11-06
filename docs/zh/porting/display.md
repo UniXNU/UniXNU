@@ -94,14 +94,15 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
 3. 使用 GENI 示例时，先调用 `geni_i2c_prepare`，再启动读写，把中断状态交给 `geni_i2c_event`，
    到期时调用 `geni_i2c_timeout`。当前传输完成或取消后再发起下一次传输。
    服务请求在工作循环上处理，确认失败处理后再启用渐变调光。
-4. 根据选定 OS ABI 配置 `IODisplayParameters` 亮度范围和 `backlight-control`。
-   服务接受 brightness 与 `FadePeriod` 属性。
+4. 让发布的属性和接受的请求与所选系统一致。iPadOS 17 使用 `IODisplayParameters` 亮度范围、
+   `backlight-control`、`brightness` 和 `FadePeriod`。iPadOS 27 还需要毫尼特、滑块表、校准参数和
+   `brightness-nits`，并且在报告虚拟平台的板子上丢弃所有请求。[ShengBacklight](/zh/drivers/sheng-backlight) 列出了每一项。
 5. 构建服务和注册封装。参考显示配方包含两者，`sheng-backlight=1` 启用 probe。
 
 在解析后的构建树定位集成点：
 
 ```sh
-rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/*/AppleARMBacklight.cpp
+rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod|brightness-nits' kits/*/AppleARMBacklight.cpp
 rg -n 'backlight|GeniI2c' scripts/build-gop-legacy-display.py
 ```
 
