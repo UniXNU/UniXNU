@@ -59,6 +59,10 @@ regression_policy = "scripts/policies/ipados-27.0.1-24A446/prelink-regression.js
 
 
 ["adt"."chosen"."u32"]
+# A Mac reads these two and chip-id over lockdown and looks them up in MobileDevice's device map. No match leaves the device class unknown,
+# which it reports as "a software update is required". The chip-id is the board's [payload.adt] chip_id.
+"board-id" = 12
+"security-domain" = 1
 "certificate-production-status" = 0
 "effective-production-status-ap" = 0
 "certificate-security-mode" = 1
