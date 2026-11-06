@@ -37,6 +37,7 @@
 1. 根据目标 DTS 和时钟/引脚定义设置控制器窗口、总线模式/速率、GPIO、中断和 SMMU stream。
    `TouchBoard.h` 提供板级数据布局参考。
 2. 实现电源/复位控制，确认引擎固件、引脚和时钟。
+   触控电源可能在启动时处于关闭状态，此时控制器只返回 0。RPMh 管理的电源通过 apps RSC 投票：先从 command DB 读取资源地址，再经 TCS 发送 VRM 投票。command DB 的 slave ID 为 ARC 3、VRM 4、BCM 5（`include/soc/qcom/cmd-db.h`），LDO 属于 VRM 资源。
 3. 按目标 SMMU context 设置 DMA 寻址和缓存维护。
 4. 读取芯片 ID，再加载固件并确认返回的几何参数。
 5. 解码完整帧，将坐标变换到显示方向。

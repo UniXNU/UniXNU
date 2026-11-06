@@ -44,6 +44,7 @@ IDs and contact count as one coherent frame for the HID consumer.
    SMMU stream from its DTS and clock/pin definitions. `TouchBoard.h` is a board
    data-layout reference.
 2. Implement power/reset ownership and verify engine firmware, pins and clocks.
+   A touch rail can be off at boot, and the controller then answers with zeros. Vote an RPMh rail through the apps RSC: read the resource address from the command DB, then send the VRM vote through a TCS. Command DB slave IDs are ARC 3, VRM 4 and BCM 5 (`include/soc/qcom/cmd-db.h`); LDO rails are VRM resources.
 3. Set DMA addressing and cache maintenance for the target SMMU context.
 4. Read the chip ID, then load its firmware and check the returned geometry.
 5. Decode complete frames and map coordinates to the display's orientation.
