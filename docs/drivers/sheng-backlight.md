@@ -11,8 +11,8 @@ Device: Xiaomi Pad 6S Pro (sheng).
 | OS | State | Features |
 | --- | --- | --- |
 | iPadOS 17 | Working | Manual brightness, backlight off on sleep |
-| iPadOS 27.0.1 (24A446) | Working | `BrightnessControl` reads the nits range and slider table; the driver reads the level from both controllers |
-| iPadOS 27.0.1 (24A446) | Not verified | The slider reaching the panel, backlight off on sleep |
+| iPadOS 27.0.1 (24A446) | Working | Manual brightness |
+| iPadOS 27.0.1 (24A446) | Not verified | Backlight off on sleep |
 
 ## Hardware
 
@@ -32,6 +32,8 @@ Published properties:
 | `IODisplayParameters.brightness` | iPadOS 17 | `min`, `max`, `value` as levels |
 | `IODisplayParameters.BrightnessMilliNits` | `BrightnessControl`, iPadOS 27 | `min`, `max`, `value` in millinits |
 | `backlight-marketing-table` | CoreBrightness, iPadOS 27 | Signed 16.16 nits at equally spaced slider positions. Display creation fails without it |
+| `LmaxProduct` | `BrightnessControl`, iPadOS 27 | 4 bytes of 16.16 nits. At zero the slider table rescales to infinity and every position means the maximum |
+| `LmidProduct`, `LminProduct` | `BrightnessControl`, iPadOS 27 | Numbers in nits |
 | `backlight-calibration-parameters` | CoreBrightness, iPadOS 27 | `lMinProduct`, `lMidProduct`, `lMaxProduct`, `lMinPanel`, `lMidPanel`, `lMaxPanel` as 16.16 nits |
 
 Accepted requests:

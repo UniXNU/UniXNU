@@ -11,8 +11,8 @@ ShengBacklight 把 sheng 面板的两颗 KTZ8866 背光控制器接入 CoreBrigh
 | 系统 | 状态 | 功能 |
 | --- | --- | --- |
 | iPadOS 17 | 可用 | 手动调节亮度，熄屏关闭背光 |
-| iPadOS 27.0.1（24A446） | 可用 | `BrightnessControl` 读取尼特范围和滑块表，驱动读取两颗控制器的等级 |
-| iPadOS 27.0.1（24A446） | 未验证 | 滑块调节面板亮度，熄屏关闭背光 |
+| iPadOS 27.0.1（24A446） | 可用 | 手动调节亮度 |
+| iPadOS 27.0.1（24A446） | 未验证 | 熄屏关闭背光 |
 
 ## 硬件
 
@@ -32,6 +32,8 @@ ShengBacklight 把 sheng 面板的两颗 KTZ8866 背光控制器接入 CoreBrigh
 | `IODisplayParameters.brightness` | iPadOS 17 | 以等级表示的 `min`、`max`、`value` |
 | `IODisplayParameters.BrightnessMilliNits` | `BrightnessControl`，iPadOS 27 | 以毫尼特表示的 `min`、`max`、`value` |
 | `backlight-marketing-table` | CoreBrightness，iPadOS 27 | 滑块等间距位置对应的有符号 16.16 尼特。缺少时无法创建显示对象 |
+| `LmaxProduct` | `BrightnessControl`，iPadOS 27 | 4 字节的 16.16 尼特。为 0 时滑块表缩放为无穷大，所有位置都对应最大值 |
+| `LmidProduct`、`LminProduct` | `BrightnessControl`，iPadOS 27 | 以尼特表示的数值 |
 | `backlight-calibration-parameters` | CoreBrightness，iPadOS 27 | `lMinProduct`、`lMidProduct`、`lMaxProduct`、`lMinPanel`、`lMidPanel`、`lMaxPanel`，均为 16.16 尼特 |
 
 接受的请求：
