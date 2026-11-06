@@ -1,0 +1,18 @@
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -3571,7 +3571,15 @@
+ 	sfs->f_bavail = vsfs->f_bavail;
+ 	sfs->f_files = vsfs->f_files;
+ 	sfs->f_ffree = vsfs->f_ffree;
+ 	sfs->f_fsid = vsfs->f_fsid;
++	/*
++	 * The SystemOS volume is a union over the root volume, and an Apple device has their files on one system partition: BaseBoard's
++	 * BSPathExistsOnSystemPartition compares this number for /System with the one for a daemon's executable. Report one number.
++	 */
++	if ((mp->mnt_flag & MNT_UNION) && mp->mnt_vnodecovered != NULLVP && (mp->mnt_vnodecovered->v_flag & VROOT) &&
++	    (mp->mnt_vnodecovered->v_mount->mnt_flag & MNT_ROOTFS)) {
++		sfs->f_fsid = mp->mnt_vnodecovered->v_mount->mnt_vfsstat.f_fsid;
++	}
+ 	sfs->f_owner = vsfs->f_owner;
+ 	sfs->f_type = mp->mnt_vtable->vfc_typenum;
+ 	sfs->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
