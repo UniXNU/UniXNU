@@ -120,15 +120,18 @@ behind the OS-facing brightness service.
    status to `geni_i2c_event` and call `geni_i2c_timeout` when its deadline expires.
    Complete or cancel the transfer before starting the next one. Keep service
    requests on the work loop and inspect failures before enabling fades.
-4. Match `IODisplayParameters` brightness limits and `backlight-control` to the
-   selected OS ABI. The service accepts brightness and `FadePeriod` properties.
+4. Match the published properties and accepted requests to the selected OS. iPadOS 17
+   uses `IODisplayParameters` brightness limits, `backlight-control`, `brightness` and
+   `FadePeriod`. iPadOS 27 also needs millinits, a slider table, calibration and
+   `brightness-nits`, and drops every request on a board that reports a virtual
+   platform. [ShengBacklight](/drivers/sheng-backlight) lists each one.
 5. Build the service and its registration wrapper. The reference display recipe does
    both; `sheng-backlight=1` enables its probe.
 
 From the resolved target tree, locate these integration points:
 
 ```sh
-rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod' kits/*/AppleARMBacklight.cpp
+rg -n 'kSeA|kSeB|kSpi|kMaxLevel|backlight-control|FadePeriod|brightness-nits' kits/*/AppleARMBacklight.cpp
 rg -n 'backlight|GeniI2c' scripts/build-gop-legacy-display.py
 ```
 
