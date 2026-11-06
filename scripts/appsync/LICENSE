@@ -1,0 +1,28 @@
+The Objective-C AppSync adaptation in this directory is licensed under
+GPL-3.0-or-later. The Python build tools use the repository's
+BSD-2-Clause-Patent license.
+
+Upstream AppSync Unified:
+Copyright (C) 2014-2024 Karen/あけみ, Linus Yang
+https://github.com/akemin-dayo/AppSync
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU General Public License for more details.
+
+The complete GNU General Public License is available at
+https://www.gnu.org/licenses/gpl-3.0.html
+
+
+The separately built unixnu-ldid executable uses Procursus ldid under
+AGPL-3.0-or-later, OpenSSL 3.5.5 under Apache-2.0, and libplist 2.7.0 under
+LGPL-2.1-or-later. Their full license files accompany the runtime under
+/usr/libexec/appsync-licenses. Exact corresponding source archives and hashes
+are recorded in signer-sources.json; the ldid change is ldid-adhoc.patch.
+The signer cache retains ldid.o, libcrypto.a and libplist.a for relinking.
