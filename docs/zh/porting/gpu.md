@@ -135,6 +135,12 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
+iOS 16：按 iOS 16.0 最低版本构建 Turnip，输出到 `build/mesa-tu-ios16`。`--target ios` 按 `arm64-apple-ios17.0` 构建。`build-adreno-metal-plugin.py` 没有 iOS 16 目标。
+
+```sh
+python3 scripts/build-turnip-darwin.py --target ios16
+```
+
 通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（参考实现使用 `sheng-gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
 
 核对所选 OS profile 的 sandbox、user-client 和 trust-cache 集成。
