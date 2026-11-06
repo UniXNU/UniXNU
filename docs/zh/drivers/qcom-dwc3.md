@@ -28,6 +28,30 @@ UCSI 通过充电器的 GLINK 通道报告线缆对端：对端是主机时进�
 
 `AppleUSBXDCI` 没有 personality，驱动要先加载该 kext，再注册子类。prelink roots 加入设备栈和主机栈，并排除 `AppleOnboardSerial` 和 `AppleSMC`，主机栈只在 metaclass 比较中用到这两者。
 
+## 配置
+
+| 启动参数 | 作用 |
+| --- | --- |
+| `sheng-usb=1` | 运行驱动 |
+| `sheng-usb=2` | 增加寄存器采样 |
+| `sheng-usb=3` | 再让控制器离开总线并重新接入一次 |
+| `sheng-usb-host=<s>` | 延时后强制进入主机模式 |
+| `sheng-usb-back=<s>` | 之后回到线缆决定的角色 |
+| `log-sys=1` | 在启动日志中加入 `native_usb_stats` 的 `[usb]` 行 |
+
+## 适配其他板子
+
+1. 提供中继器、PHY、retimer 和电源轨的时序，以及 eUSB2 参考时钟。时钟错误时 chirp 能通过，高速数据失败。
+2. 为控制器的 stream 提供缓存一致的 stage 1 上下文。
+3. 提供 `qcom_dwc3_vbus()` 和 UCSI 通道。
+4. 把 USB 栈加入 OS 配置的 prelink roots。
+5. kernelcache 变化后，用 `scripts/gen-usb27-abi.py` 和 `scripts/gen-usb27-host-abi.py` 重新生成类布局。
+
+布局变化时保留这两处覆盖：
+
+- 没有 `IOPort` 传输对象时，`AppleUSBXDCI` 的 slot 179 保持为 false。为 true 时 `bNumConfigurations` 为 0。
+- 主机模式下，xHCI 子类向 family 的期望电源回答开启，设备栈回答 0。
+
 ## 与 Mac 配对
 
 Mac 和 `lockdownd` 需要系统给出以下信息：
