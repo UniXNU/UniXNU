@@ -1,0 +1,12 @@
+--- a/ldid.cpp
++++ b/ldid.cpp
+@@ -2438,6 +2438,9 @@
+ Hash Sign(const void *idata, size_t isize, std::streambuf &output, const std::string &identifier, const std::string &entitlements, bool merge, const std::string &requirements, const ldid::Signer &signer, const Slots &slots, uint32_t flags, uint8_t platform, const Progress &progress) {
+     Hash hash;
+ 
++    // UniXNU retains AMFI: a signature without CMS must be marked ad-hoc.
++    // Apply this inside the shared signer so nested bundles get it too.
++    if (!signer) flags |= kSecCodeSignatureAdhoc;
+ 
+     std::string team;
+     std::string common;

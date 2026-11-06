@@ -86,6 +86,34 @@ class RuntimeInputs(unittest.TestCase):
                 with self.assertRaisesRegex(Error, 'FIRST installation'):
                     runtime.prepare(ctx, kernel_build=True)
 
+    def test_appsync_rebuilds_explicit_inputs_without_changing_seed(self):
+        with tempfile.TemporaryDirectory() as td:
+            ctx = self.context(Path(td))
+            ctx.logs = ctx.work / 'logs'
+            ctx.logs.mkdir()
+            ctx.board['payload']['runtime'].update(appsync=True, target='ios27', build='24A446')
+            original = Path(ctx.args.data_ramdisk).read_bytes()
+            captured = {}
+            def build(command, **kwargs):
+                request = json.loads(Path(command[-1]).read_text())
+                captured.update(request)
+                result = {key: request[key] for key in ('data_ramdisk', 'gpu_addon', 'trust_cache')}
+                (Path(request['output']) / 'generated.json').write_text(json.dumps(result))
+            with patch.object(runtime, 'Ipsw') as ipsw, patch.object(runtime, 'run', side_effect=build):
+                ipsw.return_value.disk_image.return_value = Path('/original-os.dmg')
+                runtime.prepare(ctx, kernel_build=True)
+            self.assertNotIn('appsync_apps', captured)
+            self.assertEqual(captured['os_image'], '/original-os.dmg')
+            self.assertFalse(captured['init_data'])
+            self.assertEqual(Path(ctx.args.data_ramdisk).read_bytes(), original)
+
+    def test_appsync_rejects_unqualified_os(self):
+        with tempfile.TemporaryDirectory() as td:
+            ctx = self.context(Path(td))
+            ctx.board['payload']['runtime'].update(appsync=True, target='ios26', build='23F84')
+            with self.assertRaisesRegex(Error, '24A446'):
+                runtime.prepare(ctx)
+
     def test_payload_cannot_change_compiled_uuid(self):
         with tempfile.TemporaryDirectory() as td:
             ctx = self.context(Path(td))

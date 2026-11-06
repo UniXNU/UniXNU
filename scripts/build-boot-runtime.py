@@ -12,6 +12,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import struct
 import subprocess
 import sys
@@ -106,7 +107,7 @@ def verified_cdhash(path, detached=None):
     return bundle_cdhash(path, options)
 
 
-def addon_hashes(path, work, system_bundles=()):
+def addon_hashes(path, work, system_bundles=(), system_executables=None):
     data = path.read_bytes()
     if data[:8] != b'NGPUADD2' or len(data) < 24 or struct.unpack_from('<Q', data, 16)[0] != len(data):
         raise SystemExit('invalid GPU addon')
@@ -129,7 +130,10 @@ def addon_hashes(path, work, system_bundles=()):
         output.write_bytes(body)
         output.chmod(mode & 0o777)
         if body[:4] in (b'\xcf\xfa\xed\xfe', b'\xca\xfe\xba\xbe'):
-            (system if name.startswith(system_prefixes) else executables).append(output)
+            unchanged = (system_executables or {}).get(name)
+            if unchanged and hashlib.sha256(body).hexdigest() != unchanged:
+                raise ValueError('original system executable changed in addon: ' + name)
+            (system if unchanged or name.startswith(system_prefixes) else executables).append(output)
     if at != len(data) or not executables:
         raise SystemExit('invalid addon length or no executables')
     hashes = [verified_cdhash(executable) for executable in executables]
@@ -306,10 +310,28 @@ def main():
             addon = out / 'bluetooth-addon.bin'
             candidate.replace(addon)
             (out / 'bluetooth-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
-        if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None):
+        appsync_report = None
+        if request.get('appsync'):
+            if (request.get('target'), request.get('build')) != ('ios27', '24A446'):
+                raise ValueError('AppSync requires iPadOS 27 build 24A446')
+            appsync = work / 'appsync'
+            mount_work = work / 'appsync-os'
+            mount_work.mkdir()
+            with os_mount(request['os_image'], mount_work) as mount:
+                script('appsync/build.py', '--os-root', mount, '--output', appsync)
+            appsync_report = json.loads((appsync / 'report.json').read_text())
+            directories = [arg for prefix, directory in appsync_report['directories'].items()
+                           for arg in (prefix, appsync / directory)]
+            candidate = work / 'appsync-addon.bin'
+            script('addon-add-dir.py', addon, candidate, *directories)
+            addon = out / 'appsync-addon.bin'
+            candidate.replace(addon)
+            (out / 'appsync-service.json').write_bytes((appsync / 'report.json').read_bytes())
+        if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None or appsync_report is not None):
             # Keep every original module intact. Append only absent hashes;
             # rebuilding from a previously integrated addon stays idempotent.
-            hashes = addon_hashes(addon, work / 'signed-addon', request.get('audio_system_plugins', ()))
+            hashes = addon_hashes(addon, work / 'signed-addon', request.get('audio_system_plugins', ()),
+                                  appsync_report['system_executables'] if appsync_report else None)
             data = trust.read_bytes()
             count = struct.unpack_from('<I', data)[0]
             offsets = list(struct.unpack_from(f'<{count}I', data, 4)) + [len(data)]
@@ -325,12 +347,14 @@ def main():
             if missing:
                 candidate = work / 'runtime-trust.bundle'
                 script('trust-append-module.py', trust, candidate, *missing)
-                trust = out / ('bluetooth-owner-trust.bundle' if bluetooth_report else 'wifi-owner-trust.bundle')
+                trust = out / ('appsync-owner-trust.bundle' if appsync_report else
+                               'bluetooth-owner-trust.bundle' if bluetooth_report else 'wifi-owner-trust.bundle')
                 candidate.replace(trust)
         if trust is None:
             original = work / 'apple-trust.bundle'
             script('bundle-ipsw-trust.py', original, *request['trust_modules'])
-            hashes = addon_hashes(addon, work / 'addon', request.get('audio_system_plugins', ()))
+            hashes = addon_hashes(addon, work / 'addon', request.get('audio_system_plugins', ()),
+                                  appsync_report['system_executables'] if appsync_report else None)
             candidate = work / 'owner-trust.bundle'
             script('trust-append-module.py', original, candidate, *hashes)
             trust = out / 'owner-trust.bundle'
