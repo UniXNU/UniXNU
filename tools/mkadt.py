@@ -17,6 +17,10 @@ MEM_SIZE = 0x4d000000
 # carve-out is in the low bank and the dynamic pools are limited below 4G.
 HIGH_PHYS_BASE = 0x100000000
 HIGH_MEM_SIZE = 0xfcc00000
+# umi (Mi 10, 8 GB): live FDT memory <0x80000000 0x3bb00000>, <0xc0000000 0xc0000000>, <0x1_80000000 4G>, so
+# 0x1_00000000..0x2_80000000 is one 6 GiB stretch with no reserved-memory in it (/proc/iomem System RAM
+# ffc20000-27fffffff; TWRP 2026-11-06). 0xc0000000..0xffc00000 stays unmanaged for the display/Wi-Fi/DSP pools.
+UMI_HIGH_MEM_SIZE = 0x180000000
 # /arm-io children are relative to this; it must not be 0 (serial_init bails)
 SOC_BASE = 0x01000000
 
@@ -83,6 +87,8 @@ def node(name, props=(), children=()):
 def build(seed=None, qemu=False, highmem=False, board='sweet'):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
     phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
+    if highmem and board == 'umi' and not qemu:
+        mem_size = UMI_HIGH_MEM_SIZE
     gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (GICD, GICR, TIMEBASE)
     b = BOARDS[board]
     seed = seed if seed is not None else os.urandom(64)

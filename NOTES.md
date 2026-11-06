@@ -2,6 +2,15 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-06: 0252 iOS gets 6 GB of RAM (was 3.95 GB)** (image `shim/out/umi-0252-6gb.img` = 0251 kernel + the 0248
+  ADT with /chosen dram-size 0x180000000; `tools/mkadt.py --highmem --board umi` now does the same). The 0xfcc00000
+  size was sweet's (6 GB phone) and had never been checked on umi. TWRP (read-only, 2026-11-06): FDT memory
+  <0x80000000 0x3bb00000>, <0xc0000000 0xc0000000>, <0x1_80000000 4G>; /proc/iomem System RAM ffc20000-27fffffff
+  (Linux MemTotal 7.4 GB), every reserved-memory node below 0xb1400000. So 0x1_00000000..0x2_80000000 is one clean
+  6 GiB stretch; 0xc0000000..0xffc00000 (our display/Wi-Fi/DSP pools) stays outside the kernel. The low bank (with
+  firmware holes) would need a second pmap range - not worth ~1 GB. Booted 2026-11-06 ~19:5x: free 3596 MB early
+  (0250: 1512), 2.4 GB free with the GPU at 174 MB, no panic, no UFS errors, Wi-Fi firmware up, same crash set as
+  before (TTS, CommCenter, widgets). Shim identity map still covers 0-8 GB only: fine, it touches only the kernel.
 - **2026-11-06: 0251 GPU memory caps** (patch `xnu/patches/0251-umi-gpu-memory-caps.patch`, kernel 9029e0f, image
   `shim/out/umi-0251-gpucaps.img`, 0248 cmdline/ADT). GPU BOs are wired RAM, so with Metal for every process one app
   could starve the compositor (the 11-05 freeze was backboardd's own BoAlloc refused). BoAlloc now refuses a client
