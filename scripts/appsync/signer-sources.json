@@ -1,0 +1,23 @@
+{
+  "ldid": {
+    "repository": "ProcursusTeam/ldid",
+    "commit": "af86971ae72ec3ed3d0a699107c4e882324c941b",
+    "url": "https://codeload.github.com/ProcursusTeam/ldid/tar.gz/af86971ae72ec3ed3d0a699107c4e882324c941b",
+    "sha256": "26be4e97a9c0bf608e1b7b301bf1e51cdb77e6069bf20981f615923cc080b1b1",
+    "directory": "ldid-af86971ae72ec3ed3d0a699107c4e882324c941b"
+  },
+  "libplist": {
+    "repository": "libimobiledevice/libplist",
+    "commit": "cf5897a71ea412ea2aeb1e2f6b5ea74d4fabfd8c",
+    "url": "https://codeload.github.com/libimobiledevice/libplist/tar.gz/cf5897a71ea412ea2aeb1e2f6b5ea74d4fabfd8c",
+    "sha256": "fef07306584241e003c8f2078a0ababb1b8ab1ebf68828670df0725d87bf352f",
+    "directory": "libplist-cf5897a71ea412ea2aeb1e2f6b5ea74d4fabfd8c"
+  },
+  "openssl": {
+    "repository": "openssl/openssl",
+    "commit": "67b5686b4419b4cb8caa502711c41815f5279751",
+    "url": "https://codeload.github.com/openssl/openssl/tar.gz/67b5686b4419b4cb8caa502711c41815f5279751",
+    "sha256": "f7c4a5e19fa02056e2bff4240bf474a3935207eb8fce6ee56175350acc6e2c32",
+    "directory": "openssl-67b5686b4419b4cb8caa502711c41815f5279751"
+  }
+}
