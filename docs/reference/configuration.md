@@ -37,6 +37,10 @@ Supported path keys are `device`, `out`, `uefi`, `edk2`, `kernelcache`, `kernel`
 
 `status` reports the selected file as `build_config`. Build inputs use `unixnu.local.toml`; module source overrides use the device repository's `local.toml`.
 
+The device enables the [AppSync adapter](/concepts/security#user-application-installation)
+with `[payload.runtime] appsync = true` and the matching kernel patches. It
+applies to all user application bundles without per-app build inputs.
+
 ## Profile fields
 
 | Table | Key | Meaning |

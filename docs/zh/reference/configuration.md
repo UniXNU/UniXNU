@@ -36,6 +36,10 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 
 `status` 的 `build_config` 字段显示选中的文件。`unixnu.local.toml` 保存构建输入，设备仓库的 `local.toml` 保存组件源码覆盖路径。
 
+设备通过 `[payload.runtime] appsync = true` 和匹配的内核补丁启用
+[AppSync 适配层](/zh/concepts/security#用户应用安装)，对所有用户应用包生效，
+不需要逐个应用提供构建输入。
+
 ## 配置字段
 
 | 表 | 键 | 含义 |

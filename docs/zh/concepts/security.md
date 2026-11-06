@@ -48,6 +48,51 @@ ADT 属性 `/chosen/amfi-only-platform-code` 让 AMFI 保持在平台代码策�
 | `offline-owner-systemos-mount` | 挂载 SystemOS cryptex |
 | `offline-owner-z-air-init` | 初始化 owner root 的 Z air 路径 |
 
+## 用户应用安装
+
+sheng 的 iPadOS 27.0.1（24A446）运行环境将
+[AppSync Unified](https://github.com/akemin-dayo/AppSync) 的安装验证与
+FrontBoard 启动处理机制应用于所有用户应用包。没有应用名单、bundle ID 白名单或
+构建时的可执行文件哈希登记；新增应用和更新版本均无需重新构建启动镜像。
+
+保留当前 Data seed 和固件输入，从 UniXNU 目录构建一次：
+
+```sh
+./unixnu build kernel payload -D ../UniXNU-sheng
+./unixnu bootimg -D ../UniXNU-sheng
+```
+
+启动此镜像后，将 IPA 传入设备，通过 MobileInstallation 安装，例如：
+
+```sh
+/usr/libexec/unixnu-appinst /path/on/device/Example.ipa
+```
+
+无签名、伪签名和证书过期的包均在设备端处理。安装 hook 先调用原始验证器；
+验证拒绝时，用内置 ldid 在安装副本中自动修复签名，保留 entitlements，重建资源封套、
+移除过期 provisioning profile，再次验证。原始 IPA 保持不变。
+
+安装 hook 启用原生 ad-hoc 路径，关闭预加载 trust cache 哈希和在线授权要求，
+并跳过 provisioning profile ID 验证。FrontBoard 信任用户应用包。范围按位置判断：
+Data 上 `/private/var/` 或 `/var/` 下的 `.app` 目录树，覆盖安装暂存目录、嵌套框架和
+应用扩展。系统路径沿用原生处理。
+
+`sheng-appsync-user-trust.patch` 在 XNU 加载这些目录内代码的签名时自动登记
+CodeDirectory 哈希，时机在签名结构验证之后、原始 AMFI 签名回调之前。
+它使用 owner 启动模块已有的 engineering trust cache 接口，在运行时锁下去重，
+信任条目保留到本次启动结束。重启后，应用映射代码时会重新登记。
+启动 payload 仍包含运行库和系统程序副本的信任哈希，用户应用不再是构建输入。
+
+`payload.runtime.appsync = true` 选择此功能；`--kernel-arg appsync=0` 同时禁用
+挂载和自动信任登记。每次启动最多分配 65536 个动态模块，登记失败会报错。
+自动签名后仍会校验签名结构、资源和可执行页面哈希。不提供 FairPlay 解密或
+App Store 账户授权；应用仍须兼容目标 iOS 环境。
+
+`runtime/appsync-service.json` 记录 `scope = "all-user-bundles"` 及运行库文件哈希。
+主机测试覆盖未登记应用、版本更新、嵌套包、并发登记、关闭功能和失败后的资源释放，
+并验证无签名代码、伪签名及过期证书、资源与 profile 修复和 entitlements 保留。
+真机安装、启动及重启后的持久性仍待验证。源码和测试说明见 `scripts/appsync/README.md`。
+
 ## GPU client 授权
 
 Adreno740 在加速器服务上发布 `NativeSandboxGrantProcess`。补丁 `zzw-native-adreno-sandbox-grant` 把打开进程的名称与该属性比较，指定进程可以绕过 `mac_iokit_check_open_service` 和 `mac_iokit_check_open` 打开 user client。render server 就是该指定进程。
