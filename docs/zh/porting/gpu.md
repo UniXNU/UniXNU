@@ -23,6 +23,16 @@ Adreno740 实现 A740 内核接口。AdrenoMetal 使用该接口、Turnip、meta
 和选定的 OS GPU/IOSurface ABI。确认目标 GPU 版本，对照寄存器、固件、命令包和内存接口。
 其他 GPU 代际需要先实现对应内核后端和编译器支持，再选择前端。
 
+Adreno 750（gen7_9_1）在 Linux v6.16 中使用同一套 a740 系列 GMU、HFI 和 `hw_init` 代码。与 A740 的差异：
+
+| 项目 | A740 | A750 |
+| --- | --- | --- |
+| 芯片 ID | 0x43050a01 | 0x43051401 |
+| GMU 固件 | `gmu_gen70200.bin` | `gmu_gen70900.bin` |
+| SQE 固件 | `a740_sqe.fw` | `gen70900_sqe.fw`：去掉首个 dword 后 85360 字节，超过 Adreno740 预留的 77824 字节（`GpuSqeBytes`） |
+| `hw_init` 时钟门控 | hwcg 寄存器表 | 全局时钟门控，带 CGC P2S 握手 |
+| `hw_init` ECO 写入 | `RB_CMP_DBG_ECO_CNTL` bit 11 | `RB_CMP_DBG_ECO_CNTL` bit 19，`TPL1_DBG_ECO_CNTL1` 0xc0700 |
+
 另一块 A740 设备需要收集 GPU/GMU 寄存器、中断、SMMU context 与 stream ID、固件、
 电源域、时钟/电压档位、互连投票、RAM 保留区和扫描输出布局，并与选定固件核对。
 

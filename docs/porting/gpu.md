@@ -27,6 +27,16 @@ GPU revision and compare register, firmware, packet and memory interfaces.
 For another GPU generation, implement the matching kernel backend and compiler
 support before selecting its frontend.
 
+Adreno 750 (gen7_9_1) runs through the same a740-family GMU, HFI and `hw_init` code in Linux v6.16. It differs from A740 in:
+
+| Item | A740 | A750 |
+| --- | --- | --- |
+| Chip ID | 0x43050a01 | 0x43051401 |
+| GMU firmware | `gmu_gen70200.bin` | `gmu_gen70900.bin` |
+| SQE firmware | `a740_sqe.fw` | `gen70900_sqe.fw`: 85360 bytes without its first dword, more than the 77824 bytes Adreno740 reserves (`GpuSqeBytes`) |
+| Clock gating in `hw_init` | hwcg register table | global clock gating with the CGC P2S handshake |
+| ECO writes in `hw_init` | `RB_CMP_DBG_ECO_CNTL` bit 11 | `RB_CMP_DBG_ECO_CNTL` bit 19, `TPL1_DBG_ECO_CNTL1` 0xc0700 |
+
 For another A740 board, collect GPU/GMU registers, interrupts, SMMU context and
 stream IDs, firmware, power domains, clock/voltage levels, interconnect votes,
 RAM reservations and scanout layout. Check them against the selected firmware.
