@@ -66,6 +66,8 @@ lsl x2, x2, #(ARM_PGSHIFT - TTE_SHIFT)
 
 The Apple 4K profile switches to 16 KiB above 1 GiB. The native build keeps 4 KiB at every size.
 
+On xnu-8796, `arm_init.c` includes `apple_arm64_common.h` before this policy, and that header defines `APPLE_ARM64_ARCH_FAMILY`. The native guard is then false, a board with more than 1 GiB selects 16 KiB pages, and pmap panics in `write_pte_fast` with an unaligned PTE write. On xnu-8796, decide the page shift before that include.
+
 ## User address space
 
 The patch updates the user map policy:
