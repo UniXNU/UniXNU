@@ -2,6 +2,17 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-06: 0251 GPU memory caps** (patch `xnu/patches/0251-umi-gpu-memory-caps.patch`, kernel 9029e0f, image
+  `shim/out/umi-0251-gpucaps.img`, 0248 cmdline/ADT). GPU BOs are wired RAM, so with Metal for every process one app
+  could starve the compositor (the 11-05 freeze was backboardd's own BoAlloc refused). BoAlloc now refuses a client
+  other than backboardd/SpringBoard past 768 MB of its own, 1536 MB for all such clients together, or when it would
+  leave under 1 GB of RAM unwired (`max_mem` 4044 MB); boot-args `sweetgpucap` / `sweetgpuapps` / `sweetgpureserve`
+  in MB, 0 = off. Imports (IOSurfaces) are not capped. A refusal logs `v2 BoAlloc ... refused for NAME[pid]: <limit>`
+  and the app gets VK_ERROR_OUT_OF_DEVICE_MEMORY. The 10 s report's totals are now a line of their own
+  (`GPU memory (10 s) total ...`): with ~10 clients the per-client line was cut off before them.
+  First 0251 build booted 2026-11-06 19:2x: normal use 0 refusals, backboardd 250 MB (peak 371), ten Metal clients.
+  The rebuilt image (totals line) is not booted yet. Phone was flat the night before: iOS drains even on Mac USB
+  (68 -> 44 % in an evening), don't leave it on iOS unattended.
 - **2026-11-05 evening: 0249 GPU memory per client, 0250 GPU window reclaim, Metal for every process (`*`)**
   (patches `xnu/patches/0249-umi-gpu-memory-per-client.patch` kernel b5b9b84, `0250-umi-gpu-window-reclaim.patch`
   kernel 81079a4; images `shim/out/umi-0249-gpumem.img` (booted 19:5x) and `shim/out/umi-0250-gpuwindows.img` (not
