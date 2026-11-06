@@ -1,4 +1,4 @@
-From 35bbe418c01c4db945dafc8e9cf96984d77b5a38 Mon Sep 17 00:00:00 2001
+From 70480b0e6f13fb5708b1e16478ad899e3e2afe68 Mon Sep 17 00:00:00 2001
 From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
 Date: Fri, 6 Nov 2026 21:00:07 +0100
 Subject: [PATCH] umi: charger control - FV 4.40 V, FCC 2.0 A (0.9 A soft
@@ -6,11 +6,11 @@ Subject: [PATCH] umi: charger control - FV 4.40 V, FCC 2.0 A (0.9 A soft
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 ---
- iokit/Kernel/arm/SweetBattery.cpp | 152 ++++++++++++++++++++++++++++++
- 1 file changed, 152 insertions(+)
+ iokit/Kernel/arm/SweetBattery.cpp | 153 ++++++++++++++++++++++++++++++
+ 1 file changed, 153 insertions(+)
 
 diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
-index 49ead8e..7cd9cff 100644
+index 49ead8e..7d81c06 100644
 --- a/iokit/Kernel/arm/SweetBattery.cpp
 +++ b/iokit/Kernel/arm/SweetBattery.cpp
 @@ -17,9 +17,13 @@
@@ -47,7 +47,7 @@ index 49ead8e..7cd9cff 100644
  	if (dictionary) {
  		OSCollectionIterator *it = OSCollectionIterator::withCollection(dictionary);
  		if (!it) {
-@@ -217,6 +227,142 @@ SweetBattery::estimatePercent(unsigned mv)
+@@ -217,6 +227,143 @@ SweetBattery::estimatePercent(unsigned mv)
  	return 100;
  }
  
@@ -128,9 +128,10 @@ index 49ead8e..7cd9cff 100644
 +	apsd &= 0x7fu;
 +	const char *type = (apsd & 0x40u) ? "QC 3.0" : (apsd & 0x20u) ? "QC 2.0" : (apsd & 0x08u) ? "wall (DCP)" :
 +	    (apsd & 0x04u) ? "computer, charging port (CDP)" : (apsd & 0x10u) ? "float" : (apsd & 0x01u) ? "computer (SDP)" :
-+	    "unknown";
++	    (apsd & 0x02u) ? "other charger (OCP)" : "unknown";
 +	bool qc = (apsd & 0x60u) != 0;
-+	unsigned wantIcl = qc ? 2000 : (apsd & 0x0cu) ? 1500 : (apsd & 0x10u) ? 1000 : 500;
++	/* OCP (0x02): a charger with its own D+/D- signature, e.g. a USB-PD charger before any PD (2026-11-06) */
++	unsigned wantIcl = qc ? 2000 : (apsd & 0x0eu) ? 1500 : (apsd & 0x10u) ? 1000 : 500;
 +	if ((typec & 0x02u) && wantIcl < 3000) {
 +		wantIcl = 3000;                 /* Type-C source advertises 3.0 A */
 +	} else if ((typec & 0x04u) && wantIcl < 1500) {
@@ -190,7 +191,7 @@ index 49ead8e..7cd9cff 100644
  /* umi: PM8150B (SID 2). Returns false when the data is not usable (caller publishes the fallback). */
  bool
  SweetBattery::pollUmi(void)
-@@ -255,6 +401,7 @@ SweetBattery::pollUmi(void)
+@@ -255,6 +402,7 @@ SweetBattery::pollUmi(void)
  		iOk = false;
  	}
  	bool external = (usb & 0x10u) != 0;
@@ -198,7 +199,7 @@ index 49ead8e..7cd9cff 100644
  	bool capable = external && (path & 0x10u) && (path & 1u) && !(path & 0x40u);
  	unsigned state = charger & 7u;
  	bool charging = capable && state >= 1 && state <= 4 && !(error & 2u) && !(temperature & 0x0cu);
-@@ -331,6 +478,11 @@ SweetBattery::start(IOService *provider)
+@@ -331,6 +479,11 @@ SweetBattery::start(IOService *provider)
  	int real = 0;
  	(void)PE_parse_boot_argn("sweetbattery", &real, sizeof(real));
  	fUmi = real == 2;

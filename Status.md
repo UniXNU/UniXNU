@@ -13,14 +13,14 @@
 |---|---|---|
 | 🥾 Boot | Stock bootloader → `fastboot boot` of our shim → XNU | ✅ |
 | 🧠 CPU | All 8 cores; clocks follow the load (EPSS governor, 75 °C limit) | ✅ |
-| 🧮 RAM | 6.66 GB of the 8 GB for iOS (one range, 0xd6000000-0x280000000); the rest is firmware or our DSP / Wi-Fi buffers | ✅ |
+| 🧮 RAM | 6 GB of the 8 GB for iOS (0x100000000-0x280000000). 6.66 GB (from 0xd6000000) booted but the persistent log stopped writing, so it is off for now | ✅ |
 | 💾 UFS | Own host driver, HFS+ root in `userdata`, read/write | ✅ |
 | 🖥️ Display | 1080×2340 AMOLED, presented as the iPhone X panel | ✅ |
 | 🔆 Brightness | Slider, Control Center, auto-brightness, Night Shift | ✅ |
 | 👆 Touch | ST FTM5 | ✅ |
 | 🔘 Buttons | Power, volume up/down | ✅ |
 | 🔋 Battery | Real percentage, voltage, current, charging state | ✅ |
-| 🔌 Type-C Charge | Charges, but slower than iOS uses power on a computer's USB port (68 → 44 % in an evening): use a wall charger, don't leave it on iOS unattended; no charger control or fast charge | ⚠️ |
+| 🔌 Type-C Charge | Charger control (kernel 0252): 4.40 V, 2.0 A charge current (Android's value for this phone), input limit from the charger type (computer 500 mA, wall / other 1.5 A, Type-C 3 A), QC 2.0 / 3.0 at 9 V (untested). A USB-PD charger charges at ~+0.6 A; a computer port still can't keep up with iOS. No USB-PD, no 30 W charge pump | ⚠️ |
 | ⚡ Wireless charge | | ❌ |
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
@@ -137,6 +137,7 @@
 * **Video**: hardware decode (VideoToolbox / AVD)
 * **GPU**: Safari's address bar / white status bar and link taps; the App Library blur; apps that hit the memory caps (check what they do with a nil buffer); drop the per-submit cache walk (make Turnip's write-combined command memory coherent without it), less CPU per frame
 * **RAM**: ~7 GB by moving our DSP / Wi-Fi buffers into free low RAM (0x92700000-0xb03fffff) and starting iOS at 0xc0000000
-* **Charging**: charge faster than iOS drains (charger control on the PM8150B)
+* **Charging**: why a 3 A USB-PD charger only gives ~+0.6 A (AICL?); QC 3.0 test with a QC charger; USB-PD and the SMB1390 charge pump for 30 W
+* **Audio**: check that the speaker still plays with the plug-in's hardware volume control removed (installed, not yet loaded)
 * **Wi-Fi**: 5 GHz, HT / VHT rates, WPA3
 * **Cellular**, **GPS**, **Fingerprint**, **Face ID / SEP**, **NFC**, **Wireless charging**

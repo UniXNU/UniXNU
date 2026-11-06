@@ -93,7 +93,9 @@ def build(seed=None, qemu=False, highmem=False, board='sweet'):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
     phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
     if highmem and board == 'umi' and not qemu:
-        phys_base, mem_size = UMI_LOW_PHYS_BASE, HIGH_PHYS_BASE + UMI_HIGH_MEM_SIZE - UMI_LOW_PHYS_BASE
+        mem_size = UMI_HIGH_MEM_SIZE
+        if os.environ.get('UMI_LOW_RAM') == '1':   # 6.66 GB from 0xd6000000: the persistent log stopped (NOTES)
+            phys_base, mem_size = UMI_LOW_PHYS_BASE, HIGH_PHYS_BASE + UMI_HIGH_MEM_SIZE - UMI_LOW_PHYS_BASE
     gicd, gicr, timebase = (QEMU_GICD, QEMU_GICR, QEMU_TIMEBASE) if qemu else (GICD, GICR, TIMEBASE)
     b = BOARDS[board]
     seed = seed if seed is not None else os.urandom(64)

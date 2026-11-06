@@ -2,6 +2,29 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-06 evening: 0252 charger control, USB after a charger, volume fix, 6.66 GB on hold**
+  - **0252** (`xnu/patches/0252-umi-charger-control.patch`, kernel 70480b0, image `shim/out/umi-0255-charger-6g.img` =
+    0252 kernel + the 6 GB ADT above 4 GB). Values from Android in TWRP (read only): battery xiaomi_j2gybm4n 4780 mAh,
+    FV votable effective 4.40 V (NON_FFC), FCC effective 2.0 A (BATT_VERIFY_VOTER), SDP ICL 500 mA, JEITA FCC table
+    0 / 936 / 1872 / 2808 / 6000 / 3276 mA for <0 / 0-5 / 5-10 / 10-15 / 15-45 / 45-58 C; register map checked against
+    its regmap (0x1061 0x28, 0x1070 0x50, 0x1370 0x0a, 0x1308 0x01, 0x1506 0x08). ABL leaves FCC 1.5 A, ICL 500 mA,
+    HVDCP detection OFF (0x1362 0x18), adapter_allow 0x0c, JEITA_EN 0x1b (hard + soft, left alone). The kernel sets
+    FV 4.40 V, FCC 2.0 A (0.9 A on a soft cool/warm flag), ICL by APSD / Type-C Rp, HVDCP on, QC -> adapter_allow 0x07
+    + FORCE_9V; logs a status line every minute (battery mA, registers). 0 failed writes.
+  - Results: Mac (through a hub) = SDP 500 mA, battery -70..-400 mA (iOS uses more). A USB-PD charger shows as APSD
+    0x02 (OCP) + Type-C Rp 3.0 A -> ICL 3000: **battery +626 mA** (charging, but far below FCC 2 A: next, read AICL /
+    input voltage). No QC (that charger did not do HVDCP). OCP was labelled "unknown" (fixed: "other charger", 1.5 A
+    floor).
+  - **"USB gone after the charger" is the Mac side:** the phone's persistent log shows a full re-enumeration (bus reset,
+    address, SET_CONFIGURATION, ECM endpoints, link notifications) after going back to the Mac; macOS gives the new
+    interface no 192.168.7.1 - run `sudo tools/umi-usbnet.sh` again after every re-plug.
+  - **6.66 GB layout on hold:** on 0254 (RAM from 0xd6000000, UFS DMA at 0xdb6bc000) the persistent log stopped after
+    3 flushes with no error line; on 0255 (6 GB above 4 GB) it kept writing (91 flushes). One boot each, not proven;
+    `tools/mkadt.py` is back to 6 GB (`UMI_LOW_RAM=1` for the 6.66 GB layout). Check the UFS write path below 4 GB.
+  - **Volume jump a few minutes after boot:** iOS runs the speaker with software volume and set our plug-in's hardware
+    volume control to 100 % when the route came up. SweetAudio now has no hardware control on the Speaker
+    (`SA_HW_VOLUME=1` brings it back); installed on the phone (old one: `SweetAudio.sweet-pre-novol`), loaded at the
+    next boot - not yet tested (does the speaker route still build?).
 - **2026-11-06: 0253 iOS gets 6.66 GB** (image `shim/out/umi-0253-6g6.img` = 0251 kernel + 0248 ADT with dram-base
   0xd6000000, dram-size 0x1aa000000; `tools/mkadt.py --highmem --board umi` does the same). First boot with XNU's
   RAM starting below 4 GB: our fixed low-RAM pools all end below 0xd5000000 (sweetfb 0xc0000000.., Wi-Fi 0xd0000000,

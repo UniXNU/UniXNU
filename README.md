@@ -4,7 +4,7 @@
 
 This project ports Apple's open-source XNU kernel (xnu-8796, the iOS 16 generation) to the Xiaomi Mi 10 (`umi`, Qualcomm SM8250 / Snapdragon 865). On top of it runs the **unmodified iOS 16.7.16 (20H392) userland of the iPhone X**: launchd, the system daemons, backboardd, SpringBoard and the stock apps.
 
-As of **2026-11-06** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks), Bluetooth pairing, the speaker, the brightness slider and auto-brightness work, the battery shows its real charge, the **Adreno 650 GPU draws the UI and every Metal app** (Safari included), and iOS has **6.66 GB of the phone's 8 GB of RAM**.
+As of **2026-11-06** the phone boots to the **iOS home screen** with the stock apps. Touch, the buttons, Wi-Fi in Settings (open and WPA2 networks), Bluetooth pairing, the speaker, the brightness slider and auto-brightness work, the battery shows its real charge, the **Adreno 650 GPU draws the UI and every Metal app** (Safari included), iOS has **6 GB of the phone's 8 GB of RAM**, and the kernel drives the charger (2.0 A, QC detection).
 
 > Experimental bring-up, not a usable phone OS. Many things are missing or stubbed (see below), and Apple's security model is mostly switched off. It installs into the `userdata` partition and so **erases Android's user data**.
 
@@ -16,7 +16,8 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 | --- | --- |
 | Boot | Stock Xiaomi bootloader → `fastboot boot` of our shim → XNU. The shim image can also be flashed to `boot` so iOS starts on its own |
 | CPU | All 8 cores (4× Cortex-A55, 3× A77, 1× A77 prime) via PSCI, 16K pages, GICv3 interrupts, timers; clocks follow the load; UI threads kept on the big cores |
-| RAM | 6.66 GB for iOS (0xd6000000–0x280000000, one range as XNU needs); the rest is firmware carve-outs and our DSP / Wi-Fi buffers |
+| RAM | 6 GB for iOS (0x100000000–0x280000000, one range as XNU needs); the rest is firmware carve-outs and our DSP / Wi-Fi buffers |
+| Charging | Kernel charger control on the PM8150B: 4.40 V, 2.0 A, input limit by charger type, QC 2.0 / 3.0 detection |
 | Storage | Own UFS host driver; the iOS root is a journaled HFS+ volume in `userdata`, read/write |
 | iOS userland | Real iPhone X 16.7.16 root filesystem and shared cache; launchd, the system daemons and the 31 removable stock apps |
 | Display | Kernel IOSurface + IOMobileFramebuffer (`AppleCLCD`) services; CoreAnimation frames go to the 1080×2340 AMOLED panel. Presented to iOS as an iPhone X panel (1125×2436) |
@@ -43,7 +44,7 @@ The project started on the Redmi Note 10 Pro (`sweet`, SM7150), hence its name; 
 - **No hardware video decoding** (VideoToolbox / AVD), so videos do not play; music apps never reached the audio system in tests.
 - **Wi-Fi** is 2.4 GHz only, legacy rates, no WPA3.
 - **GPU**: Safari's address bar glitches and its status bar is white, the App Library blur glitches, and an app that hits its GPU memory cap gets no buffer (it may crash rather than freeze the phone).
-- **Charging** is slower than iOS uses power on a computer's USB port: use a wall charger and don't leave it running iOS unattended.
+- **Charging** from a computer's USB port (500 mA) is slower than iOS uses power: use a wall charger. No USB-PD or 30 W fast charge.
 - **No App Store, no Apple ID.**
 - **Security is off:** permissive code signing (AMFI) and sandbox policies, a stub AppleKeyStore, no data protection. Do not put anything personal on it.
 
@@ -187,6 +188,7 @@ Not in git: partition backups, live device trees, recovery images, Apple firmwar
 | 0239–0247 | GPU and display: fence interrupts, cheaper submits, cache coherence fixes, stale frames, drawable and IOSurface leaks |
 | 0248 | UI and render threads on the big cores |
 | 0249–0251 | GPU memory per app in the log, GPU address windows given back, GPU memory caps |
+| 0252 | Charger control: voltage, charge current, input limit by charger type, QC 2.0 / 3.0 |
 
 ## Key hardware facts (Mi 10)
 
