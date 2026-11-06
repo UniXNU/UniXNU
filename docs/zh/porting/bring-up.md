@@ -140,6 +140,7 @@ JOBS=8 bash package/Scripts/smoke.sh
 | 内核入口无日志 | 启动参数、串口选择、framebuffer 地址 |
 | panic 给出 provider | ADT 节点、驱动静态库、内核开关 |
 | 无根卷 | userdata 镜像、UUID、分区容量 |
+| 运行过 Android 后报 `no valid root manifest` | Android 启动时格式化了 userdata；重新写入 userdata 镜像。关机状态下充电，或用[双系统分区](/zh/porting/dual-system-partition)保留两个系统 |
 
 ## 下一步
 
