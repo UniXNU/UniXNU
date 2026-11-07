@@ -38,6 +38,8 @@ Connecting to UART.SK also starts a stopped controller.
 
 ## Board integration
 
+The full procedure is in [Bluetooth adaptation](/porting/bluetooth).
+
 The board supplies WCN power, clocks, pins, DMA mappings, IRQs and firmware.
 `WcnPower.h` keeps independent Wi-Fi and Bluetooth votes over the shared supplies;
 the last owner releases them.
