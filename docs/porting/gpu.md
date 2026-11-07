@@ -111,6 +111,8 @@ With `sheng-fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an un
 
 `turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `sheng-tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
 
+`sheng-metal-flow=1` enables the metal2vulkan lowering thread, commit submission and pipeline warm pass for testing. The default is off. See [AdrenoMetal](/drivers/adreno-metal).
+
 Metal clients use one sample by default. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves the requested sample count; texture types, pipeline counts and resolve handling follow that policy.
 
 ### Find where a slow frame goes {#frame-path}
