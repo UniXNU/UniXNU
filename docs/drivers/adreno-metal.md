@@ -25,9 +25,13 @@ Unused owned image backing is reused by pooled and dedicated images. Extra spare
 
 Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
 
-Each program appends its pipeline records to `pipeline-records-<name>.bin` in that cache. A new device makes the recorded pipelines again in the background at the utility class, below every other pipeline making.
+Render encoder calls lower at the call, commits submit through the runtime's scheduler thread, and no pipelines are prepared ahead of use. `sheng-metal-flow=1` enables three metal2vulkan paths for testing:
 
-Render encoder calls are checked at the call and lowered on the runtime's lowering thread. A refusal found while lowering fails the command buffer. A commit submits on the committing thread when no other submission pass is running.
+- Render encoder calls lower on the runtime's lowering thread. A refusal found while lowering fails the command buffer.
+- A commit submits on the committing thread when no other submission pass is running.
+- Each program appends its pipeline records to `pipeline-records-<name>.bin` in the cache. A new device makes the recorded pipelines again in the background at the utility class.
+
+These paths stay off because they showed no measured frame-rate gain on sheng, and one test boot stopped presenting at the logo. Either value of `sheng-metal-flow=` logs the `FL` counts to os_log every ten seconds when they change.
 
 Logical Metal queues share one Vulkan queue and kernel queue per process. The frontend forwards the most urgent **current** request among live queues. Lowering or destroying a queue removes its boost. Getters report each queue's own request; setters report backend acceptance. The kernel chooses foreground or background priority from the task's GPU role. Priority policy does not use process names.
 

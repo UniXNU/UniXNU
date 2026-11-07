@@ -99,6 +99,8 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 `turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`sheng-tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
 
+`sheng-metal-flow=1` 打开 metal2vulkan 的 lowering 线程、commit 直接提交和管线预热，用于测试，默认关闭。详见 [AdrenoMetal](/zh/drivers/adreno-metal)。
+
 Metal 客户端默认使用单采样。`NATIVE_METAL_SINGLE_SAMPLE=0` 保留请求的采样数；纹理类型、pipeline 采样数和 resolve 处理遵循该策略。
 
 ### 定位慢帧的耗时 {#frame-path}
