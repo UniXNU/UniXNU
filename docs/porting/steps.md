@@ -125,7 +125,7 @@ the board DTS for XNU's ADT, and the firmware DTB for boot-image assembly.
 ## 6. Adapt drivers in dependency order
 
 Work through [driver adaptation](/porting/drivers): platform and memory,
-storage, display and brightness, input, GPU, Wi-Fi, then DSP, audio and power.
+storage, display and brightness, input, GPU, Wi-Fi, Bluetooth, USB, then DSP, audio and power.
 Each guide identifies source files, board inputs, build integration and expected
 observations. Select only implementations whose required inputs are satisfied.
 

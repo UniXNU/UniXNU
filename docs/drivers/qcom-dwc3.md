@@ -41,6 +41,8 @@ The board supplies the eUSB2 repeater, QMP PHY, retimer, rails and SMMU context.
 
 ## Adapting to another board
 
+The full procedure is in [USB adaptation](/porting/usb).
+
 1. Supply the repeater, PHY, retimer and rail sequences, and the eUSB2 reference rate. With a wrong rate chirp passes and high-speed data fails.
 2. Give the controller's stream a coherent stage 1 context.
 3. Provide `qcom_dwc3_vbus()` and the UCSI channel.

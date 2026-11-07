@@ -41,6 +41,8 @@ UCSI 通过充电器的 GLINK 通道报告线缆对端：对端是主机时进�
 
 ## 适配其他板子
 
+完整步骤见 [USB 适配](/zh/porting/usb)。
+
 1. 提供中继器、PHY、retimer 和电源轨的时序，以及 eUSB2 参考时钟。时钟错误时 chirp 能通过，高速数据失败。
 2. 为控制器的 stream 提供缓存一致的 stage 1 上下文。
 3. 提供 `qcom_dwc3_vbus()` 和 UCSI 通道。

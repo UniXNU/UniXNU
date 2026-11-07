@@ -99,4 +99,4 @@ rg -n 'nativewifi|wifi_module_objs|WifiNet|WifiProbe' scripts/build-gop-legacy-d
 
 ## 下一步
 
-有基带的设备继续[基带与移动网络](/zh/porting/baseband)，其余设备继续 [DSP、音频和电源](/zh/porting/power)。也可返回[驱动清单](/zh/porting/drivers)。
+继续[蓝牙](/zh/porting/bluetooth)。也可返回[驱动清单](/zh/porting/drivers)。

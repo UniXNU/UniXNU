@@ -117,6 +117,5 @@ The reference joins WPA2-Personal networks, gets an address by DHCP and loads we
 
 ## Next step
 
-Continue with [baseband and cellular](/porting/baseband) on devices with a modem,
-or [DSP, audio and power](/porting/power). Return to the
+Continue with [Bluetooth](/porting/bluetooth). Return to the
 [driver checklist](/porting/drivers).
