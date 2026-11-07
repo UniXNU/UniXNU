@@ -25,20 +25,18 @@ if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # Each stacks on the source the ones before it leave.
-    '0001-optional-constant-output-members.patch', '0002-resource-wait-storage-dependencies.patch',
+    '0002-resource-wait-storage-dependencies.patch',
     '0003-cache-device-entry-point-priming.patch', '0004-fold-constant-global-field-loads.patch',
     # A draw whose pipeline the driver refused binds nothing (int-170: tu_CmdBindPipeline in the render server).
     '0005-skip-draws-without-a-pipeline.patch',
     # A batch's barrier globals on the stack, and the neutral resources' maps by the runtime's key hash.
     '0006-batch-barriers-and-key-hash-neutral-maps.patch',
-    # From the DroidVM board's translator patches: a cache directory a sandboxed process may not write, llvm.bitreverse, a patch
-    # function with no control points, and Core Image kernel libraries (file_type 1) loaded as Metal loads them.
-    '0007-optional-shader-cache-directory.patch', '0008-llvm-bitreverse.patch', '0009-patch-with-no-control-points.patch',
-    '0010-core-image-kernel-libraries.patch',
-    # A two-plane surface's shadow starts as its memory lies; the Astronomy wallpaper's extended-range sRGB blends take the rounded
-    # model; pooled blocks start at 4 MiB and grow (the render server alone held 1 GiB of wired memory).
-    '0011-two-plane-shadow-as-memory-lies.patch', '0012-srgb-extended-range-blend-rounded-model.patch',
-    '0013-growing-memory-blocks.patch',
+    # From the DroidVM board's translator patches: a cache directory a sandboxed process may not write, and a patch function with no
+    # control points.
+    '0007-optional-shader-cache-directory.patch', '0009-patch-with-no-control-points.patch',
+    # A two-plane surface's shadow starts as its memory lies; pooled blocks start at 4 MiB and grow (the render server alone held 1 GiB
+    # of wired memory).
+    '0011-two-plane-shadow-as-memory-lies.patch', '0013-growing-memory-blocks.patch',
     # HostPageTexturePolicy::InPlaceWrites: textures over surfaces and padded buffers are images over their bytes, rendered and written
     # too, where their tile stores stay within their rows, instead of shadows copied in and out every pass.
     '0014-in-place-written-textures.patch', '0015-in-place-written-host-page-textures.patch',
@@ -67,11 +65,12 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # The host's diagnostics switch (SHENG_DIAG, from the boot argument sheng-diag=1): without it the stage ring and the allocation sites
     # keep nothing. The stage ring also marks the steps inside a batch's submission (SubmitStep: placed, gathered, vkQueueSubmit, changes).
     '0024-diagnostics-switch-and-submit-steps.patch',
-    # Preserve specialized link names and source definitions; share large indexed constants and expose Vulkan allocation sizes.
+    # Share large indexed constants, read constant GEP offsets, expose Vulkan allocation sizes and name a made function.
     '0025-specialized-links-shared-constants-and-allocation-size.patch',
     '0026-frame-diagnostic-links.patch',
-    '0027-bounded-image-reuse-and-retired-release.patch',
-    '0028-guard-memory-release-test-worker.patch',
+    # Pooled and room-keeper image blocks become spares and serve later placements; the room worker ages them. Frees are upstream's
+    # free thread.
+    '0027-bounded-image-reuse.patch',
     '0029-latency-stage-selection.patch',
     # Spare image blocks have no byte limit (they age, go when a block cannot be made and on memory pressure), and the room keeper takes
     # a spare block before it makes a new one: the limit freed spares the render server made again within seconds, each a fresh wiring.
