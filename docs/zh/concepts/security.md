@@ -69,7 +69,7 @@ FrontBoard 启动处理机制应用于所有用户应用包。没有应用名单
 ```
 
 无签名、伪签名和证书过期的包均在设备端处理。安装 hook 先调用原始验证器；
-验证拒绝时，用内置 ldid 在安装副本中自动修复签名，保留 entitlements，重建资源封套、
+验证拒绝时，用在 installd 进程内运行的内置 ldid 库在安装副本中自动修复签名，保留 entitlements，重建资源封套、
 移除过期 provisioning profile，再次验证。原始 IPA 保持不变。
 
 安装 hook 启用原生 ad-hoc 路径，关闭预加载 trust cache 哈希和在线授权要求，
@@ -82,6 +82,8 @@ CodeDirectory 哈希，时机在签名结构验证之后、原始 AMFI 签名回
 它使用 owner 启动模块已有的 engineering trust cache 接口，在运行时锁下去重，
 信任条目保留到本次启动结束。重启后，应用映射代码时会重新登记。
 启动 payload 仍包含运行库和系统程序副本的信任哈希，用户应用不再是构建输入。
+进入 trust cache 后，AMFI 会把这些可执行文件报告为平台二进制；exec 为用户 `.app`
+的主可执行文件清除这一身份，应用以普通第三方进程运行。
 
 `payload.runtime.appsync = true` 选择此功能；`--kernel-arg appsync=0` 同时禁用
 挂载和自动信任登记。每次启动最多分配 65536 个动态模块，登记失败会报错。
@@ -91,7 +93,7 @@ App Store 账户授权；应用仍须兼容目标 iOS 环境。
 `runtime/appsync-service.json` 记录 `scope = "all-user-bundles"` 及运行库文件哈希。
 主机测试覆盖未登记应用、版本更新、嵌套包、并发登记、关闭功能和失败后的资源释放，
 并验证无签名代码、伪签名及过期证书、资源与 profile 修复和 entitlements 保留。
-真机安装、启动及重启后的持久性仍待验证。源码和测试说明见 `scripts/appsync/README.md`。
+在 sheng 上，无签名的 arm64 应用可通过 USB 安装、启动，并在重启后保留。源码和测试说明见 `scripts/appsync/README.md`。
 
 ## GPU client 授权
 

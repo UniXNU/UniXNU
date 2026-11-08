@@ -8,7 +8,8 @@ It follows [AppSync Unified](https://github.com/akemin-dayo/AppSync/tree/235aca6
 separation of installation validation, FrontBoard launch trust and the
 LSApplicationWorkspace installer. Upstream authors: Karen/あけみ and Linus Yang.
 The Objective-C adaptation is GPL-3.0-or-later. This is an independent UniXNU
-port; real device installation and launch remain unverified.
+port. On sheng, an unsigned arm64 app installs over USB, launches and stays
+installed across reboots.
 
 ## Install applications
 
@@ -40,8 +41,9 @@ options are restored on success, failure and exceptions.
 
 `Signing.m` first invokes the original verifier. If it rejects a user package,
 the adapter locks that bundle, preflights its Mach-O slices, removes obsolete
-embedded provisioning profiles, and runs the bundled signer recursively. The
-signer preserves existing XML/DER entitlements, regenerates code and resource
+embedded provisioning profiles, and signs the bundle recursively with the
+signer library inside installd, whose sandbox denies process-fork. The signer
+preserves existing XML/DER entitlements, regenerates code and resource
 signatures, and marks signatures without a CMS identity as ad-hoc. The original
 verifier then validates the result and creates native signing information.
 Valid packages remain unchanged. Concurrent repairs serialize on the bundle;
@@ -50,15 +52,21 @@ a failed signer or second validation remains an installation failure.
 The signer is [Procursus ldid](https://github.com/ProcursusTeam/ldid), with the
 small `ldid-adhoc.patch` required by this AMFI path. `signer-sources.json` pins
 its source and the static OpenSSL/libplist dependencies by commit and archive
-SHA-256. `signer.py` builds an arm64 iOS executable with only libSystem and
-libc++ dynamic dependencies. Build downloads are cached; on-device signing is
-offline. Licenses accompany the runtime; the cache retains ldid objects and
-static libraries for relinking. See `LICENSE` and the pinned upstream sources.
+SHA-256. `signer.py` builds `/usr/lib/libunixnu-ldid.dylib`, an arm64e iOS
+library with only libSystem and libc++ dynamic dependencies that exports
+`unixnu_ldid_sign_bundle`. `ldid-library.cpp` runs ldid's `-Hsha256 -M -S` on
+a bundle, resets ldid's option state before each call, serializes calls and
+returns ldid's `exit()` as an error. The patch also memory-maps each signed
+file, which keeps large applications within installd's memory limit, and signs
+`Extensions/` ExtensionKit bundles as nested code, like `PlugIns/`. Build
+downloads are cached; on-device signing is offline. Licenses accompany the
+runtime; the cache retains ldid objects and static libraries for relinking.
+See `LICENSE` and the pinned upstream sources.
 
 Malformed Mach-O commands, encrypted slices and symlinks escaping the bundle
-are rejected before repair. There is a 120-second signer deadline. This port
-does not decrypt FairPlay content or supply App Store account authorization;
-packages still need executable code compatible with the target OS and CPU.
+are rejected before repair. This port does not decrypt FairPlay content or
+supply App Store account authorization; packages still need executable code
+compatible with the target OS and CPU.
 
 ## Launch and kernel trust
 
@@ -79,6 +87,9 @@ modules until reboot. The next boot registers an app again on first mapping.
 There is a 65536-module memory bound per boot; allocation/load failures are
 reported and reject the mapping. Like other trust-cache entries, registration
 trusts the same code hash for the rest of that boot, even if its file moves.
+Trust-cache membership makes AMFI report the code as a platform binary; right
+after `load_machfile`, exec clears that status for a user `.app` main
+executable, so the app runs as an ordinary third-party process.
 `appsync=0` disables both runtime mounts and automatic registration.
 
 ## Packaging and verification
@@ -87,8 +98,8 @@ trusts the same code hash for the rest of that boot, even if its file moves.
 Foundation dependency through the signed adapter, which re-exports Foundation,
 preserving ordinals, code addresses and chained/PAC fixups. Native identifiers
 and entitlements are checked after signing. The boot trust bundle includes
-these runtime copies and `unixnu-ldid`; user application hashes are not build
-inputs. `appsync-service.json` records `scope = "all-user-bundles"`,
+these runtime copies and the signer library; user application hashes are not
+build inputs. `appsync-service.json` records `scope = "all-user-bundles"`,
 `dynamic_user_trust = true`, `signature_repair = true` and the source pins.
 
 From UniXNU on macOS with Xcode and Python 3.13 or later:
@@ -104,13 +115,11 @@ checks unknown apps/updates, nested bundles, unsigned and multi-architecture
 Mach-O files, non-Apple and expired certificate fixtures, resource/profile
 repair, entitlement preservation and rejected encrypted/escaping inputs.
 Repaired outputs are independently checked with Apple's codesign tool. The
-first iOS certificate rejection is modeled on the host; Apple's actual iOS
-verifier, dyld and SpringBoard still require a device test.
+first iOS certificate rejection is modeled on the host.
 
 The exact kernel registration source is extracted from the board patch and
 compiled with a mock trust runtime to test concurrent deduplication, updates,
 frameworks, disabled behavior and allocation/load failures. Full kernel and
 image builds separately check the real XNU declarations and linkage. Runtime
 packing tests verify original trust-module and Data preservation and repeat
-builds. Device checkpoints are installation, registration, launch, extensions,
-updates and persistence across reboot.
+builds.
