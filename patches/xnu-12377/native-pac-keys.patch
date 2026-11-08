@@ -1,3 +1,21 @@
+diff --git a/osfmk/arm/machine_routines_apple.c b/osfmk/arm/machine_routines_apple.c
+index 144dab53..e2a736cb 100644
+--- a/osfmk/arm/machine_routines_apple.c
++++ b/osfmk/arm/machine_routines_apple.c
+@@ -249,6 +249,13 @@ ml_default_jop_pid(void)
+ #if HAS_PARAVIRTUALIZED_PAC
+ 	vmapple_pac_get_default_keys();
+ 	return vmapple_default_jop_pid;
++#elif HAS_NATIVE_PAC
++	/*
++	 * Every process signs with the one architectural key set, so this value
++	 * selects no key. It must not be 0: the shared region and dyld pagers
++	 * sign pointers only for a nonzero key and give arm64 processes key 0.
++	 */
++	return 1;
+ #else
+ 	return 0;
+ #endif /* HAS_PARAVIRTUALIZED_PAC */
 diff --git a/osfmk/arm64/machine_routines_asm.s b/osfmk/arm64/machine_routines_asm.s
 index 864fb208..671dc503 100644
 --- a/osfmk/arm64/machine_routines_asm.s
