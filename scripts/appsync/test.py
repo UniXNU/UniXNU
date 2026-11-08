@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Host regressions and optional build against the real, pinned OS inputs."""
 import argparse
+import ctypes
 import hashlib
 import json
 import plistlib
@@ -96,18 +97,22 @@ def trust_tests(work, device):
 
 
 def signing_tests(work):
-    signing_tool = work / 'ldid'
-    signer.build(signing_tool, host=True)
+    # The harness loads the signer library like installd; fixtures use the plain ldid command.
+    signing_library = work / signer.LIBRARY
+    signing_tool = Path(signer.build(signing_library, host=True)['tool'])
     harness = work / 'test-signing'
     build.run('xcrun', 'clang', '-fobjc-arc', '-fblocks', '-O1', '-g', '-Wall', '-Wextra', '-Werror',
               '-fsanitize=address,undefined', '-framework', 'Foundation',
-              '-DAS_SIGNER_PATH="' + str(signing_tool) + '"', ROOT / 'Signing.m', ROOT / 'test-signing.m', '-o', harness)
+              '-DAS_SIGNER_PATH="' + str(signing_library) + '"', ROOT / 'Signing.m', ROOT / 'test-signing.m', '-o', harness)
     base = work / 'Base.app'
     framework = base / 'Frameworks/Kit.framework'
     extension = base / 'PlugIns/Widget.appex'
+    # ExtensionKit extensions (iOS 16 and later) live in Extensions/ and are nested code like PlugIns/.
+    kit_extension = base / 'Extensions/Capture.appex'
     for bundle, name, identifier, kind in ((base, 'Main', 'org.unixnu.fixture', 'APPL'),
             (framework, 'Kit', 'org.unixnu.fixture.kit', 'FMWK'),
-            (extension, 'Widget', 'org.unixnu.fixture.widget', 'XPC!')):
+            (extension, 'Widget', 'org.unixnu.fixture.widget', 'XPC!'),
+            (kit_extension, 'Capture', 'org.unixnu.fixture.capture', 'XPC!')):
         bundle.mkdir(parents=True, exist_ok=True)
         (bundle / 'Info.plist').write_bytes(plistlib.dumps(dict(CFBundleIdentifier=identifier,
             CFBundleExecutable=name, CFBundleVersion='1', CFBundlePackageType=kind)))
@@ -115,7 +120,8 @@ def signing_tests(work):
     source = work / 'main.c'
     source.write_text('int main(void) { return 0; }\n')
     sdk = build.run('xcrun', '--sdk', 'iphoneos', '--show-sdk-path', capture=True).stdout.strip()
-    binaries = ['Main', 'Frameworks/Kit.framework/Kit', 'PlugIns/Widget.appex/Widget']
+    binaries = ['Main', 'Frameworks/Kit.framework/Kit', 'PlugIns/Widget.appex/Widget', 'Extensions/Capture.appex/Capture']
+    nested = ['Frameworks/Kit.framework', 'PlugIns/Widget.appex', 'Extensions/Capture.appex']
     entitlement_file = work / 'entitlements.plist'
     entitlements = {'application-identifier': 'EXAMPLE.org.unixnu.fixture', 'get-task-allow': True}
     entitlement_file.write_bytes(plistlib.dumps(entitlements))
@@ -138,6 +144,27 @@ def signing_tests(work):
     build.run(harness, unsigned, 'repair')
     for name in binaries:
         build.run('codesign', '--verify', '--strict', unsigned / name)
+    # Each nested bundle needs its own resource seal; installd validates them one by one.
+    for name in nested:
+        build.run('codesign', '--verify', '--strict', unsigned / name)
+
+    # installd calls the library repeatedly in one process. A failed command
+    # (ldid's exit) must return to the caller, and later calls must still sign.
+    sign = ctypes.CDLL(str(signing_library)).unixnu_ldid_sign_bundle
+    sign.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_size_t]
+    sign.restype = ctypes.c_int
+    message = ctypes.create_string_buffer(512)
+    assert sign(str(work / 'Missing.app').encode(), message, len(message)) != 0 and message.value
+    for index in range(2):
+        again = work / f'Again{index}.app'
+        shutil.copytree(unsigned, again)
+        for name in binaries:
+            build.run('codesign', '--remove-signature', again / name)
+        for resource in again.glob('**/_CodeSignature'):
+            shutil.rmtree(resource)
+        assert sign(str(again).encode(), message, len(message)) == 0, message.value
+        for name in binaries:
+            build.run('codesign', '--verify', '--strict', again / name)
 
     modified = work / 'Modified.app'
     shutil.copytree(base, modified)

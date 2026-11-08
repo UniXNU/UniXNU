@@ -81,8 +81,9 @@ def build(os_root, output):
             '-Wl,-current_version,5027.0.69',
             '-o', work / 'lib/UniXNUAppSync.dylib')
         sign(work / 'lib/UniXNUAppSync.dylib', 'org.unixnu.appsync')
-        signing = signer.build(work / 'libexec/unixnu-ldid')
-        sign(work / 'libexec/unixnu-ldid', 'org.unixnu.ldid')
+        # installd may not start processes: the signer is a library it loads.
+        signing = signer.build(work / 'lib' / signer.LIBRARY)
+        sign(work / 'lib' / signer.LIBRARY, 'org.unixnu.ldid')
         shutil.copytree(Path(signing['cache']) / 'licenses', work / 'libexec/appsync-licenses')
         run('xcrun', 'clang', *flags, ROOT / 'appinst.m', '-o', work / 'libexec/unixnu-appinst')
         entitlement_file = work / 'appinst-entitlements.plist'
@@ -108,7 +109,7 @@ def build(os_root, output):
                 raise ValueError('OS entitlements or identifier changed: ' + source)
             originals[source] = dict(sha256=pin, entitlements_preserved=True)
         files = {}
-        for relative in ['lib/UniXNUAppSync.dylib', 'libexec/unixnu-appinst', 'libexec/unixnu-ldid', *patched]:
+        for relative in ['lib/UniXNUAppSync.dylib', 'lib/' + signer.LIBRARY, 'libexec/unixnu-appinst', *patched]:
             path = work / relative
             files[relative] = dict(details(path), sha256=sha(path))
         system_executables = {}

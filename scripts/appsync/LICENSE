@@ -20,9 +20,11 @@ The complete GNU General Public License is available at
 https://www.gnu.org/licenses/gpl-3.0.html
 
 
-The separately built unixnu-ldid executable uses Procursus ldid under
-AGPL-3.0-or-later, OpenSSL 3.5.5 under Apache-2.0, and libplist 2.7.0 under
-LGPL-2.1-or-later. Their full license files accompany the runtime under
-/usr/libexec/appsync-licenses. Exact corresponding source archives and hashes
-are recorded in signer-sources.json; the ldid change is ldid-adhoc.patch.
-The signer cache retains ldid.o, libcrypto.a and libplist.a for relinking.
+The separately built libunixnu-ldid.dylib signer library uses Procursus ldid
+under AGPL-3.0-or-later, OpenSSL 3.5.5 under Apache-2.0, and libplist 2.7.0
+under LGPL-2.1-or-later. Its wrapper, ldid-library.cpp, includes the ldid
+source and is AGPL-3.0-or-later. Their full license files accompany the runtime
+under /usr/libexec/appsync-licenses. Exact corresponding source archives and
+hashes are recorded in signer-sources.json; the ldid change is
+ldid-adhoc.patch. The signer cache retains ldid-library.o, libcrypto.a and
+libplist.a for relinking.
