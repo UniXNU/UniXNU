@@ -2,19 +2,21 @@
 #import "Signing.h"
 #import <mach-o/loader.h>
 #import <mach-o/fat.h>
-#import <spawn.h>
 #import <sys/file.h>
 #import <sys/stat.h>
-#import <sys/wait.h>
-#import <signal.h>
+#import <dlfcn.h>
 #import <fcntl.h>
+#import <pthread.h>
 #import <unistd.h>
-#import <time.h>
 #import <errno.h>
 
+// installd's sandbox denies process-fork, so the signer is a library that runs
+// in the calling process (ldid-library.cpp) instead of a separate executable.
 #ifndef AS_SIGNER_PATH
-#define AS_SIGNER_PATH "/usr/libexec/unixnu-ldid"
+#define AS_SIGNER_PATH "/usr/lib/libunixnu-ldid.dylib"
 #endif
+
+typedef int (*ASSignBundle)(const char *path, char *message, size_t size);
 
 static BOOL failure(NSError **error, NSString *reason) {
     if (error) *error = [NSError errorWithDomain:@"org.unixnu.appsync" code:1
@@ -115,6 +117,24 @@ static BOOL signableBundle(NSURL *root, NSError **error) {
     return YES;
 }
 
+static ASSignBundle loadSigner(NSString **problem) {
+    static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+    static ASSignBundle sign;
+    pthread_mutex_lock(&lock);
+    if (!sign) {
+        void *image = dlopen(AS_SIGNER_PATH, RTLD_NOW | RTLD_LOCAL);
+        if (image) sign = (ASSignBundle)dlsym(image, "unixnu_ldid_sign_bundle");
+        if (!sign) {
+            const char *reason = dlerror();
+            *problem = [NSString stringWithFormat:@"Cannot load application signer: %s",
+                reason ?: "unixnu_ldid_sign_bundle missing"];
+        }
+    }
+    ASSignBundle result = sign;
+    pthread_mutex_unlock(&lock);
+    return result;
+}
+
 static BOOL repair(NSURL *root, NSError **error) {
     if (!signableBundle(root, error)) return NO;
     // A repaired ad-hoc signature has no provisioning identity. Remove stale
@@ -126,27 +146,20 @@ static BOOL repair(NSURL *root, NSError **error) {
             [file.lastPathComponent isEqual:@"embedded.provisionprofile"])
             if (![NSFileManager.defaultManager removeItemAtURL:file error:error]) return NO;
     }
-    char *arguments[] = {(char *)AS_SIGNER_PATH, "-Hsha256", "-M", "-S", (char *)root.fileSystemRepresentation, NULL};
-    char *environment[] = {"PATH=/usr/bin:/bin", "LC_ALL=C", "OPENSSL_CONF=/dev/null", NULL};
-    pid_t child;
-    int result = posix_spawn(&child, AS_SIGNER_PATH, NULL, NULL, arguments, environment);
-    if (result) return failure(error, [NSString stringWithFormat:@"Cannot start application signer: %d", result]);
-    struct timespec start, now;
-    clock_gettime(CLOCK_MONOTONIC, &start);
-    int status = 0;
-    while (YES) {
-        pid_t done = waitpid(child, &status, WNOHANG);
-        if (done == child) break;
-        if (done < 0 && errno != EINTR) return failure(error, @"Cannot wait for application signer");
-        clock_gettime(CLOCK_MONOTONIC, &now);
-        if (now.tv_sec - start.tv_sec >= 120) {
-            kill(child, SIGKILL);
-            while (waitpid(child, &status, 0) < 0 && errno == EINTR) {}
-            return failure(error, @"Application signing timed out");
-        }
-        usleep(100000);
+    NSString *problem = nil;
+    ASSignBundle sign = loadSigner(&problem);
+    if (!sign) {
+        NSLog(@"[UniXNU AppSync] %@", problem);
+        return failure(error, problem);
     }
-    if (!WIFEXITED(status) || WEXITSTATUS(status)) return failure(error, @"Application signer failed");
+    // The same command as before: ldid -Hsha256 -M -S BUNDLE.
+    char message[512] = {0};
+    int status = sign(root.fileSystemRepresentation, message, sizeof(message));
+    if (status) {
+        NSString *reason = [NSString stringWithFormat:@"Application signer failed (%d): %s", status, message];
+        NSLog(@"[UniXNU AppSync] %@: %@", reason, root.path);
+        return failure(error, reason);
+    }
     NSLog(@"[UniXNU AppSync] repaired signature: %@", root.path);
     return YES;
 }

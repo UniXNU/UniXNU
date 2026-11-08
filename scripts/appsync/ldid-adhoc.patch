@@ -1,6 +1,38 @@
 --- a/ldid.cpp
 +++ b/ldid.cpp
-@@ -2438,6 +2438,9 @@
+@@ -1454,6 +1454,31 @@
+         return std::string(static_cast<char *>(data_), size_);
+     }
+ };
++
++// A read-only streambuf backed by an mmap of the file, so reading it does not
++// copy it onto the heap. UniXNU signs inside installd, whose jetsam memory
++// limit a heap copy of a large application binary would exceed.
++class MapBuffer : public std::streambuf {
++  private:
++    Map map_;
++
++  public:
++    MapBuffer(const std::string &path) {
++        if (Look(path)) {
++            map_.open(path, O_RDONLY, PROT_READ, MAP_PRIVATE);
++            char *base(static_cast<char *>(map_.data()));
++            setg(base, base, base + map_.size());
++        }
++    }
++
++    static bool Look(const std::string &path) {
++        struct stat info;
++        return stat(path.c_str(), &info) == 0 && S_ISREG(info.st_mode) && info.st_size != 0;
++    }
++
++    const void *data() const { return map_.data(); }
++    size_t size() const { return map_.size(); }
++};
+ #endif // LDID_NOTOOLS
+ 
+ namespace ldid {
+@@ -2438,6 +2463,9 @@
  Hash Sign(const void *idata, size_t isize, std::streambuf &output, const std::string &identifier, const std::string &entitlements, bool merge, const std::string &requirements, const ldid::Signer &signer, const Slots &slots, uint32_t flags, uint8_t platform, const Progress &progress) {
      Hash hash;
  
@@ -10,3 +42,68 @@
  
      std::string team;
      std::string common;
+@@ -2890,6 +2918,12 @@
+ }
+ 
+ void DiskFolder::Open(const std::string &path, const Functor<void (std::streambuf &, size_t, const void *)> &code) const {
++    // Map non-empty regular files so a large binary is never copied onto the heap.
++    if (MapBuffer::Look(Path(path))) {
++        MapBuffer data(Path(path));
++        code(data, data.size(), NULL);
++        return;
++    }
+     std::filebuf data;
+     auto result(data.open(Path(path).c_str(), std::ios::binary | std::ios::in));
+     _assert_(result == &data, "DiskFolder::Open(%s)", Path(path).c_str());
+@@ -3137,6 +3171,16 @@
+ };
+ 
+ static Hash Sign(const uint8_t *prefix, size_t size, std::streambuf &buffer, Hash &hash, std::streambuf &save, const std::string &identifier, const std::string &entitlements, bool merge, const std::string &requirements, const ldid::Signer &signer, const Slots &slots, size_t length, uint32_t flags, uint8_t platform, const Progress &progress) {
++#ifndef LDID_NOTOOLS
++    // When the file is mmap'd (DiskFolder::Open), sign straight from the mapping
++    // so a large binary is never copied onto the heap. The prefix peeked by the
++    // caller is the start of this same mapping, so the whole file is data()..size().
++    if (auto *mapped = dynamic_cast<MapBuffer *>(&buffer)) {
++        (void) prefix, (void) size, (void) length;
++        HashProxy proxy(hash, save);
++        return Sign(mapped->data(), mapped->size(), proxy, identifier, entitlements, merge, requirements, signer, slots, flags, platform, progress);
++    }
++#endif
+     // XXX: this is a miserable fail
+     std::stringbuf temp;
+     put(temp, prefix, size);
+@@ -3208,6 +3252,14 @@
+ 
+     std::string entitlements;
+     folder.Open(executable, fun([&](std::streambuf &buffer, size_t length, const void *flag) {
++#ifndef LDID_NOTOOLS
++        // Analyze reads only the load commands; sign straight from the mapping.
++        if (auto *mapped = dynamic_cast<MapBuffer *>(&buffer)) {
++            (void) length, (void) flag;
++            entitlements = alter(root, Analyze(mapped->data(), mapped->size()));
++            return;
++        }
++#endif
+         // XXX: this is a miserable fail
+         std::stringbuf temp;
+         copy(buffer, temp, length, progress);
+@@ -3253,7 +3305,9 @@
+     }
+ 
+     std::string failure(mac ? "Contents/|Versions/[^/]*/Resources/" : "");
+-    Expression nested("^(Frameworks/[^/]*\\.framework|PlugIns/[^/]*\\.appex(()|/[^/]*.app))/(" + failure + ")Info\\.plist$");
++    // Extensions/ holds ExtensionKit extensions (iOS 16 and later). Like PlugIns/ they are nested code
++    // with their own seal; signing them as plain resources leaves their seal invalid.
++    Expression nested("^(Frameworks/[^/]*\\.framework|PlugIns/[^/]*\\.appex(()|/[^/]*.app)|Extensions/[^/]*\\.appex)/(" + failure + ")Info\\.plist$");
+     std::map<std::string, Bundle> bundles;
+ 
+     if (!flag_w) {
+@@ -3268,7 +3322,7 @@
+             SubFolder subfolder(folder, bundle);
+ 
+             State remote;
+-            bundles[nested[1]] = Sign(root + bundle, subfolder, signer, remote, requirements, Starts(name, "PlugIns/") ? alter :
++            bundles[nested[1]] = Sign(root + bundle, subfolder, signer, remote, requirements, Starts(name, "PlugIns/") || Starts(name, "Extensions/") ? alter :
+                 static_cast<const Functor<std::string (const std::string &, const std::string &)> &>(fun([&](const std::string &, const std::string &) -> std::string { return entitlements; }))
+             , merge, platform, progress);
+             local.Merge(bundle, remote);
