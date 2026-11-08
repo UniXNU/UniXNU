@@ -1,0 +1,12 @@
+diff --git a/osfmk/arm64/machine_routines_asm.s b/osfmk/arm64/machine_routines_asm.s
+index 671dc503..4aa57b7d 100644
+--- a/osfmk/arm64/machine_routines_asm.s
++++ b/osfmk/arm64/machine_routines_asm.s
+@@ -466,6 +466,7 @@ LEXT(mmu_kvtop_wpreflight)
+ 	mrs		x2, DAIF									// Load current DAIF
+ 	msr		DAIFSet, #(DAIFSC_STANDARD_DISABLE)		// Disable all asynchronous exceptions
+ 	at		s1e1w, x0									// Translation Stage 1 EL1
++	isb		sy											// PAR_EL1 holds the result only after a context synchronization, as in mmu_kvtop
+ 	mrs		x1, PAR_EL1									// Read result
+ 	msr		DAIF, x2									// Restore interrupt state
+ 	tbnz	x1, #0, L_mmu_kvtop_wpreflight_invalid		// Test Translation not valid
