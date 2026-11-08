@@ -72,9 +72,9 @@ MobileInstallation, for example:
 
 Unsigned, fakesigned and expired packages are handled on device. The installation
 hook first uses the original validator; on rejection, it repairs signatures in
-the installation copy with the bundled ldid, preserves entitlements, regenerates
-resource seals and removes stale provisioning profiles, then validates again.
-The original IPA is retained.
+the installation copy with the bundled ldid library, which runs inside installd,
+preserves entitlements, regenerates resource seals and removes stale
+provisioning profiles, then validates again. The original IPA is retained.
 
 The installation hook selects the native ad-hoc path, disables the requirement
 for a preloaded trust hash and online authorization, and skips provisioning
@@ -89,6 +89,9 @@ engineering trust-cache interface as the owner boot modules, deduplicates
 under the runtime lock, and retains registered hashes until reboot. On the next
 boot, mapping the app registers its code again. The signed runtime copies are
 still trusted by the boot payload; individual user apps are not build inputs.
+Trust-cache membership makes AMFI report these executables as platform
+binaries; exec clears that status for a user `.app` main executable, so the app
+runs as an ordinary third-party process.
 
 `payload.runtime.appsync = true` selects the runtime. `--kernel-arg appsync=0`
 disables both its mounts and automatic trust registration. The implementation
@@ -101,8 +104,8 @@ authorization are not provided. All apps still need a compatible iOS executable.
 runtime file hashes. Host tests cover unknown apps, updates, nested bundles,
 concurrent registration, disabled behavior and failure cleanup. Signing tests
 include unsigned nested code, fakesigned and expired identities, resource/profile
-repair, and preservation of entitlements. Device
-installation, launch and reboot persistence remain unverified. See
+repair, and preservation of entitlements. On sheng, an unsigned arm64 app
+installs over USB, launches and stays installed across reboots. See
 `scripts/appsync/README.md` for source and test details.
 
 ## GPU client grant
