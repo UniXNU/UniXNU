@@ -65,8 +65,15 @@ programming for ARMv8.3 key registers.
 
 On ARMv8.3, EL0 and EL1 use the same key registers. The current profile loads
 one random key set per boot on every CPU and enables `SCTLR_EL1` EnIA, EnIB,
-EnDA and EnDB. The kernel and all processes share this key set, so PAC does not
-isolate processes from each other.
+EnDA and EnDB. The kernel and all arm64e processes share this key set, so PAC
+does not isolate processes from each other.
+
+An arm64 process runs at EL0 with the four keys off. Its code signs nothing,
+and the arm64e system libraries it loads authenticate its return addresses
+with IB. The kernel clears the enable bits on the return to EL0 and sets them
+again at the EL0 vectors, so EL1 keeps every key. `ml_default_jop_pid` is
+nonzero, so the shared region and dyld pagers sign pointers only for arm64e
+processes.
 
 ## CPU features
 
