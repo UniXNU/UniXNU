@@ -152,3 +152,11 @@ They can be compared with display flips in `kernel.rings.txt`.
 - [XNU drivers](/drivers/xnu-drivers)
 - [Device tree matching](/drivers/device-tree-matching)
 - [Reference device record](/devices/sheng)
+
+## Typed partial observations and timed tracking
+
+The legacy nvt_touch_process interface described above remains available. The sheng timed consumer instead validates frame freshness, classifies data type 0x1d separately from a full M matrix, and interprets only its actual current mutual rows. A complete local blob uses the shared extraction path; a clipped observation can update an existing contact only after a qualified partial fit. Missing rows remain UNKNOWN. This does not implement complete pen input.
+
+The timed core separates original position/time from later confirmation, retains contact generations and uses actual accepted-observation intervals for filtering. The partial model eliminates amplitude/background nuisance directions before testing positional information. Its board profile is explicit and experimental.
+
+The consumer requires TouchEngine, TouchReportTimeline, the timestamp/ACK mailbox and the matching source-IOHID sender. Both NvtPartialObservation.c and NvtCoverage.c must be compiled and linked in the actual late archive. The original V3.1 build and basic tap/scroll/slow-drag device comparison succeeded; the latest interface adaptation is tracked separately by its host/source-replay evidence.

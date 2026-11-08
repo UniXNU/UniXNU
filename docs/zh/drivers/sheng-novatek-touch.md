@@ -150,3 +150,11 @@ volatile int native_touch_ids[NVT_SLOTS];
 - [XNU 驱动](/zh/drivers/xnu-drivers)
 - [设备树匹配](/zh/drivers/device-tree-matching)
 - [参考设备记录](/zh/devices/sheng)
+
+## 分型部分观测与真实时间跟踪
+
+上文所述旧 nvt_touch_process 接口仍然保留。sheng 的真实时间消费者改为检查帧新鲜度，将数据类型 0x1d 与全 M 矩阵分开，仅解释其中当前实际覆盖的互容行。完整局部触点复用共享提取路径，被裁切观测只有通过合格的部分拟合才能更新既有触点；未见行保持 UNKNOWN。本功能不等于完整笔输入。
+
+真实时间核心区分首点／首时刻和后续确认，保留触点 generation，按实际接受观测的间隔滤波。部分模型先消除幅度／背景干扰方向，再检查位置信息；板级 profile 是明确的实验配置。
+
+消费者依赖 TouchEngine、TouchReportTimeline、时间／ACK 邮箱及匹配的源码 IOHID sender。NvtPartialObservation.c 和 NvtCoverage.c 均须编译并进入实际 late archive。原 V3.1 构建和基础点按／滚动／慢拖实测成功；最新接口适配的 host／源码重放证据另行记录。

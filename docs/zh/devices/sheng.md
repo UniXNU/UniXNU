@@ -820,3 +820,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/UniXNU/UniXNU-sheng/blob/460179565a018c741b93e0b1efa07c55d4de497a/patches/xnu-12377/sheng-main-thread-profile.patch)
 
 </div>
+
+## 手指输入分型接线
+
+手指路径配合 Novatek 分型／真实时间观测器、板级 Engine／Timeline 和带原始时间的 HID 上报。板级保留共享 SMMU／中断接线，并使用特殊帧当前真实覆盖的互容区域。组件、编译／归档及消费者改动须共同选择。porting.toml 的 input 区域记录原 V3.1 成功对照及后续接口适配各自的验证范围。

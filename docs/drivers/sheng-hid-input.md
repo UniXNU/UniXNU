@@ -19,3 +19,9 @@ The catalog records implementation scope, hardware and OS requirements, board de
 [Component catalog](/reference/components)
 
 For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
+
+## Original-time touch history
+
+The source-IOHID sender receives ordered snapshots with their original observation ticks. It preserves first-contact history through confirmation and emits explicit tip-up records for vanished IDs. Snapshot ACK follows successful handleReportWithTime submission; partial success of a split transition is committed per packet. Same-ID coordinate updates preserve a continuous touch.
+
+The board producer and HID sender are a coordinated interface. The old unverified timestamp ABI is not substituted, and an API ACK is not a user-space delivery guarantee. See the Novatek driver page for typed observation processing and the device input record for the exact evidence scope.

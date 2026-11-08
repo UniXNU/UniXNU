@@ -820,3 +820,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 - `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/UniXNU/UniXNU-sheng/blob/460179565a018c741b93e0b1efa07c55d4de497a/patches/xnu-12377/sheng-main-thread-profile.patch)
 
 </div>
+
+## Typed finger-input integration
+
+The finger path combines the Novatek typed/timed observer, board Engine/Timeline and timestamp-aware HID reports. The board keeps the shared SMMU and interrupt integration while using actual current mutual regions from special frames. Component, build/archive and consumer changes are selected together. The input area of porting.toml records the successful original V3.1 comparison and the separate validation scope of later interface adaptations.

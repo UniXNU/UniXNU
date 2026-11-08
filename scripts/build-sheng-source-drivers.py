@@ -147,6 +147,8 @@ def main():
             (ROOT / 'drivers/QcomGeniSpi/GeniSpi.c', []),
             (device / 'drivers/ShengNovatekTouch/NvtProtocol.c', []),
             (device / 'drivers/ShengNovatekTouch/NvtTouchCore.c', []),
+            (device / 'drivers/ShengNovatekTouch/NvtPartialObservation.c', []),
+            (device / 'drivers/ShengNovatekTouch/NvtCoverage.c', []),
             (firmware_source, [])],
     }
     generation = None
@@ -211,6 +213,12 @@ def main():
                 dependencies[str(path.resolve())] = sha(path)
             (out / (source.stem + '.inputs.json')).write_text(json.dumps(dependencies, indent=2) + '\n')
             imports = nm(output, '-u')
+            # The new integer-only C units must not acquire compiler-rt wide-integer imports.
+            if source.stem in ('NvtPartialObservation', 'NvtCoverage'):
+                forbidden = {'divti3', 'udivti3', 'modti3', 'umodti3', 'multi3', 'ashlti3', 'ashrti3', 'lshrti3'}
+                unresolved_helpers = sorted(name for name in imports if name.lstrip('_') in forbidden)
+                if unresolved_helpers:
+                    raise SystemExit(f'{source.name}: unsupported wide-integer runtime imports: {unresolved_helpers}')
             details.append(dict(source=str(source), source_sha256=sha(source), object=str(output),
                                 object_sha256=sha(output), undefined_symbols=sorted(imports),
                                 warnings=sum('warning:' in line for line in result.stdout.splitlines())))
