@@ -64,7 +64,7 @@ function taskSidebars(prefix: string, zh: boolean) {
       item('UFS storage', 'UFS 存储', 'porting/ufs'),
       item('Display and brightness', '显示与亮度', 'porting/display'),
       item('Brightness driver', '亮度驱动', 'drivers/sheng-backlight'),
-      item('Touch and buttons', '触控与按键', 'porting/input'),
+      item('Touch, buttons and keyboard', '触控、按键与键盘', 'porting/input'),
       item('GPU and Metal', 'GPU 与 Metal', 'porting/gpu'),
       item('Wi-Fi', 'Wi-Fi', 'porting/network'),
       item('Bluetooth', '蓝牙', 'porting/bluetooth'),

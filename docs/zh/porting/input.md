@@ -1,4 +1,4 @@
-# 触控与按键适配
+# 触控、按键与键盘适配
 
 先完成[显示几何参数](/zh/porting/display)和[中断/DMA 配置](/zh/porting/platform)。
 记录触控芯片、固件、矩阵尺寸、物理方向、总线连接、复位/中断引脚及 OS HID ABI。
@@ -16,6 +16,7 @@
 | 总线与传感器 | [GeniSpi.h](https://github.com/UniXNU/QcomGeniSpi/blob/eac47baefe6a5d2368a70351e6ad1b6361bedbe2/GeniSpi.h), [NvtProtocol.h](https://github.com/UniXNU/ShengNovatekTouch/blob/a1a6f2b1912b3cde2dcbe96439e5833b9ab250f4/NvtProtocol.h#L24) | `nvt_bus`、芯片识别、固件下载和帧读取 |
 | 触点处理 | [NvtTouchCore.c](https://github.com/UniXNU/ShengNovatekTouch/blob/a1a6f2b1912b3cde2dcbe96439e5833b9ab250f4/NvtTouchCore.c) | 所支持传感器的矩阵处理与触点跟踪 |
 | 板级集成 | [TouchBoard.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/TouchBoard.h), [TouchProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/TouchProbe.cpp) | 电源/复位、传输回调、中断处理与坐标 |
+| 键盘壳 | [Wn8030.h](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/Wn8030.h), [KeyboardProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/KeyboardProbe.cpp), [KeyboardCover.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/KeyboardCover.cpp) | 控制器固件加载、帧编解码、插拔与霍尔门控、键盘与触控板共用的 HID 设备 |
 | OS 报告 | [NativeHidInput.cpp](https://github.com/UniXNU/ShengHidInput/blob/5f3a37cec0c3fc4234b10726b25489a55f0d77ef/NativeHidInput.cpp#L125), [ButtonProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/ButtonProbe.cpp) | `IOHIDDevice`、报告描述符、一致的触点快照和按键事件 |
 
 ## 1. 选择传输与传感器协议
@@ -78,8 +79,29 @@ rg -n 'native_touch_|ReportDescriptor' drivers/ShengHidInput/NativeHidInput.cpp
 
 **预期结果：** 每次按下和释放产生正确报告，包括长按和同时按键，中断活动保持有界。
 
+## 5. 适配键盘壳
+
+控制器挂在 I2C 上的键盘壳以一个 `IOHIDDevice` 接入系统。同一服务满足以下条件时，
+iPadOS 的 `SmartCoverServiceFilter` 生成触控板手势：
+
+- 具备 Keyboard（1/6）、Touch Pad（0x0d/5）和 Finger（0x0d/0x22）用法对。
+  只有 Application 和 Physical 集合计入，因此每个手指是 Physical 集合。
+- Transport 不含 `test`。
+- X、Y 物理范围以厘米为单位（unit 0x11）。事件驱动只把该单位换算为 `SurfaceDimensions`。
+
+Keyboard Power（键盘页，usage 0x66）同时作为输入和特性元素时设置 `KeyboardEnabled`；
+键盘翻到背面或合上时报 0，系统显示软键盘。
+
+按 HID 约定核对触控板 Y 方向，并把 Touch Valid 为 0 的按下触点报为抬起：
+该手掌是一帧最后一个子事件时，过滤器会使 backboardd 中止。
+
+sheng 参考实现通过 boot ROM 加载 WN8030 RAM 固件，每次中断读取一帧 68 字节，
+并用霍尔传感器门控输入。参数 `sheng-keyboard=1` 启用该路径。
+
+**预期结果：** 打字、Caps Lock、指针与滚动手势正常；翻到背面或合上时输入关闭；拔下后设备移除。
+
 ## 下一步
 
-按[构建指南](/zh/building)重建，分别记录触控与按键结果，再进入 [GPU 适配](/zh/porting/gpu)。
+按[构建指南](/zh/building)重建，分别记录触控、按键与键盘结果，再进入 [GPU 适配](/zh/porting/gpu)。
 
 arm64e 的公开源码构建方法及当前链接、运行时限制见[公开源码驱动构建](/zh/porting/migration#source-drivers)。历史 iOS 17 真机结果不代表该路径已通过验证。
