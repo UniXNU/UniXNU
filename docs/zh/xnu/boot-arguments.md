@@ -77,6 +77,8 @@ mtype -i out/<device>/<os_profile>/<config>/payload/payload.img ::/EFI/UniXNU/un
 | `sheng-data-persist=<n>` | 1 只验证 Data store 窗口，2 打开写窗口 |
 | `sheng-data-reset=<n>` | 1 丢弃 Data overlay，2 同时要求 Setup |
 | `sheng-log-reserve=<mib>` | userdata 末尾为诊断日志和导出区保留的空间，默认 1024 |
+| `sheng-data-fua=1` | Data store 改为直写（每次写入带 FUA），不使用回写 |
+| `sheng-ufs-bench=1` | 在启动继续之前运行 UFS 读取基准，结果写入日志，然后重启回 fastboot |
 | `sheng-disable-watchdogd=1` | 停止 watchdog daemon |
 | `sheng-disable-jobs=<list>` | 跳过指定 launch job |
 | `offline-legacy-*=1` | 启用 legacy 显示和输入探针 |

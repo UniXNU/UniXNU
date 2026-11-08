@@ -16,17 +16,18 @@ ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口�
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
-| 控制器与 DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/SmmuTakeover.h) | 请求队列所有权、映射和上下文接管 |
-| 命令完成 | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootCommands.h#L33) | `hostSubmit`：描述符、doorbell、超时、OCS、响应和 SCSI 状态 |
-| 存储策略 | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootPublication.h) | GPT/窗口边界和根 IOMedia 发布 |
-| 时钟状态 | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/GccUfs.h) | 分支使能与硬件门控状态解析 |
+| 控制器与 DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootTransportLayout.h) | 请求队列所有权、槽布局、映射和上下文接管 |
+| 命令完成 | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`：描述符、doorbell、完成中断、混合轮询、OCS、响应和 SCSI 状态 |
+| 排队与 DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L377) | 槽池、零拷贝 PRDT（`hostBuildPrds`）、忙重试 |
+| 存储策略 | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootPublication.h) | GPT/窗口边界和根 IOMedia 发布 |
+| 时钟状态 | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/GccUfs.h) | 分支使能与硬件门控状态解析 |
 
 ## 操作步骤 {#procedure}
 
 1. 根据目标资料填写[硬件清单](#硬件清单)，写寄存器前确认控制器、PHY、时钟、复位、SMMU 和 DMA 的所有权。
 2. 实现或适配[初始化顺序](#初始化与所有权)，结合目标控制器和固件状态核对[已有经验](#可复用经验)。
 3. 按[配置](#配置)加入匹配的组件、archive 配方、内核开关和根卷设置，提供匹配的存储 ABI 输入并构建内核。
-4. 按[完成条件](#完成条件)依次验证寄存器访问、DMA、命令完成、已知块读取、根卷挂载和持久化，逐项记录结果。
+4. 按[完成条件](#完成条件)依次验证寄存器访问、DMA、命令完成、已知块读取、根卷挂载、持久化和[性能](#performance)，逐项记录结果。
 5. 更新 `porting.toml` 的存储部分，运行记录检查，再继续[显示与亮度](/zh/porting/display)。
 
 ## 硬件清单
@@ -61,8 +62,9 @@ C++ 常量和操作访问这些资源。资源改为 DTS 属性时，还需要�
 6. 提交有界命令并检查传输、响应和 SCSI 状态。
 7. 发布根设备前读取容量和已知数据块。
 
-ShengUfs 接管已有固件请求列表，使用轮询请求槽。移植此流程需要检查
-`NativeUfs.cpp` 中的请求列表状态与所有权。需要冷初始化的设备应实现并记录
+ShengUfs 接管固件留下的控制器和链路状态，把请求列表移到单独的写合并页，
+最多同时执行 32 条命令，每条命令占一个槽。命令完成使用控制器中断加混合轮询，
+页对齐缓冲区走零拷贝 DMA。移植此流程需要检查 `NativeUfs.cpp` 中的请求列表状态与所有权。需要冷初始化的设备应实现并记录
 PHY、复位、时钟和电源序列。
 
 ## 可复用经验
@@ -77,6 +79,15 @@ PHY、复位、时钟和电源序列。
 - 接管 apps SMMU 的驱动也负责其他设备需要的 stage 1 窗口。ShengUfs 为显示 bank
   （`sheng-dpu-scanout`）和 WiFi 端点（`sheng-wifi=2` 或更大）各建立一个，默认都关闭。
   音频流保持直通：给它们使用转换 context 会让参考板型复位。
+- 请求列表项为 32 字节，两项共用一条 64 字节缓存行。在非一致性的 stream 上，
+  清理一项可能把旧副本写回，覆盖控制器为相邻项写入的完成状态。请求列表应放在
+  写合并页上（Linux 使用一致性 DMA 内存），或让每个槽的列表项独占一条缓存行。
+- 只有 UTRD 中断位（dword 0 bit 24）置位的描述符才会置 UTRCS 并产生完成中断。
+  只打开 UTRCE，按已清除的 doorbell 位找出完成的命令，与 Linux ufshcd 相同。
+- 小块命令每次都睡眠等中断，开销比命令本身还大。等待先轮询 200 微秒再睡眠，
+  可保持 8 和 32 队列深度下的小块吞吐，长命令也会让出 CPU。
+- 修改链路前用 DME_GET 读取链路状态（`PA_TxGear`、`PA_RxGear`、`PA_HSSeries`、
+  `PA_PWRMode`）。参考固件留下的是双通道 HS-G5 Rate A FAST 模式。
 
 [参考存储记录](/zh/devices/sheng#storage)提供板级参数、实现引用和当前范围。
 
@@ -114,6 +125,7 @@ PHY、复位、时钟和电源序列。
 | 块读取 | 容量和已知数据块匹配所选 LUN 与逻辑块大小 |
 | 根卷 | GPT 和根卷窗口边界正确，配置的根卷挂载并启动用户态 |
 | 持久化 | 写入位于分配的 Data 区域，经过规定重启/复位序列后保留 |
+| 性能 | 在同一设备、同一 LBA 上，每项读取测试不低于主线 Linux 驱动 |
 
 每个阶段更新存储记录。源码、主机和设备结果使用对应的
 [完成等级](/zh/porting/records#completion-levels)。
@@ -124,6 +136,27 @@ PHY、复位、时钟和电源序列。
 ./unixnu build kernel -D /path/to/device
 python3 scripts/porting-record.py check --device /path/to/device
 ```
+
+## 性能 {#performance}
+
+在同一设备上，用相同的 LBA 和相同的测试序列与主线 Linux 驱动对比。参考板型两侧都已提供：
+
+| 一侧 | 工具 | 输出 |
+| --- | --- | --- |
+| Linux | `scripts/linux-ufsbench.py` 启动只读 Linux 读取镜像，以 O_DIRECT 运行 `package/linux-log/ufsbench.c`，然后回到 fastboot | `bench.txt`，以及内核的 UFS 链路和队列信息 |
+| XNU | `sheng-ufs-bench=1` 在启动继续之前于内核中运行同样的测试，核对零拷贝读取与数据区路径，然后重启回 fastboot | UFS 日志消息缓冲区中的 `ufsbench` 行 |
+
+两侧都在刷入的根镜像范围内，按 1、8、32 队列深度随机读取 4 KiB、16 KiB、
+128 KiB 和 1 MiB，然后顺序读取。每侧至少运行三次，比较平均值：
+
+```sh
+python3 scripts/linux-ufsbench.py --reader <reader.img> --out out/linux-bench-1
+python3 scripts/compare-ufsbench.py --linux out/linux-bench-*/bench.txt --xnu <log>/msgbuf.txt ...
+```
+
+在参考板型上，每项测试都不低于主线 Linux 7.2（`ufshcd-qcom`）。最接近的是
+8 队列深度下的 4 KiB（比值 1.01）；1 MiB 读取在 1 队列深度下达到 2.2 GB/s，
+8 队列深度下达到 3.7 GB/s，Linux 分别为 1.3 和 1.9 GB/s。
 
 ## 下一步
 

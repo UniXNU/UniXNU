@@ -19,17 +19,18 @@ examples.
 
 | Implementation | Source | What to read and implement |
 | --- | --- | --- |
-| Controller and DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/SmmuTakeover.h) | Request-list ownership, mappings and context takeover |
-| Command completion | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootCommands.h#L33) | `hostSubmit`: descriptors, doorbell, timeout, OCS, response and SCSI status |
-| Storage policy | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/RootPublication.h) | GPT/window bounds and root IOMedia publication |
-| Clock state | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/GccUfs.h) | Branch enable and hardware-gating interpretation |
+| Controller and DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootTransportLayout.h) | Request-list ownership, slot layout, mappings and context takeover |
+| Command completion | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`: descriptors, doorbell, completion interrupt, hybrid polling, OCS, response and SCSI status |
+| Queueing and DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L377) | Slot pool, zero-copy PRDT (`hostBuildPrds`), busy retries |
+| Storage policy | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootPublication.h) | GPT/window bounds and root IOMedia publication |
+| Clock state | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/GccUfs.h) | Branch enable and hardware-gating interpretation |
 
 ## Procedure {#procedure}
 
 1. Fill the [hardware inventory](#hardware-inventory) from target sources. Resolve controller, PHY, clocks, resets, SMMU and DMA ownership before programming them.
 2. Implement or adapt the [initialization sequence](#initialization-and-ownership). Check the [recorded findings](#findings-to-reuse) against the target controller and firmware state.
 3. Add the matching component, archive recipe, kernel flags and root settings using [Configuration](#configuration). Build the selected kernel with the matching storage ABI inputs.
-4. Verify the [milestones](#completion-criteria) in order: register access, DMA, command completion, known-block reads, root mount, then persistence. Record the result of each completed milestone.
+4. Verify the [milestones](#completion-criteria) in order: register access, DMA, command completion, known-block reads, root mount, persistence, then [performance](#performance). Record the result of each completed milestone.
 5. Update the storage area of `porting.toml`, run its checker, and continue with [display and brightness](/porting/display).
 
 ## Hardware inventory
@@ -68,10 +69,13 @@ also requires changing its consumer and validating the generated ADT value.
 6. Submit a bounded command and inspect transfer, response and SCSI status.
 7. Read capacity and known blocks before publishing a root device.
 
-ShengUfs adopts an existing firmware request list and uses a polled request slot.
-Porting this path requires the request-list state and ownership checks in
-`NativeUfs.cpp`. A board requiring cold initialization needs its PHY, reset,
-clock and power sequence implemented and recorded.
+ShengUfs adopts the firmware's controller and link state, then moves the request
+list to its own write-combined page and runs up to 32 commands at once, one per
+slot. Completion uses the controller interrupt with hybrid polling, and
+page-aligned buffers are transferred by zero-copy DMA. Porting this path
+requires the request-list state and ownership checks in `NativeUfs.cpp`. A board
+requiring cold initialization needs its PHY, reset, clock and power sequence
+implemented and recorded.
 
 ## Findings to reuse
 
@@ -83,6 +87,19 @@ clock and power sequence implemented and recorded.
   conversions tied to the observed logical block size. See `RootLayout.h`.
 - Root reads, persistent Data writes and reset handling have separate completion
   criteria. Record the allocation and recovery method for each write exercise.
+- Request list entries are 32 bytes, so two share a 64-byte cache line. On a
+  non-coherent stream, cleaning one entry can write a stale copy over the
+  controller's completion of its neighbour. Put the list on a write-combined page
+  (Linux uses coherent DMA memory), or give each slot an entry of its own line.
+- UTRCS, and with it the completion interrupt, is raised only for descriptors
+  with the UTRD interrupt bit (dword 0 bit 24) set. Enable UTRCE alone and find
+  completed commands by their cleared doorbell bits, as Linux ufshcd does.
+- Sleeping on every completion costs more than the command at small sizes. A
+  wait that polls for its first 200 microseconds, then sleeps, keeps small-block
+  throughput at queue depth 8 and 32 while long commands leave the CPU.
+- Read the link state with DME_GET (`PA_TxGear`, `PA_RxGear`, `PA_HSSeries`,
+  `PA_PWRMode`) before changing it. The reference firmware leaves HS-G5 Rate A
+  on two lanes in FAST mode.
 - The driver that takes over the apps SMMU also owns any stage 1 window another
   device needs. ShengUfs sets one up for the display bank (`sheng-dpu-scanout`)
   and one for the WiFi endpoint (`sheng-wifi=2` or more); both are off by default.
@@ -127,6 +144,7 @@ the selected kernelcache and matching audit inputs.
 | Block reads | Capacity and known-block reads match the selected LUN and logical block size |
 | Root | GPT and root windows are bounded; the configured root mounts and starts userland |
 | Persistence | Writes remain in the allocated Data region and survive the documented reboot/reset sequence |
+| Performance | Every read test matches or exceeds the mainline Linux driver on the same device and LBAs |
 
 Update the storage record at each milestone. Keep source, host and device
 results at their corresponding [completion levels](/porting/records#completion-levels).
@@ -137,6 +155,29 @@ results at their corresponding [completion levels](/porting/records#completion-l
 ./unixnu build kernel -D /path/to/device
 python3 scripts/porting-record.py check --device /path/to/device
 ```
+
+## Performance {#performance}
+
+Compare the driver with the mainline Linux driver on the same device, the same
+LBAs and the same test sequence. The reference board provides both sides:
+
+| Side | Tool | Output |
+| --- | --- | --- |
+| Linux | `scripts/linux-ufsbench.py` boots the read-only Linux reader, runs `package/linux-log/ufsbench.c` with O_DIRECT and returns to fastboot | `bench.txt` and the kernel's UFS link and queue facts |
+| XNU | `sheng-ufs-bench=1` runs the same tests in the kernel before the boot goes on, checks zero-copy reads against the data-area path and restarts into fastboot | `ufsbench` lines in the UFS log's message buffer |
+
+Each side reads 4 KiB, 16 KiB, 128 KiB and 1 MiB at random at queue depth 1, 8
+and 32, then sequentially, inside the flashed root image. Run each side at least
+three times and compare the means:
+
+```sh
+python3 scripts/linux-ufsbench.py --reader <reader.img> --out out/linux-bench-1
+python3 scripts/compare-ufsbench.py --linux out/linux-bench-*/bench.txt --xnu <log>/msgbuf.txt ...
+```
+
+On the reference board every test matches or exceeds mainline Linux 7.2
+(`ufshcd-qcom`). The closest is 4 KiB at queue depth 8 (ratio 1.01); 1 MiB reads
+reach 2.2 GB/s at queue depth 1 and 3.7 GB/s at 8, against 1.3 and 1.9 GB/s.
 
 ## Next step
 

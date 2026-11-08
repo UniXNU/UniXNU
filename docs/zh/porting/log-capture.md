@@ -127,6 +127,8 @@
 
 [参考实现](https://github.com/UniXNU/UniXNU-sheng)提供 Linux 读取器、`userdata` 预留区域和返回 fastboot 的路径。可参考其中的 `package/BootLog.c`、`BootReset.c`、`BootResetCore.h`、`package/linux-log/` 和 `scripts/read-sheng-log.py`。其中的 PMIC 地址、watchdog 调用、存储预留和 Linux 镜像输入属于该板型的适配记录。
 
+每轮写入应尽量少。参考实现的写入器（头部版本 5）每轮只写本轮文本槽实际使用的块，以及新内核消息写到的消息缓冲区块，在参考板型上约 7 KiB/s；panic 时整段写入消息区。用户态守护进程通过 syslog 或 os_log 记录日志，由 logd 限制存储大小，不写入无上限增长的文件：参考实现的 Wi-Fi supplicant 以 `-q -s` 运行。
+
 **结果：** 一个读取器环境、一致的解码器格式、明确的存储范围，以及已经验证的 bootloader 或 recovery 返回路径。
 
 参考 iOS 27 原生源码路径使用 `sheng-log=1 boot-ui-trace=1` 抓取用户态停滞时的进程栈。
