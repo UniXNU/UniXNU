@@ -31,6 +31,15 @@ DMA, partition and completion details in the [storage record](/devices/sheng#sto
 
 For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
 
+## Command path
+
+Up to 32 commands run at once, one per command slot. The request list sits on a
+write-combined page of its own. Completion uses the controller interrupt with
+hybrid polling: a wait polls for 200 microseconds, then sleeps. Page-aligned
+buffers are transferred by zero-copy DMA of up to 1 MiB per command. On the
+reference board every read test matches or exceeds the mainline Linux driver;
+see [UFS performance](/porting/ufs#performance).
+
 ## Wi-Fi DMA window
 
 The WCN7850 DMA window maps 128 MiB at IOVA 0x10000000 using 64 two-MiB
