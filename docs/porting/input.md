@@ -1,4 +1,4 @@
-# Touch and button adaptation
+# Touch, button and keyboard adaptation
 
 Complete [display geometry](/porting/display) and [interrupt/DMA setup](/porting/platform).
 Record touch-controller model, firmware, matrix geometry, physical orientation,
@@ -18,6 +18,7 @@ examples.
 | Bus and sensor | [GeniSpi.h](https://github.com/UniXNU/QcomGeniSpi/blob/eac47baefe6a5d2368a70351e6ad1b6361bedbe2/GeniSpi.h), [NvtProtocol.h](https://github.com/UniXNU/ShengNovatekTouch/blob/a1a6f2b1912b3cde2dcbe96439e5833b9ab250f4/NvtProtocol.h#L24) | `nvt_bus`, chip identification, firmware download and frame reads |
 | Contact processing | [NvtTouchCore.c](https://github.com/UniXNU/ShengNovatekTouch/blob/a1a6f2b1912b3cde2dcbe96439e5833b9ab250f4/NvtTouchCore.c) | Matrix processing and contact tracking for the supported sensor |
 | Board integration | [TouchBoard.h](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/TouchBoard.h), [TouchProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/TouchProbe.cpp) | Power/reset, transport callbacks, interrupt handling and coordinates |
+| Keyboard cover | [Wn8030.h](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/Wn8030.h), [KeyboardProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/KeyboardProbe.cpp), [KeyboardCover.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/2f02cb9bd32308b359232ce9e5963616b5e906d6/package/KeyboardCover.cpp) | Controller image load, frame codec, attach and hall gating, one HID device for keyboard and touchpad |
 | OS reports | [NativeHidInput.cpp](https://github.com/UniXNU/ShengHidInput/blob/5f3a37cec0c3fc4234b10726b25489a55f0d77ef/NativeHidInput.cpp#L125), [ButtonProbe.cpp](https://github.com/UniXNU/UniXNU-sheng/blob/516a780473a2ac59c8b438e132bb60204dda9e22/package/ButtonProbe.cpp) | `IOHIDDevice`, report descriptors, coherent contact snapshots and button events |
 
 ## 1. Select the transport and sensor protocol
@@ -96,9 +97,37 @@ for Power, Volume Increment and Volume Decrement and enables this with
 **Expected result:** every press and release produces the expected report,
 including held and simultaneous buttons, with bounded interrupt activity.
 
+## 5. Adapt a keyboard cover
+
+A cover whose controller sits on I2C reaches the system as one `IOHIDDevice`.
+iPadOS's `SmartCoverServiceFilter` makes the touchpad gestures when one service
+has all of these:
+
+- Keyboard (1/6), Touch Pad (0x0d/5) and Finger (0x0d/0x22) usage pairs. Only
+  Application and Physical collections count, so each finger is a Physical
+  collection.
+- A transport that does not contain `test`.
+- X and Y physical extents in centimetres (unit 0x11). The event driver turns
+  only that unit into `SurfaceDimensions`.
+
+Keyboard Power (keyboard page, usage 0x66) as an input and a feature element
+sets `KeyboardEnabled`; report 0 when the cover is folded or closed so the
+system shows the on-screen keyboard.
+
+Check the touchpad Y direction against the HID convention and send a touching
+contact with Touch Valid 0 as lifted: the filter aborts backboardd when such a
+palm is the last child of a frame.
+
+The sheng reference loads the WN8030 RAM image through its boot ROM, reads one
+68-byte frame per interrupt and gates input with the hall sensors.
+`sheng-keyboard=1` enables it.
+
+**Expected result:** typing, Caps Lock, pointer and scroll gestures work; folding
+or closing the cover disables input; detaching removes the device.
+
 ## Next step
 
-Rebuild through [Building](/building), record touch and buttons separately, then
+Rebuild through [Building](/building), record touch, buttons and keyboard separately, then
 continue with [GPU adaptation](/porting/gpu).
 
 For the arm64e public-source build path and its current linking/runtime limits, see [public-source driver builds](/porting/migration#source-drivers). Historical iOS 17 device results do not qualify this path.
