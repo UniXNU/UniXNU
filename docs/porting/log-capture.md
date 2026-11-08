@@ -164,6 +164,13 @@ layout is a reference for `package/BootLog.c`, `BootReset.c`,
 addresses, watchdog calls, storage reservation and Linux image inputs belong to
 that board record.
 
+Keep each round's write small. The reference writer (header version 5) writes
+the used blocks of the round's text slot and only the message-buffer blocks
+that new kernel text reached, about 7 KiB/s on the reference board; a panic
+flush writes the whole message area. User-space daemons log through syslog or
+os_log, whose store logd bounds, not to files that grow without limit: the
+reference Wi-Fi supplicant runs with `-q -s`.
+
 **Result:** one reader environment, one matching decoder, an identified storage
 range and a tested route back to bootloader or recovery.
 
