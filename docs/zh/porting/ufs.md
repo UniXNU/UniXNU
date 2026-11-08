@@ -16,11 +16,11 @@ ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口�
 
 | 实现部分 | 源码 | 阅读与实现内容 |
 | --- | --- | --- |
-| 控制器与 DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootTransportLayout.h) | 请求队列所有权、槽布局、映射和上下文接管 |
-| 命令完成 | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`：描述符、doorbell、完成中断、混合轮询、OCS、响应和 SCSI 状态 |
-| 排队与 DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L377) | 槽池、零拷贝 PRDT（`hostBuildPrds`）、忙重试 |
-| 存储策略 | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootPublication.h) | GPT/窗口边界和根 IOMedia 发布 |
-| 时钟状态 | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/GccUfs.h) | 分支使能与硬件门控状态解析 |
+| 控制器与 DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootTransportLayout.h) | 请求队列所有权、槽布局、映射和上下文接管 |
+| 命令完成 | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`：描述符、doorbell、完成中断、混合轮询、OCS、响应和 SCSI 状态 |
+| 排队与 DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootCommands.h#L377) | 槽池、零拷贝 PRDT（`hostBuildPrds`）、忙重试 |
+| 存储策略 | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootPublication.h) | GPT/窗口边界和根 IOMedia 发布 |
+| 时钟状态 | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/GccUfs.h) | 分支使能与硬件门控状态解析 |
 
 ## 操作步骤 {#procedure}
 

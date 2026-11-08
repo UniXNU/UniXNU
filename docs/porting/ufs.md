@@ -19,11 +19,11 @@ examples.
 
 | Implementation | Source | What to read and implement |
 | --- | --- | --- |
-| Controller and DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootTransportLayout.h) | Request-list ownership, slot layout, mappings and context takeover |
-| Command completion | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`: descriptors, doorbell, completion interrupt, hybrid polling, OCS, response and SCSI status |
-| Queueing and DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootCommands.h#L377) | Slot pool, zero-copy PRDT (`hostBuildPrds`), busy retries |
-| Storage policy | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/RootPublication.h) | GPT/window bounds and root IOMedia publication |
-| Clock state | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/2e591444ee77995a10dfbffc952279698bd8b003/GccUfs.h) | Branch enable and hardware-gating interpretation |
+| Controller and DMA | [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/NativeUfs.cpp#L1108), [SmmuTakeover.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/SmmuTakeover.h), [RootTransportLayout.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootTransportLayout.h) | Request-list ownership, slot layout, mappings and context takeover |
+| Command completion | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootCommands.h#L89), [NativeUfs.cpp](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/NativeUfs.cpp#L1017) | `hostIssue`/`hostAwait`: descriptors, doorbell, completion interrupt, hybrid polling, OCS, response and SCSI status |
+| Queueing and DMA | [RootCommands.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootCommands.h#L377) | Slot pool, zero-copy PRDT (`hostBuildPrds`), busy retries |
+| Storage policy | [RootLayout.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootLayout.h), [RootPublication.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/RootPublication.h) | GPT/window bounds and root IOMedia publication |
+| Clock state | [GccUfs.h](https://github.com/UniXNU/ShengUfs/blob/fd420df000f43213d9cd019725abff0849c98c72/GccUfs.h) | Branch enable and hardware-gating interpretation |
 
 ## Procedure {#procedure}
 
