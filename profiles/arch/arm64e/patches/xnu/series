@@ -18,6 +18,7 @@
 ../../../../../patches/xnu-12377/kernel-sdk-root.patch
 ../../../../../patches/xnu-12377/source-machine-layer.patch
 ../../../../../patches/xnu-12377/native-pac-keys.patch
+../../../../../patches/xnu-12377/native-pac-arm64-user-jop.patch
 ../../../../../patches/xnu-12377/public-entitlements-v2-header.patch
 ../../../../../patches/xnu-12377/no-apple-cpu-counters.patch
 ../../../../../patches/xnu-12377/apple-only-core-type.patch

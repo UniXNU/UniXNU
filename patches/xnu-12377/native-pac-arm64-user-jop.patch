@@ -1,0 +1,54 @@
+diff --git a/osfmk/arm64/locore.s b/osfmk/arm64/locore.s
+index 3f42af80..c109f19f 100644
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -907,6 +907,20 @@ el1_sp1_serror_vector_long:
+ 
+ .macro EL0_64_VECTOR guest_label
+ 	stp		x0, x1, [sp, #-16]!					// Save x0 and x1 to the exception stack
++#if HAS_NATIVE_PAC
++	/*
++	 * An arm64 (non-arm64e) thread runs with the PAC keys off at EL0, and
++	 * SCTLR_EL1 controls EL1 as well. Turn them back on before the first
++	 * pointer authentication below (LOAD_USER_PCB).
++	 */
++	mrs		x0, SCTLR_EL1
++	tbnz	x0, #SCTLR_PACIA_ENABLED_SHIFT, Lel0_jop_keys_on_\@
++	MOV64	x1, SCTLR_PAC_KEYS_ENABLED
++	orr		x0, x0, x1
++	msr		SCTLR_EL1, x0
++	isb		sy
++Lel0_jop_keys_on_\@:
++#endif /* HAS_NATIVE_PAC */
+ #if __ARM_KERNEL_PROTECT__
+ 	mov		x18, #0 						// Zero x18 to avoid leaking data to user SS
+ #endif
+@@ -2055,6 +2069,28 @@ Lno_gcr_mask_el0_reset:
+ #endif  /* defined(ERET_IS_NOT_CONTEXT_SYNCHRONIZING) && !__ARM_KERNEL_PROTECT__ */
+ 	strb	wzr, [x1, CPU_SYNC_ON_CSWITCH]
+ 
++#if HAS_NATIVE_PAC
++	/*
++	 * An arm64 (non-arm64e) thread returns to EL0 with all PAC keys off: it
++	 * signs nothing, and arm64e libraries authenticate its return addresses
++	 * with IB (libunwind). Nothing from here to the eret signs or authenticates
++	 * a pointer, and the EL0 vectors turn the keys back on.
++	 */
++	mrs		x2, SPSR_EL1
++	tst		w2, PSR64_MODE_EL_MASK
++	b.ne	Lskip_user_jop_keys_off				// Returning to EL1
++	mrs		x2, TPIDR_EL1
++	ldr		w2, [x2, TH_ARM_MACHINE_FLAGS]
++	tbz		w2, #ARM_MACHINE_THREAD_DISABLE_USER_JOP_SHIFT, Lskip_user_jop_keys_off
++	mrs		x2, SCTLR_EL1
++	MOV64	x3, SCTLR_PAC_KEYS_ENABLED
++	bic		x2, x2, x3
++	msr		SCTLR_EL1, x2
++#if ERET_NEEDS_ISB
++	orr		x5, x5, #(1 << BIT_ISB_PENDING)
++#endif /* ERET_NEEDS_ISB */
++Lskip_user_jop_keys_off:
++#endif /* HAS_NATIVE_PAC */
+ 
+ #if ERET_NEEDS_ISB
+ 	// Apply any pending isb from earlier.
