@@ -107,7 +107,7 @@
 |---|---|---|
 | 🧩 SMP | 4× A55, 3× A77, 1× A77 prime via PSCI | ✅ |
 | 📈 Frequency scaling | EPSS governor (kernel 0238): load-following per cluster, thermal cap at 75 °C, touch boost; idle at 288 / 710 / 844 MHz | ✅ |
-| 🔥 Idle CPU load | High; the fixes [ios-s9](https://github.com/syncmodz/ios-s9) describes are still to check here (see below) | ⚠️ |
+| 🔥 Idle CPU load | ios-s9's fixes checked: all done here or not needed (fast-core scheduler = kernel 0257). Idle 65-120 % of one core (of 800 %), mostly ReportCrash from crash loops (CommCenter, TTS synthesizers) | ⚠️ |
 | 🎯 Thread placement | UI / render threads (priority ≥ 46 and realtime) kept on the A77s (kernel 0248, `sweetbig`): backboardd + SpringBoard 93 % on big cores, starts on a slow core with a big one idle 245 → 26 per 10 s | ✅ |
 
 ## 🌄 Future Development
@@ -125,11 +125,9 @@
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
-* **CPU load**, the fixes ios-s9 describes (`xnu/patches/0092`-`0094` there, idle CPU 460 % → ~50 %), to check and
-  redo here: the securityd retry storm; `BTAudioHALPlugin.driver` polling a daemon that is not running; the touch
-  polling thread on the fast ones (render / UI threads on the big cores: done, 0248); ad daemons (removed from launchd.plist
-  2026-11-04); `driverkitd` killed and
-  respawned every 10 s
+* **CPU load**: the crash loops ReportCrash spends most of the idle CPU on (CommCenter SIGABRT / SIGSEGV, the TTS
+  synthesizers KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP); a fresh idle `sweettop` on the current kernel.
+  ios-s9's fixes are all checked (NOTES 2026-11-09)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,
