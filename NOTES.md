@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 21:11: 0260 THE X55 MODEM ANSWERS ON PCIe2: link gen 3 x2, endpoint 17cb:0306 (SDX55), MHI + BHI
+  readable, execenv 0 (PBL waiting for sbl1)** (patch `xnu/patches/0260-umi-x55-pcie2-probe.patch`, kernel ec75d15 =
+  0252 + 0257-0260, built without the adreno / wlan WIP; image **`shim/out/umi-0260-x55probe.img`** = 0259's line with
+  `sweetscan=CommCenter` replaced by `sweetmdm=4`; booted 21:09, log: session scratchpad `umi-0260.log`).
+  - `bsd/dev/sweet_mdm.c` (included at the end of sweet_spmi.c: the local build cannot add files), boot-arg
+    `sweetmdm=N` after `sweetmdmdelay` s (default 120, after the Wi-Fi's PCIe0): 1 MDM2AP pins + PMX55 PON registers;
+    2 + AP2MDM pins as outputs (low), PCIe2 GDSC / clocks (GCC 0x6004, aux RCG 0x6038, votes 0x52010 bits 10-15,
+    refgen, gcc_pcie_mdm_clkref 0x8c00c) / BCRs (0x6000, 0x1f01c) / PARF / PHY (live-FDT pcie2 qcom,phy-sequence,
+    136 steps; status 0xa14); 3 + PMX55 warm reset (SPMI SID 8 PON 0x800: 0x63=0, 0x62=1, 0x63=0x80, 0x64=0xa5, as
+    msm-4.19 qpnp_pon_modem_pwr_off; `sweetmdmreset=0` skips it), 150 ms, AP2MDM_STATUS (GPIO 56) high, PERST 85,
+    LTSSM, BDF->SID table (sid-base 0x1d00), CFG0 read; 4 + BAR0 at 0x64400000 and the MHI / BHI registers.
+  - Result: PMX55 reads fine (PON type/sub 01 04, s2 ctl 04 -> 01 after the reset, write path OK). PHY ready (0xa6).
+    LTSSM 0 -> 0xe -> 0x22 -> 0x23 -> 0x11 in 11.4 ms, **link UP gen 3 x2**; id **0x030617cb**, class 0xff000000;
+    BAR0 64-bit 4 KiB; MHI: regs len 0x100, cfg 0x800080, chdboff 0x300, erdboff 0x700, bhioff 0x100, bhieoff 0,
+    status 0xad5a412; **BHI execenv 0** (PBL), status 0, errcode 0. MDM2AP status stays 0 (expected before SBL).
+    Wi-Fi (PCIe0) came up as before; no panic.
+  - Next (step 2b): MHI host on PCIe2 + BHI push of `sdx55m/sbl1.mbn` (sweet_mhi.c / sweet_wlan_fw_boot did this for
+    the QCA6390's amss20.bin), then the SAHARA server on channels 2/3 for the other images (Linux mhi + Android
+    `ks`), then QRTR over MHI IPCR, rmtfs for mdm1m9kefs1-3/c, QMI. Firmware is on the Mac only
+    (`research/mpss-umi/fw/sdx55m/`): it has to go onto the phone (`/private/var/sweet/mdm/`, tools/umi-files.py).
 - **2026-11-09 night: modem work - umi's modem is an EXTERNAL Snapdragon X55 (SDX55M) on PCIe, not an MPSS in the
   SM8250** (no kernel change; TWRP read-only pull, user asked for modem work).
   - Live FDT (TWRP `/sys/firmware/fdt`, `research/mpss-umi/live-fdt.dtb` + `live.dts`): `qcom,mdm0` compatible
