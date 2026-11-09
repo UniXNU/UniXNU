@@ -2,6 +2,24 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 night: modem work - umi's modem is an EXTERNAL Snapdragon X55 (SDX55M) on PCIe, not an MPSS in the
+  SM8250** (no kernel change; TWRP read-only pull, user asked for modem work).
+  - Live FDT (TWRP `/sys/firmware/fdt`, `research/mpss-umi/live-fdt.dtb` + `live.dts`): `qcom,mdm0` compatible
+    `qcom,ext-sdx55m` (esoc), sysmon-id 0x14, ssctl instance 0x10, `qcom,mdm-link-info` "0306_02.01.00"; GPIOs on
+    TLMM: MDM2AP errfatal 1 / status 3 (interrupts), AP2MDM status 56 / errfatal 57, pinctrl mdm_active /
+    mdm_suspend; on **PCIe2** (`qcom,pcie@1c10000`, domain 2, parf 0x1c10000, phy 0x1c16000, dm_core 0x64000000,
+    conf 0x64100000, memory 0x64300000+0x3d00000) with `qcom,mhi@0` (mhi_rmnet). No modem PIL region in the
+    reserved memory: there is nothing to PAS-boot (ios-redfin's path is for SM7250's integrated modem).
+  - Modem partition (`modem` = sde51, vfat): no `modem.mdt`; `image/sdx55m/` = the X55's boot set (sbl1, tz, hyp,
+    aop, devcfg, apps, qdsp6sw.mbn 84 MB, acdb, multi_image, xbl_cfg, sec.elf, efs1-3.bin, mdmddr.mbn, modemr.jsn)
+    and `image/sdx55/qdsp6m.qdb`. Pulled (read-only) to `research/mpss-umi/fw/sdx55m/` (18 files, 85 MB).
+  - EFS copies (read-only dd, IMEI inside, git-ignored, never written back): `research/mpss-umi/efs/` modemst1/2,
+    fsg, fsc (the SM8250 side, probably unused with an external modem) and the X55's own **mdm1m9kefs1/2/3** (8 MiB
+    each), **mdm1m9kefsc** (1 MiB), **mdmddr** (1 MiB); SHA-256 in `efs/SHA256`. by-name list: `by-name.txt`.
+  - So the X55 boots like the QCA6390 Wi-Fi here (sweet_pcie.c / sweet_mhi.c): power it via the esoc GPIOs, bring up
+    PCIe2, MHI, BHI-push sbl1.mbn, then serve the other images over MHI's SAHARA channel (Linux mhi + esoc
+    `mdm-driver`, Android `mdm_helper` / `ks`), then QRTR over MHI IPCR, rmtfs for the mdm1m9kefs partitions, QMI.
+    The `sweet_mpss.c` attempt (a third copy of sweet_slpi.c with PAS 4) was written and dropped before building.
 - **2026-11-09 night: 0259 AppleBaseband stub (modem work step 1): CommCenter crash loop gone, idle 7-9 %; iOS now
   shows "Cellular issue detected"** (patch `xnu/patches/0259-umi-baseband-stub.patch`, kernel ce10040 = 0252 + 0257-0259,
   built without the adreno / wlan WIP; image **`shim/out/umi-0259-baseband.img`** = 0258's line; booted 20:48, log:

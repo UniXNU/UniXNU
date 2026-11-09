@@ -125,8 +125,9 @@
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
-* **Cellular**: kernel 0259's `AppleBaseband` stub stops CommCenter's crash loop but iOS shows "Cellular issue
-  detected"; next the modem itself: boot MPSS (rmtfs, as ios-redfin does on SM7250) and bridge QMI to CommCenter
+* **Cellular**: the Mi 10's modem is an external Snapdragon X55 on PCIe2 (not inside the SM8250). Kernel 0259's
+  `AppleBaseband` stub stops CommCenter's crash loop but iOS shows "Cellular issue detected". Next: power the X55
+  (esoc GPIOs), PCIe2 + MHI, load sbl1 over BHI and the rest over SAHARA (as the QCA6390 Wi-Fi), then QRTR / rmtfs / QMI
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
