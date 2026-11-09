@@ -2,6 +2,7 @@
 """Discover public UniXNU device repositories and refresh the documentation catalog."""
 import argparse
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 import importlib.util
 import json
 import os
@@ -30,6 +31,8 @@ def record_tools():
 
 
 class GitHub:
+    LIMIT = 1000
+
     def __init__(self):
         self.token = os.environ.get('GITHUB_TOKEN') or os.environ.get('GH_TOKEN')
         if not self.token and shutil.which('gh'):
@@ -57,14 +60,34 @@ class GitHub:
                 time.sleep(2 ** attempt)
 
     def search(self, query):
+        """Return every repository matching query.
+
+        GitHub returns at most 1000 results for one repository search. A query
+        above that limit is split by repository creation date until each window
+        fits, so the catalog keeps every device instead of failing the sync.
+        """
         found = []
+        self.collect(query, found)
+        return found
+
+    def collect(self, query, found, start=None, end=None):
+        window = '' if start is None else f' created:{start.isoformat()}..{end.isoformat()}'
         for page in range(1, 11):
             result = self.request('search/repositories?' + urlencode({
-                'q': query, 'per_page': 100, 'page': page}))
-            if result.get('total_count', 0) > 1000:
-                raise ValueError(f'Split this search into smaller queries: {query}')
+                'q': query + window, 'per_page': 100, 'page': page}))
             if result.get('incomplete_results'):
                 raise ValueError(f'GitHub returned an incomplete search: {query}')
+            if page == 1 and result.get('total_count', 0) > self.LIMIT:
+                if start is None:
+                    self.collect(query, found, date(2008, 1, 1), date.today())
+                elif start == end:
+                    raise ValueError(
+                        f'{query} matches more than {self.LIMIT} repositories created on {start}')
+                else:
+                    middle = start + (end - start) // 2
+                    self.collect(query, found, start, middle)
+                    self.collect(query, found, middle + timedelta(days=1), end)
+                return found
             items = result['items']
             found.extend(item['full_name'] for item in items)
             if len(items) < 100:
