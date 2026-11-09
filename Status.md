@@ -126,9 +126,9 @@
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
 * **Cellular**: the Mi 10's modem is an external Snapdragon X55 on PCIe2. Kernel 0260 powers it (PMX55 warm reset)
-  and the link comes up (gen 3 x2, 17cb:0306, its boot ROM waiting); kernel 0259's `AppleBaseband` stub keeps
-  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: MHI, load sbl1 over BHI and the other
-  images over SAHARA (as the QCA6390 Wi-Fi), then QRTR / rmtfs / QMI, then a bridge to CommCenter
+  and the link comes up (gen 3 x2, 17cb:0306); kernel 0261 loads sbl1 over BHI and the X55 runs its SBL; kernel 0259's `AppleBaseband` stub keeps
+  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: MHI on the X55 and the other images over
+  SAHARA, then QRTR / rmtfs / QMI, then a bridge to CommCenter
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build

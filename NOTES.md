@@ -2,6 +2,20 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 21:17: 0261 THE X55 RUNS ITS SBL: sbl1.mbn over BHI accepted, execenv 0 -> 1, MHI READY**
+  (patch `xnu/patches/0261-umi-x55-bhi-sbl1.patch`, kernel 581f83f, built without the adreno / wlan WIP; image
+  **`shim/out/umi-0261-x55sbl1.img`** = 0260's line with `sweetmdm=5`; booted 21:15, log: scratchpad `umi-0261.log`).
+  - `sweetmdm=5`: SMMU streams 0x1d00 / 0x1d01 to bypass (sweet_smmu_route_sid: both ok); DMA pool `sweetmdmpool`
+    (default **0xd8000000, 8 MiB**, write-combined, low RAM nothing else uses); `sbl1.mbn` read straight from the FAT
+    `modem` partition `image/sdx55m/` (sweet_fat_read_file now walks a path) - 548056 bytes, ELF; MSI (cap 0x50,
+    32 vectors, 64-bit) pointed at pool + 0x7ff000; BHI IMGADDR / IMGSIZE / IMGTXDB.
+  - Result: **BHI status 0x80002468 = success** (errdbg 0xd8000000 / 0x85cd8 = our address and size), the MSI word
+    was written (0xffffffff -> 0), **execenv 1 (SBL) after 300 ms**, MHISTATUS 0x101 = state READY. MDM2AP_STATUS
+    still 0 (the SBL does not raise it). Wi-Fi up as before, no panic.
+  - Next (2c): MHI host init on the X55 (contexts, M0; sweet_mhi.c does it for the QCA6390, but it is a single
+    instance tied to sweet_wlan's pool), then a SAHARA server on channels 2 / 3 (EE SBL) serving the other
+    `image/sdx55m/` images (Linux mhi + Android `ks` / `mdm_helper`; the SBL asks by image id, e.g. qdsp6sw.mbn 84 MB),
+    then AMSS (execenv 2).
 - **2026-11-09 21:11: 0260 THE X55 MODEM ANSWERS ON PCIe2: link gen 3 x2, endpoint 17cb:0306 (SDX55), MHI + BHI
   readable, execenv 0 (PBL waiting for sbl1)** (patch `xnu/patches/0260-umi-x55-pcie2-probe.patch`, kernel ec75d15 =
   0252 + 0257-0260, built without the adreno / wlan WIP; image **`shim/out/umi-0260-x55probe.img`** = 0259's line with
