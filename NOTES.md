@@ -2,6 +2,27 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 22:25: 0262 THE X55 HAS ALL ITS FIRMWARE: Sahara transfer COMPLETE (12 images, 94 MB in 6.7 s),
+  MDM2AP_STATUS high** (patch `xnu/patches/0262-umi-x55-mhi-sahara.patch`, kernel 5c9dee5, built without the adreno /
+  wlan WIP; image **`shim/out/umi-0262-x55sahara.img`** = 0261's line with `sweetmdm=6`; booted 22:23, log: session
+  scratchpad `umi-0262.log`).
+  - `sweetmdm=6`: an MHI host of its own in the X55 pool (pool + 0x200000: 128 channel contexts, control ring 0, data
+    ring 1, command ring; M0), channels 2 (to the modem) / 3 (from it) started, 8 x 4 KiB receive buffers, Sahara
+    answered from `image/sdx55m/` of the FAT modem partition by image id; images are streamed 32 KiB per transfer
+    element with the new `sweet_fat_pread` (sweet_wlan.c: ranged reads, cursor per file); EFS images 16 / 17 / 20 from
+    the X55's own `mdm1m9kefs1/2/3` (LUN 5, read only; `sweetmdmefs=0`: the 512-byte stubs). UFS partition cache 8 -> 16.
+  - Image ids -> files from dekefake/hackios-op8pro (OnePlus 8 Pro, SM8250 + X55; no licence on that repo: facts only,
+    no code taken): 21 sbl1, 25 tz, 23 aop, 8 qdsp6sw, 34 mdmddr, 36 multi_image_qti, 37 multi_image, 38 xbl_cfg.elf,
+    41 devcfg, 33 hyp, 16 / 17 / 20 efs, 40 apdp, 42 sec.elf, 29 acdb, 6 apps. That port went on to LTE, SMS and mobile
+    data on the same modem (TFTP service, QMI DMS / UIM / NAS / WMS / WDS, IP channels 100/101): the map for what follows.
+  - Result: M0 in 1 ms (EE event SBL), channels 2/3 start code 1; Sahara HELLO v2 (max command 1024), the modem asked
+    for **34 mdmddr (40 B), [command mode 3 -> switched back], 40 apdp, 41 devcfg, 25 tz, 33 hyp, 23 aop, 16 / 17 / 20
+    EFS (2096680 B each), 29 acdb, 8 qdsp6sw (84001648 B), 6 apps**; every END_IMAGE_TX status 0; DONE_RESP
+    "complete" after 12 images, 94230495 bytes, 6699 ms. Then **MDM2AP_STATUS = 1** (the modem's "running" line) for
+    the 10 s watched, errfatal 0, the PCIe link still in L0 (no restart seen in that time). Wi-Fi up, no panic.
+  - Next (step 3): mission mode - MHI again in EE AMSS (it may come up on the same link or after a link drop), its
+    channels (IPCR / QMI0 20-21, DUN, DIAG 4/5, IP_HW0 100/101), QRTR HELLO, the modem's TFTP service (it reads
+    `/readonly/firmware/image/...`), then QMI DMS / UIM / NAS; then something CommCenter can use.
 - **2026-11-09 21:17: 0261 THE X55 RUNS ITS SBL: sbl1.mbn over BHI accepted, execenv 0 -> 1, MHI READY**
   (patch `xnu/patches/0261-umi-x55-bhi-sbl1.patch`, kernel 581f83f, built without the adreno / wlan WIP; image
   **`shim/out/umi-0261-x55sbl1.img`** = 0260's line with `sweetmdm=5`; booted 21:15, log: scratchpad `umi-0261.log`).
