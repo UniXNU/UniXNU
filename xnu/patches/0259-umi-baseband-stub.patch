@@ -1,0 +1,165 @@
+From ce1004076eb108222c23a485a175bee57d2928e1 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 20:52:48 +0100
+Subject: [PATCH] umi: AppleBaseband stub - CommCenter / abm-helper find a
+ baseband service and stop throwing (no modem started; logs every call) (0259)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetWatchdog.cpp | 126 +++++++++++++++++++++++++++++
+ iokit/KernelConfigTables.cpp       |   5 ++
+ 2 files changed, 131 insertions(+)
+
+diff --git a/iokit/Kernel/arm/SweetWatchdog.cpp b/iokit/Kernel/arm/SweetWatchdog.cpp
+index 7eed579..f3bd8d8 100644
+--- a/iokit/Kernel/arm/SweetWatchdog.cpp
++++ b/iokit/Kernel/arm/SweetWatchdog.cpp
+@@ -192,3 +192,129 @@ AppleIPAppenderUserClient::externalMethod(uint32_t selector, IOExternalMethodArg
+ 	return kIOReturnSuccess;
+ }
+ #endif /* SWEET */
++
++/*
++ * Built-in AppleBaseband stub for SWEET (umi 0259), the first step of modem work.
++ *
++ * libTelephonyBasebandDynamic's TelephonyBasebandCreateController (CommCenter)
++ * decides from the hardware model (D22AP: a Qualcomm modem) that there is a
++ * radio, waits for IOServiceMatching("AppleBaseband") and throws
++ * std::runtime_error "Unable to communicate with AppleBaseband driver" when it
++ * never comes: CommCenter SIGABRT every ~14 s on umi. This service and its
++ * user client accept every call and property write with zeroed outputs and
++ * log them (first 300 calls, then once per new selector), to learn what
++ * CommCenter expects from a modem. No modem is started.
++ */
++#if defined(SWEET)
++#include <libkern/c++/OSDictionary.h>
++#include <libkern/c++/OSCollectionIterator.h>
++#include <libkern/c++/OSSymbol.h>
++
++class AppleBaseband : public IOService {
++	OSDeclareDefaultStructors(AppleBaseband);
++
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(AppleBaseband, IOService);
++
++bool
++AppleBaseband::start(IOService *provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	setProperty(kIOUserClientClassKey, "AppleBasebandUserClient");
++	registerService();
++	IOLog("SWEET BB: AppleBaseband registered (stub: accepts every call, no modem started)\n");
++	return true;
++}
++
++IOReturn
++AppleBaseband::setProperties(OSObject *properties)
++{
++	char name[32];
++	proc_selfname(name, sizeof(name));
++	OSDictionary *dict = OSDynamicCast(OSDictionary, properties);
++	if (dict == NULL) {
++		IOLog("SWEET BB: %s setProperties (not a dictionary) -> ok\n", name);
++		return kIOReturnSuccess;
++	}
++	OSCollectionIterator *it = OSCollectionIterator::withCollection(dict);
++	if (it != NULL) {
++		OSSymbol *key;
++		while ((key = OSDynamicCast(OSSymbol, it->getNextObject())) != NULL) {
++			OSObject *val = dict->getObject(key);
++			OSNumber *n = OSDynamicCast(OSNumber, val);
++			OSBoolean *b = OSDynamicCast(OSBoolean, val);
++			IOLog("SWEET BB: %s set %s = %s%llu\n", name, key->getCStringNoCopy(),
++			    b ? (b->isTrue() ? "true " : "false ") : "",
++			    n ? n->unsigned64BitValue() : 0ULL);
++		}
++		it->release();
++	}
++	return kIOReturnSuccess;
++}
++
++class AppleBasebandUserClient : public IOUserClient {
++	OSDeclareDefaultStructors(AppleBasebandUserClient);
++
++public:
++	IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	IOReturn externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++	    IOExternalMethodDispatch *dispatch, OSObject *target,
++	    void *reference) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(AppleBasebandUserClient, IOUserClient);
++
++IOReturn
++AppleBasebandUserClient::clientClose(void)
++{
++	terminate();
++	return kIOReturnSuccess;
++}
++
++static uint64_t sweet_bb_logged;        /* selectors already logged (< 64) */
++static uint32_t sweet_bb_calls;
++
++IOReturn
++AppleBasebandUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++    __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
++    __unused void *reference)
++{
++	for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
++		args->scalarOutput[i] = 0;
++	}
++	if (args->structureOutputDescriptor != NULL) {
++		IOByteCount len = args->structureOutputDescriptor->getLength();
++		for (IOByteCount off = 0; off < len; off += 8) {
++			static const uint64_t zero = 0;
++			args->structureOutputDescriptor->writeBytes(off, &zero, len - off < 8 ? len - off : 8);
++		}
++	} else if (args->structureOutput != NULL) {
++		bzero(args->structureOutput, args->structureOutputSize);
++	}
++
++	bool first = selector < 64 && !(sweet_bb_logged & (1ULL << selector));
++	if (selector < 64) {
++		sweet_bb_logged |= 1ULL << selector;
++	}
++	if (sweet_bb_calls++ < 300 || first || selector >= 64) {
++		char name[32];
++		proc_selfname(name, sizeof(name));
++		uint64_t s0 = args->scalarInputCount > 0 ? args->scalarInput[0] : 0;
++		uint64_t s1 = args->scalarInputCount > 1 ? args->scalarInput[1] : 0;
++		const uint8_t *in = (const uint8_t *)args->structureInput;
++		uint32_t isz = args->structureInputSize;
++		IOLog("SWEET BB: %s sel %u in %u/%u (0x%llx 0x%llx) out %u/%u%s%.*s -> ok\n", name, selector,
++		    args->scalarInputCount, isz, s0, s1,
++		    args->scalarOutputCount, args->structureOutputSize,
++		    (in != NULL && isz > 0) ? " str " : "",
++		    (in != NULL && isz > 0) ? (int)(isz < 64 ? isz : 64) : 0, (in != NULL) ? (const char *)in : "");
++	}
++	return kIOReturnSuccess;
++}
++#endif /* SWEET */
+diff --git a/iokit/KernelConfigTables.cpp b/iokit/KernelConfigTables.cpp
+index dff1aa1..ef6b5cd 100644
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -58,6 +58,11 @@ const char * gIOKernelConfigTables =
+     "     'IOMatchCategory' = IOWatchdog;"
+     "   },"
+     "   {"
++    "     'IOClass'         = AppleBaseband;"
++    "     'IOProviderClass' = IOResources;"
++    "     'IOMatchCategory' = AppleBaseband;"
++    "   },"
++    "   {"
+     "     'IOClass'         = AppleIPAppender;"
+     "     'IOProviderClass' = IOResources;"
+     "     'IOMatchCategory' = AppleIPAppender;"
+-- 
+2.54.0 (Apple Git-157)
+
