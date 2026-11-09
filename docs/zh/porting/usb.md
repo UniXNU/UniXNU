@@ -1,6 +1,6 @@
 # USB 适配
 
-先完成[平台中断和 DMA](/zh/porting/platform)。[QcomDwc3](/zh/drivers/qcom-dwc3)
+先完成[平台中断和 DMA](/zh/porting/platform)。[QcomDwc3](https://github.com/UniXNU/QcomDwc3)
 派生自苹果的 `AppleUSBXDCI` 和 `AppleUSBXHCI`。移植时提供寄存器窗口、中断、电源和 PHY。
 苹果的 USB 栈、`configd` 和 `lockdownd` 不做修改。
 
@@ -106,7 +106,7 @@ clang++ -std=c++17 -I.. ucsi_host.cpp && ./a.out
 | `/System` 和系统守护进程使用同一个文件系统编号 | [`native-union-statfs-fsid`](/zh/xnu/patch-reference) |
 | 锁状态 3 | [`sheng-aks-sls=3`](/zh/drivers/apple-key-store-state) |
 
-三个 ID 使用 `MobileDevice.framework` 内设备映射表中该机型的行。各项的作用见[与 Mac 配对](/zh/drivers/qcom-dwc3#与-mac-配对)。
+三个 ID 使用 `MobileDevice.framework` 内设备映射表中该机型的行。
 
 ## 6. 构建和验证
 

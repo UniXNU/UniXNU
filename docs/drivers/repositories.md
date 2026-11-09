@@ -23,8 +23,8 @@ These repositories are maintained in the UniXNU organization.
 | ShengNovatekTouch | [UniXNU/ShengNovatekTouch](https://github.com/UniXNU/ShengNovatekTouch) | XNU touch | [ShengNovatekTouch](/drivers/sheng-novatek-touch) |
 | XnuPrelink | [UniXNU/XnuPrelink](https://github.com/UniXNU/XnuPrelink) | Kernel tooling | [XnuPrelink](/drivers/xnu-prelink) |
 | Ath12kWifi | [UniXNU/Ath12kWifi](https://github.com/UniXNU/Ath12kWifi) | XNU Wi-Fi | [Ath12kWifi](/drivers/ath12k-wifi) |
-| QcaBluetooth | [UniXNU/QcaBluetooth](https://github.com/UniXNU/QcaBluetooth) | XNU Bluetooth | [QcaBluetooth](/drivers/qca-bluetooth) |
-| QcomDwc3 | [UniXNU/QcomDwc3](https://github.com/UniXNU/QcomDwc3) | XNU USB | [QcomDwc3](/drivers/qcom-dwc3) |
+| QcaBluetooth | [UniXNU/QcaBluetooth](https://github.com/UniXNU/QcaBluetooth) | XNU Bluetooth |  |
+| QcomDwc3 | [UniXNU/QcomDwc3](https://github.com/UniXNU/QcomDwc3) | XNU USB |  |
 | ArmCpu | [UniXNU/ArmCpu](https://github.com/UniXNU/ArmCpu) | XNU CPU and GIC | [ArmCpu](/drivers/arm-cpu) |
 | ArmDTPlatform | [UniXNU/ArmDTPlatform](https://github.com/UniXNU/ArmDTPlatform) | XNU platform expert | [ArmDTPlatform](/drivers/arm-dt-platform) |
 | ArmVirtPlatform | [UniXNU/ArmVirtPlatform](https://github.com/UniXNU/ArmVirtPlatform) | XNU platform | [ArmVirtPlatform](/drivers/arm-virt-platform) |
