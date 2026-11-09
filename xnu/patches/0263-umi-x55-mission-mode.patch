@@ -1,0 +1,602 @@
+From ec6af6b871a49b4d7329c294c953814a8747fda5 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 23:28:58 +0100
+Subject: [PATCH] umi: X55 mission mode on the same link - AMSS 290 ms after
+ Sahara, SBL MHI session kept, LOOPBACK echoed, IPCR 20/21 started; QRTR v2
+ headers (sweetmdm=7) (0263)
+
+Built and booted up to the LOOPBACK echo (0263e); the QRTR v2 parsing (0263f) is built, not booted.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 473 ++++++++++++++++++++++++++++++++++++++++----
+ 1 file changed, 432 insertions(+), 41 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 2f7f1af..eecbc0f 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -24,6 +24,10 @@
+  *               the 512-byte stubs of the firmware partition). Big images are streamed with sweet_fat_pread.
+  *               It ends when the modem says the transfer is complete (it then restarts itself and leaves the
+  *               link: mission mode is the next step), on an unknown image, or after sweetmdmsecs (120).
++ *   sweetmdm=7  + mission mode: once MDM2AP status is high, PCIe2 is cycled as Android does (PERST low 15 ms, link
++ *               trained again: the modem's AMSS sets its endpoint up on that reset; facts from the OnePlus 8 Pro port),
++ *               the BAR / MSI / MHI set up again (execution environment 2), LOOPBACK 0/1 pinged, IPCR 20/21 started
++ *               and QRTR spoken (HELLO; every service the modem announces is logged) for sweetmdmqrtr seconds (30).
+  * PCIe sequence as sweet_pcie.c (PCIe0, QCA6390) with the PCIe2 registers (Linux gcc-sm8250.c).
+  * Built inside sweet_spmi.c (the local build cannot add source files).
+  */
+@@ -412,6 +416,36 @@ md_iatu(unsigned idx, uint32_t type, uint32_t base, uint32_t size, uint32_t targ
+ 	(void)md_poll(r, 0x04, 1u << 31, 1u << 31, 5);
+ }
+ 
++static bool
++md_phy_init(void)
++{
++	md_wr(md.gcc, GCC_PCIE2_BCR, 1);
++	md_wr(md.gcc, GCC_PCIE2_PHY_BCR, 1);
++	delay(1000);
++	md_wr(md.gcc, GCC_PCIE2_PHY_BCR, 0);
++	md_wr(md.gcc, GCC_PCIE2_BCR, 0);
++	delay(1000);
++
++	md_wr(md.parf, PARF_DEVICE_TYPE, 4);
++	md_wr(md.parf, PARF_PHY_CTRL, md_rd(md.parf, PARF_PHY_CTRL) & ~1u);
++	md_wr(md.parf, PARF_DBI_BASE_ADDR, 0);
++	md_wr(md.parf, PARF_SYS_CTRL, 0x365e);
++	md_wr(md.parf, PARF_MHI_CLK_RST, md_rd(md.parf, PARF_MHI_CLK_RST) | (1u << 4));
++	md_wr(md.parf, PARF_PM_CTRL, md_rd(md.parf, PARF_PM_CTRL) | (1u << 5));
++	md_wr(md.parf, PARF_AXI_HALT_V2, md_rd(md.parf, PARF_AXI_HALT_V2) | (1u << 31));
++	md_wr(md.parf, PARF_SLV_ADDR_SPACE, 0x4000000);
++
++	for (unsigned i = 0; i < sizeof(mdm_phy_seq) / sizeof(mdm_phy_seq[0]); ++i) {
++		md_wr(md.phy, mdm_phy_seq[i].off, mdm_phy_seq[i].val);
++		if (mdm_phy_seq[i].delay_us) {
++			delay(mdm_phy_seq[i].delay_us);
++		}
++	}
++	bool phy_ok = md_poll(md.phy, PHY_PCS_STATUS, 1u << 6, 0, 100);
++	printf("SWEET MDM: PCIe2 PHY %s, status %#x\n", phy_ok ? "ready" : "NOT ready", md_rd(md.phy, PHY_PCS_STATUS));
++	return phy_ok;
++}
++
+ static int
+ md_bar0(void)
+ {
+@@ -581,6 +615,14 @@ md_sbl1(void)
+ #define MH_EL           16u
+ #define SAH_OUT         2u
+ #define SAH_IN          3u
++#define MX_IPCR_OUT     20u             /* live FDT esoc0 mhi_chan@20 / 21 "IPCR", ee mask 4 (AMSS) */
++#define MX_IPCR_IN      21u
++#define MH_TRE_LB_OUT   0x6200u         /* channel 0 */
++#define MH_TRE_LB_IN    0x6300u         /* channel 1 */
++#define MH_TRE_IP_OUT   0x6400u         /* channel 20 */
++#define MH_TRE_IP_IN    0x6500u         /* channel 21 */
++#define MH_RXBUF2       0x20000u        /* IPCR receive buffers, 8 x 4 KiB */
++#define MH_LBBUF        0x28000u        /* loopback: 4 KiB out, 4 KiB in */
+ #define MHI_CFG         0x10u
+ #define MHI_CHDBOFF     0x18u
+ #define MHI_ERDBOFF     0x20u
+@@ -598,6 +640,8 @@ static struct {
+ 	uint32_t pa, chdb, erdb;
+ 	uint32_t er0_rp, er0_wp, er1_rp, er1_wp, cmd_wp, out_wp, in_wp;
+ 	unsigned ee, mstate;
++	unsigned tx_ch, rx_ch;          /* the channel pair being served: Sahara 2/3, then IPCR 20/21 */
++	uint32_t tx_ring, rx_ring, rx_base;
+ 	bool tx_done, gone;
+ 	int cmd_code;
+ } mx;
+@@ -679,7 +723,7 @@ mx_er0(void)
+ }
+ 
+ static int
+-mhi_init(void)
++mhi_init(bool mission)
+ {
+ 	mx.mem = md.pool + MH_OFF;
+ 	mx.pa = md.pool_pa + MH_OFF;
+@@ -691,9 +735,18 @@ mhi_init(void)
+ 	if (!rst || !rdy) {
+ 		return 20;
+ 	}
+-	/* channels 2 (out) / 3 (in) on event ring 1, disabled until START_CHAN (Linux mhi_init_dev_ctxt) */
+-	mx_ctx(MH_CHCTX + SAH_OUT * 44u, 2u << 8, 1, 1, 0, 0, 0);
+-	mx_ctx(MH_CHCTX + SAH_IN * 44u, 2u << 8, 2, 1, 0, 0, 0);
++	/* channels on event ring 1, disabled until START_CHAN (Linux mhi_init_dev_ctxt): SBL 2 / 3 (Sahara);
++	   mission mode 0 / 1 (LOOPBACK) and 20 / 21 (IPCR: QRTR) */
++	/* all of them from the start, as Linux mhi_init_dev_ctxt: the SBL session carries on into AMSS (0263d: an MHI
++	   set up again on top of the live M0 session never completed a command) */
++	if (!mission) {
++		mx_ctx(MH_CHCTX + SAH_OUT * 44u, 2u << 8, 1, 1, 0, 0, 0);
++		mx_ctx(MH_CHCTX + SAH_IN * 44u, 2u << 8, 2, 1, 0, 0, 0);
++	}
++	static const uint8_t mc[4][2] = { { 0, 1 }, { 1, 2 }, { MX_IPCR_OUT, 1 }, { MX_IPCR_IN, 2 } };
++	for (unsigned i = 0; i < 4; ++i) {
++		mx_ctx(MH_CHCTX + mc[i][0] * 44u, 2u << 8, mc[i][1], 1, 0, 0, 0);
++	}
+ 	mx_ctx(MH_ERCTX, 0, 1, 1, MH_ER0, MH_ER0_N * MH_EL, MH_ER0 + (MH_ER0_N - 1) * MH_EL);
+ 	mx_ctx(MH_ERCTX + 44, 1u << 16, 1, 2, MH_ER1, MH_ER1_N * MH_EL, MH_ER1 + (MH_ER1_N - 1) * MH_EL);
+ 	mx_ctx(MH_CMDCTX, 0, 0, 0, MH_CMD, MH_CMD_N * MH_EL, MH_CMD);
+@@ -761,9 +814,9 @@ mx_ring(unsigned ch, uint32_t ring, uint32_t wp)
+ static void
+ mx_rx_queue(unsigned buf)
+ {
+-	mx_tre(MH_TRE_IN + mx.in_wp * MH_EL, mx.pa + MH_RXBUF + buf * MH_RX_LEN, MH_RX_LEN, 0x2u << 16 | 1u << 9);
++	mx_tre(mx.rx_ring + mx.in_wp * MH_EL, mx.pa + mx.rx_base + buf * MH_RX_LEN, MH_RX_LEN, 0x2u << 16 | 1u << 9);
+ 	mx.in_wp = (mx.in_wp + 1) % MH_TRE_N;
+-	mx_ring(SAH_IN, MH_TRE_IN, mx.in_wp);
++	mx_ring(mx.rx_ch, mx.rx_ring, mx.in_wp);
+ }
+ 
+ /* Received Sahara packets wait here. */
+@@ -784,14 +837,14 @@ mx_er1(void)
+ 		uint64_t ptr = mx_rd64(e);
+ 		uint32_t d0 = mx32(e)[2], d1 = mx32(e)[3];
+ 		unsigned type = (d1 >> 16) & 0xff, ch = d1 >> 24, code = d0 >> 24, n = d0 & 0xffff;
+-		if (type == 0x22 && ch == SAH_IN) {
+-			unsigned slot = (unsigned)((ptr - (mx.pa + MH_TRE_IN)) / MH_EL);
+-			uint64_t buf = mx_rd64(MH_TRE_IN + slot * MH_EL);
+-			unsigned b = (unsigned)((buf - (mx.pa + MH_RXBUF)) / MH_RX_LEN);
++		if (type == 0x22 && ch == mx.rx_ch) {
++			unsigned slot = (unsigned)((ptr - (mx.pa + mx.rx_ring)) / MH_EL);
++			uint64_t buf = mx_rd64(mx.rx_ring + slot * MH_EL);
++			unsigned b = (unsigned)((buf - (mx.pa + mx.rx_base)) / MH_RX_LEN);
+ 			if (b < MH_RX_N) {
+ 				if (mx_rxq_tail - mx_rxq_head < 8 && n <= MH_RX_LEN) {
+ 					unsigned q = mx_rxq_tail % 8;
+-					memcpy(mx_rxq[q], (const void *)(mx.mem + MH_RXBUF + b * MH_RX_LEN), n);
++					memcpy(mx_rxq[q], (const void *)(mx.mem + mx.rx_base + b * MH_RX_LEN), n);
+ 					mx_rxq_len[q] = n;
+ 					mx_rxq_tail++;
+ 				} else {
+@@ -799,8 +852,10 @@ mx_er1(void)
+ 				}
+ 				mx_rx_queue(b);
+ 			}
+-		} else if (type == 0x22 && ch == SAH_OUT) {
++		} else if (type == 0x22 && ch == mx.tx_ch) {
+ 			mx.tx_done = true;
++		} else if (type == 0x22 && ch == 1u) {
++			printf("SWEET MDM: LOOPBACK: the modem echoed %u bytes\n", n);
+ 		} else {
+ 			printf("SWEET MDM: data event %#x ch %u code %u len %u\n", type, ch, code, n);
+ 		}
+@@ -817,9 +872,9 @@ static int
+ mx_send(uint32_t len)
+ {
+ 	mx.tx_done = false;
+-	mx_tre(MH_TRE_OUT + mx.out_wp * MH_EL, mx.pa + MH_TXBUF, len, 0x2u << 16 | 1u << 9);
++	mx_tre(mx.tx_ring + mx.out_wp * MH_EL, mx.pa + MH_TXBUF, len, 0x2u << 16 | 1u << 9);
+ 	mx.out_wp = (mx.out_wp + 1) % MH_TRE_N;
+-	mx_ring(SAH_OUT, MH_TRE_OUT, mx.out_wp);
++	mx_ring(mx.tx_ch, mx.tx_ring, mx.out_wp);
+ 	for (unsigned i = 0; i < 20000 && !mx.tx_done; ++i) {
+ 		mx_er1();
+ 		if (!mx.tx_done) {
+@@ -984,13 +1039,369 @@ sah_packet(const uint8_t *p, uint32_t n)
+ 	}
+ }
+ 
++
++/* ---- mission mode: the modem's AMSS on PCIe2, QRTR on IPCR ---- */
++
++struct mx_qhdr {
++	uint32_t version, type, src_node, src_port, confirm_rx, size, dst_node, dst_port;
++};
++#define MX_QCTRL        0xfffffffeu
++#define MX_QNODE        1u              /* we are node 1, as Android's APPS */
++
++static struct {
++	unsigned hellos, servers, data, other;
++	uint32_t node;
++	bool v2;                /* the modem speaks QRTR v2 headers (version 3, 16 bytes) on IPCR: answered the same way */
++} mq;
++
++/* QRTR v2 header (Linux qrtr.c struct qrtr_hdr_v2): version 3, type, flags (bit 0 confirm_rx), optlen, le32 size,
++   le16 src node / port, dst node / port; control port 0xfffe */
++struct mx_qhdr2 {
++	uint8_t version, type, flags, optlen;
++	uint32_t size;
++	uint16_t src_node, src_port, dst_node, dst_port;
++};
++
++static void
++mx_qsend(const uint32_t *w, unsigned nwords)
++{
++	volatile uint32_t *p = mx32(MH_TXBUF);
++	for (unsigned i = 0; i < nwords; ++i) {
++		p[i] = w[i];
++	}
++	(void)mx_send(4u * nwords);
++}
++
++/* One QRTR packet: header (v1 or v2, as the modem speaks), then the payload words. */
++static void
++mx_qpkt(uint32_t type, uint32_t src_port, uint32_t dst_node, uint32_t dst_port, bool confirm, const uint32_t *pl,
++    unsigned nwords)
++{
++	uint32_t pkt[8 + 16];
++	unsigned hw;
++	if (mq.v2) {
++		struct mx_qhdr2 h = { 3, (uint8_t)type, confirm ? 1 : 0, 0, 4u * nwords, (uint16_t)MX_QNODE,
++			              (uint16_t)src_port, (uint16_t)dst_node, (uint16_t)dst_port };
++		memcpy(pkt, &h, sizeof(h));
++		hw = 4;
++	} else {
++		uint32_t h[8] = { 1, type, MX_QNODE, src_port, confirm ? 1u : 0u, 4u * nwords, dst_node, dst_port };
++		memcpy(pkt, h, sizeof(h));
++		hw = 8;
++	}
++	for (unsigned i = 0; i < nwords && i < 16; ++i) {
++		pkt[hw + i] = pl[i];
++	}
++	mx_qsend(pkt, hw + nwords);
++}
++
++static void
++mx_qctrl(uint32_t type, uint32_t dst_node, uint32_t a, uint32_t b, uint32_t c, uint32_t d)
++{
++	uint32_t pl[5] = { type, a, b, c, d };
++	mx_qpkt(type, MX_QCTRL, dst_node, MX_QCTRL, false, pl, 5);
++}
++
++static const char *
++mx_qmi_name(uint32_t svc)
++{
++	switch (svc) {
++	case 0x00: return "CTL";
++	case 0x01: return "WDS";
++	case 0x02: return "DMS";
++	case 0x03: return "NAS";
++	case 0x05: return "WMS";
++	case 0x09: return "VOICE";
++	case 0x0b: return "UIM";
++	case 0x0c: return "PBM";
++	case 0x10: return "LOC";
++	case 0x17: return "TS";
++	case 0x18: return "TMD";
++	case 0x1a: return "WDA";
++	case 0x1e: return "SSCTL?";
++	case 0x2b: return "SSCTL";
++	case 0x2f: return "IMSA?";
++	case 0x42: return "SERVREG_NOTIF";
++	case 0x40: return "SERVREG_LOC";
++	case 0x1000: return "TFTP";
++	default: return "";
++	}
++}
++
++static void
++mx_qrx(const uint8_t *p, uint32_t len)
++{
++	struct mx_qhdr h;
++	if (len < sizeof(h)) {
++		printf("SWEET MDM: QRTR: short packet, %u bytes\n", len);
++		return;
++	}
++	size_t hl = sizeof(h);
++	if ((p[0] & 0xff) == 3) {
++		struct mx_qhdr2 h2;
++		memcpy(&h2, p, sizeof(h2));
++		if (!mq.v2) {
++			printf("SWEET MDM: QRTR: the modem speaks v2 headers: answering in v2\n");
++		}
++		mq.v2 = true;
++		h.version = 1;
++		h.type = h2.type;
++		h.confirm_rx = h2.flags & 1u;
++		h.size = h2.size;
++		h.src_node = h2.src_node == 0xffffu ? 0xffffffffu : h2.src_node;
++		h.src_port = h2.src_port >= 0xfffeu ? 0xffff0000u | h2.src_port : h2.src_port;
++		h.dst_node = h2.dst_node == 0xffffu ? 0xffffffffu : h2.dst_node;
++		h.dst_port = h2.dst_port >= 0xfffeu ? 0xffff0000u | h2.dst_port : h2.dst_port;
++		hl = sizeof(h2) + h2.optlen * 4u;
++	} else {
++		memcpy(&h, p, sizeof(h));
++	}
++	if (h.version != 1 || hl > len) {
++		printf("SWEET MDM: QRTR: header %08x (%u bytes)\n", *(const uint32_t *)p, len);
++		mq.other++;
++		return;
++	}
++	uint32_t c[5] = { 0 };
++	memcpy(c, p + hl, MIN((size_t)(len - hl), sizeof(c)));
++	switch (h.type) {
++	case 2:         /* HELLO */
++		mq.hellos++;
++		mq.node = h.src_node;
++		printf("SWEET MDM: QRTR HELLO from node %u: answered\n", h.src_node);
++		mx_qctrl(2, h.src_node, 0, 0, 0, 0);
++		break;
++	case 4:         /* NEW_SERVER: service, instance (version | instance << 8), node, port */
++		mq.servers++;
++		printf("SWEET MDM: QRTR NEW_SERVER service %#x %s version %u instance %u at node %u port %#x\n", c[1],
++		    mx_qmi_name(c[1]), c[2] & 0xff, c[2] >> 8, c[3], c[4]);
++		break;
++	case 5:
++		printf("SWEET MDM: QRTR DEL_SERVER service %#x at node %u port %#x\n", c[1], c[3], c[4]);
++		break;
++	case 10:        /* NEW_LOOKUP: a client looks for a service (the modem's TFTP client wants ours, 0x1000) */
++		printf("SWEET MDM: QRTR NEW_LOOKUP from node %u port %#x: service %#x %s instance %#x\n", h.src_node, h.src_port,
++		    c[1], mx_qmi_name(c[1]), c[2]);
++		break;
++	case 1:         /* DATA */
++		mq.data++;
++		if (mq.data <= 20) {
++			printf("SWEET MDM: QRTR DATA %u bytes from %u:%#x to port %#x%s\n", h.size, h.src_node, h.src_port, h.dst_port,
++			    h.confirm_rx ? " (confirm)" : "");
++		}
++		if (h.confirm_rx) {
++			/* RESUME_TX, 20 bytes of payload (the modem's router drops shorter ones: OnePlus port's finding) */
++			uint32_t r[5] = { 7, MX_QNODE, h.dst_port, 0, 0 };
++			mx_qpkt(7, h.dst_port, h.src_node, h.src_port, false, r, 5);
++		}
++		break;
++	default:
++		printf("SWEET MDM: QRTR type %u from %u:%#x to %u:%#x, %u bytes\n", h.type, h.src_node, h.src_port, h.dst_node,
++		    h.dst_port, h.size);
++		break;
++	}
++}
++
++/*
++ * Android's msm_pcie_disable + enable when the modem has booted: PERST held, the controller's core and PHY reset and
++ * set up again (0263b: PERST and the LTSSM enable alone left LTSSM in 0x5, pre-detect quiet), the link trained again. The link
++ * bits are only trusted once LTSSM has left L0 and come back to it (0263: right after the release they still said
++ * "up" in LTSSM 0x5 and the endpoint read all ones); then the endpoint's ID is read until it answers (the AMSS sets
++ * its endpoint up after the reset). Up to 3 cycles.
++ */
++static bool
++md_soft_cycle(void)
++{
++	for (unsigned attempt = 1; attempt <= 3; ++attempt) {
++		/* as msm_pcie_disable + msm_pcie_enable: PERST low, LTSSM off, core + PHY reset and set up again */
++		md_gpio(PERST2_PIN, 0, 1, 0, true, false);
++		md_wr(md.parf, PARF_LTSSM, md_rd(md.parf, PARF_LTSSM) & ~(1u << 8));
++		uint32_t st = md_rd(md.dbi, ELBI_SYS_STTS);
++		printf("SWEET MDM: soft cycle %u: PERST low, LTSSM %#x stts %#x\n", attempt, (st >> 12) & 0x3f, st);
++		if (!md_phy_init()) {
++			continue;
++		}
++		md_wr(md.dbi, DBI_BUSNUM, 0x00010100);
++		md_wr(md.dbi, DBI_CMD, md_rd(md.dbi, DBI_CMD) | 0x6u);
++		md_wait(100);
++		md_gpio(PERST2_PIN, 0, 1, 0, true, true);
++		md_wait(1);
++		md_wr(md.parf, PARF_LTSSM, md_rd(md.parf, PARF_LTSSM) | (1u << 8));
++		uint32_t last = ~0u;
++		bool left = false, up = false;
++		for (unsigned i = 0; i < 30000 && !up; ++i) {           /* 3 s */
++			st = md_rd(md.dbi, ELBI_SYS_STTS);
++			uint32_t l = (st >> 12) & 0x3f;
++			if (l != last) {
++				last = l;
++				printf("SWEET MDM: soft cycle %u: LTSSM %#x at %u00 us\n", attempt, l, i);
++			}
++			left = left || l != 0x11;
++			up = left && l == 0x11 && (st & (1u << 10)) && (md_rd(md.dbi, DBI_LINKCTL) & (1u << 29));
++			delay(100);
++		}
++		uint32_t ls = md_rd(md.dbi, DBI_LINKCTL);
++		printf("SWEET MDM: soft cycle %u: link %s (gen %u x%u)\n", attempt, up ? "UP" : "down", (ls >> 16) & 0xf,
++		    (ls >> 20) & 0x3f);
++		if (!up) {
++			continue;
++		}
++		for (unsigned i = 0; i < 256; ++i) {
++			md_wr(md.parf, 0x2000u + 4u * i, 0);
++		}
++		md_wr(md.parf, 0x2000u + 4u * 0x15u, 0x0100u << 16 | 1u << 8);
++		md_wr(md.dbi, DBI_BUSNUM, 0x00010100);
++		md_wr(md.dbi, DBI_CMD, md_rd(md.dbi, DBI_CMD) | 0x6u);
++		for (unsigned t = 0; t < 40; ++t) {                     /* 2 s for the endpoint to answer */
++			md_iatu(0, 4, MDM_CONF_PA, 0x1000, 1u << 24);
++			uint32_t id = md_rd(md.conf, 0x00);
++			if ((id & 0xffffu) == 0x17cbu) {
++				printf("SWEET MDM: soft cycle %u: endpoint %#x after %u ms\n", attempt, id, t * 50);
++				return true;
++			}
++			md_wait(50);
++		}
++		printf("SWEET MDM: soft cycle %u: the endpoint does not answer (%#x)\n", attempt, md_rd(md.conf, 0x00));
++	}
++	return false;
++}
++
++static int
++md_mission(void)
++{
++	/*
++	 * First on the same link: right after Sahara the modem's AMSS may show itself there (execution environment 2,
++	 * MHI READY) for a short while before it resets its PCIe side and asks for a new link (WAKE). 0263b / c: the
++	 * link was already down 2 s later, and after a full PCIe re-init the modem was back in its boot ROM.
++	 */
++	vm_offset_t bhi = md.bar0 + md_rd(md.bar0, 0x28);
++	uint32_t ee = 0, ms = 0, last_ee = ~0u, last_ms = ~0u, last_lt = ~0u, last_pins = ~0u;
++	bool same_link = false;
++	for (unsigned t = 0; t < 500; ++t) {                    /* 5 s, every 10 ms */
++		uint32_t lt = (md_rd(md.dbi, ELBI_SYS_STTS) >> 12) & 0x3f;
++		ee = md_rd(bhi, BHI_EXECENV);
++		ms = md_rd(md.bar0, MHI_STATUS);
++		uint32_t pins = md_gpio_in(MDM2AP_STATUS) | md_gpio_in(MDM2AP_ERRFATAL) << 1 | md_gpio_in(WAKE2_PIN) << 2;
++		if (ee != last_ee || ms != last_ms || lt != last_lt || pins != last_pins) {
++			printf("SWEET MDM: after sahara %u0 ms: ltssm %#x execenv %#x mhistatus %#x (state %u) mdm2ap status %u errfatal %u wake %u\n",
++			    t, lt, ee, ms, (ms >> 8) & 0xff, pins & 1, (pins >> 1) & 1, (pins >> 2) & 1);
++			last_ee = ee;
++			last_ms = ms;
++			last_lt = lt;
++			last_pins = pins;
++		}
++		if (lt == 0x11 && ee == 2 && ms != 0xffffffffu && (ms & 1u)) {
++			same_link = true;
++			break;
++		}
++		delay(10000);
++	}
++	if (!same_link) {
++		md_pins("before the soft cycle");
++		if (!md_soft_cycle()) {
++			return 30;
++		}
++		if (md_bar0() != 0) {
++			return 32;
++		}
++		md_msi(md.pool_pa + MDM_MSI_OFF, 0);
++		bhi = md.bar0 + md_rd(md.bar0, 0x28);
++		for (unsigned t = 0; t < 100; ++t) {
++			ee = md_rd(bhi, BHI_EXECENV);
++			if (ee == 2 && (md_rd(md.bar0, MHI_STATUS) & 1u)) {
++				break;
++			}
++			md_wait(100);
++		}
++	} else {
++		printf("SWEET MDM: AMSS on the same link: taking it\n");
++	}
++	md_state(bhi, "mission");
++	if (ee != 2) {
++		printf("SWEET MDM: execution environment %u, not AMSS\n", ee);
++		return 33;
++	}
++	if (!same_link) {
++		int r = mhi_init(true);
++		if (r) {
++			return r;
++		}
++	} else {
++		/* the SBL's session goes on: its events (EE AMSS) first */
++		for (unsigned t = 0; t < 200; ++t) {
++			mx_er0();
++			delay(1000);
++		}
++		printf("SWEET MDM: same session: ee %u, mhistatus %#x, ctrl %#x\n", mx.ee, md_rd(md.bar0, MHI_STATUS),
++		    md_rd(md.bar0, MHI_CTRL));
++	}
++	/* LOOPBACK: 16 bytes out on 0, one buffer in on 1 */
++	if (mx_chan_start(0, false, MH_TRE_LB_OUT) == 0 && mx_chan_start(1, true, MH_TRE_LB_IN) == 0) {
++		memcpy((void *)(mx.mem + MH_LBBUF), "sweet umi ping!!", 16);
++		mx_tre(MH_TRE_LB_IN, mx.pa + MH_LBBUF + 0x1000, 0x1000, 0x2u << 16 | 1u << 9);
++		mx_ring(1, MH_TRE_LB_IN, 1);
++		mx_tre(MH_TRE_LB_OUT, mx.pa + MH_LBBUF, 16, 0x2u << 16 | 1u << 9);
++		mx_ring(0, MH_TRE_LB_OUT, 1);
++		for (unsigned t = 0; t < 1500; ++t) {
++			mx_er0();
++			mx_er1();
++			delay(1000);
++		}
++		printf("SWEET MDM: LOOPBACK buffer: %.16s\n", (const char *)(mx.mem + MH_LBBUF + 0x1000));
++	}
++	/* IPCR: QRTR */
++	mx.tx_ch = MX_IPCR_OUT;
++	mx.rx_ch = MX_IPCR_IN;
++	mx.tx_ring = MH_TRE_IP_OUT;
++	mx.rx_ring = MH_TRE_IP_IN;
++	mx.rx_base = MH_RXBUF2;
++	mx.in_wp = mx.out_wp = 0;
++	mx_rxq_head = mx_rxq_tail = 0;
++	if (mx_chan_start(MX_IPCR_OUT, false, MH_TRE_IP_OUT) || mx_chan_start(MX_IPCR_IN, true, MH_TRE_IP_IN)) {
++		return 34;
++	}
++	for (unsigned b = 0; b < MH_RX_N; ++b) {
++		mx_rx_queue(b);
++	}
++	printf("SWEET MDM: IPCR channels %u/%u running: QRTR HELLO sent\n", MX_IPCR_OUT, MX_IPCR_IN);
++	bzero(&mq, sizeof(mq));
++	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
++	unsigned secs = 30;
++	(void)PE_parse_boot_argn("sweetmdmqrtr", &secs, sizeof(secs));
++	for (unsigned t = 0; t < secs * 1000u && !mx.gone; ++t) {
++		mx_er0();
++		mx_er1();
++		while (mx_rxq_head != mx_rxq_tail) {
++			unsigned q = mx_rxq_head % 8;
++			mx_rxq_head++;
++			mx_qrx(mx_rxq[q], mx_rxq_len[q]);
++		}
++		if (t % 10000 == 9999) {
++			printf("SWEET MDM: QRTR %u s: %u hellos, %u services, %u data; mhistatus %#x mdm2ap status %u errfatal %u\n",
++			    (t + 1) / 1000, mq.hellos, mq.servers, mq.data, md_rd(md.bar0, MHI_STATUS), md_gpio_in(MDM2AP_STATUS),
++			    md_gpio_in(MDM2AP_ERRFATAL));
++			if (md_rd(md.bar0, MHI_STATUS) == 0xffffffffu) {
++				mx.gone = true;
++			}
++		}
++		delay(1000);
++	}
++	printf("SWEET MDM: mission: %u hellos, %u services announced, %u data packets%s\n", mq.hellos, mq.servers, mq.data,
++	    mx.gone ? " (the modem went away)" : "");
++	return mq.servers ? 0 : 35;
++}
++
+ static int
+ md_sahara(void)
+ {
+-	int r = mhi_init();
++	int r = mhi_init(false);
+ 	if (r) {
+ 		return r;
+ 	}
++	mx.tx_ch = SAH_OUT;
++	mx.rx_ch = SAH_IN;
++	mx.tx_ring = MH_TRE_OUT;
++	mx.rx_ring = MH_TRE_IN;
++	mx.rx_base = MH_RXBUF;
+ 	if (mx_chan_start(SAH_OUT, false, MH_TRE_OUT) || mx_chan_start(SAH_IN, true, MH_TRE_IN)) {
+ 		return 24;
+ 	}
+@@ -1030,13 +1441,16 @@ md_sahara(void)
+ 	printf("SWEET MDM: sahara ends after %llu ms: %s; %u images, %llu bytes%s\n", ns / 1000000,
+ 	    sah.complete ? "COMPLETE" : sah.stop ? "stopped" : mx.gone ? "modem gone" : "timeout", sah.images, sah.bytes,
+ 	    sah.unknown_id ? " (an unknown image id)" : "");
+-	/* what the modem does next: it restarts into the images; watch the link and its pins for 10 s */
+-	for (unsigned t = 0; t < 20; ++t) {
++	/* what the modem does next: it restarts into the images; watch the link and its pins for 10 s (2 s for stage 7) */
++	for (unsigned t = 0; t < (md.stage >= 7 ? 0u : 20u); ++t) {
+ 		md_wait(500);
+ 		uint32_t st = md_rd(md.dbi, ELBI_SYS_STTS);
+ 		printf("SWEET MDM: after sahara +%u ms: link stts %#x (ltssm %#x) mdm2ap status %u errfatal %u\n", (t + 1) * 500,
+ 		    st, (st >> 12) & 0x3f, md_gpio_in(MDM2AP_STATUS), md_gpio_in(MDM2AP_ERRFATAL));
+ 	}
++	if (sah.complete && md.stage >= 7) {
++		return md_mission();
++	}
+ 	return sah.complete ? 0 : 25;
+ }
+ 
+@@ -1074,30 +1488,7 @@ md_run(void)
+ 	printf("SWEET MDM: rcg aux %d refgen %d\n", aux, ref);
+ 	md_clocks_dump("clocks on");
+ 
+-	md_wr(md.gcc, GCC_PCIE2_BCR, 1);
+-	md_wr(md.gcc, GCC_PCIE2_PHY_BCR, 1);
+-	delay(1000);
+-	md_wr(md.gcc, GCC_PCIE2_PHY_BCR, 0);
+-	md_wr(md.gcc, GCC_PCIE2_BCR, 0);
+-	delay(1000);
+-
+-	md_wr(md.parf, PARF_DEVICE_TYPE, 4);
+-	md_wr(md.parf, PARF_PHY_CTRL, md_rd(md.parf, PARF_PHY_CTRL) & ~1u);
+-	md_wr(md.parf, PARF_DBI_BASE_ADDR, 0);
+-	md_wr(md.parf, PARF_SYS_CTRL, 0x365e);
+-	md_wr(md.parf, PARF_MHI_CLK_RST, md_rd(md.parf, PARF_MHI_CLK_RST) | (1u << 4));
+-	md_wr(md.parf, PARF_PM_CTRL, md_rd(md.parf, PARF_PM_CTRL) | (1u << 5));
+-	md_wr(md.parf, PARF_AXI_HALT_V2, md_rd(md.parf, PARF_AXI_HALT_V2) | (1u << 31));
+-	md_wr(md.parf, PARF_SLV_ADDR_SPACE, 0x4000000);
+-
+-	for (unsigned i = 0; i < sizeof(mdm_phy_seq) / sizeof(mdm_phy_seq[0]); ++i) {
+-		md_wr(md.phy, mdm_phy_seq[i].off, mdm_phy_seq[i].val);
+-		if (mdm_phy_seq[i].delay_us) {
+-			delay(mdm_phy_seq[i].delay_us);
+-		}
+-	}
+-	bool phy_ok = md_poll(md.phy, PHY_PCS_STATUS, 1u << 6, 0, 100);
+-	printf("SWEET MDM: PCIe2 PHY %s, status %#x\n", phy_ok ? "ready" : "NOT ready", md_rd(md.phy, PHY_PCS_STATUS));
++	bool phy_ok = md_phy_init();
+ 	md_clocks_dump("phy");
+ 	if (!phy_ok || md.stage == 2) {
+ 		return phy_ok ? 0 : 2;
+-- 
+2.54.0 (Apple Git-157)
+

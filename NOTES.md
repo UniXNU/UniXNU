@@ -2,6 +2,28 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 23:25: 0263 THE X55 IN MISSION MODE: AMSS on the same link, LOOPBACK echoed, QRTR packets from the
+  modem** (patch `xnu/patches/0263-umi-x55-mission-mode.patch`, kernel ec6af6b, built without the adreno / wlan WIP;
+  booted as 0263e = **`shim/out/umi-0263e-x55mission.img`** (0262's line with `sweetmdm=7`), 23:23, log: session
+  scratchpad `umi-0263b.log` (all of 0263b-e in one file)). **Stopped for the night here; the phone was left on 0263e.**
+  - `sweetmdm=7`: after Sahara, the same link is watched every 10 ms: MDM2AP status high at ~90 ms, WAKE at ~200 ms,
+    **BHI execenv 2 (AMSS) at 290 ms**, link still L0, MHI still M0. The SBL's MHI session is kept (all channel
+    contexts are written at the first MHI init, as Linux mhi_init_dev_ctxt), the EE event 2 arrives on control ring 0,
+    then START_CHAN 0 / 1 / 20 / 21 all complete with code 1. LOOPBACK: 16 bytes out on 0 -> **"sweet umi ping!!"
+    back on 1**. IPCR 20/21: the modem sends **QRTR v2** packets (version 3, 16-byte header): HELLO from node 2 to
+    broadcast, then repeated NEW_SERVER (type 4, 20-byte payload) to node 1 - not decoded in 0263e.
+  - Dead ends on the way (each one boot): 0263 / 0263b PERST + LTSSM-enable cycle after Sahara: LTSSM stuck in 0x5
+    (pre-detect quiet), stale "link up" bits, config space all ones; 0263c full PCIe2 re-init (core + PHY reset, PHY
+    sequence, PERST): link back at gen 3 x2 in 715 ms, but the modem was back in its PBL (execenv 0, MDM2AP 0) - it
+    had restarted; 0263d AMSS found on the same link but MHI set up again on top of the live M0 session: no command
+    completed. The soft cycle stays in the code as a fallback (`md_soft_cycle`, full re-init).
+  - **Built, NOT booted: 0263f** = **`shim/out/umi-0263f-x55qrtr.img`** (same line): QRTR v2 headers parsed and sent
+    (Linux struct qrtr_hdr_v2; ports 0xfffe/0xffff widened), HELLO answered in v2, NEW_SERVER / NEW_LOOKUP logged with
+    QMI service names, RESUME_TX with a 20-byte payload. The source is in kernel ec6af6b (0263 = this state).
+  - Next: boot 0263f and read the service list; then the modem's TFTP client (it looks up service 0x1000 and reads
+    `/readonly/firmware/image/...`), then QMI DMS / UIM / NAS (SIM, registration).
+  - USB after a `fastboot boot`: macOS sometimes leaves the new en8 without 192.168.7.1 (no log) -
+    `sudo tools/umi-usbnet.sh` fixes it; scratchpad `boot-and-wait.sh` re-adds it when a sudo ticket is valid.
 - **2026-11-09 22:25: 0262 THE X55 HAS ALL ITS FIRMWARE: Sahara transfer COMPLETE (12 images, 94 MB in 6.7 s),
   MDM2AP_STATUS high** (patch `xnu/patches/0262-umi-x55-mhi-sahara.patch`, kernel 5c9dee5, built without the adreno /
   wlan WIP; image **`shim/out/umi-0262-x55sahara.img`** = 0261's line with `sweetmdm=6`; booted 22:23, log: session
