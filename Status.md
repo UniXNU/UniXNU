@@ -107,7 +107,7 @@
 |---|---|---|
 | 🧩 SMP | 4× A55, 3× A77, 1× A77 prime via PSCI | ✅ |
 | 📈 Frequency scaling | EPSS governor (kernel 0238): load-following per cluster, thermal cap at 75 °C, touch boost; idle at 288 / 710 / 844 MHz | ✅ |
-| 🔥 Idle CPU load | ios-s9's fixes checked: all done here or not needed (fast-core scheduler = kernel 0257). Idle 65-120 % of one core (of 800 %), mostly ReportCrash from crash loops (CommCenter, TTS synthesizers) | ⚠️ |
+| 🔥 Idle CPU load | Home screen idle ~35 % of one core (of 800 %; 0238: 65-120 %); ios-s9's fixes all checked (fast cores = kernel 0257). What is left is mostly ReportCrash for CommCenter crashing every ~10-20 s | ⚠️ |
 | 🎯 Thread placement | UI / render threads (priority ≥ 46 and realtime) kept on the A77s (kernel 0248, `sweetbig`): backboardd + SpringBoard 93 % on big cores, starts on a slow core with a big one idle 245 → 26 per 10 s | ✅ |
 
 ## 🌄 Future Development
@@ -125,9 +125,8 @@
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
-* **CPU load**: the crash loops ReportCrash spends most of the idle CPU on (CommCenter SIGABRT / SIGSEGV, the TTS
-  synthesizers KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP); a fresh idle `sweettop` on the current kernel.
-  ios-s9's fixes are all checked (NOTES 2026-11-09)
+* **CPU load**: CommCenter's crash loop (SIGABRT / SIGSEGV every ~10-20 s; ReportCrash 8-24 % + CommCenter 4 % of
+  one core at idle, most of what is left); the TTS synthesizers crash ~9 times each in the first 2 minutes, then stop
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,

@@ -12,8 +12,15 @@
     ad daemons = out of launchd.plist (11-04); driverkitd = not respawning here. ios-s9 0093/0095-0098 (vsync rate,
     CPU scanout, `sweet_parallelism` for the CPU renderer, framebuffer threads) are for its CPU framebuffer: not
     needed with our GPU path. Its `sweet_mem_vote` = apollo 0153 DDR voting, already on the cpufreq list.
-  - Remaining idle load (last measured on 0238: 65-120 % of one core) is mostly ReportCrash (CommCenter, TTS
-    synthesizer crash loops). Next: a fresh idle `sweettop` on the current kernel, then those loops.
+  - **Idle measured 2026-11-09 20:09** (`fastboot boot shim/out/umi-0255-charger-6g.img`, its own line: sweettop=10,
+    sweetbigab=6; phone untouched on the home screen; log: session scratchpad `umi-idle-0255.log`, UDP 5140):
+    boot rounds 0-3 400-804 %; rounds 4-21 16-98 %, rounds 10-21 median ~35 % of one core (0238: 65-120 %, 0233b:
+    140-180 %). Averages over rounds 10-21: ReportCrash 18.8 %, kernel_task 3.8 %, CommCenter 3.3 %, all else
+    < 1 %; backboardd / SpringBoard not in the top 12 (nothing animating).
+  - Crash loops: KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP SIGABRT 9 each, all in rounds 5-12 (first
+    ~2 min), then none; **CommCenter keeps going**: 14 crashes (7 SIGABRT, 7 SIGSEGV), ~1 per round to the end, so
+    ReportCrash stays at 8-24 %. Next: CommCenter's exception (`sweetiolog=CommCenter`, symbolicate the `CRASH
+    CommCenter bt` lines with tools/sweet-crash.py) or drop its KeepAlive / the job if Settings' Location row survives.
 - **2026-11-06 evening: 0252 charger control, USB after a charger, volume fix, 6.66 GB on hold**
   - **0252** (`xnu/patches/0252-umi-charger-control.patch`, kernel 70480b0, image `shim/out/umi-0255-charger-6g.img` =
     0252 kernel + the 6 GB ADT above 4 GB). Values from Android in TWRP (read only): battery xiaomi_j2gybm4n 4780 mAh,
