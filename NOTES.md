@@ -2,6 +2,22 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 night: 0259 AppleBaseband stub (modem work step 1): CommCenter crash loop gone, idle 7-9 %; iOS now
+  shows "Cellular issue detected"** (patch `xnu/patches/0259-umi-baseband-stub.patch`, kernel ce10040 = 0252 + 0257-0259,
+  built without the adreno / wlan WIP; image **`shim/out/umi-0259-baseband.img`** = 0258's line; booted 20:48, log:
+  session scratchpad `umi-0259.log`).
+  - Built-in `AppleBaseband` (IOResources, in SweetWatchdog.cpp): every user-client call and property write accepted
+    with zeroed outputs and logged (`SWEET BB: NAME sel N in a/b (s0 s1) out c/d [str ...]`, first 300 calls).
+  - Seen: CommCenter and abm-helper self-identify (sel 15, struct "NAME: TelephonyBaseband"), CommCenter sel 32 (0x3),
+    sel 3 (1 scalar out, polled), sel 23 (1 out), sel 22 (in 0x1); 15 calls in all, then quiet. No property writes.
+  - **0 CommCenter crashes** (0258: 13 in 3 min). Idle rounds 20-22: **7-9 % of one core** (rounds 12-18 the user was
+    in Settings). ReportCrash over rounds 10-22 still 17 %: TTS synthesizers (12 each), widget extensions, assetsd.
+  - Side effect: iOS shows a "Cellular issue detected" alert - CommCenter now believes there is a modem and it never
+    comes up (sel 3 answers 0). Next: decode abm's boot state machine (what sel 3 / 23 should answer), or keep the
+    alert as the honest state until the modem is real.
+  - Reference for steps 2-3: DenialOfGravity/ios-redfin (Pixel 5, SM7250, MIT), branch `ws-hm-apps`: the modem boots
+    there (rmtfs buffer 2.5 MB in modem-owned RAM, wland daemon), `cell.c` reads UIM / NAS / DMS over the modem's
+    QRTR link (read-only, gated by /var/local/cell.on), opt-in slot switch (UIM 0x46) / operating mode (DMS 0x2e).
 - **2026-11-09 evening: 0258 AppleIPAppender stub; CommCenter's SIGSEGV gone, its SIGABRT explained (not fixed)**
   (patch `xnu/patches/0258-umi-ipappender-stub.patch`, kernel 67de4bd = 0252 + 0257 + 0258, built WITHOUT the
   uncommitted adreno / wlan WIP (stashed for the build, put back after); image **`shim/out/umi-0258-ipappender.img`**

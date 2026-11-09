@@ -107,7 +107,7 @@
 |---|---|---|
 | 🧩 SMP | 4× A55, 3× A77, 1× A77 prime via PSCI | ✅ |
 | 📈 Frequency scaling | EPSS governor (kernel 0238): load-following per cluster, thermal cap at 75 °C, touch boost; idle at 288 / 710 / 844 MHz | ✅ |
-| 🔥 Idle CPU load | Home screen idle ~35 % of one core (of 800 %; 0238: 65-120 %); ios-s9's fixes all checked (fast cores = kernel 0257). What is left is mostly ReportCrash for CommCenter crashing every ~10-20 s | ⚠️ |
+| 🔥 Idle CPU load | Home screen idle 7-9 % of one core once settled (kernel 0259; 0238: 65-120 %). CommCenter no longer crash-loops (stubs 0258 / 0259), but iOS now shows "Cellular issue detected"; the TTS synthesizers still crash in the first minutes | ✅ |
 | 🎯 Thread placement | UI / render threads (priority ≥ 46 and realtime) kept on the A77s (kernel 0248, `sweetbig`): backboardd + SpringBoard 93 % on big cores, starts on a slow core with a big one idle 245 → 26 per 10 s | ✅ |
 
 ## 🌄 Future Development
@@ -125,9 +125,9 @@
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
-* **CPU load**: CommCenter's SIGABRT loop (~every 14 s, ReportCrash ~17 % + CommCenter ~5 % of one core at idle):
-  the iPhone X identity makes it expect a Qualcomm modem and throw when no `AppleBaseband` driver answers (SIGSEGV half
-  fixed by kernel 0258); the TTS synthesizers crash ~9 times each in the first 2 minutes, then stop
+* **Cellular**: kernel 0259's `AppleBaseband` stub stops CommCenter's crash loop but iOS shows "Cellular issue
+  detected"; next the modem itself: boot MPSS (rmtfs, as ios-redfin does on SM7250) and bridge QMI to CommCenter
+* **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,
