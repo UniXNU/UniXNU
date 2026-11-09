@@ -1,7 +1,7 @@
 # Bluetooth adaptation
 
 Complete [platform interrupts and DMA](/porting/platform) and supply the
-[runtime inputs](/porting/packaging#runtime-inputs-for-ios-27). [QcaBluetooth](/drivers/qca-bluetooth)
+[runtime inputs](/porting/packaging#runtime-inputs-for-ios-27). [QcaBluetooth](https://github.com/UniXNU/QcaBluetooth)
 runs the Linux `btqca.c` initialization over a GENI UART and carries H4 bytes to Apple's
 `bluetoothd` through UART.SK. Apple's stack owns scanning, pairing, keys, BLE and audio
 profiles.

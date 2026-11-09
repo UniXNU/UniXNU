@@ -1,6 +1,6 @@
 # USB adaptation
 
-Complete [platform interrupts and DMA](/porting/platform) first. [QcomDwc3](/drivers/qcom-dwc3)
+Complete [platform interrupts and DMA](/porting/platform) first. [QcomDwc3](https://github.com/UniXNU/QcomDwc3)
 derives from Apple's `AppleUSBXDCI` and `AppleUSBXHCI`. The port supplies the register
 window, interrupt, power and PHYs. Apple's USB stacks, `configd` and `lockdownd` run
 unchanged.
@@ -115,7 +115,6 @@ clang++ -std=c++17 -I.. ucsi_host.cpp && ./a.out
 | Lock state 3 | [`sheng-aks-sls=3`](/drivers/apple-key-store-state) |
 
 Use the model's row in the device map inside `MobileDevice.framework` for the three IDs.
-See [Pairing with a Mac](/drivers/qcom-dwc3#pairing-with-a-mac) for what each answer does.
 
 ## 6. Build and verify
 

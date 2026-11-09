@@ -1,7 +1,7 @@
 # 蓝牙适配
 
 先完成[平台中断和 DMA](/zh/porting/platform)，并准备[运行输入](/zh/porting/packaging#ios-27-运行输入)。
-[QcaBluetooth](/zh/drivers/qca-bluetooth) 通过 GENI UART 运行 Linux `btqca.c` 初始化，
+[QcaBluetooth](https://github.com/UniXNU/QcaBluetooth) 通过 GENI UART 运行 Linux `btqca.c` 初始化，
 再经 UART.SK 把 H4 字节传给苹果的 `bluetoothd`。扫描、配对、密钥、BLE 和音频配置文件都由苹果的协议栈负责。
 
 按[驱动接入步骤](/zh/porting/drivers#build-integration)连接构建配方，再执行本页的检查。
