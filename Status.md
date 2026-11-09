@@ -125,8 +125,9 @@
   * A boot with kernel 0237 alone (Bluetooth 1 s after UFS by default, no `sweetbtdelay=1` on the line)
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
-* **CPU load**: CommCenter's crash loop (SIGABRT / SIGSEGV every ~10-20 s; ReportCrash 8-24 % + CommCenter 4 % of
-  one core at idle, most of what is left); the TTS synthesizers crash ~9 times each in the first 2 minutes, then stop
+* **CPU load**: CommCenter's SIGABRT loop (~every 14 s, ReportCrash ~17 % + CommCenter ~5 % of one core at idle):
+  the iPhone X identity makes it expect a Qualcomm modem and throw when no `AppleBaseband` driver answers (SIGSEGV half
+  fixed by kernel 0258); the TTS synthesizers crash ~9 times each in the first 2 minutes, then stop
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
 * **Audio**: microphones, the earpiece as the second channel, an earlier ADSP start, ADSP restart after a crash,

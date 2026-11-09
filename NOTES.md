@@ -2,6 +2,32 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-09 evening: 0258 AppleIPAppender stub; CommCenter's SIGSEGV gone, its SIGABRT explained (not fixed)**
+  (patch `xnu/patches/0258-umi-ipappender-stub.patch`, kernel 67de4bd = 0252 + 0257 + 0258, built WITHOUT the
+  uncommitted adreno / wlan WIP (stashed for the build, put back after); image **`shim/out/umi-0258-ipappender.img`**
+  = 0255's line minus `sweetbigab=6` and `sweetnull=bluetoothd` (length limit) plus `sweetscan=CommCenter`, 6 GB ADT;
+  booted 20:25, log: session scratchpad `umi-0258.log`).
+  - **SIGSEGV** (symbolicated, `tools/sweet-crash.py research/dsc/20H392__iPhone10,3_6/dyld_shared_cache_arm64`):
+    CommCenter main+0xa2e9e8 -> `ApplePDPHelperInterface::reportLinkThroughput` -> `callStructMethod` on NULL.
+    ApplePDPHelper.framework opens `IOServiceMatching("AppleIPAppender")` type 0 (the baseband's IP data path - not
+    USB-C power delivery as the 10-31 entry guessed); `getInstance()` is NULL without it and CommCenter does not check.
+    0258 adds a built-in `AppleIPAppender` (IOResources, in SweetWatchdog.cpp) whose user client accepts every call
+    with zeroed outputs. On 0258: `SWEET IPAPP: CommCenter sel 11 in 0/32` (reportLinkThroughput) and `sel 16 in 2/0`,
+    **0 SIGSEGV** (0255: 7 of 14).
+  - **SIGABRT** (still 13 in rounds 4-21): `sweetscan` heap text = `terminating due to uncaught exception of type
+    std::runtime_error: Unable to communicate with AppleBaseband driver`. libTelephonyBasebandDynamic
+    `TelephonyBasebandCreateController`: if `TelephonyRadiosGetRadio()` != 0 it waits (with a timeout) for an
+    `AppleBaseband` IOService, and on failure `__TUAssertTrigger` throws; with radio 0 it logs "Device not supported"
+    and returns NULL (no throw). The radio comes from libTelephonyUtilDynamic: MGCopyAnswer `IsVirtualDevice` true ->
+    model info zeroed (no radio); else `HWModelStr` (D22AP here) -> `_TelephonyRadiosDetermineRadio`'s model table.
+    So the iPhone X identity itself makes CommCenter expect a Qualcomm modem.
+  - Idle on 0258, rounds 10-21 (no sweetbigab, so not exactly like for like): 20-87 %, ~38 % median; ReportCrash 16.8 %,
+    CommCenter 5.3 %, kernel_task 4.1 %. TTS synthesizers: 9 SIGABRT each in the first 2 min, as before.
+  - Options for the SIGABRT (none tried): (a) an `AppleBaseband` stub service - CommCenter then goes on into baseband
+    bring-up (self-identify, Set Baseband State, RESET_REQUEST, SPMI reset, HSIC) and may wait or hang instead
+    (the 10-18 Setup hang was CommCenter blocking); (b) radio 0 by making `IsVirtualDevice` true - every MobileGestalt
+    client sees a virtual device, wide effects; (c) launchd `ThrottleInterval` on the CommCenter job - fewer crashes,
+    but CommCenter is away longer between runs.
 - **2026-11-09: ios-s9's idle-CPU fixes all checked; its fast-core scheduler committed as 0257** (patch
   `xnu/patches/0257-umi-fast-cores.patch`, kernel 4ae921e, sched_prim.c only; no new image, nothing booted).
   - `sweetfast` (ios-s9 0092, default 0xf0) had been in every local kernel build since 0238 but never committed, so
