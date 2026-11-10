@@ -1,0 +1,188 @@
+Counters that separate the digest work of code signatures with 16 KiB hash pages from the rest of its window.
+
+The "hash" time of these signatures (cs_native4k_hash_ticks) is wall time summed over every thread inside the window at
+once. In the lazy form the window also holds the allocation and protection of a chunk of answers and the lock that
+records an answer, and in both forms any time the thread waited for a processor. It therefore says nothing about the
+speed of SHA-256 itself. The digests are those of the code directory's hash type through libkern (SHA256_Init and its
+kin), which call g_crypto_funcs: the corecrypto of the boot kernel collection, registered at STARTUP SYSCTL before any
+signature is added, whose SHA-256 is its ARMv8 SHA2 implementation.
+
+This adds, per original 16 KiB block, around the digests of the block and of its 4 KiB parts only: the wall ticks, the
+ticks the thread itself ran (recount_current_thread_time_mach) and the bytes hashed, by the type of the core the block
+ended on (efficiency cores, the others); and in the lazy form the chunks made, the ticks spent making them and the ticks
+spent recording answers. sysctl vm.cs_native4k_stats gains "sha E <MiB>/<wall ms>/<cpu ms> P ... chunks <n> <ms>
+record <ms>". Nothing that is read, hashed, accepted or refused changes.
+
+Has not run on hardware.
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -69,6 +69,7 @@
+ #include <kern/kalloc.h>
+ #include <kern/zalloc.h>
+ #include <kern/thread.h>
++#include <kern/recount.h>
+ #include <mach/thread_act.h>
+ #include <machine/machine_routines.h>
+ #include <vm/pmap.h>
+@@ -5906,6 +5907,51 @@
+ uint64_t cs_native4k_read_ticks = 0, cs_native4k_hash_ticks = 0, cs_native4k_bytes = 0;
+ extern uint64_t mach_absolute_time(void);
+ 
++/*
++ * The digests alone. cs_native4k_hash_ticks is the wall time of a window that also holds, in the lazy form, the
++ * allocation and protection of a chunk, the lock that records an answer and any time the thread waited for a processor,
++ * summed over every thread in it at once. These count, per original block, only the cs_init/cs_update/cs_final calls of
++ * the block and of its 4 KiB parts: the wall ticks, the ticks the thread itself ran (recount), and the bytes they hashed,
++ * by the type of the core the block ended on ([0] efficiency cores, [1] the others). Bytes over CPU ticks is the rate of
++ * the digest implementation; wall over CPU is the waiting. In the lazy form chunk_ticks/chunks_made is the making of
++ * chunks and record_ticks the recording of answers, both inside the hash window. A measurement, never read to decide.
++ */
++uint64_t cs_native4k_digest_wall[2], cs_native4k_digest_cpu[2], cs_native4k_digest_bytes[2];
++uint64_t cs_native4k_chunk_ticks = 0, cs_native4k_record_ticks = 0;
++unsigned long cs_native4k_chunks_made = 0;
++
++struct cs_native4k_clock {
++	uint64_t        wall;
++	uint64_t        cpu;
++};
++
++/* recount reads the running thread's time with interrupts off. */
++static void
++cs_native4k_clock_start(struct cs_native4k_clock *clock)
++{
++	const boolean_t enabled = ml_set_interrupts_enabled(FALSE);
++	clock->wall = mach_absolute_time();
++	clock->cpu = recount_current_thread_time_mach();
++	ml_set_interrupts_enabled(enabled);
++}
++
++static void
++cs_native4k_clock_stop(const struct cs_native4k_clock *clock, uint64_t bytes)
++{
++	const boolean_t enabled = ml_set_interrupts_enabled(FALSE);
++	const uint64_t wall = mach_absolute_time() - clock->wall;
++	const uint64_t cpu = recount_current_thread_time_mach() - clock->cpu;
++	const ml_topology_info_t *topology = ml_get_topology_info();
++	const unsigned int id = (unsigned int)cpu_number();
++	const unsigned int kind = (topology != NULL && topology->cpus != NULL && id < topology->num_cpus &&
++	    topology->cpus[id].cpu_id == id && topology->cpus[id].cluster_type == CLUSTER_TYPE_E) ? 0 : 1;
++	ml_set_interrupts_enabled(enabled);
++
++	os_atomic_add(&cs_native4k_digest_wall[kind], wall, relaxed);
++	os_atomic_add(&cs_native4k_digest_cpu[kind], cpu, relaxed);
++	os_atomic_add(&cs_native4k_digest_bytes[kind], bytes, relaxed);
++}
++
+ /* The original signed 16K hash authenticates the whole immutable input
+  * buffer first. Only then derive native-page digests from that same buffer.
+  * Publish nothing until every original block has passed, and make the
+@@ -5987,10 +6033,13 @@
+ 				error = EBADEXEC;
+ 				break;
+ 			}
++			struct cs_native4k_clock clock;
++			cs_native4k_clock_start(&clock);
+ 			md->cs_init(&ctx);
+ 			md->cs_update(&ctx, data, length);
+ 			md->cs_final(digest, &ctx);
+ 			if (bcmp(expected, digest, md->cs_size)) {
++				cs_native4k_clock_stop(&clock, (uint64_t)length);
+ 				os_atomic_inc(&cs_validate_page_bad_hash, relaxed);
+ 				error = EBADEXEC;
+ 				break;
+@@ -6004,6 +6053,7 @@
+ 				md->cs_final(digest, &ctx);
+ 				memcpy((void *)(pass->storage + index * md->cs_size), digest, md->cs_size);
+ 			}
++			cs_native4k_clock_stop(&clock, 2 * (uint64_t)length);
+ 		}
+ 		os_atomic_add(&cs_native4k_hash_ticks, mach_absolute_time() - hash_start, relaxed);
+ 	}
+@@ -6442,6 +6492,7 @@
+ 	struct cs_native4k_lazy_chunk *_Atomic *slot = vm_fault_cs_lazy_alias(&lazy->chunk[index]);
+ 	if (os_atomic_cmpxchgv(slot, NULL, (struct cs_native4k_lazy_chunk *)storage, &chunk, release)) {
+ 		cs_native4k_lazy_wired(CS_LAZY_CHUNK_SIZE);
++		os_atomic_inc(&cs_native4k_chunks_made, relaxed);
+ 		return (struct cs_native4k_lazy_chunk *)storage;
+ 	}
+ 	/* Another thread's chunk is in the table. */
+@@ -6556,25 +6607,32 @@
+ 
+ 		os_atomic_add(&cs_native4k_bytes, (uint64_t)length, relaxed);
+ 		if (expected != NULL) {
++			struct cs_native4k_clock clock;
++			cs_native4k_clock_start(&clock);
+ 			md->cs_init(&ctx);
+ 			md->cs_update(&ctx, buffer, length);
+ 			md->cs_final(digest, &ctx);
+ 			matches = bcmp(expected, digest, md->cs_size) == 0;
+-		}
+-		if (matches) {
+-			bzero(derived, sizeof(derived));
+-			for (size_t sub = 0; sub < length; sub += PAGE_SIZE) {
+-				md->cs_init(&ctx);
+-				md->cs_update(&ctx, buffer + sub, MIN((size_t)PAGE_SIZE, length - sub));
+-				md->cs_final(digest, &ctx);
+-				memcpy(derived[sub >> PAGE_SHIFT], digest, md->cs_size);
++			if (matches) {
++				bzero(derived, sizeof(derived));
++				for (size_t sub = 0; sub < length; sub += PAGE_SIZE) {
++					md->cs_init(&ctx);
++					md->cs_update(&ctx, buffer + sub, MIN((size_t)PAGE_SIZE, length - sub));
++					md->cs_final(digest, &ctx);
++					memcpy(derived[sub >> PAGE_SHIFT], digest, md->cs_size);
++				}
+ 			}
++			cs_native4k_clock_stop(&clock, (matches ? 2 : 1) * (uint64_t)length);
+ 		}
++		const uint64_t chunk_start = mach_absolute_time();
+ 		struct cs_native4k_lazy_chunk *chunk = cs_native4k_lazy_chunk(lazy, block, true);
++		const uint64_t record_start = mach_absolute_time();
++		os_atomic_add(&cs_native4k_chunk_ticks, record_start - chunk_start, relaxed);
+ 		if (chunk == NULL) {
+ 			kr = KERN_RESOURCE_SHORTAGE;
+ 		} else {
+ 			cs_native4k_lazy_record(chunk, block, matches ? derived : NULL);
++			os_atomic_add(&cs_native4k_record_ticks, mach_absolute_time() - record_start, relaxed);
+ 		}
+ 	}
+ 	if (kr != KERN_SUCCESS) {
+@@ -6645,6 +6703,8 @@
+  * it to the slow path; wire: vm_fault_wire_fast left it to vm_fault; load: header blocks at image activation; enter:
+  * vm_fault_enter gave the fault back); "unready" is the validations that met such a block all the same, in total and
+  * for entering or copying a page, a pager's source page, a text revalidation and cs_validate_range. These must be 0.
++ * Last the digests alone ("sha", cs_native4k_clock_stop), on efficiency cores and on the others: MiB hashed, ms of wall
++ * time and ms the threads ran; then the chunks made and the ms in making them and in recording answers.
+  */
+ size_t cs_native4k_stats_text(char *text, size_t size);
+ size_t
+@@ -6686,7 +6746,7 @@
+ 	           longest_ns / NSEC_PER_MSEC, longest_bytes >> 10, longest_name);
+ 	uint64_t lazy_ns;
+ 	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_lazy_ticks, relaxed), &lazy_ns);
+-	return length + (size_t)scnprintf(text + length, size - length,
++	const size_t lazy_length = (size_t)scnprintf(text + length, size - length,
+ 	           " lazy %u blobs %lu auth %lu bad %lu err %lu %llums retry page %lu fast %lu wire %lu load %lu enter %lu "
+ 	           "unready %lu map %lu pager %lu reval %lu range %lu",
+ 	           cs_native4k_lazy, os_atomic_load(&cs_native4k_lazy_blobs, relaxed),
+@@ -6702,6 +6762,20 @@
+ 	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_PAGER], relaxed),
+ 	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_REVALIDATE], relaxed),
+ 	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_RANGE], relaxed));
++	uint64_t wall_ns[2], cpu_ns[2], chunk_ns, record_ns;
++	for (unsigned int i = 0; i < 2; i++) {
++		absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_digest_wall[i], relaxed), &wall_ns[i]);
++		absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_digest_cpu[i], relaxed), &cpu_ns[i]);
++	}
++	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_chunk_ticks, relaxed), &chunk_ns);
++	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_record_ticks, relaxed), &record_ns);
++	return length + lazy_length + (size_t)scnprintf(text + length + lazy_length, size - length - lazy_length,
++	           " sha E %lluM/%llums/%llums P %lluM/%llums/%llums chunks %lu %llums record %llums",
++	           os_atomic_load(&cs_native4k_digest_bytes[0], relaxed) >> 20, wall_ns[0] / NSEC_PER_MSEC,
++	           cpu_ns[0] / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_digest_bytes[1], relaxed) >> 20, wall_ns[1] / NSEC_PER_MSEC,
++	           cpu_ns[1] / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_chunks_made, relaxed), chunk_ns / NSEC_PER_MSEC, record_ns / NSEC_PER_MSEC);
+ }
+ 
+ static int
