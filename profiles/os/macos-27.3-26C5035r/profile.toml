@@ -67,6 +67,11 @@
 "osenvironment" = "main"
 "crypto-hash-method" = "sha2-384"
 "cryptex1-certificate-format" = "x509"
+# The boot volume, as iBoot names it: kern.bootuuid and kern.apfsprebootuuid read these (kern_sysctl.c), and launchd, logd,
+# tzlinkd and dyld ask for them to find /System/Volumes/Preboot/<uuid>. The booted System volume here is the OS image
+# (os_volume_uuid below) in no volume group, so both carry its UUID, as efiboot sets both to one UUID on Intel Macs.
+"boot-uuid" = "84581E99-85BE-4957-AC53-2947E887B3E4"
+"apfs-preboot-uuid" = "84581E99-85BE-4957-AC53-2947E887B3E4"
 
 
 ["adt"."chosen"."u32"]
