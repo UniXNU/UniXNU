@@ -46,6 +46,8 @@ UniXNU 为不同 SoC 和设备的移植提供共享构建工具、ARM64 支持�
 
 见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+macOS 27 配置的内核补丁（union 根卷、4K 内核上的代码签名页、24 MHz 时基、实时与 mmap 修正、禁止执行）和 Data 种子里的账户设置参考了由 UniXNU 引导的 [macOS-DroidVM](https://github.com/Droid-VM/macOS-DroidVM)。
+
 ## 许可证
 
 BSD-2-Clause-Patent，见 [LICENSE](LICENSE)。
