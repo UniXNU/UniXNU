@@ -1,0 +1,20 @@
+The macOS shared cache needs a larger arm64 shared region than xnu-12377 defines. On XNU_TARGET_OS_OSX the
+kernel region is 8 GiB (6 to 14 GiB): the 26C5035r cache ends at 0x34c168000 and slides up to 0x20000000 more.
+The user address space limit (ARM64_MIN_MAX_ADDRESS, ARM64_MAX_OFFSET_DEVICE_*) is computed from the region end.
+--- a/osfmk/mach/shared_region.h
++++ b/osfmk/mach/shared_region.h
+@@ -88,7 +88,14 @@
+ /* ARM64_TODO: move to higher memory */
+ #endif
+ #define SHARED_REGION_BASE_ARM64                0x180000000ULL
++#if defined(KERNEL) && defined(XNU_TARGET_OS_OSX) && XNU_TARGET_OS_OSX
++/* The macOS 27 shared cache (26C5035r: 0x1cc168000 bytes, max slide 0x20000000) does not fit 6 GiB.
++ * Apple's macOS value (0xE40000000) needs the 47-bit user address space; this layout ends at 63 GiB, and
++ * the user address space limit (ARM64_MIN_MAX_ADDRESS) follows the end of the region. */
++#define SHARED_REGION_SIZE_ARM64                0x200000000ULL
++#else
+ #define SHARED_REGION_SIZE_ARM64                0x180000000ULL
++#endif
+ #define SHARED_REGION_NESTING_BASE_ARM64        SHARED_REGION_BASE_ARM64
+ #define SHARED_REGION_NESTING_SIZE_ARM64        SHARED_REGION_SIZE_ARM64
+ #define SHARED_REGION_NESTING_MIN_ARM64         ?
