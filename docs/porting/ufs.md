@@ -97,6 +97,12 @@ implemented and recorded.
 - Sleeping on every completion costs more than the command at small sizes. A
   wait that polls for its first 200 microseconds, then sleeps, keeps small-block
   throughput at queue depth 8 and 32 while long commands leave the CPU.
+- Poll without blocking. `IODelay` between polls blocks on a timer when the
+  cores register no idle exit latency, and each such pause costs about 30 to
+  37 microseconds. ShengUfs waits with WFE between polls (`native-ufs-wait=1`,
+  budget `native-ufs-spin-us`), sleeps early when another thread waits for the
+  CPU, and keeps `IODelay` where it cannot sleep (interrupts masked,
+  preemption off, panic path).
 - Read the link state with DME_GET (`PA_TxGear`, `PA_RxGear`, `PA_HSSeries`,
   `PA_PWRMode`) before changing it. The reference firmware leaves HS-G5 Rate A
   on two lanes in FAST mode.
