@@ -8,3 +8,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-machine-config.patch
 ../xnu-12377/macos-target-kernel.patch
 ../xnu-12377/macos-darwin26-kpi.patch
+../xnu-12377/macos-owner-data-firmlinks.patch
