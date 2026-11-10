@@ -8,6 +8,7 @@
 *.rs text eol=lf
 *.json text eol=lf
 *.patch text eol=lf -whitespace
+docs/.vitepress/device-records/*.toml -whitespace
 *.png binary
 *.jpg binary
 *.efi binary
