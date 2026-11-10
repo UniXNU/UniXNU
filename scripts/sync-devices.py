@@ -295,13 +295,11 @@ def render_site(registry, local=None):
     tools = record_tools()
     local = local or {}
     names = set()
-    navigation = []
     for entry in registry['device']:
         name, repo = entry['name'], entry['repository']
         if not SLUG.fullmatch(name) or not REPOSITORY.fullmatch(repo) or name in names:
             raise ValueError(f'Invalid or duplicate device entry: {name}')
         names.add(name)
-        navigation.append({'name': name, 'title': entry['title'], 'title_zh': entry['title_zh']})
         record = None
         if entry.get('format') == 2:
             if name in local:
@@ -333,29 +331,84 @@ def render_site(registry, local=None):
                 if entry.get('record_error'):
                     body += '\n\n' + tools.markdown_text(entry['record_error'])
             page.write_text(body.rstrip() + '\n')
+    render_catalog(registry, tools)
+
+
+def render_catalog(registry, tools):
+    official, groups = [], {}
+    for entry in registry['device']:
+        if entry['repository'].lower() == 'unixnu/unixnu-sheng':
+            official.append(entry)
+            continue
+        board = entry.get('board') or entry['name']
+        if not SLUG.fullmatch(board):
+            raise ValueError(f'Invalid device codename: {board}')
+        groups.setdefault(board, []).append(entry)
+    groups = dict(sorted(groups.items()))
+    for entries in groups.values():
+        entries.sort(key=lambda entry: entry['repository'].lower())
+
+    navigation = [
+        {'name': entry['name'], 'title': entry['title'] + ' (official)',
+         'title_zh': entry['title_zh'] + '（官方维护）'}
+        for entry in official
+    ]
+    navigation.extend(
+        {'name': f'models/{board}',
+         'title': 'sheng (community)' if board == 'sheng' else board,
+         'title_zh': 'sheng（社区）' if board == 'sheng' else board}
+        for board in groups
+    )
     (ROOT / 'docs/.vitepress/device-catalog.json').write_text(json.dumps(navigation, ensure_ascii=False, indent=2) + '\n')
     for zh in (False, True):
         prefix = '/zh' if zh else ''
+        directory = ROOT / ('docs/zh/devices' if zh else 'docs/devices')
+        models = directory / 'models'
+        models.mkdir(parents=True, exist_ok=True)
+        for page in models.glob('*.md'):
+            if page.stem not in groups:
+                page.unlink()
         lines = ['# ' + ('设备' if zh else 'Devices'), '',
-                 ('打开设备页查看来源、配置和适配记录。格式 2 页面由固定版本的 porting.toml 生成。'
-                  if zh else 'Open a device page for its sources, configuration and porting record. Format 2 pages use porting.toml at the pinned source revision.'), '',
+                 ('按机型代号查看各仓库的设备说明与适配记录。'
+                  if zh else 'Find device documentation and porting records by codename.'), '',
                  ('构建与验证见[构建与启动](/zh/building)、[移植步骤](/zh/porting/steps)和[日志抓取](/zh/porting/log-capture)。'
-                  if zh else 'Follow [Build and boot](/building), [porting steps](/porting/steps) and [log capture](/porting/log-capture) for build and validation procedures.'), '',
-                 '| ' + ('设备 | SoC | 格式 | 文档 | 仓库' if zh else 'Device | SoC | Format | Documentation | Repository') + ' |',
-                 '| --- | --- | --- | --- | --- |']
-        for entry in registry['device']:
+                  if zh else 'Follow [Build and boot](/building), [porting steps](/porting/steps) and [log capture](/porting/log-capture) for build and validation procedures.'), '']
+        if official:
+            lines += ['## ' + ('官方维护' if zh else 'Officially maintained'), '',
+                      '| ' + ('设备 | 代号 | SoC | 仓库' if zh else 'Device | Codename | SoC | Repository') + ' |',
+                      '| --- | --- | --- | --- |']
+        for entry in official:
             name, repo = entry['name'], entry['repository']
-            title = tools.markdown_text(entry['title_zh' if zh else 'title'])
-            state = ('适配记录' if zh else 'Porting record') if entry.get('record_state') == 'available' else (
-                ('记录待补齐' if zh else 'Record pending') if entry.get('format') == 2 else
-                ('设备说明' if zh else 'Device notes') if entry.get('legacy_page') == 'preserve' else
-                ('仓库链接' if zh else 'Repository link'))
-            lines.append(f'| [{title}]({prefix}/devices/{name}) | {tools.markdown_text(entry.get("soc", ""))} | '
-                         f'{entry.get("format", 1)} | {state} | [{repo}](https://github.com/{repo}) |')
+            title = tools.markdown_text(entry['title_zh' if zh else 'title'].replace('·', ' / ').replace('•', ' / '))
+            lines.append(f'| [{title}]({prefix}/devices/{name}) | sheng | '
+                         f'{tools.markdown_text(entry.get("soc", ""))} | [{repo}](https://github.com/{repo}) |')
+        lines += ['', '## ' + ('社区设备' if zh else 'Community devices'), '',
+                  '| ' + ('机型代号 | SoC | 来源数量' if zh else 'Codename | SoC | Sources') + ' |',
+                  '| --- | --- | --- |']
+        for board, entries in groups.items():
+            socs = ', '.join(sorted({entry['soc'] for entry in entries if entry.get('soc')}))
+            label = ('sheng（社区）' if zh else 'sheng (community)') if board == 'sheng' else board
+            lines.append(f'| [{label}]({prefix}/devices/models/{board}) | '
+                         f'{tools.markdown_text(socs)} | {len(entries)} |')
+            page = ['# ' + label, '',
+                    ('查看各仓库的设备说明与适配记录。'
+                     if zh else 'Browse device documentation and porting records from each repository.'), '',
+                    '| ' + ('仓库 | 设备页面 | 文档 | SoC' if zh else 'Repository | Device page | Documentation | SoC') + ' |',
+                    '| --- | --- | --- | --- |']
+            for entry in entries:
+                name, repo = entry['name'], entry['repository']
+                title = tools.markdown_text(entry['title_zh' if zh else 'title'].replace('·', ' / ').replace('•', ' / '))
+                state = ('适配记录' if zh else 'Porting record') if entry.get('record_state') == 'available' else (
+                    ('记录待补齐' if zh else 'Record pending') if entry.get('format') == 2 else
+                    ('设备说明' if zh else 'Device notes') if entry.get('legacy_page') == 'preserve' else
+                    ('仓库链接' if zh else 'Repository link'))
+                page.append(f'| [{repo}](https://github.com/{repo}) | [{title}]({prefix}/devices/{name}) | '
+                            f'{state} | {tools.markdown_text(entry.get("soc", ""))} |')
+            (models / f'{board}.md').write_text('\n'.join(page) + '\n')
         lines += ['', '## ' + ('维护设备记录' if zh else 'Maintain device records') + ' {#adding-a-device}', '',
                   ('按[记录指南](/zh/porting/records#publishing-and-reuse)发布设备配置与适配记录。'
                    if zh else 'Publish device configuration and records using the [record guide](/porting/records#publishing-and-reuse).'), '']
-        (ROOT / ('docs/zh/devices/index.md' if zh else 'docs/devices/index.md')).write_text('\n'.join(lines))
+        (directory / 'index.md').write_text('\n'.join(lines))
 
 
 def main():
