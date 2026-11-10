@@ -1,0 +1,27 @@
+macOS 27 launchd sets kqworkloop limits from the daemon plists (opendirectoryd: 3 soft, 10 hard); xnu-12377 counts
+past them in normal operation and the hard limit ends the daemon. On XNU_TARGET_OS_OSX no limits are kept until the
+Darwin 26 accounting is known (as macOS-DroidVM 0005).
+--- a/bsd/kern/kern_proc.c
++++ b/bsd/kern/kern_proc.c
+@@ -5487,8 +5487,21 @@
+ 	struct filedesc *fdp = &p->p_fd;
+ 	lck_mtx_lock_spin_always(&fdp->fd_kqhashlock);
+ 
++#if XNU_TARGET_OS_OSX
++	/*
++	 * macOS 27's launchd sets the limits its daemons' plists name (opendirectoryd: 3 soft, 10 hard), and xnu-12377 counts
++	 * dynamic workloops that those daemons create in normal operation past them, so the hard limit ends the daemon.
++	 * The Darwin 26 kernel those values were made for is not published; until its accounting is known, no limits
++	 * (macOS-DroidVM 0005 does the same).
++	 */
++	(void)soft_limit;
++	(void)hard_limit;
++	fdp->kqwl_dyn_soft_limit = KQWL_LIMIT_SENTINEL;
++	fdp->kqwl_dyn_hard_limit = KQWL_LIMIT_SENTINEL;
++#else
+ 	fdp->kqwl_dyn_soft_limit = soft_limit;
+ 	fdp->kqwl_dyn_hard_limit = hard_limit;
++#endif
+ 	/* Make sure existing limits aren't exceeded already */
+ 	kqworkloop_check_limit_exceeded(fdp);
+ 
