@@ -189,6 +189,15 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
                 '-I', str(ROOT / 'drivers/VirtioMmioBlock'), '-I', str(tree / '.cache/xnu-work/osfmk')]
     flags = ['-DNATIVE_UFS_SOURCE_API=1', '-DNATIVE_VERIFIED_BLOCK=1',
              '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-DNATIVE_VERIFIED_POLICY_HANDOFF=1']
+    if os.environ.get('UNIXNU_XNU_TARGET') == 'macosx':
+        # The kernel keeps the iOS target triple, so TargetConditionals gives TARGET_OS_OSX 0. The macOS
+        # IOStorageFamily has the TARGET_OS_OSX members (doLockUnlockMedia, reportLockability,
+        # reportPollRequirements and the IOStorage.h fields); without them every later IOBlockStorageDevice
+        # vtable slot sits 3 slots early and the original IOBlockStorageDriver fails PAC on its calls.
+        osx = out / 'macos-target.h'
+        osx.write_text('/* Generated: the macOS IOStorageFamily ABI on the iOS-triple kernel. */\n'
+                       '#include <TargetConditionals.h>\n#undef TARGET_OS_OSX\n#define TARGET_OS_OSX 1\n')
+        flags += ['-include', str(osx)]
     # The RAM disk carries the Data seed; like NativeUfs its class registers with the source storage classes.
     sources = [base, device / 'drivers/ShengUfs/NativeUfs.cpp', ROOT / 'drivers/RamBlock/NativeRamBlock.cpp',
                device_source('SourceStorage.cpp'), device_source('SourceRootPolicies.cpp'),
