@@ -9,7 +9,7 @@ index 4704203..2c6f346 100644
 +/* The deletable system apps (Weather, Notes, Calendar, ...) ship in the OS volume's /private/var/staged_system_apps. A restore copies
 + * them into the Data volume, where SystemAppMigrator installs them during the first-boot data migration; until then only the
 + * placeholders in /System/Library/AppPlaceholders exist and the widgets of those apps stay blank. The owner Data mount hides the OS
-+ * directory, so with boot-arg sheng-staged-apps=1 it is copied once, through the vnode the Data mount covers, into Data's
++ * directory, so with boot-arg staged-apps=1 it is copied once, through the vnode the Data mount covers, into Data's
 + * /private/var/staged_system_apps before launchd starts. /private/var/db/.sheng-staged-apps marks a complete copy. Directories and
 + * regular files only (the 21H461 set has nothing else), owned by mobile (uid and gid 501): installcoordinationd and the migration plugin,
 + * which move and remove them, run as mobile.
@@ -253,7 +253,7 @@ index 4704203..2c6f346 100644
 +native_staged_apps_prepare(proc_t p, user_addr_t scratch, mount_t data_mount)
 +{
 +	uint32_t enabled = 0;
-+	if (!PE_parse_boot_argn("sheng-staged-apps", &enabled, sizeof(enabled)) || enabled != 1) {
++	if (!PE_parse_boot_argn("staged-apps", &enabled, sizeof(enabled)) || enabled != 1) {
 +		return;
 +	}
 +	vfs_context_t ctx = vfs_context_current();

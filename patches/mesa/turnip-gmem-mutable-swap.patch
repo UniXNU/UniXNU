@@ -344,7 +344,7 @@ index 33a22aa..bc779a7 100644
 +static_assert(sizeof(struct tu_pass_rec) == 72, "pass record");
 +static struct tu_pass_rec tu_pass_ring[512];
 +
-+/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from sheng-diag=1): without it no pass is stamped or kept in the ring. */
++/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from diag=1): without it no pass is stamped or kept in the ring. */
 +static bool
 +tu_pass_trace_on(void)
 +{
@@ -702,7 +702,7 @@ index 0209408..c12bd00 100644
 +static struct tu_darwin_submit_rec darwin_submit_ring[512];
 +static uint32_t darwin_submit_seq;
 +
-+/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from sheng-diag=1): without it no submission is kept in the ring. */
++/* The host's diagnostics switch (SHENG_DIAG, set by the plugin from diag=1): without it no submission is kept in the ring. */
 +static bool
 +darwin_submit_trace_on(void)
 +{

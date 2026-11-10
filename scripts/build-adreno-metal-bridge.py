@@ -62,7 +62,7 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # The threads that bring command buffers to their handlers run at the user-interactive class and the compile threads at least at
     # the user-initiated class on iOS too, not on macOS alone: on the iPad they ran at the default class and woke up to 50 ms late.
     '0023-quality-of-service-on-ios.patch',
-    # The host's diagnostics switch (SHENG_DIAG, from the boot argument sheng-diag=1): without it the stage ring and the allocation sites
+    # The host's diagnostics switch (SHENG_DIAG, from the boot argument diag=1): without it the stage ring and the allocation sites
     # keep nothing. The stage ring also marks the steps inside a batch's submission (SubmitStep: placed, gathered, vkQueueSubmit, changes).
     '0024-diagnostics-switch-and-submit-steps.patch',
     # Share large indexed constants, read constant GEP offsets, expose Vulkan allocation sizes and name a made function.

@@ -10,7 +10,7 @@ kernel mounts over the default wallpaper's layered animation; --wallpaper-floati
 wallpaper's floating layer (iPadOS 27). --prime-list adds FILE (the absolute paths of the OS image's .metallib
 files, one per line) as addons/NativeAdrenoMetal.primelist, the libraries the render server compiles ahead (PrimeShaders.h). The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
 hands it to the kernel as /chosen/memory-map/GpuAddon, and the kernel writes every file whose content or mode differs into the mounted
-Data volume before its addon mounts (sheng-gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
+Data volume before its addon mounts (gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
 (whose identity is the seed's content) survives a plugin rebuild. The kernel creates missing directories.
 
 The data of every file is zlib-compressed: the payload FAT (the boot image's ramdisk) has to stay at 192 MiB, which the tablet's boot

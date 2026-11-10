@@ -120,7 +120,7 @@ diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd
      * (tu_allocate_transient_attachments). The autotuner's choice, SYSMEM by default for passes of few draws, is a matter of bandwidth,
      * which does not weigh the memory: a 3048x2032 RGBA16F attachment is 48 MiB. */
 -   for (unsigned i = 0; i < cmd->state.pass->attachment_count; i++) {
-+   /* sheng-tum=s (tu_sheng_render_mode) renders even those passes in system memory, backing their transient attachments at the
++   /* tum=s (tu_sheng_render_mode) renders even those passes in system memory, backing their transient attachments at the
 +    * pass: the colour reference for the GMEM swap trace. */
 +   const bool strict_sysmem = sheng_mode == 's';
 +   for (unsigned i = 0; !(forced_sysmem && strict_sysmem) && i < cmd->state.pass->attachment_count; i++) {
@@ -181,7 +181,7 @@ diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/t
     struct {uint64_t seq,us;uint32_t event,pid;uint64_t v[12];} rec={0,0,event,0,{a,b,c,d,e,f,g,h,i,j,k,l}};
     (void)tu_darwin_frame_diagnostic(0x7102,&rec,sizeof(rec));
  }
-+/* Boot-arg sheng-tum=g renders every pass that can in GMEM, sheng-tum=s every pass in system memory (transient attachments too):
++/* Boot-arg tum=g renders every pass that can in GMEM, tum=s every pass in system memory (transient attachments too):
 + * the colour runs of the GMEM swap check, set by the boot so their command lines stay short. 0 when absent. */
 +#include <sys/sysctl.h>
 +static inline char tu_sheng_render_mode() {
@@ -189,8 +189,8 @@ diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/t
 +   if (mode == 1) {
 +      char args[1100] = {};
 +      size_t size = sizeof args - 1;
-+      const char *at = sysctlbyname("kern.bootargs", args, &size, nullptr, 0) == 0 ? strstr(args, "sheng-tum=") : nullptr;
-+      mode = at && (at[10] == 'g' || at[10] == 's') ? at[10] : 0;
++      const char *at = sysctlbyname("kern.bootargs", args, &size, nullptr, 0) == 0 ? args : nullptr;
++      while (at && (at = strstr(at, "tum=")) && at != args && at[-1] != ' ') at += 4; mode = at && (at[4] == 'g' || at[4] == 's') ? at[4] : 0;
 +   }
 +   return mode;
 +}
