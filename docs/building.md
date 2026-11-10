@@ -298,6 +298,14 @@ The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-a
 
 `--skip-setup` marks Setup as done in a copy of the Data seed supplied with `--data-ramdisk`.
 
+A macOS profile (`--os macos-27`) makes its Data seed from the system volume's
+`/System/Library/Templates/Data` with `scripts/make-macos-data-seed.py`. The template keeps its file
+owners, so the script runs as root. Files below `private/`, `Users/`, `Library/Preferences/` and
+`Library/Keychains/` are copied; every other template file becomes a symbolic link to its copy in the system
+volume's template, as macOS does for the paths of `Data.symlink-patterns`, so the seed fits the payload.
+Without a seed the build stops and prints the `sudo` command, with the output path `runtime/data.dbr`. Keep that seed for later builds. The kernel mounts it at
+`/System/Volumes/Data` and sets the firmlinks of the system volume's `/usr/share/firmlinks`.
+
 ### userdata
 
 The userdata step builds the raw image for the `userdata` partition. It holds the unchanged `OS` and `SystemOS` disk images of the IPSW behind the `SHNGROOT` manifest. On macOS the disk images are attached read-only with `hdiutil`; on Linux `scripts/unixnu/udif.py` decodes them, with `lzfse` for LZFSE chunks. Both give the same bytes. The output is `out/<device>/<os_profile>/<config>/userdata/userdata-root.img` with `userdata-root.json`.
