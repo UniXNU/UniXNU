@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 17:35: 0264 QMI ANSWERS FROM THE X55: revision read; the modem puts itself OFFLINE; SIM slots
+  "error, no ATR"** (patch `xnu/patches/0264-umi-x55-qmi-clients.patch`, kernel 15ca229, built without the adreno /
+  wlan WIP; image **`shim/out/umi-0264-x55qmi.img`** = 0262's line with `sweetmdm=8`; booted 17:32; log: scratchpad
+  `umi-0264.log`).
+  - `sweetmdm=8`: QMI over QRTR from our port 0x4001 on node 1 (no CTL: each service is a QRTR port; service
+    locations from NEW_SERVER), read only; asked once DMS, UIM and NAS are announced (~25 s after mission mode), then
+    NAS serving system / signal and DMS mode every 10 s; 90 s window. `sweetmdmonline=1` (DMS set operating mode
+    online) exists, NOT used yet.
+  - Answers (24, all result 0 except the first NAS serving system: QMI error 0x4a): **DMS revision
+    `MPSS.HI.2.5.c1-00075-SDX55_RMTEFS_PACK-1.14515.35  1  [Feb 14 2023]`** (an RMTEFS build: its EFS is meant to
+    be synced through the host); **DMS operating mode 5 "shutting down", then 3 "OFFLINE"** for the rest of the run;
+    DMS ids present (ESN 8, IMEI 15, MEID 14 characters; values not logged); **UIM card status: 2 slots, both card
+    state 2 "error", error code 3 (no ATR)**, no applications; NAS: not registered, cs / ps attach 2, radio "none",
+    signal -128 dBm. The modem itself stayed healthy (MDM2AP 1, MHI M0); QRTR RESUME_TX from node 3 keep coming.
+  - Reading: the modem went offline by itself (the SIM is then powered down: no ATR). Candidates: a host service it
+    waits for and does not find (TFTP 0x1000 / rmtfs: the RMTEFS build; no NEW_LOOKUP to us was seen - it may wait
+    for our NEW_SERVER broadcast instead), or the EFS / MBN configuration (modem_pr/mcfg on the modem partition).
+  - Next: DMS get operating mode TLV 0x10 (offline reason mask) and DMS / NAS indications; announce a TFTP server
+    (service 0x1000) and serve read requests from the FAT modem partition (writes kept in RAM only); then
+    `sweetmdmonline=1` once it is not offline for a reason; check the SIM is in the tray.
 - **2026-11-10 17:22: 0263f THE MODEM ANNOUNCES ITS QMI SERVICES: QRTR v2 HELLO answered, 63 services on nodes 2 / 3
   incl. DMS, NAS, UIM, WDS, WDA, WMS, VOICE, PBM, LOC, IMSA** (kernel ec6af6b = patch 0263, image
   **`shim/out/umi-0263f-x55qrtr.img`**, 0262's line with `sweetmdm=7`; booted 17:19; log: scratchpad `umi-0263f.log`).
