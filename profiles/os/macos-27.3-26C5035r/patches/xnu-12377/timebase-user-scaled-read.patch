@@ -1,0 +1,96 @@
+timebase-user=1: mach_absolute_time in userspace without a trap on a timebase scaled 5/4.
+
+With a scaled timebase (timebase-hz) the user timebase type was NONE and every mach_absolute_time and
+mach_continuous_time of every process was a kernel trap, because libsystem_kernel has no scaled read. With the
+argument and the 5/4 scale the kernel publishes USER_TIMEBASE_SPEC and changes libsystem's counter path when the
+page that holds it has passed code signing validation, beside the existing text fixups: x0 += x0 >> 2 before the
+commpage offset is added, which is floor(counter * 5 / 4), the kernel's own conversion. Code that reads the counter
+itself without that routine sees the unscaled counter, as before timebase-hz existed. Without the argument nothing
+changes.
+
+Has not run on hardware.
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -498,12 +498,65 @@
+ 
+ extern uint32_t ml_timebase_scale_num, ml_timebase_scale_den;   /* the timebase's scale (below, timebase-hz) */
+ 
++/*
++ * timebase-user=1 with the 5/4 scale: mach_absolute_time in userspace without a trap. libsystem_kernel's routine has no scaled
++ * read, so its counter path is changed in place when the page that holds it has passed code signing validation (vm_fault.c,
++ * beside the text fixups): the instruction that adds the commpage offset is preceded by x0 += x0 >> 2, which is
++ * floor(counter * 5 / 4) exactly, the kernel's own conversion. The three changed words end in the first word of the
++ * CNTVCTSS_EL0 path, which is not taken with the type this kernel then publishes (USER_TIMEBASE_SPEC). A copy of the routine
++ * that is not found whole inside one page stays as it is and reads the unscaled counter.
++ */
++bool ml_timebase_user_scaled(void);
++bool
++ml_timebase_user_scaled(void)
++{
++	static int asked = -1;   /* -1 not read yet */
++	if (asked < 0) {
++		uint32_t value = 0;
++		asked = PE_parse_boot_argn("timebase-user", &value, sizeof(value)) && value == 1;
++	}
++	return asked > 0 && ml_timebase_scale_num == 5 && ml_timebase_scale_den == 4;
++}
++
++volatile uint32_t ml_timebase_user_fixups = 0;   /* routines changed since boot */
++unsigned int ml_timebase_user_fixup(void *page);
++unsigned int
++ml_timebase_user_fixup(void *page)
++{
++	/* isb; 1: ldr x1,[x3]; mrs x0,cntvct_el0; ldr x2,[x3]; cmp x1,x2; b.ne 1b; add x0,x0,x1; ret; ldr x1,[x3]; mrs x0,cntvctss_el0 */
++	static const uint32_t routine[10] = {
++		0xd5033fdf, 0xf9400061, 0xd53be040, 0xf9400062, 0xeb02003f, 0x54ffff81, 0x8b010000, 0xd65f03c0, 0xf9400061, 0xd53be0c0
++	};
++	uint32_t *words = page;
++	unsigned int changed = 0;
++
++	if (!ml_timebase_user_scaled()) {
++		return 0;
++	}
++	for (unsigned int i = 0; i + 10 <= PAGE_SIZE / sizeof(uint32_t); i++) {
++		if (words[i] != routine[0] || memcmp(&words[i], routine, sizeof(routine)) != 0) {
++			continue;
++		}
++		words[i + 6] = 0x8b400800;      /* add x0, x0, x0, lsr #2 */
++		words[i + 7] = 0x8b010000;      /* add x0, x0, x1 */
++		words[i + 8] = 0xd65f03c0;      /* ret */
++		changed++;
++	}
++	if (changed) {
++		ml_timebase_user_fixups = ml_timebase_user_fixups + changed;
++	}
++	return changed;
++}
++
+ uint8_t
+ user_timebase_type(void)
+ {
+-	/* A scaled timebase is not the counter EL0 would read: userspace takes it through the mach_absolute_time trap. */
++	/*
++	 * A scaled timebase is not the counter EL0 would read: userspace takes it through the mach_absolute_time trap, or, with
++	 * timebase-user=1 and a scale of 5/4, reads the counter and scales it in libsystem's own routine (ml_timebase_user_fixup).
++	 */
+ 	if (ml_timebase_scale_num != ml_timebase_scale_den) {
+-		return USER_TIMEBASE_NONE;
++		return ml_timebase_user_scaled() ? USER_TIMEBASE_SPEC : USER_TIMEBASE_NONE;
+ 	}
+ #if HAS_ACNTVCT
+ 	return USER_TIMEBASE_NOSPEC_APPLE;
+--- a/osfmk/vm/vm_fault.c
++++ b/osfmk/vm/vm_fault.c
+@@ -8956,6 +8956,12 @@
+ 	/* Boot-argument fixups of signed text land after validation, through the physical aperture, before any mapping. */
+ 	if (validated == VMP_CS_ALL_TRUE && tainted == VMP_CS_ALL_FALSE &&
+ 	    cs_text_fixup_page(vnode, mo_offset, (void *)phystokv((pmap_paddr_t)VM_PAGE_GET_PHYS_PAGE(page) << PAGE_SHIFT)) != 0) {
++		cache_sync_page(VM_PAGE_GET_PHYS_PAGE(page));
++	}
++	/* The scaled user timebase read (machine_routines.c ml_timebase_user_fixup), the same way. */
++	extern unsigned int ml_timebase_user_fixup(void *page);
++	if (validated == VMP_CS_ALL_TRUE && tainted == VMP_CS_ALL_FALSE &&
++	    ml_timebase_user_fixup((void *)phystokv((pmap_paddr_t)VM_PAGE_GET_PHYS_PAGE(page) << PAGE_SHIFT)) != 0) {
+ 		cache_sync_page(VM_PAGE_GET_PHYS_PAGE(page));
+ 	}
+ #endif

@@ -1,0 +1,461 @@
+Memory ranges inside the kernel-managed span that are not usable memory.
+
+The loader may hand the kernel one span that covers more than one run of memory (boot_args physBase/memSize) and lists
+the ranges inside it the kernel must not use, a gap between DRAM banks or memory the firmware keeps, in the device tree
+property /chosen/darwinboot-memory-excluded: (base, size) pairs of 64-bit values, a pair of size zero being an unused
+slot. Without the property nothing changes.
+
+arm_vm_init.c keeps a sorted, page-aligned copy of the list in boot-allocated memory (IOKit frees the flattened device
+tree). The physical aperture leaves the ranges unmapped, so memory that is not there cannot be reached by a stray access
+or a kernel core dump. The boot allocator (pmap_next_page_hi) steps over them. The enumeration for the linear page array
+(pmap_next_page) still reports their pages in place, and pmap_startup marks those entries so that they never reach the
+free list. pmap_valid_page() is false for them. max_mem and sane_size leave them out; hw.memsize comes from the loader's
+memSizeActual, which carries the usable bytes. The kernel's contiguous boot allocations sit behind the loaded image; the
+loader keeps max(span / 64, 32 MiB) there free of excluded ranges and the kernel checks it before its first allocation.
+
+pmap_startup also released every entry of the page array up to its estimate npages. The entries past vm_pages_count are
+never initialized, and with the linear array they stand for page numbers at and above avail_end, which is not memory the
+kernel owns. The release loop now ends at vm_pages_count, and a boot line reports the three counts.
+
+vm.pages_excluded reports the excluded pages inside the page array; vm.pages leaves them out.
+
+Requires a loader that writes the property (DarwinBoot with /chosen/darwinboot-memory-excluded in the tree).
+
+diff --git a/bsd/vm/vm_unix.c b/bsd/vm/vm_unix.c
+index 930dac3..d5cf2b7 100644
+--- a/bsd/vm/vm_unix.c
++++ b/bsd/vm/vm_unix.c
+@@ -3456,6 +3456,10 @@ SYSCTL_ULONG(_vm, OID_AUTO, vm_max_kernel_address, CTLFLAG_RD, (unsigned long *)
+ extern uint32_t vm_page_pages;
+ SYSCTL_UINT(_vm, OID_AUTO, pages, CTLFLAG_RD | CTLFLAG_LOCKED, &vm_page_pages, 0, "");
+ 
++/* Pages inside the managed span that are not usable memory (ranges the loader excluded); vm.pages leaves them out. */
++extern uint32_t vm_page_excluded_pages;
++SYSCTL_UINT(_vm, OID_AUTO, pages_excluded, CTLFLAG_RD | CTLFLAG_LOCKED, &vm_page_excluded_pages, 0, "");
++
+ extern uint32_t vm_page_busy_absent_skipped;
+ SYSCTL_UINT(_vm, OID_AUTO, page_busy_absent_skipped, CTLFLAG_RD | CTLFLAG_LOCKED, &vm_page_busy_absent_skipped, 0, "");
+ 
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index 1eb9109..c78c94f 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -2715,7 +2715,9 @@ pmap_virtual_region(
+ /*
+  * Routines to track and allocate physical pages during early boot.
+  * On most systems that memory runs from first_avail through to avail_end
+- * with no gaps.
++ * with no gaps. Where the loader lists excluded ranges inside it, their
++ * pages are not available: the boot allocator steps over them, and the
++ * enumeration for the linear page array reports them without counting them.
+  */
+ 
+ static unsigned int avail_page_count = 0;
+@@ -2734,9 +2736,30 @@ initialize_ram_ranges(void)
+ 	assert(first <= end);
+ 	assert(first == (first & ~PAGE_MASK));
+ 	assert(end == (end & ~PAGE_MASK));
+-	avail_page_count = atop(end - first);
++	avail_page_count = atop(end - first - arm_vm_excluded_bytes(first, end));
+ 
+ 	need_ram_ranges_init = false;
++
++	pmap_paddr_t excluded_base, excluded_end;
++	for (pmap_paddr_t pa = 0; arm_vm_excluded_range(pa, &excluded_base, &excluded_end); pa = excluded_end) {
++		printf("pmap: excluded memory 0x%llx..0x%llx (%llu KB)\n", (unsigned long long)excluded_base,
++		    (unsigned long long)excluded_end, (unsigned long long)((excluded_end - excluded_base) >> 10));
++	}
++}
++
++/**
++ * Whether the page lies in a range of the managed span that is not usable
++ * memory.
++ *
++ * @param pn the physical page number to query.
++ */
++bool
++pmap_page_is_excluded(ppnum_t pn)
++{
++	const pmap_paddr_t pa = ptoa(pn);
++	pmap_paddr_t base, end;
++
++	return arm_vm_excluded_range(pa, &base, &end) && base <= pa;
+ }
+ 
+ unsigned int
+@@ -2765,6 +2788,16 @@ pmap_next_page_hi(
+ 	ppnum_t            * pnum,
+ 	__unused boolean_t might_free)
+ {
++	pmap_paddr_t base, end;
++
++	if (need_ram_ranges_init) {
++		initialize_ram_ranges();
++	}
++
++	/* Stolen memory is mapped page by page, so it continues behind an excluded range. */
++	while (first_avail != avail_end && arm_vm_excluded_range(first_avail, &base, &end) && base <= first_avail) {
++		first_avail = end;
++	}
+ 	return pmap_next_page(pnum);
+ }
+ 
+@@ -2780,8 +2813,14 @@ pmap_next_page(
+ 	if (first_avail != avail_end) {
+ 		*pnum = (ppnum_t)atop(first_avail);
+ 		first_avail += PAGE_SIZE;
+-		assert(avail_page_count > 0);
+-		--avail_page_count;
++		/*
++		 * The page array is linear, so the page of an excluded range is reported
++		 * in its place. The caller asks pmap_page_is_excluded() and keeps it.
++		 */
++		if (!pmap_page_is_excluded(*pnum)) {
++			assert(avail_page_count > 0);
++			--avail_page_count;
++		}
+ 		return TRUE;
+ 	}
+ 	assert(avail_page_count == 0);
+@@ -11822,14 +11861,15 @@ pmap_is_exotic(
+ }
+ 
+ 
+-/* ARMTODO -- an implementation that accounts for
+- * holes in the physical map, if any.
++/*
++ * A page of managed memory. The pages of an excluded range lie inside the
++ * managed span and are not memory.
+  */
+ boolean_t
+ pmap_valid_page(
+ 	ppnum_t pn)
+ {
+-	return pa_valid(ptoa(pn));
++	return pa_valid(ptoa(pn)) && !pmap_page_is_excluded(pn);
+ }
+ 
+ boolean_t
+diff --git a/osfmk/arm/pmap/pmap.h b/osfmk/arm/pmap/pmap.h
+index 0c6ba7c..4d83b05 100644
+--- a/osfmk/arm/pmap/pmap.h
++++ b/osfmk/arm/pmap/pmap.h
+@@ -606,6 +606,15 @@ extern void pmap_check_ppl_hashed_flag_all(void);
+ extern boolean_t pmap_valid_page(ppnum_t pn);
+ extern boolean_t pmap_bootloader_page(ppnum_t pn);
+ 
++/*
++ * Ranges of the managed span that are not memory the kernel may use (arm_vm_init.c). The VM asks per page
++ * while it builds the page array.
++ */
++#define PMAP_HAS_EXCLUDED_PAGES 1
++extern bool arm_vm_excluded_range(pmap_paddr_t pa, pmap_paddr_t *base, pmap_paddr_t *end);
++extern uint64_t arm_vm_excluded_bytes(pmap_paddr_t start, pmap_paddr_t end);
++extern bool pmap_page_is_excluded(ppnum_t pn);
++
+ extern boolean_t pmap_is_empty(pmap_t pmap, vm_map_offset_t start, vm_map_offset_t end);
+ 
+ #define ARM_PMAP_MAX_OFFSET_DEFAULT 0x01
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index 01ab93b..6880f7c 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -349,6 +349,33 @@ SECURITY_READ_ONLY_LATE(vm_map_address_t) physmap_end = (vm_map_address_t)0;
+  */
+ SECURITY_READ_ONLY_LATE(addr64_t) first_avail_phys = 0;
+ 
++/*
++ * Excluded ranges: parts of [gPhysBase, gPhysBase + mem_size) that are not memory the kernel may use, such as
++ * a gap between two DRAM banks or memory the firmware keeps. The loader lists them in the device tree property
++ * /chosen/darwinboot-memory-excluded as (base, size) pairs of 64-bit values; a pair of size zero is an unused
++ * slot. The table below is a sorted copy with page-aligned, non-overlapping entries inside the managed span. It
++ * lives in boot-allocated memory because IOKit frees the flattened device tree.
++ *
++ * A page of an excluded range has its entry in the linear page array and in the pmap's per-page tables, but it
++ * never reaches the free list, is not stolen by the boot allocator, has no physical aperture mapping, and does
++ * not count as memory.
++ *
++ * Everything the kernel places directly behind the loaded image before the VM takes over (translation tables,
++ * the pmap's tables) is contiguous. The loader keeps ARM_VM_EXCLUDED_RESERVE bytes behind the image free of
++ * excluded ranges; those allocations take about 1/320 of the span plus a few megabytes.
++ */
++#define ARM_VM_EXCLUDED_RESERVE(span) MAX((span) / 64, (uint64_t)32 * 1024 * 1024)
++
++typedef struct {
++	pmap_paddr_t base;
++	pmap_paddr_t end;
++} arm_vm_excluded_range_t;
++
++SECURITY_READ_ONLY_LATE(static pmap_paddr_t)              arm_vm_excluded_table_pa;
++SECURITY_READ_ONLY_LATE(static arm_vm_excluded_range_t *) arm_vm_excluded_table;
++SECURITY_READ_ONLY_LATE(static unsigned int)              arm_vm_excluded_count;
++SECURITY_READ_ONLY_LATE(static uint64_t)                  arm_vm_excluded_size;
++
+ /*
+  * Bounds of the kernelcache; used for accounting.
+  */
+@@ -446,6 +473,118 @@ round_up_pte_hint_address(vm_offset_t address)
+ 	return (address + (hint_size - 1)) & ~(hint_size - 1);
+ }
+ 
++/*
++ * The excluded range with the lowest end above pa. Its base may lie above pa.
++ */
++bool
++arm_vm_excluded_range(pmap_paddr_t pa, pmap_paddr_t *base, pmap_paddr_t *end)
++{
++	for (unsigned int i = 0; i < arm_vm_excluded_count; i++) {
++		if (pa < arm_vm_excluded_table[i].end) {
++			*base = arm_vm_excluded_table[i].base;
++			*end = arm_vm_excluded_table[i].end;
++			return true;
++		}
++	}
++	return false;
++}
++
++/*
++ * Excluded bytes inside [start, end).
++ */
++uint64_t
++arm_vm_excluded_bytes(pmap_paddr_t start, pmap_paddr_t end)
++{
++	uint64_t bytes = 0;
++
++	for (unsigned int i = 0; i < arm_vm_excluded_count; i++) {
++		const pmap_paddr_t from = MAX(start, arm_vm_excluded_table[i].base);
++		const pmap_paddr_t to = MIN(end, arm_vm_excluded_table[i].end);
++
++		if (from < to) {
++			bytes += to - from;
++		}
++	}
++	return bytes;
++}
++
++/*
++ * Read the loader's excluded ranges into a table at avail_start. Runs on the bootstrap translation tables,
++ * before the first boot allocation.
++ */
++static void
++arm_vm_excluded_init(boot_args *args)
++{
++	const pmap_paddr_t span_end = gPhysBase + mem_size;
++	const pmap_paddr_t table_pa = (avail_start + PAGE_MASK) & ~((pmap_paddr_t)PAGE_MASK);
++	arm_vm_excluded_range_t *table;
++	DTEntry chosen;
++	const uint8_t *pairs;
++	unsigned int pairs_size;
++	unsigned int count = 0;
++
++	if (SecureDTLookupEntry(NULL, "/chosen", &chosen) != kSuccess ||
++	    SecureDTGetProperty(chosen, "darwinboot-memory-excluded", (void const **)&pairs, &pairs_size) != kSuccess ||
++	    pairs_size < 2 * sizeof(uint64_t)) {
++		return;
++	}
++	table = (arm_vm_excluded_range_t *)phystokv(table_pa);
++
++	for (unsigned int offset = 0; offset + 2 * sizeof(uint64_t) <= pairs_size; offset += 2 * sizeof(uint64_t)) {
++		uint64_t base, size, end;
++		unsigned int at;
++
++		/* A device tree property is aligned to four bytes only. */
++		memcpy(&base, pairs + offset, sizeof(base));
++		memcpy(&size, pairs + offset + sizeof(base), sizeof(size));
++		if (size == 0) {
++			continue;
++		}
++		/* The kernel's page may be larger than the loader's: a partly excluded page is excluded. */
++		end = base + size;
++		if (end < base || end > span_end) {
++			end = span_end;
++		}
++		base = MAX(base & ~((uint64_t)PAGE_MASK), (uint64_t)gPhysBase);
++		end = (end + PAGE_MASK) & ~((uint64_t)PAGE_MASK);
++		if (base >= end) {
++			continue;
++		}
++		/* Insert in ascending order, then join with the neighbours it touches. */
++		for (at = count; at > 0 && table[at - 1].base > base; at--) {
++			table[at] = table[at - 1];
++		}
++		table[at].base = base;
++		table[at].end = end;
++		count++;
++		if (at > 0 && table[at - 1].end >= table[at].base) {
++			at--;
++		}
++		while (at + 1 < count && table[at].end >= table[at + 1].base) {
++			table[at].end = MAX(table[at].end, table[at + 1].end);
++			for (unsigned int i = at + 1; i + 1 < count; i++) {
++				table[i] = table[i + 1];
++			}
++			count--;
++		}
++	}
++	if (count == 0) {
++		return;
++	}
++
++	if (table[0].base < args->topOfKernelData + ARM_VM_EXCLUDED_RESERVE(mem_size)) {
++		panic("excluded memory at 0x%llx is inside the kernel's boot allocations (0x%llx + 0x%llx)",
++		    (unsigned long long)table[0].base, (unsigned long long)args->topOfKernelData,
++		    (unsigned long long)ARM_VM_EXCLUDED_RESERVE(mem_size));
++	}
++
++	arm_vm_excluded_table_pa = table_pa;
++	arm_vm_excluded_table = table;
++	arm_vm_excluded_count = count;
++	avail_start = (table_pa + count * sizeof(*table) + PAGE_MASK) & ~((pmap_paddr_t)PAGE_MASK);
++	arm_vm_excluded_size = arm_vm_excluded_bytes(gPhysBase, span_end);
++}
++
+ /* allocate a page for a page table: we support static and dynamic mappings.
+  *
+  * returns a virtual address for the allocated page
+@@ -1554,7 +1693,31 @@ arm_vm_physmap_slide(ptov_table_entry *temp_ptov_table, vm_map_address_t orig_va
+ 	assert((temp_ptov_table[ptov_index].va & ARM_PGMASK) == 0);
+ 	temp_ptov_table[ptov_index].len = round_page(len);
+ 	pa_offset = temp_ptov_table[ptov_index].va - orig_va;
+-	arm_vm_page_granular_prot(temp_ptov_table[ptov_index].va, temp_ptov_table[ptov_index].len, pa_offset, 1, pte_prot_APX, 1, granule, ARM64_PAGE_UNGUARDED);
++
++	/*
++	 * The segment keeps one linear translation, and an excluded range inside it stays unmapped: memory that is
++	 * not there cannot be read through the aperture, by a stray access or by a kernel core dump.
++	 */
++	const pmap_paddr_t seg_pa = temp_ptov_table[ptov_index].pa;
++	const vm_map_address_t seg_va = temp_ptov_table[ptov_index].va;
++	const vm_map_address_t seg_end = seg_va + temp_ptov_table[ptov_index].len;
++	vm_map_address_t va = seg_va;
++	pmap_paddr_t excluded_base, excluded_end;
++
++	while (va < seg_end && arm_vm_excluded_range(seg_pa + (va - seg_va), &excluded_base, &excluded_end)) {
++		const vm_map_address_t hole = seg_va + (MAX(excluded_base, seg_pa) - seg_pa);
++
++		if (hole >= seg_end) {
++			break;
++		}
++		if (hole > va) {
++			arm_vm_page_granular_prot(va, hole - va, pa_offset, 1, pte_prot_APX, 1, granule, ARM64_PAGE_UNGUARDED);
++		}
++		va = seg_va + (excluded_end - seg_pa);
++	}
++	if (va < seg_end) {
++		arm_vm_page_granular_prot(va, seg_end - va, pa_offset, 1, pte_prot_APX, 1, granule, ARM64_PAGE_UNGUARDED);
++	}
+ 	++ptov_index;
+ }
+ 
+@@ -1952,6 +2115,7 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	 * to trampoline to KVA. this requires only 3 pages to stay resident.
+ 	 */
+ 	first_avail_phys = avail_start = args->topOfKernelData;
++	arm_vm_excluded_init(args);
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR) || defined(KERNEL_INTEGRITY_PV_CTRR)
+ 	arm_replace_identity_map();
+@@ -2188,6 +2352,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	// global table pointers may need to be different due to physical aperture remapping
+ 	cpu_tte = (tt_entry_t*)(phystokv(cpu_ttep));
+ 	invalid_tte = (tt_entry_t*)(phystokv(invalid_ttep));
++	if (arm_vm_excluded_count != 0) {
++		arm_vm_excluded_table = (arm_vm_excluded_range_t *)phystokv(arm_vm_excluded_table_pa);
++	}
+ 
+ 	// From here on out, we're off the bootstrap translation tables.
+ 
+@@ -2236,8 +2403,9 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 		flush_mmu_tlb();
+ 	}
+ 
+-	sane_size = mem_size - (avail_start - gPhysBase);
+-	max_mem = mem_size;
++	/* Excluded ranges are not memory: the sizes the VM and the BSD layer scale by leave them out. */
++	sane_size = mem_size - (avail_start - gPhysBase) - arm_vm_excluded_size;
++	max_mem = mem_size - arm_vm_excluded_size;
+ 	vm_kernel_slid_base = segLOWESTTEXT;
+ 	// vm_kernel_slide is set by arm_init()->arm_slide_rebase_and_sign_image()
+ 	vm_kernel_stext = segTEXTB;
+@@ -2405,6 +2573,10 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 	pmap_static_allocations_done();
+ #endif
+ 	first_avail = avail_start;
++	if (arm_vm_excluded_count != 0 && arm_vm_excluded_table[0].base < first_avail) {
++		panic("boot allocations end at 0x%llx, inside the excluded memory at 0x%llx",
++		    (unsigned long long)first_avail, (unsigned long long)arm_vm_excluded_table[0].base);
++	}
+ 	patch_low_glo_static_region(args->topOfKernelData, avail_start - args->topOfKernelData);
+ 	enable_preemption();
+ }
+diff --git a/osfmk/vm/vm_resident.c b/osfmk/vm/vm_resident.c
+index 8bebebb..5c29bad 100644
+--- a/osfmk/vm/vm_resident.c
++++ b/osfmk/vm/vm_resident.c
+@@ -263,6 +263,7 @@ SECURITY_READ_ONLY_EARLY(vm_packing_params_t) vmn_packing_params =
+ vm_offset_t virtual_space_start;
+ vm_offset_t virtual_space_end;
+ uint32_t        vm_page_pages;
++uint32_t        vm_page_excluded_pages; /* entries of the page array that stand for excluded memory, never pages */
+ 
+ /*
+  *	The vm_page_lookup() routine, which provides for fast
+@@ -2769,6 +2770,18 @@ pmap_startup(
+ 
+ 		++vm_pages_count;
+ 		vm_page_init(vm_page_get(i), phys_page);
++#ifdef PMAP_HAS_EXCLUDED_PAGES
++		if (pmap_page_is_excluded(phys_page)) {
++			/*
++			 * Not memory: the entry only keeps the array linear. The error mark
++			 * keeps the page out of the free list (see the release loop below);
++			 * it stays busy and on no queue for good, and is never touched.
++			 */
++			vm_page_get(i)->vmp_error = true;
++			++vm_page_excluded_pages;
++			continue;
++		}
++#endif /* PMAP_HAS_EXCLUDED_PAGES */
+ 		if (fillval) {
+ 			fillPage(phys_page, fillval);
+ 		}
+@@ -2777,10 +2790,16 @@ pmap_startup(
+ 		}
+ 	}
+ 
+-	vm_page_pages = vm_pages_count; /* used to report to user space */
++	vm_page_pages = vm_pages_count - vm_page_excluded_pages; /* used to report to user space */
+ 
+ 	if (!vm_himemory_mode) {
+-		for (uint32_t i = npages; i-- > 0;) {
++		/*
++		 * Only the entries initialized above stand for pages. npages is an
++		 * estimate made before the array was stolen and can exceed their number;
++		 * the entries past vm_pages_count are uninitialized and would stand for
++		 * page numbers at and above avail_end.
++		 */
++		for (uint32_t i = vm_pages_count; i-- > 0;) {
+ 			/* skip retired pages */
+ 			if (!VMP_ERROR_GET(vm_page_get(i))) {
+ 				vm_page_release_startup(vm_page_get(i));
+@@ -2793,6 +2812,8 @@ pmap_startup(
+ 	absolutetime_to_nanoseconds(mach_absolute_time(), &now_ns);
+ 	printf("pmap_startup() init/release time: %lld microsec\n",
+ 	    (now_ns - start_ns) / NSEC_PER_USEC);
++	printf("pmap_startup() %u page entries, %u of them excluded memory, %u unused\n",
++	    vm_pages_count, vm_page_excluded_pages, npages - vm_pages_count);
+ #if XNU_VM_HAS_DELAYED_PAGES
+ 	printf("pmap_startup() delayed init/release of %d pages\n",
+ 	    vm_delayed_count);
+@@ -4199,7 +4220,12 @@ vm_page_init(vm_page_t mem, ppnum_t phys_page)
+ 
+ #if DEBUG
+ 	if ((phys_page != vm_page_fictitious_addr) && (phys_page != vm_page_guard_addr)) {
++#ifdef PMAP_HAS_EXCLUDED_PAGES
++		/* The page of an excluded range has an entry in the page array and is not memory. */
++		if (!pmap_valid_page(phys_page) && !pmap_page_is_excluded(phys_page)) {
++#else /* PMAP_HAS_EXCLUDED_PAGES */
+ 		if (!(pmap_valid_page(phys_page))) {
++#endif /* PMAP_HAS_EXCLUDED_PAGES */
+ 			panic("vm_page_init: non-DRAM phys_page 0x%x", phys_page);
+ 		}
+ 	}

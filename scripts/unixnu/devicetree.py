@@ -321,6 +321,26 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
         if not 0x10000000 <= size <= 0x200000000 or size % 0x200000:
             raise Error('Owned memory must be 256 MiB to 8 GiB in 2 MiB steps')
         chosen.append(('darwinboot-memory-size', struct.pack('<Q', size)))
+    # A table DarwinBoot fills with the ranges of the window the kernel must not use (gaps between DRAM banks, memory the firmware
+    # keeps). With it the window may span more than one run of free memory; only an OS profile whose XNU reads the property sets it.
+    if options.get('owned_memory_excluded_ranges'):
+        value = options['owned_memory_excluded_ranges']
+        slots = 0 if isinstance(value, bool) else int(str(value), 0)
+        if not 1 <= slots <= 4096:
+            raise Error('Owned memory excluded ranges: a table size of 1 to 4096 ranges')
+        chosen.append(('darwinboot-memory-excluded', bytes(16 * slots)))
+    # Two empty records DarwinBoot fills with where its inputs lie in the firmware's memory map (the payload RAM disk and the
+    # entry's initrd buffer); the kernel reports them as kern.boot_payload_memory. With the excluded-range table the loader
+    # also counts the whole pages of a verified input inside the window as usable memory.
+    if options.get('loader_inputs'):
+        chosen.append(('darwinboot-loader-inputs', bytes(64)))
+    # A table DarwinBoot fills with the largest runs of free memory outside the window (a DRAM bank too far from it for the
+    # kernel's page array), for a driver that manages memory of its own.
+    if options.get('owned_memory_outside_ranges'):
+        slots = int(str(options['owned_memory_outside_ranges']), 0)
+        if not 1 <= slots <= 64:
+            raise Error('Owned memory outside ranges: a table size of 1 to 64 ranges')
+        chosen.append(('darwinboot-memory-outside', bytes(16 * slots)))
     if options.get('root_match_volume_uuid'):
         volume = str(uuid.UUID(options['root_match_volume_uuid'])).upper()
         chosen.append(('root-matching', ('<dict><key>IOProviderClass</key><string>IOMedia</string>'

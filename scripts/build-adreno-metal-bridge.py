@@ -74,7 +74,15 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0029-latency-stage-selection.patch',
     # Spare image blocks have no byte limit (they age, go when a block cannot be made and on memory pressure), and the room keeper takes
     # a spare block before it makes a new one: the limit freed spares the render server made again within seconds, each a fresh wiring.
-    '0030-spare-image-blocks-give-room.patch']]
+    '0030-spare-image-blocks-give-room.patch',
+    # Live blocks by kind and size class and the driver's commitment of lazily allocated ones, for the MK and ML rows.
+    '0031-memory-kinds-by-size.patch',
+    # A cache hit stops refreshing access times after the platform refuses it once.
+    '0032-shader-cache-touch-refused-once.patch',
+    # The room thread's timed spare aging runs inside an exit-guard section.
+    '0033-room-thread-ages-spares-in-a-section.patch',
+    # Parked objects and kept empty blocks go by time, so a discarded volatile resource's block is returned without a later submission.
+    '0034-parked-objects-and-kept-blocks-age-by-time.patch']]
 
 
 def git_tree(*steps):

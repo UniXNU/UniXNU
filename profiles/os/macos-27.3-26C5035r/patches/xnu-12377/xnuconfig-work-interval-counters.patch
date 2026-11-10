@@ -1,0 +1,97 @@
+Counts of the work interval calls a macOS userspace makes, by interval type.
+
+No performance controller is registered on this board, so the kernel accepts work intervals and drops what they report.
+Whether a controller would have anything to act on under macOS is not known: the measurements that exist are from iPadOS.
+This adds the counts that answer it and changes no behaviour: intervals created, notifications (start, finish, deadline)
+and the notifications that finished after their deadline, each by the type field of the create flags, and the instance
+start, update and finish calls. `sysctl kern.work_interval_stats` prints them; native_wi_stats and
+native_wi_instance_ops are global for the board log.
+diff --git a/bsd/kern/sys_work_interval.c b/bsd/kern/sys_work_interval.c
+--- a/bsd/kern/sys_work_interval.c
++++ b/bsd/kern/sys_work_interval.c
+@@ -39,6 +39,7 @@
+ #include <libkern/libkern.h>
+ 
+ #include <sys/proc.h>
++#include <sys/sysctl.h>
+ #include <kern/policy_internal.h>
+ 
+ /* Board bring-up diagnostic: the last work-interval CREATE2 results, read by the boot-progress banner. */
+@@ -52,7 +53,50 @@
+ 	unsigned slot = native_wi_count++ % 4;
+ 	snprintf(native_wi_log[slot], sizeof(native_wi_log[slot]), "WI#%u p%d %s %s err=%d kret=%d flags=%x app=%d",
+ 	    native_wi_count, proc_selfpid(), name, what, error, kret, flags, (int)task_is_app(current_task()));
++}
++
++/*
++ * What the macOS userspace asks of the work interval interface, by interval type (the type field of the create flags, 0 to
++ * 15): [0] intervals created, [1] notifications (the call that carries start, finish and deadline), [2] notifications that
++ * finished after their deadline. native_wi_instance_ops counts the instance start, update and finish calls (6, 7, 8). No
++ * performance controller is registered on this board; these counts say whether one would have anything to act on.
++ * sysctl kern.work_interval_stats prints the types in use.
++ */
++volatile uint64_t native_wi_stats[16][3];
++volatile uint64_t native_wi_instance_ops[3];
++
++static void
++native_wi_count_call(uint32_t create_flags, unsigned int column)
++{
++	__atomic_fetch_add(&native_wi_stats[(create_flags & WORK_INTERVAL_TYPE_MASK) >> 28][column], 1, __ATOMIC_RELAXED);
++}
++
++static int
++sysctl_work_interval_stats SYSCTL_HANDLER_ARGS
++{
++#pragma unused(oidp, arg1, arg2)
++	char text[1024];
++	size_t at = 0;
++
++	text[0] = '\0';
++	for (unsigned int type = 0; type < 16 && at < sizeof(text) - 1; type++) {
++		const uint64_t created = native_wi_stats[type][0];
++		const uint64_t notified = native_wi_stats[type][1];
++		const uint64_t late = native_wi_stats[type][2];
++		if (created == 0 && notified == 0) {
++			continue;
++		}
++		at += (size_t)scnprintf(text + at, sizeof(text) - at, "type%u created=%llu notified=%llu late=%llu | ",
++		    type, created, notified, late);
++	}
++	if (at < sizeof(text) - 1) {
++		(void)scnprintf(text + at, sizeof(text) - at, "instance start=%llu update=%llu finish=%llu",
++		    native_wi_instance_ops[0], native_wi_instance_ops[1], native_wi_instance_ops[2]);
++	}
++	return SYSCTL_OUT(req, text, strlen(text) + 1);
+ }
++SYSCTL_PROC(_kern, OID_AUTO, work_interval_stats, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++    0, 0, sysctl_work_interval_stats, "A", "work interval calls by interval type");
+ 
+ int
+ work_interval_ctl(__unused proc_t p, struct work_interval_ctl_args *uap,
+@@ -123,6 +167,7 @@
+ 			kern_work_interval_destroy(current_thread(), create_args.wica_id);
+ 			return error;
+ 		}
++		native_wi_count_call(create_args.wica_create_flags, 0);
+ 		break;
+ 	case WORK_INTERVAL_OPERATION_GET_FLAGS:
+ 		if (uap->arg == USER_ADDR_NULL || uap->len < sizeof(create_params)) {
+@@ -248,6 +293,10 @@
+ 		if ((error = copyin(uap->arg, &notification, sizeof(notification)))) {
+ 			return error;
+ 		}
++		native_wi_count_call(notification.create_flags, 1);
++		if (notification.deadline != 0 && notification.finish > notification.deadline) {
++			native_wi_count_call(notification.create_flags, 2);
++		}
+ 
+ 
+ 		struct kern_work_interval_args kwi_args = {
+@@ -295,6 +344,7 @@
+ 		if (uap->arg == USER_ADDR_NULL || uap->work_interval_id == 0) {
+ 			return EINVAL;
+ 		}
++		__atomic_fetch_add(&native_wi_instance_ops[operation - 6], 1, __ATOMIC_RELAXED);
+ 		break;
+ 
+ 	default:

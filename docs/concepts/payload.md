@@ -73,6 +73,8 @@ The ADT must reserve the following properties when the matching input exists:
 | `/chosen/memory-map/PackedRAMDisk` | DarwinBoot writes the packed ramdisk address and size |
 | `/chosen/memory-map/TrustCache` | DarwinBoot writes the trust cache address and size |
 | `/chosen/darwinboot-memory-size` | Requests a contiguous window larger than 256 MiB |
+| `/chosen/darwinboot-memory-excluded` | DarwinBoot writes the ranges of the window the kernel must not use (gaps between DRAM banks, memory the firmware keeps) and puts the usable byte count in `memSizeActual` |
+| `/chosen/darwinboot-loader-inputs` | DarwinBoot writes two 32-byte records (payload RAM disk, initrd buffer): base, size, UEFI memory type, state, usable bytes |
 
 DarwinBoot requires the placeholder to exist for every input it receives. A mismatch is `EFI_COMPROMISED_DATA`.
 
