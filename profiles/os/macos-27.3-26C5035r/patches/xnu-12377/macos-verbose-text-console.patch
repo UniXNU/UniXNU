@@ -1,18 +1,50 @@
-A verbose macOS boot (-v) shows the kernel log on the screen: iBoot reports a text console for -v, while
-DarwinBoot always reports a graphics one, so the kernel only drew the boot progress bar.
+The kernel log on the screen of a macOS boot: vc-text=1 draws the console as text on the boot framebuffer and
+mirrors it with the serial console, as macOS-DroidVM's virt-vc-text does. DarwinBoot reports a graphics console, so
+without it the kernel only draws the boot progress bar. v_display stays set for a later display driver.
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -137,6 +137,10 @@
+ SECURITY_READ_ONLY_LATE(uint32_t) cons_ops_index = VC_CONS_OPS;
+ #endif
+ 
++/* vc-text=1 (pe_init.c): also write each console character to the other console. */
++extern bool console_mirror;
++bool console_mirror = false;
++
+ LCK_GRP_DECLARE(console_lck_grp, "console");
+ 
+ /* If the NMI string is entered into the console, the system will enter the debugger. */
+@@ -263,6 +267,9 @@
+ 	}
+ 
+ 	cons_ops[idx].putc(c, poll);
++	if (console_mirror) {
++		cons_ops[idx == SERIAL_CONS_OPS ? VC_CONS_OPS : SERIAL_CONS_OPS].putc(c, poll);
++	}
+ }
+ 
+ /**
 --- a/pexpert/arm/pe_init.c
 +++ b/pexpert/arm/pe_init.c
-@@ -561,6 +561,13 @@
+@@ -561,10 +561,20 @@
  	 */
  	check_for_panic_log();
  
-+#if XNU_TARGET_OS_OSX
-+	/* A verbose boot (-v) gets the text console, as iBoot reports it for -v; DarwinBoot always reports graphics. */
-+	int verbose = 0;
-+	if (PE_state.video.v_display && PE_parse_boot_argn("-v", &verbose, sizeof(verbose))) {
-+		PE_state.video.v_display = 0;
-+	}
-+#endif
- 	if (PE_state.video.v_display) {
+-	if (PE_state.video.v_display) {
++	/*
++	 * vc-text=1 draws the kernel console as text on the boot framebuffer and mirrors it with the serial console
++	 * (as on the UniXNU virtual boards). v_display stays set, so a display driver can still take the framebuffer over.
++	 */
++	uint32_t vc_text = 0;
++	PE_parse_boot_argn("vc-text", &vc_text, sizeof(vc_text));
++	if (PE_state.video.v_display && !vc_text) {
  		PE_initialize_console(&PE_state.video, kPEGraphicsMode);
  	} else {
+ 		PE_initialize_console(&PE_state.video, kPETextMode);
++		if (vc_text) {
++			extern bool console_mirror;
++			console_mirror = true;
++		}
+ 	}
+ }
+ 
