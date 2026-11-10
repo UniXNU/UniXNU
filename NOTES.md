@@ -2,6 +2,40 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 21:10: sweet-telephonyd, a STAND-IN FOR COMMCENTER, answers iOS from the modem's state (stages 1-3);
+  vmd removed** (`phone/sweet-telephonyd/sweet_telephonyd.m`, `phone/build-sweet-telephonyd.sh [install]`, job
+  `phone/sweet-telephonyd/com.sweet.telephonyd.plist`; kernel image unchanged: `umi-0273b-x55service-gpu.img`).
+  Calls are out of scope (user: data-only SIM, calls need VoLTE in the country); order: status bar / SIM, then data.
+  - **Phone files changed (user-approved, each read back):** `/usr/local/bin/sweet-telephonyd` (new);
+    `/System/Library/xpc/launchd.plist`: job `com.apple.CommCenter` (CommCenter-noncellular) replaced by
+    `com.sweet.telephonyd` (root, KeepAlive, the same 11 MachServices), then job `com.apple.voicemail.vmd` removed
+    (529 jobs). Backups on the phone: `launchd.plist.sweet-cc` (before the stand-in), `launchd.plist.sweet-vmd`
+    (stand-in, with vmd); on the Mac `~/ios-umi-backup/root-edits-2026-11-10/`. Undo: put `.sweet-cc` back.
+  - Approach (stand-in answering CTXPCServiceInterface over NSXPC on `com.apple.commcenter.coretelephony.xpc`, plain
+    XPC with echoed placeholders on the other services, `+contextWithSlot:`, the LTE enum values) from facts in
+    dekefake/hackios-op8pro `docs/research/modem-sdx55.md`; our own code. Built with the iPhoneOS SDK + ldid;
+    `xpc_connection_create_mach_service` / `xpc_connection_get_pid` / `-[NSXPCListener initWithMachServiceName:]`
+    are "unavailable on iOS" in the SDK: reached with dlsym / objc_msgSend. Log: `/private/var/sweet/telephonyd.log`
+    (ring rewritten every 5 s, counts per client / request).
+  - Stage 1 (neutral answers): ~20 clients (SpringBoard, Preferences, callservicesd, imagent, identityservices,
+    locationd, wifid, apsd, symptomsd, bluetoothd, chronod, ...) on both APIs; legacy requests seen: kWhois,
+    kRegisterNotification (kEvent numbers), kRegistrationGetProperty (kRegistrationMCC ...), kPacketGetProperty
+    (kCellularDataHideRatIndicator), kCUPolicyGet, kSmsIsMmsConfigured, kRegistrationSetProperty (BrickMode false).
+    **vmd looped on getSubscriptionInfo / getActiveContexts (480,000 requests; sweet-telephonyd 66 % + vmd 59 % of a
+    core).** Stage 2 (CTXPCServiceSubscriptionInfo + CTXPCContexts with the slot-1 context): that loop gone, the
+    stand-in 6 %; vmd still looped on getActiveContexts at 92 % in its own code -> its job removed (no visual
+    voicemail on a data-only SIM; ios-redfin keeps it stopped too).
+  - Stage 3: answers for getSIMStatus (kCTSIMSupportSIMStatusReady), copyRegistrationStatus /
+    copyRegistrationDisplayStatus (RegisteredHome), copyOperatorName / Localized / getShortLabel (228-02 -> "Sunrise";
+    01 Swisscom, 03 Salt), MCC / MNC, getSignalStrengthInfo (bars from dBm, max 4), getDataStatus(Basic) (LTE:
+    radioTechnology 7, indicator 7, bearer 4), default voice / data context; **notifications** through the client's
+    CoreTelephonyClientDelegateProxyInterface proxy for what it registered (activeSubscriptionsDidChange,
+    subscriptionInfoDidChange, simStatusDidChange, operatorNameChanged, displayStatusChanged, signalStrengthChanged,
+    dataStatus) at registration and whenever kern.sweet_cell changes. Boot ~21:04: SpringBoard got its 7
+    notifications with `reg=1 rat=lte mcc=228 mnc=2 dbm=-91 sim=ready` at 131 s; whole phone 28 % CPU idle.
+  - Open: what the status bar shows (user to check); legacy plain-XPC requests still answered by echo (e.g.
+    kRegistrationGetProperty kRegistrationMCC gets null); MobileGestalt still says no baseband (no ADT `baseband` node:
+    the OnePlus port added one so Settings shows Cellular); mobile data (WDS + IP channels 100/101).
 - **2026-11-10 20:20: 0273 MODEM SERVICE MODE: registered on LTE for good, kern.sweet_cell; METAL REGRESSION FIXED
   (builds 0258-0273 had dropped the uncommitted GPU page-table fix)** (patch `xnu/patches/0273-umi-x55-service.patch`,
   kernel d51c6ec; image **`shim/out/umi-0273b-x55service-gpu.img`** = 0270's line with `sweetmdm=9 sweetmdmonline=1`;

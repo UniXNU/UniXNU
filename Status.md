@@ -129,10 +129,10 @@
   (`sweet_mdm.c`, kernels 0260-0272): power and PCIe2 link, sbl1 over BHI, the other 12 images over MHI / Sahara,
   mission mode, QRTR, its TFTP and remote-EFS services (nothing written to the phone), operating mode steered by the
   host, SIM provisioning session: **SIM READY and REGISTERED on LTE (-90 dBm)**, kept up as a kernel service with its
-  state in `kern.sweet_cell` (kernel 0273). Nothing in iOS uses it yet (kernel
-  0259's `AppleBaseband` stub keeps CommCenter from crash-looping; iOS shows "Cellular issue detected"). Next: a
-  bridge to CommCenter (SIM, operator, bars), mobile data
-  (WDS, IP_HW0 100/101), SMS (WMS)
+  state in `kern.sweet_cell` (kernel 0273). iOS gets it through `sweet-telephonyd`, a stand-in for CommCenter that
+  answers CoreTelephony from the modem's state (SIM, operator, signal, LTE) and notifies SpringBoard. Next: Settings >
+  Cellular (a `baseband` node for MobileGestalt), mobile data (WDS, IP_HW0 100/101). Calls are not planned (data-only
+  SIM; calls need VoLTE)
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build
