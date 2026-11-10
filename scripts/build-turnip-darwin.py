@@ -2,7 +2,7 @@
 """Build Turnip (Mesa freedreno Vulkan) with the native Darwin kernel backend (patches/mesa/turnip-darwin-kmd.patch).
 
 --target host builds for the Mac only to prove the backend compiles and links against the real Turnip; --target ios
-cross-builds the ARM64/iOS 17 library, --target ios27 the arm64e/iOS 27 one. Neither runs a GPU: the backend talks to the NativeAdreno IOKit service, which
+cross-builds the ARM64/iOS 17 library, --target ios27 the arm64e/iOS 27 one, --target macos27 the arm64e/macOS 27 one. None runs a GPU: the backend talks to the NativeAdreno IOKit service, which
 exists only on the tablet. Output stays under build/ and is never committed."""
 import argparse
 import hashlib
@@ -16,12 +16,12 @@ from mesa_patch_identity import validate_recorded_patches
 
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--target', choices=('host', 'ios', 'ios27'), default='host')
+parser.add_argument('--target', choices=('host', 'ios', 'ios27', 'macos27'), default='host')
 parser.add_argument('--configure-only', action='store_true')
 parser.add_argument('--builtin-pack', type=Path, help='Embed an exact-source/profile/GPU-bound own builtin pack; no runtime compiler fallback')
 args = parser.parse_args()
 SOURCE = ROOT / '.cache/mesa-work'
-OUT = ROOT / {'host': 'build/mesa-tu', 'ios': 'build/mesa-tu-ios', 'ios27': 'build/mesa-tu-ios27'}[args.target]
+OUT = ROOT / {'host': 'build/mesa-tu', 'ios': 'build/mesa-tu-ios', 'ios27': 'build/mesa-tu-ios27', 'macos27': 'build/mesa-tu-macos27'}[args.target]
 LOGS = ROOT / '.cache'
 
 
@@ -44,10 +44,11 @@ options = ['-Dgallium-drivers=', '-Dvulkan-drivers=freedreno', '-Dfreedreno-kmds
            '-Dllvm=disabled', '-Dshared-glapi=disabled', '-Dxmlconfig=disabled', '-Dshader-cache=enabled',
            '-Dtools=', '-Dbuild-tests=false', '-Dvideo-codecs=', '-Dvulkan-layers=']
 setup = [ROOT / '.cache/mesa-venv/bin/meson', 'setup', OUT, SOURCE, '--wrap-mode=nodownload']
-if args.target in ('ios', 'ios27'):
-    sdk = read(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'])
-    find = lambda tool: read(['xcrun', '--sdk', 'iphoneos', '--find', tool])
-    triple = 'arm64e-apple-ios27.0' if args.target == 'ios27' else 'arm64-apple-ios17.0'
+if args.target in ('ios', 'ios27', 'macos27'):
+    sdk_name = 'macosx' if args.target == 'macos27' else 'iphoneos'
+    sdk = read(['xcrun', '--sdk', sdk_name, '--show-sdk-path'])
+    find = lambda tool: read(['xcrun', '--sdk', sdk_name, '--find', tool])
+    triple = {'ios': 'arm64-apple-ios17.0', 'ios27': 'arm64e-apple-ios27.0', 'macos27': 'arm64e-apple-macos27.0'}[args.target]
     flags = ['-target', triple, '-isysroot', sdk, '-fstack-protector-strong']
     cross = ROOT / ('build/mesa-tu-%s.cross' % args.target)
     cross.parent.mkdir(exist_ok=True)
