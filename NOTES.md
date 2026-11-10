@@ -2,6 +2,22 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 18:40: 0268 EFS SYNC ANSWERED: no more remotefs_sahara assertion; "shutting down" still comes ~10 s
+  after ONLINE, so the EFS sync is a consequence, not the cause** (patch `xnu/patches/0268-umi-x55-efs-sync.patch`,
+  image **`shim/out/umi-0268-x55efs.img`** = 0265b's line + `sweetmdmrestart=1`; booted ~18:27; log: scratchpad
+  `umi-0268.log`).
+  - MHI 10 / 11 "EFS" started with the mission channels. While "shutting down" the modem's remotefs client said
+    **HELLO (version 2, mode 2 = memory debug)**, then **MEM_DEBUG: a 52-byte table at 0x80f63368** = one region
+    **"m9kefs1" at 0x80200000, 2097152 bytes**; read with MEM_READ in 16 KiB pieces into RAM; RESET -> RESET_RESP
+    ("the sync is over"). **SFR stayed empty** (0267: the assertion). The modem then stayed "shutting down" (did not
+    reset itself) until our restart at 2 min.
+  - Restart 1: Sahara served **image 16 from the synced RAM copy** (the others from the partitions), complete; again
+    ONLINE, the same mcfg flow (mcfg.tmp read / write / unlink), "shutting down" ~10 s later. UIM: both slots still
+    "error, no ATR"; NAS "searching". The synced EFS stays in RAM only (never written to the phone).
+  - So the shutdown trigger is still unknown; the EFS sync is the modem's graceful-shutdown step. The kernel log
+    (UDP) truncates many DIAG lines (volume). Next: DIAG with medium level (0x1e) but the TFTP client's subsystem
+    (102) not printed, to see what decides the shutdown right after the mcfg flow; the UIM power-up loop
+    (uim_powerup_logging) in parallel; maybe the SSCTL / sysmon service (0x2b) wants a host answer.
 - **2026-11-10 18:25: 0267 THE MODEM SAYS WHY: SFR "ssr:AP:remotefs_sahara.c:850: Assertion
   remotefs_sahara_info.sahara_status == SAHARA_END_OF_IMG_TRANSFER fail"** (patch
   `xnu/patches/0267-umi-x55-sfr-diag.patch`, image **`shim/out/umi-0267-x55diag.img`** = 0265b's line; booted

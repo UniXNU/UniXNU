@@ -1,0 +1,449 @@
+From 53b6fbd607f849d91920429d2198ae9b4c81f3f1 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 18:34:07 +0100
+Subject: [PATCH] umi: X55 remote EFS sync over Sahara on MHI 10/11 (memory
+ debug into RAM, RESET; served at the next modem boot), restart after the
+ modem went away or 2 min shutting down (0268)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 356 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 349 insertions(+), 7 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 008037b..44e35b4 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -38,7 +38,11 @@
+  *               (PMX55 warm reset, PCIe2 re-init, BHI, Sahara, mission) if sweetmdmrestart=N allows (default 0).
+  *               SFR: a 4 KiB failure reason buffer handed over (MHI command 73) and printed. DIAG on MHI 4 / 5:
+  *               every subsystem's message mask set (sweetmdmdiag, default 0x1c = high / error / fatal) and the
+- *               F3 messages logged (format strings as text, at most 1500). 150 s window.
++ *               F3 messages logged (format strings as text, at most 1500). 240 s window.
++ *               Remote EFS on MHI 10 / 11: Sahara answered (HELLO; memory debug: table and regions read into RAM,
++ *               then RESET; image reads served from the mdm1m9kefs partitions); what was synced replaces those
++ *               partitions at the next modem boot of this phone boot. Restart (if allowed) after the modem went
++ *               away or 2 min of "shutting down".
+  * PCIe sequence as sweet_pcie.c (PCIe0, QCA6390) with the PCIe2 registers (Linux gcc-sm8250.c).
+  * Built inside sweet_spmi.c (the local build cannot add source files).
+  */
+@@ -644,6 +648,12 @@ md_sbl1(void)
+ #define MH_DGTX         0x38000u        /* 4 KiB */
+ #define MH_SFR          0x39000u        /* the modem's failure reason buffer, 4 KiB */
+ #define MX_SFR_LEN      0x1000u
++#define MX_EFS_OUT      10u             /* live FDT esoc0 mhi_chan@10 / 11 "EFS", ee AMSS */
++#define MX_EFS_IN       11u
++#define MH_TRE_EF_OUT   0x6800u
++#define MH_TRE_EF_IN    0x6900u
++#define MH_EFBUF        0x40000u        /* 8 x 4 KiB receive buffers */
++#define MH_EFTX         0x48000u        /* 4 KiB */
+ #define MHI_CFG         0x10u
+ #define MHI_CHDBOFF     0x18u
+ #define MHI_ERDBOFF     0x20u
+@@ -764,9 +774,9 @@ mhi_init(bool mission)
+ 		mx_ctx(MH_CHCTX + SAH_OUT * 44u, 2u << 8, 1, 1, 0, 0, 0);
+ 		mx_ctx(MH_CHCTX + SAH_IN * 44u, 2u << 8, 2, 1, 0, 0, 0);
+ 	}
+-	static const uint8_t mc[6][2] = { { 0, 1 }, { 1, 2 }, { MX_IPCR_OUT, 1 }, { MX_IPCR_IN, 2 }, { MX_DIAG_OUT, 1 },
+-		                          { MX_DIAG_IN, 2 } };
+-	for (unsigned i = 0; i < 6; ++i) {
++	static const uint8_t mc[8][2] = { { 0, 1 }, { 1, 2 }, { MX_IPCR_OUT, 1 }, { MX_IPCR_IN, 2 }, { MX_DIAG_OUT, 1 },
++		                          { MX_DIAG_IN, 2 }, { MX_EFS_OUT, 1 }, { MX_EFS_IN, 2 } };
++	for (unsigned i = 0; i < 8; ++i) {
+ 		mx_ctx(MH_CHCTX + mc[i][0] * 44u, 2u << 8, mc[i][1], 1, 0, 0, 0);
+ 	}
+ 	mx_ctx(MH_ERCTX, 0, 1, 1, MH_ER0, MH_ER0_N * MH_EL, MH_ER0 + (MH_ER0_N - 1) * MH_EL);
+@@ -843,6 +853,9 @@ mx_rx_queue(unsigned buf)
+ 
+ static void dg_feed(const uint8_t *b, uint32_t n);
+ static void dg_rx_queue(unsigned buf);
++static void ef_feed(const uint8_t *p, uint32_t n);
++static void ef_rx_queue(unsigned buf);
++static void ef_txdone(void);
+ 
+ /* Received Sahara packets wait here. */
+ static uint8_t mx_rxq[8][MH_RX_LEN];
+@@ -887,6 +900,16 @@ mx_er1(void)
+ 			}
+ 		} else if (type == 0x22 && ch == MX_DIAG_OUT) {
+ 			/* a DIAG request went out */
++		} else if (type == 0x22 && ch == MX_EFS_IN) {
++			unsigned slot = (unsigned)((ptr - (mx.pa + MH_TRE_EF_IN)) / MH_EL);
++			uint64_t buf = mx_rd64(MH_TRE_EF_IN + slot * MH_EL);
++			unsigned b = (unsigned)((buf - (mx.pa + MH_EFBUF)) / MH_RX_LEN);
++			if (b < MH_RX_N && n <= MH_RX_LEN) {
++				ef_feed((const uint8_t *)(mx.mem + MH_EFBUF + b * MH_RX_LEN), n);
++				ef_rx_queue(b);
++			}
++		} else if (type == 0x22 && ch == MX_EFS_OUT) {
++			ef_txdone();
+ 		} else if (type == 0x22 && ch == mx.tx_ch) {
+ 			mx.tx_done = true;
+ 		} else if (type == 0x22 && ch == 1u) {
+@@ -1110,6 +1133,297 @@ dg_start(void)
+ 	printf("SWEET MDM: DIAG channels %u/%u running, message mask %#x for every subsystem\n", MX_DIAG_OUT, MX_DIAG_IN, m);
+ }
+ 
++/* ---- The modem's remote EFS on MHI 10 (to the modem) / 11 (from it): Sahara, as its remotefs_sahara client speaks it ----
++ * 0267: during "shutting down" the modem waited ~90 s on this and asserted (SFR "ssr:AP:remotefs_sahara.c:850").
++ * The OnePlus 8 Pro port found these channels and the two ways the client uses them (facts only): image reads (the
++ * host serves the EFS) or memory debug (the host reads the modem's EFS images to keep them, Qualcomm's ks -m).
++ * Both are answered here; memory-debug regions are kept in RAM for this phone boot and served instead of the
++ * mdm1m9kefs partitions at the next modem boot. Nothing is written to the phone. */
++
++#define EF_CHUNK        0x4000u         /* MEM_READ size: 4 receive buffers */
++#define EF_REGION_MAX   (4u << 20)
++#define EF_NREG         8u
++
++static struct {
++	bool on, is64;
++	int state;                      /* 0 commands, 1 receiving the table, 2 receiving a region */
++	uint32_t in_wp, out_wp;
++	uint8_t table[1024];
++	uint32_t table_len, nreg, cur;
++	uint64_t want, got;
++	uint64_t base[EF_NREG], len[EF_NREG];
++	char name[EF_NREG][24];
++	unsigned logged;
++	bool tx_done;
++} ef;
++
++/* What was synced: kept for the next modem boot (this phone boot only). */
++static struct {
++	char name[24];
++	uint8_t *data;
++	uint32_t len;
++} ef_keep[EF_NREG];
++
++static void
++ef_rx_queue(unsigned buf)
++{
++	mx_tre(MH_TRE_EF_IN + ef.in_wp * MH_EL, mx.pa + MH_EFBUF + buf * MH_RX_LEN, MH_RX_LEN, 0x2u << 16 | 1u << 9);
++	ef.in_wp = (ef.in_wp + 1) % MH_TRE_N;
++	mx_ring(MX_EFS_IN, MH_TRE_EF_IN, ef.in_wp);
++}
++
++static void
++ef_send(const void *p, uint32_t n)
++{
++	memcpy((void *)(mx.mem + MH_EFTX), p, n);
++	ef.tx_done = false;
++	mx_tre(MH_TRE_EF_OUT + ef.out_wp * MH_EL, mx.pa + MH_EFTX, n, 0x2u << 16 | 1u << 9);
++	ef.out_wp = (ef.out_wp + 1) % MH_TRE_N;
++	mx_ring(MX_EFS_OUT, MH_TRE_EF_OUT, ef.out_wp);
++}
++
++static void
++ef_mem_read(uint64_t addr, uint64_t len)
++{
++	if (ef.is64) {
++		uint32_t w[6] = { 0x11, 0x18, (uint32_t)addr, (uint32_t)(addr >> 32), (uint32_t)len, (uint32_t)(len >> 32) };
++		ef_send(w, sizeof(w));
++	} else {
++		uint32_t w[4] = { 0x0a, 0x10, (uint32_t)addr, (uint32_t)len };
++		ef_send(w, sizeof(w));
++	}
++}
++
++static uint8_t *
++ef_slot(const char *name)
++{
++	for (unsigned i = 0; i < EF_NREG; ++i) {
++		if (ef_keep[i].data != NULL && strcmp(ef_keep[i].name, name) == 0) {
++			return ef_keep[i].data;
++		}
++	}
++	for (unsigned i = 0; i < EF_NREG; ++i) {
++		if (ef_keep[i].data == NULL) {
++			ef_keep[i].data = kalloc_data(EF_REGION_MAX, Z_WAITOK | Z_ZERO);
++			strlcpy(ef_keep[i].name, name, sizeof(ef_keep[i].name));
++			return ef_keep[i].data;
++		}
++	}
++	return NULL;
++}
++
++/* Next region, or the end: RESET (what ks does after the last region). */
++static void
++ef_next(void)
++{
++	while (ef.cur < ef.nreg && (ef.len[ef.cur] == 0 || ef.len[ef.cur] > EF_REGION_MAX)) {
++		printf("SWEET MDM: EFS sync: region %u \"%s\" (%llu bytes) skipped\n", ef.cur, ef.name[ef.cur], ef.len[ef.cur]);
++		ef.cur++;
++	}
++	if (ef.cur >= ef.nreg) {
++		uint32_t w[2] = { 7, 8 };
++		printf("SWEET MDM: EFS sync: all %u region(s) read: RESET sent\n", ef.nreg);
++		ef_send(w, sizeof(w));
++		ef.state = 0;
++		return;
++	}
++	ef.want = MIN((uint64_t)EF_CHUNK, ef.len[ef.cur] - ef.got);
++	ef.state = 2;
++	ef_mem_read(ef.base[ef.cur] + ef.got, ef.want);
++}
++
++static void
++ef_cmd(const uint8_t *p, uint32_t n)
++{
++	uint32_t w[8] = { 0 };
++	memcpy(w, p, MIN(n, (uint32_t)sizeof(w)));
++	if (ef.logged++ < 40) {
++		printf("SWEET MDM: EFS sahara: command %u, %u bytes: %08x %08x %08x %08x %08x %08x\n", w[0], n, w[2], w[3], w[4], w[5],
++		    w[6], w[7]);
++	}
++	switch (w[0]) {
++	case 1: {       /* HELLO */
++		uint32_t r[12] = { 2, 0x30, 2, 1, 0, w[5], 0, 0, 0, 0, 0, 0 };
++		printf("SWEET MDM: EFS sahara HELLO: version %u, mode %u: answered\n", w[2], w[5]);
++		ef_send(r, sizeof(r));
++		break;
++	}
++	case 9:         /* MEM_DEBUG: table address, length */
++	case 0x10: {    /* MEM_DEBUG64 */
++		ef.is64 = w[0] == 0x10;
++		uint64_t addr = ef.is64 ? ((uint64_t)w[3] << 32 | w[2]) : w[2];
++		uint64_t len = ef.is64 ? ((uint64_t)w[5] << 32 | w[4]) : w[3];
++		ef.table_len = (uint32_t)MIN(len, (uint64_t)sizeof(ef.table));
++		ef.want = ef.table_len;
++		ef.got = 0;
++		ef.state = 1;
++		printf("SWEET MDM: EFS sync: memory debug (%s), table of %llu bytes at %#llx: reading it\n", ef.is64 ? "64-bit" : "32-bit",
++		    len, addr);
++		ef_mem_read(addr, ef.table_len);
++		break;
++	}
++	case 3: case 0x12: {    /* READ_DATA(64): the client reads an image from us */
++		uint32_t id = w[2];
++		uint64_t off = w[0] == 3 ? w[3] : ((uint64_t)w[5] << 32 | w[4]);
++		uint64_t len = w[0] == 3 ? w[4] : ((uint64_t)w[7] << 32 | w[6]);
++		const char *part = id == 16 ? "mdm1m9kefs1" : id == 17 ? "mdm1m9kefs2" : id == 20 ? "mdm1m9kefs3" : NULL;
++		printf("SWEET MDM: EFS sahara: read of image %u (%s), %llu bytes at %llu\n", id, part ? part : "?", len, off);
++		while (part != NULL && len > 0) {
++			uint32_t take = (uint32_t)MIN(len, (uint64_t)0x1000);
++			uint8_t *b = (uint8_t *)(mx.mem + MH_EFTX);
++			bzero(b, take);
++			(void)sweet_ufs_read_part(part, off, b, take);
++			ef.tx_done = false;
++			mx_tre(MH_TRE_EF_OUT + ef.out_wp * MH_EL, mx.pa + MH_EFTX, take, 0x2u << 16 | 1u << 9);
++			ef.out_wp = (ef.out_wp + 1) % MH_TRE_N;
++			mx_ring(MX_EFS_OUT, MH_TRE_EF_OUT, ef.out_wp);
++			for (unsigned i = 0; i < 20000 && !ef.tx_done; ++i) {
++				mx_er1();
++				delay(100);
++			}
++			off += take;
++			len -= take;
++		}
++		break;
++	}
++	case 4: {       /* END_IMAGE_TX */
++		uint32_t d[2] = { 5, 8 };
++		printf("SWEET MDM: EFS sahara: image %u done, status %u: DONE sent\n", w[2], w[3]);
++		ef_send(d, sizeof(d));
++		break;
++	}
++	case 6:
++		printf("SWEET MDM: EFS sahara: DONE_RESP, status %u\n", w[2]);
++		break;
++	case 8:
++		printf("SWEET MDM: EFS sahara: RESET_RESP: the sync is over\n");
++		break;
++	default:
++		break;
++	}
++}
++
++/* Bytes from channel 11. */
++static void
++ef_feed(const uint8_t *p, uint32_t n)
++{
++	if (ef.state == 0) {
++		if (n >= 8) {
++			ef_cmd(p, n);
++		}
++		return;
++	}
++	if (ef.state == 1) {
++		uint32_t take = (uint32_t)MIN((uint64_t)n, ef.want - ef.got);
++		memcpy(ef.table + ef.got, p, take);
++		ef.got += take;
++		if (ef.got < ef.want) {
++			return;
++		}
++		uint32_t es = ef.is64 ? 64u : 52u;
++		ef.nreg = MIN(ef.table_len / es, EF_NREG);
++		for (unsigned i = 0; i < ef.nreg; ++i) {
++			const uint8_t *e = ef.table + i * es;
++			if (ef.is64) {
++				memcpy(&ef.base[i], e + 8, 8);
++				memcpy(&ef.len[i], e + 16, 8);
++			} else {
++				uint32_t b, l;
++				memcpy(&b, e + 4, 4);
++				memcpy(&l, e + 8, 4);
++				ef.base[i] = b;
++				ef.len[i] = l;
++			}
++			const char *fname = (const char *)e + (ef.is64 ? 44 : 32);
++			const char *desc = (const char *)e + (ef.is64 ? 24 : 12);
++			snprintf(ef.name[i], sizeof(ef.name[i]), "%.20s", fname[0] ? fname : desc);
++			for (unsigned k = 0; k < EF_NREG; ++k) {
++				if (ef_keep[k].data != NULL && strcmp(ef_keep[k].name, ef.name[i]) == 0) {
++					ef_keep[k].len = 0;     /* synced again: starts over */
++				}
++			}
++			printf("SWEET MDM: EFS sync: region %u \"%.20s\" / \"%.20s\" %#llx + %llu bytes\n", i, desc, fname, ef.base[i],
++			    ef.len[i]);
++		}
++		ef.cur = 0;
++		ef.got = 0;
++		ef_next();
++		return;
++	}
++	/* state 2: region data */
++	uint8_t *dst = ef_slot(ef.name[ef.cur]);
++	uint64_t at = ef.base[ef.cur];
++	uint32_t take = (uint32_t)MIN((uint64_t)n, ef.want);
++	uint64_t done = 0;
++	for (unsigned i = 0; i < EF_NREG; ++i) {
++		if (ef_keep[i].data == dst && dst != NULL) {
++			/* where this chunk goes: the region's bytes already received */
++			done = ef_keep[i].len;
++			if (done + take <= EF_REGION_MAX) {
++				memcpy(dst + done, p, take);
++				ef_keep[i].len = (uint32_t)(done + take);
++			}
++		}
++	}
++	(void)at;
++	ef.want -= take;
++	ef.got += take;
++	if (ef.want == 0) {
++		if (ef.got >= ef.len[ef.cur]) {
++			printf("SWEET MDM: EFS sync: region %u \"%s\" kept in RAM (%llu bytes)\n", ef.cur, ef.name[ef.cur], ef.got);
++			ef.cur++;
++			ef.got = 0;
++			for (unsigned i = 0; i < EF_NREG; ++i) {
++				if (ef.cur < ef.nreg && ef_keep[i].data != NULL && strcmp(ef_keep[i].name, ef.name[ef.cur]) == 0) {
++					ef_keep[i].len = 0;     /* a region synced again starts over */
++				}
++			}
++		}
++		ef_next();
++	}
++}
++
++static void
++ef_start(void)
++{
++	bool keep_on = ef.on;
++	(void)keep_on;
++	bzero(&ef, sizeof(ef));
++	if (mx_chan_start(MX_EFS_OUT, false, MH_TRE_EF_OUT) || mx_chan_start(MX_EFS_IN, true, MH_TRE_EF_IN)) {
++		return;
++	}
++	for (unsigned b = 0; b < MH_RX_N; ++b) {
++		ef_rx_queue(b);
++	}
++	ef.on = true;
++	printf("SWEET MDM: EFS channels %u/%u running (remote EFS over Sahara)\n", MX_EFS_OUT, MX_EFS_IN);
++}
++
++/* For the next Sahara boot: a synced image for EFS image id 16 / 17 / 20, if one was kept. */
++static const uint8_t *
++ef_kept_for(uint32_t id, uint32_t *len)
++{
++	const char *want = id == 16 ? "1" : id == 17 ? "2" : id == 20 ? "3" : NULL;
++	for (unsigned i = 0; want != NULL && i < EF_NREG; ++i) {
++		const char *nm = ef_keep[i].name;
++		size_t l = strlen(nm);
++		/* "efs1.bin" / "EFS1" ...: the digit after "efs" */
++		for (size_t k = 0; ef_keep[i].data != NULL && ef_keep[i].len && k + 3 < l; ++k) {
++			if ((nm[k] | 0x20) == 'e' && (nm[k + 1] | 0x20) == 'f' && (nm[k + 2] | 0x20) == 's' && nm[k + 3] == want[0]) {
++				*len = ef_keep[i].len;
++				return ef_keep[i].data;
++			}
++		}
++	}
++	return NULL;
++}
++
++static void
++ef_txdone(void)
++{
++	ef.tx_done = true;
++}
++
+ /* ---- Sahara (Qualcomm's image transfer protocol over channels 2 / 3) ---- */
+ 
+ enum { SAH_HELLO = 1, SAH_HELLO_RESP, SAH_READ_DATA, SAH_END_IMAGE_TX, SAH_DONE, SAH_DONE_RESP, SAH_RESET, SAH_RESET_RESP,
+@@ -1161,6 +1475,33 @@ sah_read(uint32_t id, uint64_t off, uint64_t len)
+ 	unsigned efs = 1;
+ 	(void)PE_parse_boot_argn("sweetmdmefs", &efs, sizeof(efs));
+ 	const char *part = NULL;
++	uint32_t klen = 0;
++	const uint8_t *kept = ef_kept_for(id, &klen);
++	if (kept != NULL) {
++		if (id != sah.last_id) {
++			printf("SWEET MDM: sahara: image %u from the EFS synced in RAM (%u bytes)\n", id, klen);
++			sah.last_id = id;
++			sah.id_bytes = 0;
++		}
++		while (len > 0 && !sah.stop) {
++			uint32_t take = (uint32_t)MIN(len, (uint64_t)MH_TX_LEN);
++			uint8_t *buf = (uint8_t *)(mx.mem + MH_TXBUF);
++			bzero(buf, take);
++			if (off < klen) {
++				memcpy(buf, kept + off, MIN((uint64_t)take, klen - off));
++			}
++			__asm__ volatile("dsb sy" ::: "memory");
++			if (mx_send(take) != 0) {
++				sah.stop = true;
++				return;
++			}
++			off += take;
++			len -= take;
++			sah.bytes += take;
++			sah.id_bytes += take;
++		}
++		return;
++	}
+ 	if (efs && (id == 16 || id == 17 || id == 20)) {
+ 		part = id == 16 ? "mdm1m9kefs1" : id == 17 ? "mdm1m9kefs2" : "mdm1m9kefs3";
+ 	}
+@@ -1871,7 +2212,7 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 		printf("SWEET MDM: DMS operating mode: %u (%s)\n", v[0], mx_opmode(v[0]));
+ 		mq.opmode = v[0];
+ 		mq.opmode5 = v[0] == 5 ? mq.opmode5 + 1 : 0;
+-		if (mq.opmode5 >= 2) {
++		if (mq.opmode5 >= 12) {        /* two minutes (0266: after 10 s, which cut its EFS sync short) */
+ 			mq.restart_wanted = true;
+ 		}
+ 		const uint8_t *w;
+@@ -2128,11 +2469,12 @@ md_mission(void)
+ 	if (md.stage >= 8) {
+ 		mx_sfr_cfg();
+ 		dg_start();
++		ef_start();
+ 	}
+ 	bzero(&mq, sizeof(mq));
+ 	bzero(mt, sizeof(mt));                  /* TFTP sessions of a previous modem run */
+ 	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
+-	unsigned secs = md.stage >= 8 ? 150 : 30;
++	unsigned secs = md.stage >= 8 ? 240 : 30;
+ 	(void)PE_parse_boot_argn("sweetmdmqrtr", &secs, sizeof(secs));
+ 	unsigned maxr0 = 0;
+ 	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr0, sizeof(maxr0));
+@@ -2170,7 +2512,7 @@ md_mission(void)
+ 	static unsigned restarts;
+ 	unsigned maxr = 0;                      /* restarts are opt-in now: sweetmdmrestart=N */
+ 	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr, sizeof(maxr));
+-	if (mq.restart_wanted && restarts < maxr) {
++	if ((mq.restart_wanted || mx.gone) && restarts < maxr) {
+ 		restarts++;
+ 		unsigned files = 0;
+ 		for (unsigned i = 0; i < MT_STORE_N; ++i) {
+-- 
+2.54.0 (Apple Git-157)
+
