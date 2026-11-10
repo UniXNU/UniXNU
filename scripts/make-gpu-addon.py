@@ -75,7 +75,8 @@ def main():
     output = Path(args[0]).resolve()
     if output.exists():
         sys.exit('Refuse to overwrite ' + str(output))
-    if not (BUNDLE / 'NativeAdrenoMetal').is_file():
+    # iOS keeps a flat bundle; macOS keeps the executable in Contents/MacOS. The addon carries either layout as built.
+    if not (BUNDLE / 'NativeAdrenoMetal').is_file() and not (BUNDLE / 'Contents/MacOS/NativeAdrenoMetal').is_file():
         sys.exit('Build the plugin first: python3 scripts/build-adreno-metal-plugin.py')
     files = []
     for path in sorted(p for p in BUNDLE.rglob('*') if p.is_file()):

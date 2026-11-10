@@ -1,4 +1,5 @@
 diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h
+new file mode 100644
 --- /dev/null
 +++ b/src/freedreno/vulkan/tu_frame_diagnostic.h
 @@ -0,0 +1,16 @@
