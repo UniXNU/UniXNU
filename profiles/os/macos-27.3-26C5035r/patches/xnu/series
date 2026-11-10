@@ -46,3 +46,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/gpucache-system-shader-cache-view.patch
 ../xnu-12377/payload-radix-root-at-startup.patch
 ../xnu-12377/cssha-digest-time.patch
+../xnu-12377/gpupool-device-pager-close.patch
