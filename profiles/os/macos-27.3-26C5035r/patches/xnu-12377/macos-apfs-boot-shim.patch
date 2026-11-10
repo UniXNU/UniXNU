@@ -1,0 +1,46 @@
+apfs-boot-shim=1: launchd's mount-phase-1/2 boot tasks (RequireSuccess) run apfs_boot_util, which creates the VM volume
+in the root container; the owner-verified OS image is read-only and holds the System volume only. The payload addon's
+owner apfs_boot_util (UniXNU scripts/macos-boot-shims, CDHash in the owner trust cache) is shown over
+apfs.fs/Contents/Resources as a read-only union after the Data mount. The signed images stay unchanged.
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9343,6 +9343,31 @@
+ 
+ /* The owner Data mount of native_owner_data_prepare at the macOS mount point, then the firmlinks. The
+  * iPadOS layers it adds over the mounted Data (GPU addon, staged system apps) are not used here. */
++/*
++ * apfs-boot-shim=1: launchd's boot tasks mount-phase-1/2 (RequireSuccess) run apfs_boot_util, which creates and mounts the
++ * root container's role volumes (VM first). The root container here is the unchanged, owner-verified OS image: System
++ * only, read-only. The payload's addon carries an owner apfs_boot_util (below bootshim/, its CDHash in the owner trust
++ * cache) that has nothing to mount; it is shown over apfs.fs/Contents/Resources as a read-only union, the other tools
++ * there stay the original ones. Never fatal; stage and status as native_gpu_addon_mount records them.
++ */
++volatile int native_owner_boot_shim_stage = 0;
++volatile int native_owner_boot_shim_status = -1;
++static void
++native_owner_macos_boot_shims(proc_t p, user_addr_t scratch)
++{
++	uint32_t enabled = 0;
++	if (!PE_parse_boot_argn("apfs-boot-shim", &enabled, sizeof(enabled)) || enabled != 1) {
++		return;
++	}
++	native_gpu_addon_install(p, scratch);
++	static const char source[] = "/private/var/ngpu/bootshim", point[] = "/System/Library/Filesystems/apfs.fs/Contents/Resources";
++	native_gpu_addon_mount(p, scratch, 0xc00, source, sizeof(source), point, sizeof(point),
++	    "/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_checkseal",
++	    "/System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_boot_util", &native_owner_boot_shim_stage,
++	    &native_owner_boot_shim_status);
++	printf("owner Data: apfs_boot_util shim stage %d, status %d\n", native_owner_boot_shim_stage, native_owner_boot_shim_status);
++}
++
+ static int
+ native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
+ {
+@@ -9403,6 +9428,7 @@
+ 	if (!error) native_owner_data_stage = 5;
+ 	if (!error) native_owner_macos_cryptex_view(p, scratch);
+ 	if (!error) native_owner_macos_gpu_addon(p, scratch);
++	if (!error) native_owner_macos_boot_shims(p, scratch);
+ done:
+ 	if (data_root) vnode_put(data_root);
+ 	native_owner_data_status = error;

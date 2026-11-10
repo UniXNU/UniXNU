@@ -92,6 +92,23 @@ def build_plugin(target):
     return ROOT / 'build' / {'ios27': 'adreno-metal-plugin27', 'macos27': 'adreno-metal-plugin-macos27'}.get(target, 'adreno-metal-plugin')
 
 
+def build_boot_shims(work):
+    """macOS on a read-only root container: the owner apfs_boot_util (scripts/macos-boot-shims) in an addon of its own,
+    below bootshim/, which the kernel shows over apfs.fs/Contents/Resources with apfs-boot-shim=1."""
+    tree = work / 'boot-shims'
+    (tree / 'bootshim').mkdir(parents=True)
+    exe = tree / 'bootshim/apfs_boot_util'
+    sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
+    run('xcrun', '--sdk', 'macosx', 'clang', '-target', 'arm64e-apple-macos27.0', '-isysroot', sdk, '-O2', '-Wall', '-Werror',
+        ROOT / 'scripts/macos-boot-shims/apfs_boot_util.c', '-o', exe)
+    run('codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.unixnu.apfs_boot_util', exe)
+    empty = work / 'boot-shims-empty.bin'
+    empty.write_bytes(b'NGPUADD2' + struct.pack('<IIQ', 0, 0, 24))
+    addon = work / 'boot-shims.bin'
+    script('addon-add-dir.py', empty, addon, 'bootshim', tree / 'bootshim')
+    return addon
+
+
 def bundle_cdhash(path, options=()):
     detail = subprocess.run(['codesign', '--display', '--verbose=4', *options, str(path)],
                             check=True, capture_output=True, text=True).stderr
@@ -251,6 +268,9 @@ def main():
                         candidate = combined
                     addon = out / 'gpuaddon.bin'
                     candidate.replace(addon)
+        if addon is None and not want_addon and request.get('boot_shims'):
+            addon = out / 'boot-shims.bin'
+            build_boot_shims(work).replace(addon)
         bluetooth_report = None
         if request.get('bluetooth_tool'):
             bluetooth = work / 'bluetooth'
