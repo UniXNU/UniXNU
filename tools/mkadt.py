@@ -89,7 +89,7 @@ def node(name, props=(), children=()):
     return n
 
 
-def build(seed=None, qemu=False, highmem=False, board='sweet'):
+def build(seed=None, qemu=False, highmem=False, board='sweet', baseband=False):
     """qemu=True: same tree, but with QEMU virt's GIC addresses and CNTFRQ (tools/qemu-sweet.py)."""
     phys_base, mem_size = (HIGH_PHYS_BASE, HIGH_MEM_SIZE) if highmem else (PHYS_BASE, MEM_SIZE)
     if highmem and board == 'umi' and not qemu:
@@ -274,6 +274,21 @@ def build(seed=None, qemu=False, highmem=False, board='sweet'):
         product_props = [(k, names.get(k, v)) for k, v in product_props]
     product = [node('product', [ph()] + product_props)] if product_props else []
 
+    # --baseband (opt-in): umi has a cellular modem (X55, run by the kernel's sweet_mdm). MobileGestalt computes
+    # HasBaseband, contains-cellular-radio and cellular-data from IODeviceTree:/baseband and CACHES them; with them
+    # 0 SpringBoard takes the line for a "bootstrap" one and shows SOS. One boot with this node and the MobileGestalt
+    # cache deleted is enough: the rebuilt cache keeps the answers (1) on images without the node. Opt-in because the
+    # 0274 boot with the node had the screen flipping between 2 frames (0273b without it, same cache: fine).
+    # Only the identity part of D22AP's node (class 3, no function-* GPIO references, zero IMEI); no launchd job
+    # here is gated on it (the cellular CommCenter job is not installed).
+    baseband = [node('baseband', [
+        ph(),
+        ('compatible', cstr('baseband,sweet')),
+        ('device_type', cstr('baseband')),
+        ('class', u32(3)),
+        ('device-imei', bytes(32)),
+    ])] if board == 'umi' and baseband else []
+
     # Identity of the iPhone X whose userland runs here: compatible[0] is
     # hw.model/hw.target (D22AP), model is hw.machine/hw.product
     # (iPhone10,3). 'xiaomi,sweet' stays for SweetPlatformExpert matching,
@@ -287,12 +302,12 @@ def build(seed=None, qemu=False, highmem=False, board='sweet'):
         ('manufacturer', cstr('Apple Inc.')),
         ('#address-cells', u32(2)),
         ('#size-cells', u32(2)),
-    ], [chosen, defaults, cpus, arm_io, fbcon, buttons] + product + ([] if qemu else [ufs]) + gpufw)
+    ], [chosen, defaults, cpus, arm_io, fbcon, buttons] + product + baseband + ([] if qemu else [ufs]) + gpufw)
 
 
 if __name__ == '__main__':
     board = sys.argv[sys.argv.index('--board') + 1] if '--board' in sys.argv else 'sweet'
-    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv, board=board)
+    root = build(qemu='--qemu' in sys.argv, highmem='--highmem' in sys.argv, board=board, baseband='--baseband' in sys.argv)
     blob = adt.serialize(root)
     open(sys.argv[1], 'wb').write(blob)
     if '--dump' in sys.argv:

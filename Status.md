@@ -25,7 +25,7 @@
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
 | 🦷 Bluetooth | QCA6390 over UART (921600 baud): scan, connect and pair in Settings, Control Center button, off / on (slow); see the tests below | ⚠️ |
-| 📶 Cellular Data | The X55 modem boots from the kernel and stays registered on LTE with the SIM (kernels 0272-0273); nothing in iOS uses it yet (no data, calls or SMS) | ⚠️ |
+| 📶 Cellular Data | The X55 modem boots from the kernel and stays registered on LTE with the SIM (kernels 0272-0273); the status bar shows the carrier (Sunrise) with signal bars through sweet-telephonyd, the CommCenter stand-in. No mobile data yet; calls and SMS are not planned | ⚠️ |
 | 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
@@ -130,8 +130,8 @@
   mission mode, QRTR, its TFTP and remote-EFS services (nothing written to the phone), operating mode steered by the
   host, SIM provisioning session: **SIM READY and REGISTERED on LTE (-90 dBm)**, kept up as a kernel service with its
   state in `kern.sweet_cell` (kernel 0273). iOS gets it through `sweet-telephonyd`, a stand-in for CommCenter that
-  answers CoreTelephony from the modem's state (SIM, operator, signal, LTE) and notifies SpringBoard. Next: Settings >
-  Cellular (a `baseband` node for MobileGestalt), mobile data (WDS, IP_HW0 100/101). Calls are not planned (data-only
+  answers CoreTelephony from the modem's state (SIM, operator, signal, LTE) and notifies SpringBoard. Status bar: carrier + bars (MobileGestalt
+  cache rebuilt once with a `baseband` node). Next: Settings > Cellular, mobile data (WDS, IP_HW0 100/101). Calls are not planned (data-only
   SIM; calls need VoLTE)
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:

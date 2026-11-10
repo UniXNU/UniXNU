@@ -2,6 +2,34 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 22:55: STATUS BAR SHOWS "Sunrise" WITH 3 STABLE BARS (no SOS)** (kernel unchanged, image
+  `shim/out/umi-0273b-x55service-gpu.img`; sweet-telephonyd ec488b6 + this commit; MobileGestalt cache rebuilt).
+  - SOS decoding (SystemStatusServer, in SpringBoard): `_shouldShowEmergencyOnlyStatus...` = hasCellularTelephony &&
+    (reg == EmergencyOnly || (reg == registered && bootstrap)) && !carrierBundle.suppressSOSOnlyWithLimitedService.
+    `bootstrap` (STTelephonyStateProvider `_updateDataConnectionTypeForContext:`) = !isCellularRadioCapabilityActive
+    || HideRatIndicator. isCellularRadioCapabilityActive starts from MobileGestalt `contains-cellular-radio`, then
+    `_CTServerConnectionHideDataIndicator`; the hide queries are plain-XPC kPacketGetProperty
+    (kCellularDataHideRatIndicator / kCellularDataHideIndicator), read with dyn_cast_or_default(obj, **true**).
+  - Fix 1 (sweet-telephonyd ec488b6): the echo sent back null for those keys -> "hide" -> SOS. `plain_property()`
+    answers typed values: hide keys + kRegistrationEmergencyCallBackMode false, kRegistrationIsInHomeCountry true,
+    kRegistrationIsDataAttached = registered, kRegistrationMCC / kRegistrationOperatorName strings when registered.
+    Still SOS: the daemon's new MobileGestalt log showed contains-cellular-radio 0, HasBaseband 0, cellular-data 0,
+    telephony 1. (First version used MGGetBoolAnswer, which ABORTS for a non-bool key (BasebandChipset) -> the daemon
+    crash-looped and SpringBoard sat on the Apple logo ~8 min; now MGCopyAnswer only.)
+  - Fix 2: MobileGestalt computes HasBaseband with `deviceTreeNodeIsPresent:withExactName:` "baseband" and CACHES it
+    in CacheData (not CacheExtra), and the cache is only invalidated by build / UUID. tools/mkadt.py got a minimal
+    `/baseband` node (compatible baseband,sweet, device_type baseband, class 3, zero device-imei; no function-*);
+    image `umi-0274-baseband-node.img` (0273b + node): BasebandClass 3 but HasBaseband still 0 (cached). **Phone file
+    deleted (user OK):** `/private/var/containers/Shared/SystemGroup/systemgroup.com.apple.mobilegestaltcache/
+    Library/Caches/com.apple.MobileGestalt.plist` (backup `~/ios-umi-backup/mg-cache-2026-11-10/`, not in git). The
+    rebuilt cache differs in 5 CacheData bytes (offsets 320 = 3, 560 / 632 / 2600 / 4792 = 1); CacheExtra identical;
+    contains-cellular-radio / HasBaseband / cellular-data now 1 -> no more SOS, but no bars on 0274.
+  - **0274 with the node: the screen flipped between 2 frames in a loop** (user; GPU log healthy, fences fine).
+    Booting 0273b (no node) with the rebuilt cache: **"Sunrise", 3 stable bars, no flicker** - the cached answers
+    stay 1 without the node. The node is now opt-in (`mkadt.py --baseband`, not used by umi-boot-image.sh); why the
+    node made the display flip is not known. Brightness: backboardd ramps to 420 nits (max) at ~20 lux on 0273b
+    AND 0274 (same before) - auto-brightness, separate issue.
+  - Open: Settings > Cellular, mobile data (WDS + IP channels 100/101).
 - **2026-11-10 21:10: sweet-telephonyd, a STAND-IN FOR COMMCENTER, answers iOS from the modem's state (stages 1-3);
   vmd removed** (`phone/sweet-telephonyd/sweet_telephonyd.m`, `phone/build-sweet-telephonyd.sh [install]`, job
   `phone/sweet-telephonyd/com.sweet.telephonyd.plist`; kernel image unchanged: `umi-0273b-x55service-gpu.img`).
