@@ -332,12 +332,18 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
             if not re.fullmatch(r'[A-Za-z0-9_.\-]{1,63},[0-9a-fA-F]{1,16},(?:[0-9a-fA-F]{2}){1,16},(?:[0-9a-fA-F]{2}){1,16}', value) or len(value) >= 160:
                 raise Error(f'Malformed text fixup: {value}')
         chosen.append(('text-fixups', b''.join(value.encode() + b'\0' for value in payload['text_fixups'])))
-    chosen += typed_properties(platform.get('chosen', {}))
+    # [adt.chosen]: property tables by type, and any other key as a child node of /chosen (macOS: asmb, the local boot policy).
+    chosen_table = platform.get('chosen', {})
+    chosen += typed_properties({kind: value for kind, value in chosen_table.items() if kind in PROPERTY_TYPES})
+    for child, value in chosen_table.items():
+        if child not in PROPERTY_TYPES and not isinstance(value, dict):
+            raise Error(f'ADT node chosen: {child} is neither a property type nor a child node')
+    chosen_children = [platform_node(child, value) for child, value in chosen_table.items() if child not in PROPERTY_TYPES]
     mappings = [('PackedRAMDisk' if options.get('packed_data_ramdisk') else 'RAMDisk', bytes(16))] if data else []
     mappings += [('TrustCache', bytes(16))] if trust else []
     mappings += [('GpuAddon', bytes(16))] if addon else []
     mappings += [('RootPolicies', bytes(16))] if root_policies else []
-    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties')])]
+    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties'), *chosen_children])]
     cpus = next((entry for entry in root.children if entry.name == 'cpus'), None)
     if cpus is None:
         raise Error('Hardware DTS requires /cpus')

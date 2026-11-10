@@ -81,6 +81,16 @@
 "amfi-only-platform-code" = 1
 
 
+# The local boot policy csr_bootstrap reads (kern_csr.c): lp-sip0 keeps every SIP protection on, lp-sip1 adds
+# CSR_ALLOW_UNAUTHENTICATED_ROOT, as `csrutil authenticated-root disable` does. The system volume carries no Apple seal
+# manifest here; the owner-signed root policies verify every block of it instead.
+["adt"."chosen"."asmb"."u64"]
+"lp-sip0" = 0
+
+["adt"."chosen"."asmb"."u32"]
+"lp-sip1" = 1
+
+
 ["adt"."product"]
 
 ["adt"."product"."string"]
