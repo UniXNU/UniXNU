@@ -1,7 +1,7 @@
 The macOS options of the bcm2837 machine. macOS userspace and the macOS kexts need the
 parts of Apple's MASTER.arm64.MacOSX that the iPhoneOS-based machine file leaves out: System V
 IPC, sendfile, disk quotas (the HFS quota KPIs), /.vol paths, setuid on mounts, the external
-resolver, searchfs, firmlinks and file leases, the commpage preemption-free zone that macOS
+resolver, searchfs, firmlinks and file leases, mount by role (Data, VM, Preboot and Recovery), AppleDouble files, nullfs, the commpage preemption-free zone that macOS
 libplatform calls for OSAtomicFifo, audit, CSR with its configuration from the device tree,
 supplemental signatures and a second static trust cache. The rest of the machine file, the
 memory and code signing configuration proven on this board, stays as it is. Only the macOS
@@ -19,7 +19,7 @@ diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
  #  BSD_DEV =        [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEV ]
  #  BSD_DEBUG =      [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEBUG ]
 -#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs]
-+#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs quota config_volfs config_mnt_suid config_ext_resolver config_searchfs config_firmlinks config_file_leases ]
++#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs quota config_volfs config_mnt_suid config_ext_resolver config_searchfs config_firmlinks config_file_leases config_rosv_startup config_mount_vm config_mount_prebootrecovery config_appledouble nullfs ]
  #  FILESYS_RELEASE= [ FILESYS_BASE ]
  #  FILESYS_DEV =    [ FILESYS_BASE fdesc config_union_mounts ]
  #  FILESYS_DEBUG =  [ FILESYS_BASE fdesc config_union_mounts ]
