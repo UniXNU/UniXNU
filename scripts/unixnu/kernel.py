@@ -58,14 +58,18 @@ def version_env(modules, ctx=None):
         root = ctx.board.get('root', {})
         for key, variable in (('os_volume_uuid', 'XNU_OWNER_ROOT_VOLUME_UUID'),
                               ('systemos_volume_uuid', 'XNU_OWNER_CACHE_VOLUME_UUID'),
+                              ('app_volume_uuid', 'XNU_OWNER_APP_VOLUME_UUID'),
                               ('os_image_sha256', 'UNIXNU_ROOT_OS_SHA256'),
-                              ('systemos_image_sha256', 'UNIXNU_ROOT_SYSTEMOS_SHA256')):
+                              ('systemos_image_sha256', 'UNIXNU_ROOT_SYSTEMOS_SHA256'),
+                              ('app_image_sha256', 'UNIXNU_ROOT_APP_SHA256')):
             if root.get(key):
                 env[variable] = root[key]
         if root.get('os_volume_uuid'):
             env['UNIXNU_ROOT_OS_UUID'] = root['os_volume_uuid']
         if root.get('systemos_volume_uuid'):
             env['UNIXNU_ROOT_SYSTEMOS_UUID'] = root['systemos_volume_uuid']
+        if root.get('app_volume_uuid'):
+            env['UNIXNU_ROOT_APP_UUID'] = root['app_volume_uuid']
         env['UNIXNU_IPSW_BUILD'] = ctx.board.get('ipsw', {}).get('build', '')
         env['UNIXNU_XNU_ARCH'] = load_toml(ctx.profile_roots['arch'] / 'profile.toml').get('arch', {}).get('name', 'arm64')
     return env

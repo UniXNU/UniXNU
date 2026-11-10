@@ -113,8 +113,10 @@ def main():
     # A bring-up image can carry one policy: the boot image must stay under the
     # 192 MiB fastboot limit, and the second table does not fit yet.
     tables_in_userdata = os.environ.get('XNU_SOURCE_STORAGE_TABLES', '') == 'userdata'
-    selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', 'OS,SystemOS')).split(',')
-                if name.strip() in ('OS', 'SystemOS')]
+    # The App window (the application cryptex of macOS) has a policy when its policy directory ships one.
+    default_policies = 'OS,SystemOS,App' if (policies / 'App').is_dir() else 'OS,SystemOS'
+    selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', default_policies)).split(',')
+                if name.strip() in ('OS', 'SystemOS', 'App')]
     if not selected:
         parser.error('UNIXNU_SOURCE_STORAGE_POLICIES names no policy')
     manifest_paths = [policies / name / 'manifest.bin' for name in selected]
@@ -123,7 +125,7 @@ def main():
         parser.error('All selected policies must share the same complete explicit owner anchor')
     manifests = []
     expected = {}
-    for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS')):
+    for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS'), ('App', 'UNIXNU_ROOT_APP')):
         digest, identity = os.environ.get(prefix + '_SHA256'), os.environ.get(prefix + '_UUID')
         if name in selected and not (digest and identity):
             parser.error(f'the OS profile has no [root] {name.lower()}_image_sha256 and {name.lower()}_volume_uuid')

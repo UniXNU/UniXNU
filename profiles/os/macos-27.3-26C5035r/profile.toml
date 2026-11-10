@@ -178,6 +178,8 @@ os_volume_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"
 os_image_sha256 = "40d8282eb8650da9b4d7437a981764c48d47ee4bdc5b8b362248f25ecbce0e70"
 systemos_volume_uuid = "6678E466-2F88-4C56-9408-DC7361BAA0BA"
 systemos_image_sha256 = "14330ed990fe7022114b10718f4defe3049d49b6e5d52fd3ac71a487541cd1f3"
+app_volume_uuid = "F2AEA010-C8EB-4AF8-92A9-4B90781CD668"
+app_image_sha256 = "797bb1e07e354e80e75d3be2658d8f586b343dbdc05cb93cb880e772ab0d23d1"
 
 
 [payload.adt]
