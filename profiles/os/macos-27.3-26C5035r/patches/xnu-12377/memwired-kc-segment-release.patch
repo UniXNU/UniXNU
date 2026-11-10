@@ -1,0 +1,136 @@
+The kernel collection's segments that XNU hands back once used go to the VM (kc-segment-release, default 1).
+
+kern.boot_payload_memory of the last desktop boots reads "freed 0 pages, dropped 5 calls 0x2810000 bytes": every
+ml_static_mfree() request for memory of the loaded kernel collection was dropped, 40 MiB that stay wired (and counted
+in VM_KERN_COUNT_WIRED_STATIC_KERNELCACHE) for the session. The requests are the collection's __LINKEDIT
+(OSKext::jettisonFileSetLinkeditSegment, 0x272c000, made unless keepsyms is set), the kernel's __BOOTDATA
+(arm_vm_prot_finalize after the boot stacks are replaced, 0xd8000), __KLDDATA (0x8000) and __KLD (0x4000)
+(OSKext::removeKextBootstrap). On a kernel without a monitor, without the SPTM and without ARM_LARGE_MEMORY the
+physical aperture aliases only the memory in front of the collection and behind topOfKernelData, so the static
+address of these segments lies below physmap_base and ml_static_mfree() returns at "It is acceptable (if bad) to fail
+to free". A monitor kernel slides the same segments into the aperture so that they can be freed, and after
+the free arm_vm_prot_finalize() clears their static mappings there: nothing of XNU reads them once given back.
+
+arm_vm_prot_init() maps each of these segments with page mappings and no contiguous hint (granule 0). ml_static_protect()
+and ml_static_mfree() now take a range that lies wholly inside one of them by its static address, as they take a
+range of the image tail (payload-addon-release.patch): every page gets the protections of free memory and keeps its
+static address as its kernel address (phystokv() of a collection page is that address). Pages before the page array
+are found through the radix tree whose root payload-radix-root-at-startup.patch makes during startup. Ranges in any
+other segment of the collection are dropped as before. kc-segment-release=0 restores the old behaviour.
+
+kern.boot_payload_memory shows the result: about 10256 more pages freed and no bytes dropped for these segments.
+
+Has not run on hardware.
+
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1415,11 +1415,59 @@
+ 	}
+ 
+ 	return true;
++}
++
++/*
++ * kc-segment-release (default 1, 0 keeps the old behaviour): the segments of the loaded kernel collection that XNU
++ * hands back once it is done with them go to the VM on a kernel without a monitor, without the SPTM and without
++ * ARM_LARGE_MEMORY. They are the collection's __LINKEDIT (OSKext::jettisonFileSetLinkeditSegment, unless keepsyms is
++ * set), the kernel's __BOOTDATA (arm_vm_prot_finalize, once the boot stacks have been replaced) and its __KLD and
++ * __KLDDATA (OSKext::removeKextBootstrap). Their only kernel address is the one in the static region: the physical
++ * aperture of such a kernel aliases the memory in front of the collection and behind topOfKernelData, not the
++ * collection, so ml_static_mfree() used to drop these requests (40 MiB on sheng: 0x2810000 bytes in 5 calls).
++ * arm_vm_prot_init() maps each of them with page mappings and no contiguous hint (granule 0), so ml_static_protect()
++ * can give every page the protections of free memory and the page keeps that address as its kernel address, as
++ * pages of the image tail do (ml_static_in_image_tail). A monitor kernel slides the same segments into the aperture
++ * for this reason (the XNU_MONITOR arm_vm_physmap_init()).
++ */
++SECURITY_READ_ONLY_LATE(static uint32_t) kc_segment_release = 1;
++
++bool arm_vm_static_segment_releasable(vm_offset_t vaddr, vm_size_t size);
++
++bool
++arm_vm_static_segment_releasable(vm_offset_t vaddr, vm_size_t size)
++{
++#if !XNU_MONITOR && !defined(CONFIG_SPTM) && !defined(ARM_LARGE_MEMORY)
++	const struct {
++		vm_offset_t base;
++		vm_size_t   size;
++	} segments[] = {
++		{ segLINKB, segSizeLINK },
++		{ segBOOTDATAB, segSizeBOOTDATA },
++		{ segKLDB, segSizeKLD },
++		{ segKLDDATAB, segSizeKLDDATA },
++	};
++
++	if (kc_segment_release != 1 || size == 0) {
++		return false;
++	}
++	for (unsigned int i = 0; i < sizeof(segments) / sizeof(segments[0]); i++) {
++		if (segments[i].size != 0 && vaddr >= segments[i].base && vaddr - segments[i].base < segments[i].size &&
++		    size <= segments[i].size - (vaddr - segments[i].base)) {
++			return true;
++		}
++	}
++#else
++#pragma unused(vaddr, size)
++#endif
++	return false;
+ }
+ 
+ void
+ arm_vm_prot_init(__unused boot_args * args)
+ {
++	(void) PE_parse_boot_argn("kc-segment-release", &kc_segment_release, sizeof(kc_segment_release));
++
+ 	segLOWESTTEXT = UINT64_MAX;
+ 	if (segSizePRELINKTEXT && (segPRELINKTEXTB < segLOWESTTEXT)) {
+ 		segLOWESTTEXT = segPRELINKTEXTB;
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2032,6 +2032,20 @@
+ #pragma unused(vaddr, size)
+ 	return false;
+ #endif
++}
++
++/*
++ * Whether ml_static_protect() and ml_static_mfree() take a range below the
++ * physical aperture by its static address: the image tail, or a segment of the
++ * kernel collection that is handed back once used
++ * (arm_vm_static_segment_releasable, kc-segment-release).
++ */
++extern bool arm_vm_static_segment_releasable(vm_offset_t vaddr, vm_size_t size);
++
++static bool
++ml_static_takes_static_address(vm_offset_t vaddr, vm_size_t size)
++{
++	return ml_static_in_image_tail(vaddr, size) || arm_vm_static_segment_releasable(vaddr, size);
+ }
+ 
+ kern_return_t
+@@ -2062,7 +2076,7 @@
+ 	ppnum_t       ppn;
+ 	kern_return_t result = KERN_SUCCESS;
+ 
+-	if (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size)) {
++	if (vaddr < physmap_base && !ml_static_takes_static_address(vaddr, size)) {
+ 		panic("ml_static_protect(): %p < %p", (void *) vaddr, (void *) physmap_base);
+ 		return KERN_FAILURE;
+ 	}
+@@ -2257,7 +2271,7 @@
+ ml_static_mfree_prepare(vm_offset_t vaddr, vm_size_t size)
+ {
+ 	if ((vaddr & PAGE_MASK) != 0 || size < PAGE_SIZE ||
+-	    (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size))) {
++	    (vaddr < physmap_base && !ml_static_takes_static_address(vaddr, size))) {
+ 		return false;
+ 	}
+ 	return ml_static_protect(vaddr, trunc_page(size), VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS;
+@@ -2280,7 +2294,7 @@
+ 
+ 
+ 	/* It is acceptable (if bad) to fail to free. */
+-	if (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size)) {
++	if (vaddr < physmap_base && !ml_static_takes_static_address(vaddr, size)) {
+ 		os_atomic_inc(&ml_static_mfree_dropped_calls, relaxed);
+ 		os_atomic_add(&ml_static_mfree_dropped_bytes, (uint64_t)size, relaxed);
+ 		return;

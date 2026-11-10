@@ -1,0 +1,57 @@
+The lazy answers of 16 KiB-signed images (cs-lazy=1) are kept in chunks of one page instead of four.
+
+vm.cs_native4k_stats of the last desktop boot: "auth 43685 ... table 36224K peak 36224K" with 443 lazy blobs. The
+table bytes are the per-blob pointer tables (at least one page each) and the chunks of 127 blocks, 16 KiB each, that
+cshash-native4k-lazy.patch allocates wired at the first authentication of one of their blocks. About 34 MiB of chunks
+held 43685 answers, about 20 per chunk: more than 80 % of the chunk memory held no answer, because the blocks a boot
+uses lie scattered over the 6.8 GiB of the dyld shared cache. A chunk is now one page of 31 blocks (496 KiB of file).
+
+What is read, hashed, compared, recorded and answered is unchanged, and so is the protection of the chunks (read-only
+mapping, written through the physical aperture, one chunk per index installed by compare-and-swap). The pointer
+tables grow by four (8 bytes per 496 KiB of file instead of per 1.98 MiB, about 110 KiB for all 6.8 GiB). There are
+more and smaller kernel_map entries, one per chunk. How much is saved depends on how the used blocks cluster: between
+nothing (no two used blocks of a 127-block chunk within the same 31) and three quarters of the chunk memory. The
+table bytes of vm.cs_native4k_stats against "auth" x 128 bytes show it on the next boot. The layout is a compile-time
+constant; no boot argument selects the old one.
+
+Has not run on hardware.
+
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -6283,7 +6283,7 @@
+  * accepts the page, no page is marked, and the VM, which asks cs_native4k_lazy_pending before each validation,
+  * authenticates and comes back.
+  *
+- * The states and the derived hashes live in chunks of 127 blocks (four pages for 1.98 MiB of the file), allocated when
++ * The states and the derived hashes live in chunks of 31 blocks (one page for 496 KiB of the file), allocated when
+  * a block of theirs is first authenticated and found through a table of chunk pointers. Table and chunks are mapped
+  * read-only before they can be reached, as the eager table is, and are written through the physical aperture, the way
+  * the read-only zone allocator writes its elements on a kernel without a monitor (pmap_ro_zone_memcpy). The pointer to
+@@ -6295,8 +6295,13 @@
+  */
+ #define CS_LAZY_BLOCK           16384
+ #define CS_LAZY_SLOT            32      /* bytes kept per derived hash; a larger hash keeps the blob eager */
+-#define CS_LAZY_CHUNK_BLOCKS    127
+-#define CS_LAZY_CHUNK_SIZE      16384
++/*
++ * One page per chunk. The blocks a boot authenticates are sparse inside the files of the dyld shared cache: with
++ * four-page chunks of 127 blocks, 43685 authenticated blocks held about 34 MiB of chunks, about 20 blocks per chunk,
++ * so more than 80 % of that wired memory held no answer. A smaller chunk holds the same answers with less unused.
++ */
++#define CS_LAZY_CHUNK_BLOCKS    31
++#define CS_LAZY_CHUNK_SIZE      4096
+ #define CS_LAZY_UNKNOWN         0
+ #define CS_LAZY_READY           1
+ #define CS_LAZY_BAD             2
+@@ -6306,8 +6311,10 @@
+ struct cs_native4k_lazy_chunk {
+ 	_Atomic uint8_t state[CS_LAZY_CHUNK_BLOCKS + 1];
+ 	uint8_t         hash[CS_LAZY_CHUNK_BLOCKS][CS_LAZY_BLOCK / 4096][CS_LAZY_SLOT];
++	uint8_t         unused[CS_LAZY_CHUNK_SIZE - (CS_LAZY_CHUNK_BLOCKS + 1) -
++	    CS_LAZY_CHUNK_BLOCKS * (CS_LAZY_BLOCK / 4096) * CS_LAZY_SLOT];
+ };
+-_Static_assert(sizeof(struct cs_native4k_lazy_chunk) == CS_LAZY_CHUNK_SIZE, "a chunk is four pages");
++_Static_assert(sizeof(struct cs_native4k_lazy_chunk) == CS_LAZY_CHUNK_SIZE, "a chunk is one page");
+ 
+ struct cs_native4k_lazy {
+ 	vm_size_t       allocation;     /* bytes of this table */

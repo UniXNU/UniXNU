@@ -1,0 +1,30 @@
+The booter memory of mach_memory_info is zero when the loader's memSizeActual holds the usable bytes of the span.
+
+zprint of the last desktop boot reads VM_KERN_COUNT_BOOT_STOLEN 18014398509403120K and a wired total of 3001 MiB.
+ml_get_booter_memory_size() returns memSizeActual - memSize, the DRAM the booter kept beyond the kernel's span on
+Apple's loaders. With /chosen/darwinboot-memory-excluded (window-memory-excluded-ranges.patch) the loader passes the
+usable bytes of the span in memSizeActual (0x17b2fc000 against memSize 0x180000000), so the difference wraps to
+-77 MiB, vm_page_diagnose() adds it to VM_KERN_COUNT_WIRED and reports the wrapped value as boot-stolen memory. The
+booter keeps nothing of that span, so the size is now 0 when memSizeActual is set and smaller than memSize. Only the
+two counters of mach_memory_info change: the wired total shows 77 MiB more, the true figure. No other reader exists.
+
+Has not run on hardware.
+
+--- a/osfmk/arm/machine_routines_common.c
++++ b/osfmk/arm/machine_routines_common.c
+@@ -1274,6 +1274,15 @@
+ #if CONFIG_SPTM
+ 	size -= memSize;
+ #else
++	/*
++	 * The booter's memory is what DRAM has beyond the kernel's span. A loader that hands the kernel one span
++	 * with ranges it must not use (/chosen/darwinboot-memory-excluded) puts the usable bytes of the span in
++	 * memSizeActual, which is then smaller than memSize: the booter keeps nothing of the span, and the
++	 * difference would wrap and be subtracted from the wired total of mach_memory_info (zprint).
++	 */
++	if (BootArgs->memSizeActual != 0 && size < BootArgs->memSize) {
++		return 0;
++	}
+ 	size -= BootArgs->memSize;
+ #endif /* CONFIG_SPTM */
+ 

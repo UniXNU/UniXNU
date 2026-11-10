@@ -47,3 +47,6 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/payload-radix-root-at-startup.patch
 ../xnu-12377/cssha-digest-time.patch
 ../xnu-12377/gpupool-device-pager-close.patch
+../xnu-12377/memwired-kc-segment-release.patch
+../xnu-12377/memwired-booter-size-accounting.patch
+../xnu-12377/memwired-cs-lazy-page-chunks.patch
