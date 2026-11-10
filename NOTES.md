@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 18:12: 0266 MODEM RESTARTS WORK, but "shutting down" comes back every run; mcfg.tmp is only a lock**
+  (patch `xnu/patches/0266-umi-x55-ramstore-restart.patch`, image **`shim/out/umi-0266-x55restart.img`** = 0265b's line;
+  booted ~18:04; log: scratchpad `umi-0266.log`).
+  - `/readwrite` writes now kept in RAM (32 files x 512 KiB, this phone boot only, never stored on the phone) and read
+    back; when DMS answers "shutting down" twice in a row (~10 s) the modem is restarted (AP2MDM status low, PMX55
+    warm reset, 150 ms, status high, full PCIe2 re-init, BHI, Sahara, mission), at most twice per phone boot.
+  - Run: 3 modem boots in one phone boot. Restarts 1 and 2: PCIe2 back at gen 3 x2 at once, endpoint answers, Sahara
+    complete again (5.96 / 5.98 s). Each run: DMS ONLINE first, then the mcfg flow, then "shutting down", NAS
+    "searching" (radio none), UIM both slots "error, no ATR". After restart 2 the AMSS did not show on the same link
+    in time and the fallback cycle found it back in its PBL (execenv 0): stage result 33.
+  - **`/readwrite/mcfg.tmp` is a lock, not the trigger**: the modem reads it (absent), writes 1 byte, reads it back,
+    then sends a WRQ with option **`unlink=0`** (Qualcomm's delete). Our store kept it as an empty file (wrong: it should
+    be removed, a later read should get "not found"). Between that and "shutting down" it only reads
+    `mbn_hw.dig`, `oem_hw.txt` and the SDX55 `mcfg_hw.mbn` variants (FUSION/LA/SS, DSDS, SS_CDMALess, DSDS_CDMALess:
+    found) and the Lahaina / Chitwan / Bitra ones (not found). So the shutdown cause is still unknown.
+  - Candidates for next time: (1) honour `unlink`; (2) what the modem wants from the host at that point - a host
+    service it looks for and does not find (watch NEW_LOOKUP to us; SSCTL / sysmon handshakes, SERVREG / PDR), or
+    an indication it sends us (DMS / NAS indications are not registered for); (3) read the modem's own failure text
+    (the SFR buffer: MHI SFR_CFG command, as the OnePlus port does) or DIAG (MHI 4/5) F3 messages; (4) the SIM:
+    UIM never powers the card even while ONLINE.
 - **2026-11-10 17:58: 0265 TFTP SERVER FOR THE X55 WORKS; the modem goes ONLINE, writes /readwrite/mcfg.tmp, then
   stays "shutting down"** (patch `xnu/patches/0265-umi-x55-tftp-server.patch`, kernel 42c9f12, built without the adreno
   / wlan WIP; image **`shim/out/umi-0265b-x55tftp.img`** = 0262's line with `sweetmdm=8`; booted ~17:55; log:
