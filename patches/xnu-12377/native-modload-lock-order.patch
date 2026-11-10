@@ -1,0 +1,97 @@
+Late class registration takes the kext lock before the stalled-classes lock, as a kext load does.
+
+OSMetaClass::preModLoad holds sStalledClassesLock until postModLoad, which looks the kext up under sKextLock. A kext load
+holds sKextLock first (OSKext::load, OSRuntimeInitializeCPP), so a driver registering classes at runtime outside a load took
+the locks in the opposite order; overlapping with a concurrent load, both waited forever and every later kext load and IOKit
+match that loads a driver waited too (sheng macOS run24 and run27: no IOMedia finished matching, root never appeared).
+preModLoad now takes sKextLock first (recursive for a kext load) and postModLoad releases it.
+
+diff --git a/libkern/c++/OSKext.cpp b/libkern/c++/OSKext.cpp
+--- a/libkern/c++/OSKext.cpp
++++ b/libkern/c++/OSKext.cpp
+@@ -4281,6 +4281,35 @@
+ #endif
+ /*********************************************************************
+ *********************************************************************/
++/*
++ * OSMetaClass::preModLoad and postModLoad register a module's classes with sStalledClassesLock held between them, and
++ * postModLoad looks the module's kext up under sKextLock. A kext load registers its classes the same way while it already
++ * holds sKextLock (OSKext::load, OSRuntimeInitializeCPP), so the lock order there is sKextLock, then sStalledClassesLock.
++ * A caller outside a kext load (classes a driver registers late, at runtime) took them in the opposite order: it held
++ * sStalledClassesLock and waited for sKextLock in postModLoad while a concurrent kext load held sKextLock and waited for
++ * sStalledClassesLock in preModLoad, and from then on every kext load, and so every IOKit match that loads its driver, waited.
++ * preModLoad takes sKextLock first (recursively for a kext load) and postModLoad releases it, one order for every caller.
++ */
++volatile uint32_t native_modload_kext_waits = 0;   /* preModLoad calls that found sKextLock held by another thread */
++extern "C" bool
++OSKextLockForModLoad(void)
++{
++	if (!sKextLock) {
++		return false;   /* the kernel's own classes, before OSKext::initialize */
++	}
++	if (!IORecursiveLockTryLock(sKextLock)) {
++		native_modload_kext_waits = native_modload_kext_waits + 1;
++		IORecursiveLockLock(sKextLock);
++		printf("OSKext: class registration waited for a kext load (%u)\n", native_modload_kext_waits);
++	}
++	return true;
++}
++extern "C" void
++OSKextUnlockForModLoad(void)
++{
++	IORecursiveLockUnlock(sKextLock);
++}
++
+ OSSharedPtr<OSKext>
+ OSKext::lookupKextWithIdentifier(const char * kextIdentifier)
+ {
+diff --git a/libkern/c++/OSMetaClass.cpp b/libkern/c++/OSMetaClass.cpp
+--- a/libkern/c++/OSMetaClass.cpp
++++ b/libkern/c++/OSMetaClass.cpp
+@@ -107,6 +107,10 @@
+ 	OSMetaClass ** classes;
+ } * sStalled;
+ IOLock * sStalledClassesLock = NULL;
++/* Whether the module now in flight holds sKextLock (OSKextLockForModLoad, OSKext.cpp); guarded by sStalledClassesLock. */
++static bool sStalledKextLocked;
++extern "C" bool OSKextLockForModLoad(void);
++extern "C" void OSKextUnlockForModLoad(void);
+ 
+ struct ExpansionData {
+ 	OSOrderedSet    * instances;
+@@ -779,7 +783,9 @@
+ void *
+ OSMetaClass::preModLoad(const char * kextIdentifier)
+ {
++	const bool kextLocked = OSKextLockForModLoad();
+ 	IOLockLock(sStalledClassesLock);
++	sStalledKextLocked = kextLocked;
+ 
+ 	assert(sStalled == NULL);
+ 	sStalled = kalloc_type(StalledData, Z_WAITOK_ZERO_NOFAIL);
+@@ -788,6 +794,12 @@
+ 	    kKModCapacityIncrement, Z_WAITOK_ZERO, VM_KERN_MEMORY_OSKEXT);
+ 	if (!sStalled->classes) {
+ 		kfree_type(StalledData, sStalled);
++		sStalled = NULL;
++		sStalledKextLocked = false;
++		IOLockUnlock(sStalledClassesLock);
++		if (kextLocked) {
++			OSKextUnlockForModLoad();
++		}
+ 		return NULL;
+ 	}
+ 	OSMETA_ACCUMSIZE((kKModCapacityIncrement * sizeof(OSMetaClass *)) +
+@@ -973,7 +985,12 @@
+ 	        sStalled = NULL;
+ 	}
+ 
++	const bool kextLocked = sStalledKextLocked;
++	sStalledKextLocked = false;
+ 	IOLockUnlock(sStalledClassesLock);
++	if (kextLocked) {
++		OSKextUnlockForModLoad();
++	}
+ 
+ 	return result;
+ }
