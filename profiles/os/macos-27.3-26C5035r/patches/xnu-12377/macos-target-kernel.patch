@@ -1,0 +1,87 @@
+The macOS target on the embedded machine configuration. Apple builds its macOS kernels without
+CONFIG_EMBEDDED and with ARM_LARGE_MEMORY; this kernel keeps the board's embedded options and small
+address layout and defines XNU_TARGET_OS_OSX, which reaches code Apple never builds that way:
+- mmap accepts MAP_32BIT in the kernel of a macOS userspace (the flag is defined for kernels only
+  when the compiler targets macOS).
+- The compressor's jetsam check reads the thrashing flag, which the macOS branch leaves undeclared;
+  macOS turns thrashing detection off, so it is false.
+- The swap budget and the compressor pool keep the embedded limits on the small layout: the macOS
+  ones are sized for the large kernel address space.
+- Syscall 435 (pid_hibernate, the embedded freezer call) is nosys, as in Apple's macOS kernels;
+  its body is built for the embedded targets only.
+diff --git a/bsd/kern/syscalls.master b/bsd/kern/syscalls.master
+index 0911b26..7235dc5 100644
+--- a/bsd/kern/syscalls.master
++++ b/bsd/kern/syscalls.master
+@@ -650,7 +650,8 @@
+ 432	AUE_NULL	ALL	{ int audit_session_port(au_asid_t asid, user_addr_t portnamep); }
+ 433	AUE_NULL	ALL	{ int pid_suspend(int pid); }
+ 434	AUE_NULL	ALL	{ int pid_resume(int pid); }
+-#if CONFIG_EMBEDDED
++; pid_hibernate is the freezer call of the embedded targets: kern_proc.c defines it for them only, macOS has nosys
++#if CONFIG_EMBEDDED && !XNU_TARGET_OS_OSX
+ 435	AUE_NULL	ALL	{ int pid_hibernate(int pid); }
+ #else
+ 435     AUE_NULL        ALL     { int nosys(void); }
+diff --git a/bsd/sys/mman.h b/bsd/sys/mman.h
+index 25e577e..a82ada0 100644
+--- a/bsd/sys/mman.h
++++ b/bsd/sys/mman.h
+@@ -151,7 +151,7 @@
+ #define MAP_RESILIENT_CODESIGN  0x2000 /* no code-signing failures */
+ #define MAP_RESILIENT_MEDIA     0x4000 /* no backing-store failures */
+ 
+-#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500
++#if (defined(KERNEL) && XNU_TARGET_OS_OSX) || (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500)
+ #define MAP_32BIT       0x8000          /* Return virtual addresses <4G only */
+ #endif /* defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500 */
+ 
+diff --git a/osfmk/vm/vm_compressor.c b/osfmk/vm/vm_compressor.c
+index 147488f..f448c7e 100644
+--- a/osfmk/vm/vm_compressor.c
++++ b/osfmk/vm/vm_compressor.c
+@@ -829,7 +829,9 @@ vm_compressor_set_size(void)
+ 	compressor_pool_max_size = C_SEG_MAX_LIMIT;
+ 	compressor_pool_max_size *= c_seg_bufsize;
+ 
+-#if XNU_TARGET_OS_OSX
++	/* The macOS pool (a multiple of memory, for swap) is sized for the large kernel address layout; the small
++	 * layout keeps the embedded sizing. */
++#if XNU_TARGET_OS_OSX && (!defined(__arm64__) || defined(ARM_LARGE_MEMORY))
+ 
+ 	if (vm_compression_limit == 0) {
+ 		if (max_mem <= (4ULL * 1024ULL * 1024ULL * 1024ULL)) {
+@@ -2860,6 +2862,9 @@ compressor_needs_to_swap()
+ 	/*
+ 	 * Thrashing detection disabled.
+ 	 */
++#if CONFIG_JETSAM
++	bool compressor_is_thrashing = false;
++#endif
+ #else /* (XNU_TARGET_OS_OSX && __arm64__) */
+ 
+ 	bool compressor_is_thrashing = vm_compressor_is_thrashing();
+diff --git a/osfmk/vm/vm_compressor_backing_store.c b/osfmk/vm/vm_compressor_backing_store.c
+index 96f36cc..02c6dde 100644
+--- a/osfmk/vm/vm_compressor_backing_store.c
++++ b/osfmk/vm/vm_compressor_backing_store.c
+@@ -172,7 +172,19 @@ boolean_t vm_swap_force_defrag = FALSE, vm_swap_force_reclaim = FALSE;
+ 
+ #else /* !XNU_TARGET_OS_OSX */
+ 
++#if defined(__arm64__) && !defined(ARM_LARGE_MEMORY)
++/*
++ * A macOS userspace on the small kernel address layout (every Apple macOS arm64 kernel is
++ * ARM_LARGE_MEMORY): the swap budget and the compressor submap must fit this layout's kernel VA,
++ * so it keeps the limits the embedded configuration uses on the same layout.
++ */
++#define VM_MAX_SWAP_FILE_NUM            5
++#define VM_MAX_SWAP_FILE_SWAP_ENABLED_NUM (4ULL * (1ULL << 30) / MAX_SWAP_FILE_SIZE)
++#define VM_MIN_SWAP_FILE_SWAP_ENABLED_NUM (4ULL * (1ULL << 30) / MAX_SWAP_FILE_SIZE)
++#define VM_SWAP_MIN_VOLUME_CAPACITY (128ULL * (1ULL << 30))
++#else
+ #define VM_MAX_SWAP_FILE_NUM            100
++#endif
+ #define VM_SWAPFILE_DELAYED_TRIM_MAX    128
+ 
+ #define VM_SWAP_SHOULD_DEFRAGMENT()     (((vm_swap_force_defrag == TRUE) || (c_swappedout_sparse_count > (vm_swapfile_total_segs_used / 4))) ? 1 : 0)

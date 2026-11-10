@@ -1,0 +1,22 @@
+{
+  "kernelcache_sha256": "d1003b5143ffd88439b4d45b6017f587171cfe6855660bed05370a2ea5db9fe9",
+  "collection_slide": "0x1f000000000",
+  "base_class": "IOAccelerator",
+  "metaclass": "0xfffffe000cc22b38",
+  "instance_bytes": 136,
+  "virtual_entries": 272,
+  "operational_overrides": [],
+  "metadata_overrides": [
+    0,
+    1,
+    7
+  ],
+  "libkern_entries": [
+    16
+  ],
+  "protected_compatible_constructor_aliases": [
+    "0xfffffe000aae62e0"
+  ],
+  "nondeleting_destructor": "0xfffffe000aae6350",
+  "evidence": "IOGraphicsFamily IOAccelerator of d1003b5143ffd884: vtable 0xfffffe00085c9220, 272 entries with IOService's diversities. Slots 0, 1 (destructors) and 7 (getMetaClass) are its own; slot 16 is OSMetaClassBase::Dispatch(IORPC), which every kext-built class holds where the kernel's IOService vtable holds a reserved stub. Its MetaClass constructor passes size 0x88. Addresses from the collection's symbol table."
+}
