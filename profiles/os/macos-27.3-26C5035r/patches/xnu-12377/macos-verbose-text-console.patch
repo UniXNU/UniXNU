@@ -1,0 +1,18 @@
+A verbose macOS boot (-v) shows the kernel log on the screen: iBoot reports a text console for -v, while
+DarwinBoot always reports a graphics one, so the kernel only drew the boot progress bar.
+--- a/pexpert/arm/pe_init.c
++++ b/pexpert/arm/pe_init.c
+@@ -561,6 +561,13 @@
+ 	 */
+ 	check_for_panic_log();
+ 
++#if XNU_TARGET_OS_OSX
++	/* A verbose boot (-v) gets the text console, as iBoot reports it for -v; DarwinBoot always reports graphics. */
++	int verbose = 0;
++	if (PE_state.video.v_display && PE_parse_boot_argn("-v", &verbose, sizeof(verbose))) {
++		PE_state.video.v_display = 0;
++	}
++#endif
+ 	if (PE_state.video.v_display) {
+ 		PE_initialize_console(&PE_state.video, kPEGraphicsMode);
+ 	} else {
