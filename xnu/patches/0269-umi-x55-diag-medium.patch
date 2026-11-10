@@ -1,0 +1,80 @@
+From fc6fdd8b4aea8565fea5afa8497200087284c89b Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 18:46:04 +0100
+Subject: [PATCH] umi: X55 DIAG at medium level with the TFTP client's messages
+ counted, not printed (0269)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 20 ++++++++++++++------
+ 1 file changed, 14 insertions(+), 6 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 44e35b4..716f86f 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -37,7 +37,7 @@
+  *               offline reason is logged. When DMS stays "shutting down" (two polls, ~10 s) the modem is restarted
+  *               (PMX55 warm reset, PCIe2 re-init, BHI, Sahara, mission) if sweetmdmrestart=N allows (default 0).
+  *               SFR: a 4 KiB failure reason buffer handed over (MHI command 73) and printed. DIAG on MHI 4 / 5:
+- *               every subsystem's message mask set (sweetmdmdiag, default 0x1c = high / error / fatal) and the
++ *               every subsystem's message mask set (sweetmdmdiag, default 0x1e = medium..fatal) and the
+  *               F3 messages logged (format strings as text, at most 1500). 240 s window.
+  *               Remote EFS on MHI 10 / 11: Sahara answered (HELLO; memory debug: table and regions read into RAM,
+  *               then RESET; image reads served from the mdm1m9kefs partitions); what was synced replaces those
+@@ -958,7 +958,7 @@ static struct {
+ 	uint8_t frame[4096];
+ 	uint32_t flen;
+ 	bool esc, on;
+-	unsigned msgs, printed, other, bad;
++	unsigned msgs, printed, other, bad, muted, uim;
+ } dg;
+ 
+ static uint16_t
+@@ -1024,7 +1024,12 @@ dg_packet(const uint8_t *p, uint32_t n)
+ 		uint16_t line = (uint16_t)(p[12] | p[13] << 8), ssid = (uint16_t)(p[14] | p[15] << 8);
+ 		uint32_t mask = (uint32_t)p[16] | (uint32_t)p[17] << 8 | (uint32_t)p[18] << 16 | (uint32_t)p[19] << 24;
+ 		uint32_t o = 20 + 4u * nargs;
+-		if (o >= n || dg.printed >= 1500) {
++		/* 0269: the TFTP client (ssid 102) was ~85 % of the messages and the UDP log dropped lines: counted only */
++		if (ssid == 102) {
++			dg.muted++;
++			return;
++		}
++		if (o >= n || dg.printed >= 3000) {
+ 			return;
+ 		}
+ 		const char *fmt = (const char *)p + o;
+@@ -1041,6 +1046,9 @@ dg_packet(const uint8_t *p, uint32_t n)
+ 		for (unsigned i = 0; i < nargs && i < 6; ++i) {
+ 			memcpy(&a[i], p + 20 + 4 * i, 4);
+ 		}
++		if (ssid == 21 && fl >= 11 && strncmp(fmt, "UIM_PUP_MSG", 11) == 0 && dg.uim++ >= 45) {
++			return;                         /* the UIM power-up log: its first two rounds are enough */
++		}
+ 		dg.printed++;
+ 		/* the modem's format string is printed as text, never used as a format */
+ 		printf("SWEET MDM: F3 %u/%#x %.*s:%u: %.*s | %x %x %x %x %x %x\n", ssid, mask,
+@@ -1124,7 +1132,7 @@ dg_start(void)
+ 		dg_rx_queue(b);
+ 	}
+ 	dg.on = true;
+-	uint32_t m = 0x1c;                      /* MSG_LEGACY high 0x4, error 0x8, fatal 0x10 */
++	uint32_t m = 0x1e;                      /* MSG_LEGACY medium 0x2, high 0x4, error 0x8, fatal 0x10 */
+ 	(void)PE_parse_boot_argn("sweetmdmdiag", &m, sizeof(m));
+ 	const uint8_t verno[1] = { 0x00 };      /* DIAG_VERNO_F: a first answer */
+ 	dg_send(verno, 1);
+@@ -2506,8 +2514,8 @@ md_mission(void)
+ 	}
+ 	printf("SWEET MDM: mission: %u hellos, %u services announced, %u data packets, %u QMI answers%s\n", mq.hellos,
+ 	    mq.servers, mq.data, mq.answers, mx.gone ? " (the modem went away)" : "");
+-	printf("SWEET MDM: DIAG: %u F3 messages (%u printed), %u other packets, %u bad frames\n", dg.msgs, dg.printed, dg.other,
+-	    dg.bad);
++	printf("SWEET MDM: DIAG: %u F3 messages (%u printed, %u of the TFTP client not printed), %u other packets, %u bad frames\n",
++	    dg.msgs, dg.printed, dg.muted, dg.other, dg.bad);
+ 	mx_sfr_print("end of the run");
+ 	static unsigned restarts;
+ 	unsigned maxr = 0;                      /* restarts are opt-in now: sweetmdmrestart=N */
+-- 
+2.54.0 (Apple Git-157)
+

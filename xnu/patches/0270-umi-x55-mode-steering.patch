@@ -1,0 +1,107 @@
+From dca1f8cd1e1d6621a1a6ceb5b254a86ba7470c55 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 19:07:19 +0100
+Subject: [PATCH] umi: X55 operating mode steered by the host
+ (sweetmdmonline=1: low power when DMS appears, online ~20 s later and
+ whenever not online) - the modem stays online, the radio sees the network
+ (0270)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 48 ++++++++++++++++++++++++++++++++++-----------
+ 1 file changed, 37 insertions(+), 11 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 716f86f..fc18b47 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -30,8 +30,9 @@
+  *               and QRTR spoken (HELLO; every service the modem announces is logged) for sweetmdmqrtr seconds (30).
+  *   sweetmdm=8  + QMI clients over QRTR (our port 0x4001 on node 1), read only: DMS revision / operating mode / IDs
+  *               (the IMEI is not logged, only its length), UIM card status, NAS serving system + signal strength
+- *               (again every 10 s). sweetmdmonline=1 also asks DMS for operating mode online (the radio transmits
+- *               and registers with the SIM's network); default off. sweetmdmqrtr defaults to 90 s here.
++ *               (again every 10 s). sweetmdmonline=1: the host steers the operating mode (low power when DMS
++ *               appears, online ~20 s later and whenever it is not; the radio then transmits and registers with
++ *               the SIM's network); default off.
+  *               Also a TFTP server for the modem (QRTR service 0x1000, port 0x4002): reads from the FAT modem
+  *               partition; /readwrite files kept in RAM for this phone boot (never written to the phone); DMS's
+  *               offline reason is logged. When DMS stays "shutting down" (two polls, ~10 s) the modem is restarted
+@@ -1620,7 +1621,8 @@ static struct {
+ 	uint32_t node;
+ 	uint32_t svc_node[0x60], svc_port[0x60];   /* where each QMI service (< 0x60) is */
+ 	uint16_t txn;
+-	bool asked, online_asked, restart_wanted;
++	bool asked, online_asked, restart_wanted, lpm_sent;
++	unsigned online_at;
+ 	unsigned answers, opmode, opmode5;
+ 	bool v2;                /* the modem speaks QRTR v2 headers (version 3, 16 bytes) on IPCR: answered the same way */
+ } mq;
+@@ -2284,10 +2286,40 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 	}
+ }
+ 
++/*
++ * The host steers the operating mode (sweetmdmonline=1), as the OnePlus 8 Pro port does with the same modem (facts):
++ * LOW POWER as soon as DMS is announced (left alone, the modem went online by itself and into an MCFG refresh that
++ * ends in "shutting down": 0265-0269b), ONLINE ~20 s later, and ONLINE again every 10 s while it is not online.
++ */
++static void
++mx_mode_steer(unsigned t_ms)
++{
++	unsigned online = 0;
++	(void)PE_parse_boot_argn("sweetmdmonline", &online, sizeof(online));
++	if (!online || mq.svc_port[0x02] == 0) {
++		return;
++	}
++	if (!mq.lpm_sent) {
++		static const uint8_t lpm[4] = { 0x01, 0x01, 0x00, 0x01 };    /* TLV 1: mode 1 = low power */
++		mq.lpm_sent = true;
++		mq.online_at = t_ms + 20000;
++		printf("SWEET MDM: QMI: DMS set operating mode LOW POWER (DMS just announced)\n");
++		mx_qmi_req(0x02, 0x2e, lpm, 4);
++		return;
++	}
++	if (t_ms >= mq.online_at && t_ms % 10000 == 5000 && mq.opmode != 0) {
++		static const uint8_t on[4] = { 0x01, 0x01, 0x00, 0x00 };     /* TLV 1: mode 0 = online */
++		printf("SWEET MDM: QMI: DMS mode %u: set operating mode ONLINE\n", mq.opmode);
++		mx_qmi_req(0x02, 0x2e, on, 4);
++		mx_qmi_req(0x02, 0x2d, NULL, 0);
++	}
++}
++
+ /* The read-only survey; again NAS / DMS mode every 10 s. */
+ static void
+ mx_qmi_survey(unsigned t_ms)
+ {
++	mx_mode_steer(t_ms);
+ 	if (!mq.asked && mq.svc_port[0x02] && mq.svc_port[0x0b] && mq.svc_port[0x03]) {
+ 		mq.asked = true;
+ 		printf("SWEET MDM: QMI: DMS, UIM and NAS announced: asking\n");
+@@ -2297,14 +2329,7 @@ mx_qmi_survey(unsigned t_ms)
+ 		mx_qmi_req(0x0b, 0x2f, NULL, 0);        /* UIM get card status */
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);        /* NAS get serving system */
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);        /* NAS get signal strength */
+-		unsigned online = 0;
+-		(void)PE_parse_boot_argn("sweetmdmonline", &online, sizeof(online));
+-		if (online && !mq.online_asked) {
+-			static const uint8_t on[4] = { 0x01, 0x01, 0x00, 0x00 };     /* TLV 1: mode 0 = online */
+-			mq.online_asked = true;
+-			printf("SWEET MDM: QMI: asking DMS for operating mode ONLINE (sweetmdmonline=1)\n");
+-			mx_qmi_req(0x02, 0x2e, on, 4);
+-		}
++
+ 	} else if (mq.asked && t_ms % 10000 == 0) {
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);
+@@ -2480,6 +2505,7 @@ md_mission(void)
+ 		ef_start();
+ 	}
+ 	bzero(&mq, sizeof(mq));
++	mq.opmode = 0xff;
+ 	bzero(mt, sizeof(mt));                  /* TFTP sessions of a previous modem run */
+ 	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
+ 	unsigned secs = md.stage >= 8 ? 240 : 30;
+-- 
+2.54.0 (Apple Git-157)
+

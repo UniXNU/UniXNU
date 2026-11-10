@@ -2,6 +2,25 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 19:05: 0270 THE X55 STAYS ONLINE AND THE RADIO SEES THE NETWORK (UMTS, MCC 228 MNC 03, -88 dBm);
+  not registered: the SIM is still not powered** (patch `xnu/patches/0270-umi-x55-mode-steering.patch`, image
+  **`shim/out/umi-0270-x55online.img`** = 0265b's line + `sweetmdmonline=1`; booted ~19:00; log: scratchpad
+  `umi-0270.log`). The radio transmitted (online) for the first time on this phone.
+  - 0269 (medium DIAG, TFTP client muted; patch 0269) named the shutdown: MCFG `mcfg_remote_update_required` compares
+    the digest kept in EFS (prev: only the mbn_sw.dig part) with mbn_hw.dig + mbn_sw.dig (curr): different -> MCFG
+    re-discovers SR_DSDS / SS / DSDS_CDMALess / SS_CDMALess - SDX55_Fusion, starts `MCFG_ACENTRIC_STM` /
+    `MCFG_MCENTRIC_STM`, goes "shutting down", syncs EFS (remotefs memory_debug: success), waits. 0269b (one restart):
+    the stored digest was still the old one, the same refresh again, EFS sync of `m9kefs2` (the sync alternates
+    m9kefs1 / m9kefs2).
+  - 0270: the host steers the operating mode as the OnePlus 8 Pro port does with this modem (facts): DMS set LOW POWER
+    as soon as DMS is announced (accepted), ONLINE ~20 s later (accepted) and again every 10 s while not online. The
+    MCFG digest mismatch and refresh still show in DIAG, but **no "shutting down": ONLINE for the whole 240 s**, one
+    periodic EFS sync (m9kefs1) taken, SFR empty, MHI M0, stage result 0. **NAS: searching, cs / ps attach 2,
+    network 2, radio 5 (UMTS), MCC 228 MNC 03, signal -88 dBm.**
+  - SIM: UIM card status both slots still "error, no ATR", 0 applications; the UIM power-up log repeats.
+  - Next: the SIM. QMI UIM power up (0x31) per slot and card status indications (event registration); the UIM F3
+    power-up tags; the slot / card-detect configuration (SR_DSDS); compare with the OnePlus port (its UIM worked:
+    PIN1 verified, registration on LTE).
 - **2026-11-10 18:40: 0268 EFS SYNC ANSWERED: no more remotefs_sahara assertion; "shutting down" still comes ~10 s
   after ONLINE, so the EFS sync is a consequence, not the cause** (patch `xnu/patches/0268-umi-x55-efs-sync.patch`,
   image **`shim/out/umi-0268-x55efs.img`** = 0265b's line + `sweetmdmrestart=1`; booted ~18:27; log: scratchpad
