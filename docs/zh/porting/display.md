@@ -52,8 +52,6 @@ GPU 交接使用 `NGPSwap.sequence` 跟踪待处理帧，复制完成后用相�
 
 24A446 适配通过原版 IOSurfaceRoot 工厂创建默认 surface，核对内存和尺寸后将引用交给显示框架。
 框架的 `create_default_fb_surface()` 槽返回 void，返回寄存器中的残值不是对象指针。
-一次 300 秒启动记录中，三次交换均完成，没有内核 panic，屏幕显示苹果标志。
-桌面启动尚未通过验证；应先抓取显示服务和 SpringBoard 的等待链，再判断静止标志是否由帧传输故障造成。
 
 ### 读取显示管线 {#dpu-pipes}
 
@@ -94,9 +92,7 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
 3. 使用 GENI 示例时，先调用 `geni_i2c_prepare`，再启动读写，把中断状态交给 `geni_i2c_event`，
    到期时调用 `geni_i2c_timeout`。当前传输完成或取消后再发起下一次传输。
    服务请求在工作循环上处理，确认失败处理后再启用渐变调光。
-4. 让发布的属性和接受的请求与所选系统一致。iPadOS 17 使用 `IODisplayParameters` 亮度范围、
-   `backlight-control`、`brightness` 和 `FadePeriod`。iPadOS 27 还需要毫尼特、滑块表、校准参数和
-   `brightness-nits`，并且在报告虚拟平台的板子上丢弃所有请求。[亮度接口](/zh/porting/brightness)列出了每一项。
+4. 按所选系统发布属性并接受请求，各项见[亮度接口](#brightness-interface)。
 5. 构建服务和注册封装。参考显示配方包含两者，`backlight=1` 启用 probe。
 
 在解析后的构建树定位集成点：
@@ -111,6 +107,59 @@ rg -n 'backlight|GeniI2c' scripts/build-gop-legacy-display.py
 **预期结果：** 最低、中间和最高设置有对应回读与可见亮度，渐变调光完成，超时计数稳定。
 参考实现的 `native_backlight_stats` 记录发布、请求、回读、中断和失败。
 控制器写入与系统 UI 亮度调整分别验证。
+
+## 5. 亮度接口 {#brightness-interface}
+
+系统对背光服务的要求。数值取自 sheng 的 `AppleARMBacklight.cpp`。
+
+### 服务身份
+
+`AppleARMPlatform` 已定义 `AppleARMBacklight`，所以板级类使用自己的类名，`getMetaClass`
+返回 `AppleARMBacklight` 的 metaclass。CoreBrightness 据此把该服务当作内建显示屏的背光，
+沙盒也按该类应用配置。
+
+### 发布的属性
+
+| 属性 | 读取方 | 内容 |
+| --- | --- | --- |
+| `backlight-control` | CoreBrightness | `true` |
+| `IODisplayParameters.brightness` | iPadOS 17 | 以等级表示的 `min`、`max`、`value` |
+| `IODisplayParameters.BrightnessMilliNits` | iPadOS 27 | 以毫尼特表示的 `min`、`max`、`value` |
+| `backlight-marketing-table` | iPadOS 27 | 滑块等间距位置对应的有符号 16.16 尼特。缺少时无法创建显示对象 |
+| `LmaxProduct` | iPadOS 27 | 4 字节的 16.16 尼特。为 0 时滑块所有位置都对应最大值 |
+| `LmidProduct`、`LminProduct` | iPadOS 27 | 以尼特表示的数值 |
+| `backlight-calibration-parameters` | iPadOS 27 | `lMinProduct`、`lMidProduct`、`lMaxProduct`、`lMinPanel`、`lMidPanel`、`lMaxPanel`，均为 16.16 尼特 |
+
+### 接受的请求
+
+| 属性 | 作用 |
+| --- | --- |
+| `brightness-nits` | 有符号 16.16 尼特。小于等于 0 时关闭 LED，其他值按比例换算为不低于 1 的等级 |
+| `brightness`、`FadePeriod` | 等级和以 16.16 秒表示的渐变时间，最长 5 秒，每 16 ms 一步 |
+
+其他属性返回成功，不产生效果。请求通过定时器交给工作循环，调用方不会等待传输。
+
+### iPadOS 27 上的虚拟平台
+
+设置了 ADT 属性 `vmm-present` 的板子会让 MobileGestalt 回答 `IsVirtualDevice`。
+CoreBrightness 随后选择一个丢弃所有亮度请求的控制方式。`scripts/appsync/BacklightMode.m`
+让 `backboardd` 使用真机的模式，它通过
+[AppSync 适配层](/zh/concepts/security)加载。
+
+### 启动参数
+
+| 参数 | 作用 |
+| --- | --- |
+| `backlight=1` | 启动服务 |
+| `backlight-control=0` | 不发布 `backlight-control`，也不返回上述 metaclass |
+| `log-display=1` | 在启动日志中加入 `L` 行 |
+
+### 验证
+
+1. 系统日志出现 `[UniXNU backlight] physical brightness control selected`。
+2. `L` 行显示 `st=4`，`xerr` 保持为 0。
+3. 拖动滑块时 `req` 增加，`lvl` 和面板亮度随之变化。
+4. 熄屏时背光关闭，唤醒后恢复。
 
 ## 下一步
 
