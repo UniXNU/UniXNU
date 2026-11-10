@@ -281,8 +281,9 @@ def prelink(ctx):
     if wanted and sha256_file(cache) != wanted:
         raise Error(f'{cache} does not match the kernelcache this board was qualified against (sha256 {wanted})')
     output.parent.mkdir(parents=True, exist_ok=True)
+    # A fileset stays at the native link address and has no slide; the static-prelink format needs one.
     command = ['python3', ctx.tree / spec['tool'], '--kernel', kernel, '--prelinked', cache,
-               f'--slide={spec["slide"]}']
+               f'--slide={spec.get("slide", "0")}']
     for root in spec.get('roots', []):
         command += ['--root', root]
     if spec.get('early_security_init'):
