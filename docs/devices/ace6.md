@@ -4,4 +4,4 @@
 
 Complete and validate [porting.toml](/porting/records) in the device repository to publish its subsystem record.
 
-xiaoan919/UniXNU-ace6/firmware: procedure requires concrete entries
+xiaoan919/UniXNU-ace6: components without an area: \['ShengPlatformPower'\]

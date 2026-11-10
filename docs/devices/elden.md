@@ -6,7 +6,7 @@
 
 Lenovo Legion Y700 Gen 4 format 2 migration. Phase 1 UEFI is device-verified; XNU, storage, display and touch remain bring-up work.
 
-Source record: [porting.toml](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/porting.toml), `33b55083a0b61630f71478230f648606163115eb`.
+Source record: [porting.toml](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/porting.toml), `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 This page is generated from the device record.
 
@@ -16,7 +16,7 @@ This page is generated from the device record.
 | [Firmware and boot](#firmware) | `device-verified` |
 | [CPU and interrupts](#cpu) | `implemented` |
 | [Memory and DMA](#memory) | `implemented` |
-| [Storage and root](#storage) | `planned` |
+| [Storage and root](#storage) | `host-verified` |
 | [Display](#display) | `planned` |
 | [Input](#input) | `planned` |
 | [GPU](#gpu) | `planned` |
@@ -53,6 +53,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Development findings
 
+- 2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write.
 - The repository was format 1 and did not select shared SoC or OS profiles.
 - A public UniXNU-sm8750-common repository was not available during migration.
 - Keeping a separate local SoC profile preserves parser validation without mislabelling unqualified hardware support as shared.
@@ -79,31 +80,33 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Schema 2 profile, component, kernel, device-tree and payload declarations.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/board.toml)
-- `source`: [SM8750 transition source with the release replacement documented.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/feeds.toml)
-- `source`: [Shared-profile-shaped SM8750 transition metadata.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/soc/sm8750/soc.toml)
-- `source`: [Migration result, preserved phase 1 inputs and remaining release work.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/FORMAT2-MIGRATION.md)
-- `host`: [2026-10-25: fresh defconfig, tree and status runs resolved four profiles, five pinned components, 56 patches and 4 KiB pages under a format 2 output directory separate from phase 1. The local SM8750 source remains unpinned for release.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `host`: [2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write. Revision plus local working-tree patches.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/NIGHT-BRINGUP-20261106.md)
+  Command: <code>.venv/bin/python third_party/UniXNU/unixnu build kernel -D . -j4</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Schema 2 profile, component, kernel, device-tree and payload declarations.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/board.toml)
+- `source`: [SM8750 transition source with the release replacement documented.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/feeds.toml)
+- `source`: [Shared-profile-shaped SM8750 transition metadata.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/soc/sm8750/soc.toml)
+- `source`: [Migration result, preserved phase 1 inputs and remaining release work.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/FORMAT2-MIGRATION.md)
+- `host`: [2026-10-25: fresh defconfig, tree and status runs resolved four profiles, five pinned components, 56 patches and 4 KiB pages under a format 2 output directory separate from phase 1. The local SM8750 source remains unpinned for release.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>.venv/bin/python .cache/phase2-plan/UniXNU/unixnu status --json -D .</code>. Revision: `16e592abee8a550dec8154ed1f38b5ebc4f16213`.
-- `host`: [2026-10-25: defconfig and status resolved five canonical components and 57 applied patches. The Command Line Tools host-shim build produced and prelinked the target kernel; release rebuilding still requires a full Xcode iPhoneOS SDK.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
+- `host`: [2026-10-25: defconfig and status resolved five canonical components and 57 applied patches. The Command Line Tools host-shim build produced and prelinked the target kernel; release rebuilding still requires a full Xcode iPhoneOS SDK.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
   Command: <code>PATH=.cache/phase2-plan/toolchain/bin:.venv/bin:$PATH .venv/bin/python .cache/phase2-plan/UniXNU/unixnu build kernel -D .</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
-- `device`: [2026-11-01: the entry probe drew the full-width blue band at mid-screen and the device reset through PSCI after about two seconds, so the patched XNU entry instruction executed and the reset channel works.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `device`: [2026-11-01: the entry probe drew the full-width blue band at mid-screen and the device reset through PSCI after about two seconds, so the patched XNU entry instruction executed and the reset channel works.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>fastboot boot out/phase2.4/v3/elden-phase2.4-probe-boot.img</code>. Revision: `ef0e33d97c1a9571ec097e3ae37442efb8f4bb45`.
-- `device`: [2026-11-01: console and initialize\_screen skipped; reset probes at 0x985d68 and 0x985d54 both froze while 0x985d44 reset, so the kernel halts inside the stage-16 kernel\_startup\_initialize\_upto call at 0x985d50.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `device`: [2026-11-01: console and initialize\_screen skipped; reset probes at 0x985d68 and 0x985d54 both froze while 0x985d44 reset, so the kernel halts inside the stage-16 kernel\_startup\_initialize\_upto call at 0x985d50.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>fastboot boot out/phase2.4/v45/elden-phase2.4-probe-boot.img</code>. Revision: `ef0e33d97c1a9571ec097e3ae37442efb8f4bb45`.
-- `host`: [2026-11-01: the probe builder appends no segment in this mode; it overwrites the target instruction in place with a wait-then-PSCI-reset stub and optionally writes ret over named Apple handoffs. Every probe image passed verify\_phase2\_artifact.py with a v4 boot header and the 56 MiB FAT16 payload.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `host`: [2026-11-01: the probe builder appends no segment in this mode; it overwrites the target instruction in place with a wait-then-PSCI-reset stub and optionally writes ret over named Apple handoffs. Every probe image passed verify\_phase2\_artifact.py with a v4 boot header and the 56 MiB FAT16 payload.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>.venv/bin/python scripts/make_entry_probe_kernel.py --output-dir out/phase2.4/v45 --reset-va 0xfffffff007985d68 --ret-at 0xfffffff0073bde3c --ret-at 0xfffffff007941dec</code>. Revision: `ef0e33d97c1a9571ec097e3ae37442efb8f4bb45`.
-- `host`: [2026-11-01: the working tree at 718f75a adds --poke ADDRESS\|SYMBOL=WORD to the probe builder \(32-bit, code or data, prints the previous word and the owning segment\) on top of new segments/locate/symbol\_address helpers. The console candidate kernel is 54,050,920 bytes sha256 8a57a771b987477135692dc6b7a0c25c2a94587b8e0200e3a5934f284483de08 with eight pokes and no injected code; payload 5ebb049ef53865994e5870929397bddad4fb19c653116e77a4bfc6d757dc3f70 and image 0e3648192f2c2f3b1d6d01f75efa99b83b5f4d91fbcd06c07bd8790865fb41f9 passed verify\_phase2\_artifact.py with a v4 header, and darwinboot\_preflight accepted 16 segments and the ADT. Host evidence only; the image has not been booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `host`: [2026-11-01: the working tree at 718f75a adds --poke ADDRESS\|SYMBOL=WORD to the probe builder \(32-bit, code or data, prints the previous word and the owning segment\) on top of new segments/locate/symbol\_address helpers. The console candidate kernel is 54,050,920 bytes sha256 8a57a771b987477135692dc6b7a0c25c2a94587b8e0200e3a5934f284483de08 with eight pokes and no injected code; payload 5ebb049ef53865994e5870929397bddad4fb19c653116e77a4bfc6d757dc3f70 and image 0e3648192f2c2f3b1d6d01f75efa99b83b5f4d91fbcd06c07bd8790865fb41f9 passed verify\_phase2\_artifact.py with a v4 header, and darwinboot\_preflight accepted 16 segments and the ADT. Host evidence only; the image has not been booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>.venv/bin/python scripts/make_entry_probe_kernel.py --output-dir out/phase2.4/v49 --poke 0xfffffff0073bdf24=0x14000005 --poke 0xfffffff007941e0c=0x1400001d --poke 0xfffffff007941e90=0x52800041 --poke 0xfffffff0071fd970=0x00000000 --poke 0xfffffff0071fd978=0x073bb01c --poke 0xfffffff0071fd97c=0xfffffff0 --poke 0xfffffff0071652a4=0x00000001 --poke 0xfffffff007053aac=0x000d2970</code>. Revision: `718f75ae7215880274fda8c423858f68456509c2`.
-- `device`: [2026-11-01: the poke-only console image printed kernel text on the device for the first time. The log runs from DarwinBoot and AppleCredentialManager through bsd\_init, IOKit, APFS, Skywalk, IONVRAM and IOSurface and ends in panic\(cpu 0 caller ...\): "AMFI: not booted with security-mode-change-enabled\\n" @ConfigurationSettings.cpp, preceded by Waiting on &lt;dict ... IOProviderClass ... IOMedia ... Apple\_HFS ...&gt;. So the kernel passes the stage-16 kernel\_startup\_initialize\_upto call; the earlier stage-16 halt reading was a panic with kprintf gated off.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `device`: [2026-11-01: the poke-only console image printed kernel text on the device for the first time. The log runs from DarwinBoot and AppleCredentialManager through bsd\_init, IOKit, APFS, Skywalk, IONVRAM and IOSurface and ends in panic\(cpu 0 caller ...\): "AMFI: not booted with security-mode-change-enabled\\n" @ConfigurationSettings.cpp, preceded by Waiting on &lt;dict ... IOProviderClass ... IOMedia ... Apple\_HFS ...&gt;. So the kernel passes the stage-16 kernel\_startup\_initialize\_upto call; the earlier stage-16 halt reading was a panic with kprintf gated off.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>fastboot boot out/phase2.4/v49/elden-phase2.4-probe-boot.img</code>. Revision: `718f75ae7215880274fda8c423858f68456509c2`.
-- `host`: [2026-11-01: v50 keeps the six console pokes and drops the startup\_debug and format-string pokes so the normal log scrolls, and pairs them with package/phase2.5-unixnu.toml whose xnu args add security-mode-change-enable=1 and amfi\_get\_out\_of\_my\_way=1 \(DarwinBoot copies the payload args into boot\_args-&gt;CommandLine\). Kernel 54,050,920 bytes sha256 f97e5f15b91630bbbad0dee002c352f122c7ff22747c6d2830148da63596deac, payload 2493716f6b8fbadd380c60bb236cc925cd90992c5c2fa6b1722af929903faf62, image d12b56ecd6e3e53fb23982ab09fbd0a26820501b8cb8d8edf1eacfa95e0cae70 passed verify\_phase2\_artifact.py \(--xnu-title\) and darwinboot\_preflight.py. Host evidence only; not yet booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `host`: [2026-11-01: v50 keeps the six console pokes and drops the startup\_debug and format-string pokes so the normal log scrolls, and pairs them with package/phase2.5-unixnu.toml whose xnu args add security-mode-change-enable=1 and amfi\_get\_out\_of\_my\_way=1 \(DarwinBoot copies the payload args into boot\_args-&gt;CommandLine\). Kernel 54,050,920 bytes sha256 f97e5f15b91630bbbad0dee002c352f122c7ff22747c6d2830148da63596deac, payload 2493716f6b8fbadd380c60bb236cc925cd90992c5c2fa6b1722af929903faf62, image d12b56ecd6e3e53fb23982ab09fbd0a26820501b8cb8d8edf1eacfa95e0cae70 passed verify\_phase2\_artifact.py \(--xnu-title\) and darwinboot\_preflight.py. Host evidence only; not yet booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>.venv/bin/python scripts/make_entry_probe_kernel.py --output-dir out/phase2.4/v50 --poke 0xfffffff0073bdf24=0x14000005 --poke 0xfffffff007941e0c=0x1400001d --poke 0xfffffff007941e90=0x52800041 --poke 0xfffffff0071fd970=0x00000000 --poke 0xfffffff0071fd978=0x073bb01c --poke 0xfffffff0071fd97c=0xfffffff0</code>. Revision: `718f75ae7215880274fda8c423858f68456509c2`.
-- `device`: [2026-11-01: the AMFI security-mode-change gate passed, so the boot-arg channel from package/phase2.5-unixnu.toml through DarwinBoot to boot\_args-&gt;CommandLine is device-proven. The panic moved to "AMFI: No PMGR?\\n" @ConfigurationSettings.cpp:235: the developer-mode latch looks up the ApplePMGRNub service \(string 0xfffffff0042dde02, lookup at 0xfffffff004aaeb00\) and panics through the thunk at 0xfffffff004ac93e4 when the lookup returns NULL, which it does because elden publishes no power-management driver. The root-device wait text and the AMFI panic appear in the same screen tail.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `device`: [2026-11-01: the AMFI security-mode-change gate passed, so the boot-arg channel from package/phase2.5-unixnu.toml through DarwinBoot to boot\_args-&gt;CommandLine is device-proven. The panic moved to "AMFI: No PMGR?\\n" @ConfigurationSettings.cpp:235: the developer-mode latch looks up the ApplePMGRNub service \(string 0xfffffff0042dde02, lookup at 0xfffffff004aaeb00\) and panics through the thunk at 0xfffffff004ac93e4 when the lookup returns NULL, which it does because elden publishes no power-management driver. The root-device wait text and the AMFI panic appear in the same screen tail.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>fastboot boot out/phase2.4/v50/elden-phase2.4-probe-boot.img</code>. Revision: `1724a7a6b8f87e8ecc5875a8586e7417e747a95c`.
-- `host`: [2026-11-01: v51 keeps the six console pokes and adds 0xfffffff004aaecfc: mov x0,x21 \(0xaa1503e0\) -&gt; b 0xfffffff004aaec4c \(0x17ffffd4\), the epilogue of the developer-mode latch, so a missing ApplePMGRNub skips the latch instead of panicking. Kernel 54,050,920 bytes sha256 08def1c8206c04d1c20d6df273250a5ef04d72921c96112c6f863f84b8df7106, payload b912b4dfd0f86f2c92286049338756030f1592b0b2137523b4e79aa24fccc161, image cc739804217c3277bb07e4ce967381d5e1dd970eb46e9bb6637ebb83c5c668be passed verify\_phase2\_artifact.py \(--xnu-title "ELDEN 2.5 CONSOLE"\) and darwinboot\_preflight.py. Host evidence only; not yet booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `host`: [2026-11-01: v51 keeps the six console pokes and adds 0xfffffff004aaecfc: mov x0,x21 \(0xaa1503e0\) -&gt; b 0xfffffff004aaec4c \(0x17ffffd4\), the epilogue of the developer-mode latch, so a missing ApplePMGRNub skips the latch instead of panicking. Kernel 54,050,920 bytes sha256 08def1c8206c04d1c20d6df273250a5ef04d72921c96112c6f863f84b8df7106, payload b912b4dfd0f86f2c92286049338756030f1592b0b2137523b4e79aa24fccc161, image cc739804217c3277bb07e4ce967381d5e1dd970eb46e9bb6637ebb83c5c668be passed verify\_phase2\_artifact.py \(--xnu-title "ELDEN 2.5 CONSOLE"\) and darwinboot\_preflight.py. Host evidence only; not yet booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>.venv/bin/python scripts/make_entry_probe_kernel.py --output-dir out/phase2.4/v51 --poke 0xfffffff0073bdf24=0x14000005 --poke 0xfffffff007941e0c=0x1400001d --poke 0xfffffff007941e90=0x52800041 --poke 0xfffffff0071fd970=0x00000000 --poke 0xfffffff0071fd978=0x073bb01c --poke 0xfffffff0071fd97c=0xfffffff0 --poke 0xfffffff004aaecfc=0x17ffffd4</code>. Revision: `1724a7a6b8f87e8ecc5875a8586e7417e747a95c`.
-- `device`: [2026-11-01: v51 reaches the root-device wait loop and stops there with no panic. The screen repeats Waiting on &lt;dict ID="0"&gt;&lt;key&gt;IOProviderClass&lt;/key&gt;&lt;string ID="1"&gt;IOMedia&lt;/string&gt;&lt;key&gt;Content&lt;/key&gt;&lt;string ID="2"&gt;Apple\_HFS&lt;/string&gt;&lt;/dict&gt;, which means the kernel completed arm\_init, kernel\_bootstrap\_thread, bsd\_init, IOKit and kext loading, skipped the AMFI developer-mode latch with the 0xfffffff004aaecfc poke, and is now waiting for a block device that elden does not publish. Kernel-side phase 2.5 goal met; storage \(UFS\) is the phase 3 entry point. Display, the ArmCpu/GIC/timer checkpoints and the firmware-level console fix remain unproven.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.5-STATUS.md)
+- `device`: [2026-11-01: v51 reaches the root-device wait loop and stops there with no panic. The screen repeats Waiting on &lt;dict ID="0"&gt;&lt;key&gt;IOProviderClass&lt;/key&gt;&lt;string ID="1"&gt;IOMedia&lt;/string&gt;&lt;key&gt;Content&lt;/key&gt;&lt;string ID="2"&gt;Apple\_HFS&lt;/string&gt;&lt;/dict&gt;, which means the kernel completed arm\_init, kernel\_bootstrap\_thread, bsd\_init, IOKit and kext loading, skipped the AMFI developer-mode latch with the 0xfffffff004aaecfc poke, and is now waiting for a block device that elden does not publish. Kernel-side phase 2.5 goal met; storage \(UFS\) is the phase 3 entry point. Display, the ArmCpu/GIC/timer checkpoints and the firmware-level console fix remain unproven.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.5-STATUS.md)
   Command: <code>fastboot boot out/phase2.4/v51/elden-phase2.4-probe-boot.img</code>. Revision: `1724a7a6b8f87e8ecc5875a8586e7417e747a95c`.
 
 ## Firmware and boot {#firmware}
@@ -133,6 +136,9 @@ Components: `DarwinBoot`.
 
 ### Development findings
 
+- 2026-11-06 prerequisites: bounded current-boot FDT/original-initrd bootconfig inheritance and a conventional-memory report mode are compiled in the31744-byte EFI application. Synthetic metadata bounds/CRC, priority and full-initrd cleanup/retry pass in AAVMF; the accepted FD is unchanged. See docs/PREREQUISITES-20261106.md.
+- 2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write.
+- 2026-11-05 offline inventory of the accepted FD confirms EldenPayloadDxe present and UniXNURamDiskDxe absent. Actual old/new BootShim bytes were emulated through both copy and in-place branches: x3=8 MiB versus 56 MiB, x0 preserved, FD copy identical. The newer FD regression is not hardware-isolated. See docs/OFFLINE-PAYLOAD-20261105.md.
 - The vendor UFSDxe crashed before the menu, so it was removed from the phase 1 APRIORI, DSC and FDF.
 - The embedded FAT payload avoids persistent storage and makes the menu independent of UFS.
 - The same image reached the visible menu twice and returned to stock Android after reset.
@@ -157,11 +163,17 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Accepted phase 1 artifact and firmware/module inventory.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-STATUS.md)
-- `source`: [Static FD, Android image and embedded FAT verification.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/scripts/verify_artifact.py)
-- `device`: [2026-10-25: owner reported that the current image completed two RAM cold boots, reached the visible and operable UniXNU menu, and returned to stock Android.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `host`: [2026-11-06 prerequisites: bounded current-boot FDT/original-initrd bootconfig inheritance and a conventional-memory report mode are compiled in the31744-byte EFI application. Synthetic metadata bounds/CRC, priority and full-initrd cleanup/retry pass in AAVMF; the accepted FD is unchanged. See docs/PREREQUISITES-20261106.md. Source revision plus local working-tree changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PREREQUISITES-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-payload-loader.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write. Revision plus local working-tree patches.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/NIGHT-BRINGUP-20261106.md)
+  Command: <code>.venv/bin/python third_party/UniXNU/unixnu build kernel -D . -j4</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-05 offline inventory of the accepted FD confirms EldenPayloadDxe present and UniXNURamDiskDxe absent. Actual old/new BootShim bytes were emulated through both copy and in-place branches: x3=8 MiB versus 56 MiB, x0 preserved, FD copy identical. The newer FD regression is not hardware-isolated. See docs/OFFLINE-PAYLOAD-20261105.md. Source revision plus uncommitted local packaging changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/OFFLINE-PAYLOAD-20261105.md)
+  Command: <code>.venv/bin/python scripts/build_offline_ufs_packet.py --fd out/phase3/old-fd-verified.bin --source-payload out/phase3/payload-fat16.img --kernel third_party/UniXNU/out/elden/ipados-17.7.11-21H461/elden-ufs_probe/kernel/kernel.macho</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Accepted phase 1 artifact and firmware/module inventory.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-STATUS.md)
+- `source`: [Static FD, Android image and embedded FAT verification.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/scripts/verify_artifact.py)
+- `device`: [2026-10-25: owner reported that the current image completed two RAM cold boots, reached the visible and operable UniXNU menu, and returned to stock Android.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>fastboot boot out/elden-phase1.img</code>. Revision: `dffc3020a85830d0d981a85871d9ab31aac5827d`.
-- `device`: [Two owner-run RAM cold boots reached the UniXNU menu and returned to Android.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-HANDOFF.md)
+- `device`: [Two owner-run RAM cold boots reached the UniXNU menu and returned to Android.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-HANDOFF.md)
   Command: <code>fastboot boot out/elden-phase1.img</code>. Revision: `c591b1a0a471f24978aba25c56c8f6ec9bd06668`.
 
 ## CPU and interrupts {#cpu}
@@ -216,11 +228,11 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [SM8750 CPU, PSCI, GICv3 and timer resources.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/soc/sm8750/dts/sm8750.dtsi)
-- `source`: [Board CPU/GIC/timebase inventory and planned diagnostic sequence.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-HANDOFF.md)
-- `host`: [2026-10-25: independently decoded ADT contains the eight expected MPIDRs, cpu0 running and seven CPUs waiting, 19.2 MHz timebase, SMC PSCI, and GIC distributor/redistributor bases with 0x40000 stride. No device CPU checkpoint is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
+- `source`: [SM8750 CPU, PSCI, GICv3 and timer resources.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/soc/sm8750/dts/sm8750.dtsi)
+- `source`: [Board CPU/GIC/timebase inventory and planned diagnostic sequence.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-HANDOFF.md)
+- `host`: [2026-10-25: independently decoded ADT contains the eight expected MPIDRs, cpu0 running and seven CPUs waiting, 19.2 MHz timebase, SMC PSCI, and GIC distributor/redistributor bases with 0x40000 stride. No device CPU checkpoint is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
   Command: <code>.venv/bin/python scripts/phase2_1_audit.py --linux-dir .cache/elden-linux</code>. Revision: `16e592abee8a550dec8154ed1f38b5ebc4f16213`.
-- `host`: [2026-10-25: the prelinked kernel exports ArmCpu probe/start, GIC distributor and timer-related symbols and ArmDTPlatform configure/createDeviceNubs symbols. Symbol presence is source evidence, not a device checkpoint.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
+- `host`: [2026-10-25: the prelinked kernel exports ArmCpu probe/start, GIC distributor and timer-related symbols and ArmDTPlatform configure/createDeviceNubs symbols. Symbol presence is source evidence, not a device checkpoint.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
   Command: <code>xcrun nm -g .cache/phase2-plan/UniXNU/out/elden/ipados-17.7.11-21H461/elden/kernel/kernel.macho</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
 
 ## Memory and DMA {#memory}
@@ -250,6 +262,8 @@ Components: `ArmDTPlatform`.
 
 ### Development findings
 
+- 2026-11-07: device read-check succeeds with a 6GiB high-address window. EFI reports a 13GiB free run at0x8c0000000. Installed loader accepts at most8GiB; current bootstrap-table reserve is sized for6GiB. Fresh512MiB test Data expands exactly under the actual C decoder.
+- 2026-11-06 prerequisites: offline FDT/EFI intersection planning and readonly EFI extent reporting are prepared. A historical FDT suggests a high-address4GiB candidate but dynamic reservations and a same-boot EFI map remain unqualified; the256MiB XNU probe configuration was not enlarged.
 - The previous \[0x80000000, 0x100000000\) candidate overlapped 44 recorded no-map reservations and was removed.
 - The live FDT is 885,861 bytes with SHA-256 8a653a3e790f29bf2b0f3545135f06fe771360f31da3d37c04f648c26b95e26e and describes the current 12 GiB RAM map.
 - The former A8000000+10000000 UEFI Kernel carveout overlaps the live initrd B74AC000-B7FFEE30 and is unsuitable for RAM-boot phase 2.
@@ -273,21 +287,27 @@ Components: `ArmDTPlatform`.
 
 ### Next action
 
-- Phase 2.3: preserve .cache/device/elden-live.fdt locally and rerun the live audit if firmware or boot mode changes; never commit the raw tree. Keep the phase 2 hardware ADT separate from the firmware FDT.
+- Keep6GiB for the next hardware test; separately qualify any larger window and do not advertise a flat16GiB.
 
 ### Evidence
 
-- `source`: [One 256 MiB XNU range in UEFI DXE conventional memory and board compatible values.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/dts/elden.dts)
-- `source`: [Sanitised live 12 GiB RAM, reserved-memory and expected GOP framebuffer description.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/dts/elden-firmware-memory.dts)
-- `source`: [Documented DRAM base, fragmentation risk and memory handoff constraints.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/porting-analysis.md)
-- `device`: [2026-10-25: owner-connected device produced an 885,861-byte live FDT with SHA-256 8a653a3e790f29bf2b0f3545135f06fe771360f31da3d37c04f648c26b95e26e. The flashed vendor tree reports generic qcom,sun-qrd compatible values but contains elden panel markers, 1904x3040 display, 1d84000 UFS and a 12 GiB RAM map. Raw bytes remain local-only.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
+- `host`: [Base revision plus local working-tree patches. 2026-11-07: device read-check succeeds with a 6GiB high-address window. EFI reports a 13GiB free run at0x8c0000000. Installed loader accepts at most8GiB; current bootstrap-table reserve is sized for6GiB. Fresh512MiB test Data expands exactly under the actual C decoder.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STARTUP-USB-CANDIDATE-20261107.md)
+  Command: <code>python edl_work/audit_startup_candidates.py (Y700 work repository)</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 prerequisites: offline FDT/EFI intersection planning and readonly EFI extent reporting are prepared. A historical FDT suggests a high-address4GiB candidate but dynamic reservations and a same-boot EFI map remain unqualified; the256MiB XNU probe configuration was not enlarged. Source revision plus local working-tree changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PREREQUISITES-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-payload-loader.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [One 256 MiB XNU range in UEFI DXE conventional memory and board compatible values.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/dts/elden.dts)
+- `source`: [Sanitised live 12 GiB RAM, reserved-memory and expected GOP framebuffer description.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/dts/elden-firmware-memory.dts)
+- `source`: [Documented DRAM base, fragmentation risk and memory handoff constraints.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/porting-analysis.md)
+- `device`: [2026-10-25: owner-connected device produced an 885,861-byte live FDT with SHA-256 8a653a3e790f29bf2b0f3545135f06fe771360f31da3d37c04f648c26b95e26e. The flashed vendor tree reports generic qcom,sun-qrd compatible values but contains elden panel markers, 1904x3040 display, 1d84000 UFS and a 12 GiB RAM map. Raw bytes remain local-only.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
   Command: <code>/Users/jerry/Library/Android/sdk/platform-tools/adb shell su -c 'cp /sys/firmware/fdt /data/local/tmp/elden-live.fdt'</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
-- `host`: [2026-10-25: the live FDT audit passed with C2400000+10000000. It is in live RAM and UEFI DXE conventional memory, avoids all live reserved-memory and the B74AC000-B7FFEE30 initrd, and reproduces the eight-CPU ADT. No XNU entry is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
+- `host`: [2026-10-25: the live FDT audit passed with C2400000+10000000. It is in live RAM and UEFI DXE conventional memory, avoids all live reserved-memory and the B74AC000-B7FFEE30 initrd, and reproduces the eight-CPU ADT. No XNU entry is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
   Command: <code>.venv/bin/python scripts/phase2_1_audit.py --firmware-dtb .cache/device/elden-live.fdt --output-dir .cache/phase2.1-live</code>. Revision: `16e592abee8a550dec8154ed1f38b5ebc4f16213`.
 
 ## Storage and root {#storage}
 
-`planned`
+`host-verified`
+
+Components: `ShengUfs`.
 
 ### Hardware and dependencies
 
@@ -299,28 +319,28 @@ Components: `ArmDTPlatform`.
 
 ### Configuration
 
-- The phase 1 defconfig disables Native UFS; no defconfig selects a storage transport yet.
-- soc/sm8750/dts/sm8750.dtsi now declares ufs\_mem\_hc and ufs\_mem\_phy and dts/elden.dts enables both; only generator-exported properties are present \(reg, compatible, interrupt-parent, interrupts, dma-coherent, unixnu,adt-name\).
-- Clocks, resets, power domains, SMMU and ICE stay comments until their provider nodes exist, because the ADT generator drops reference properties whose target is absent.
-- Provider nodes still missing: GCC, RPMh, TCSR, apps\_smmu, TLMM and the PMIC regulators.
+- elden-ufs\_probe\_defconfig selects the read-only observation build; elden-ufs\_rootcheck\_defconfig builds the complete read-only IOBlockStorageDevice interface.
+- The SM8750 board patch keeps explicit LUN0/4 selection and validates inherited SMMUv2 identity DMA without changing the admitted route.
+- Root-check uses ARMADA\_BACKUP for the existing LUN4 test window; production root partition and manifest remain separate configuration work.
 
 ### Procedure
 
-- Stage 1 \(host\): describe the controller, PHY and supplies, and verify the ADT export without building a new kernel.
-- Stage 2 \(host\): the probe defconfig, payload config, ShengUfs substrate patch and build-sheng-ufs-probe.py exist; the probe-only kernel is not built yet because this host has Command Line Tools without Xcode.
-- Stage 3 \(device\): owner RAM-boots the probe image with native-ufs-probe=N and native-ufs-diagnostics=1; record the GCC, controller and LUN0 results.
-- Stage 4 \(later\): add the sheng PMGR instrument, native-ufs-root=1, userdata geometry and the verify-root probe before any mount.
+- Build on the configured Mac using the selected source-kernel headers and pinned storage reference.
+- Qualify the original and concrete 190-slot ABI, link the complete kernel, then audit the final candidate and real class-registration path.
+- Package the accepted FD with a 56 MiB payload, preserve exact stock rollback values, and perform independent signature/content/entry checks.
+- The owner next verifies kernel entry and read-only UFS diagnostics on hardware before any root mount or partition work.
 
 ### Development findings
 
-- The same-device Linux tree is the authoritative inventory: UFS works on Linux 7.2.6 with F2FS, so controller and PHY are good hardware on elden.
-- The distro repository tb322fc-linux \(c1fecc6\) is packaging only and its UFS patch is Linux ufshcd code, not portable to XNU.
-- ShengUfs matches Apple platform-expert personality 2 unconditionally and reads fixed SM8750 constants \(host 0x1d84000, GCC 0x100000, SMMU 0x15000000, stream 0x60\) instead of the device tree; NativeUfs::inspect only reads the GCC UFS-MEM-GDSC and the driver never writes clocks.
-- Exporting ufshc/ufsphy moves the ADT arm-io window from base 0x16000000 size 0x1000000 \(13,152-byte ADT\) to base 0x1000000 size 0x16000000 \(13,624-byte ADT\) because the UFS block at 0x1d80000 lies below the GIC at 0x16000000; arm-io/ufshc exports reg 0xd84000 and arm-io/ufsphy exports reg 0xd80000.
-- UFSDxe crashed in phase 1 and was removed from the menu path, but a fastboot RAM boot does not need it: ABL must read boot.img from UFS before starting this image, so the controller and PHY are already running when XNU starts.
-- There is no elden XNU UFS probe result yet; the phase 1 FAT payload intentionally bypasses persistent storage.
-- Stage 2 code is in place: scripts/driver-patches/sheng-ufs-sm8750.patch applies to the pinned ShengUfs revision e2b32cc4, scripts/build-sheng-ufs-probe.py compiles the probe-only archive, configs/elden-ufs\_probe\_defconfig selects CONFIG\_XNU\_NATIVE\_UFS, board.toml \[kernel\].archives names the builder, and package/phase3-ufs-probe-unixnu.toml carries native-ufs-probe=2 without native-ufs-root or sheng-pmgr.
-- The probe kernel is not built: this host has Command Line Tools only, so XNU compiles through the phase 2.2 shims \(.cache/phase2-plan/toolchain\) up to the assembler rule and sysproto regeneration and then stops; a complete Xcode install removes every shim.
+- 2026-11-07: LUN0/ipados root header read is device-verified. New AVB-kernel-pinned complete-image and per-block verification, live readonly media ancestry bridge, SystemOS union and RAM Data startup candidate compile/link and host checks pass; new mount/startup remains untested on hardware.
+- 2026-11-06 prerequisites: official21H461 OS/SystemOS and original trust inputs are verified. Native readonly APFS inspection supplies actual filesystem UUIDs. A9381609472-byte raw root layout passes file readback and the actual RootLayout parser with file callbacks; Data, runtime policies and real root-target kernel remain pending. No hardware disk access.
+- 2026-11-06: standalone GPL UEFI UFS backend and current/previous stage2 applications compile; original/session suites and independent SHA/header/torn-update tests pass. Actual AAVMF probe platform rejection and RAM FAT child failure/cleanup/retry pass; no tablet UFS operation is claimed. See docs/UFS-STAGE2-20261106.md.
+- The full root-check kernel 07d4df1d… compiled/prelinked successfully; the diagnostic derivative is 3fd40e9f….
+- 190 original/concrete slots, 23 concrete overrides, 11 original imports and actual C2/D2 were qualified without replacing the storage class with stubs.
+- The final derivative executes to the real registered original storage class in QEMU using the actual menu arguments; class sizes are 0xd8/0x90/0x88.
+- The compressed EFI loader decoded all complete assets in AAVMF, and a neutral-debug DarwinBoot test build passed EBS to the same XNU console and UFS registration gate. This is not a test of the entire vendor firmware.
+- The exact accepted DarwinBoot binary needs its platform graphics debug sink in AAVMF; its observed fault is before EBS, unlike a proved hardware handoff failure.
+- 2026-11-06 hardware: corrected arm-io/AAPL,phandle ADT and fixed-address SMMU loads reach read-only LUN4 GPT/block checks. LUN0/ipados source configuration is added; block publication and root mounting remain pending.
 
 ### Completion criteria
 
@@ -330,23 +350,44 @@ Components: `ArmDTPlatform`.
 
 ### Current limits
 
-- Storage is not implemented; the first deliverable is a read-only probe, not a root device.
-- The new arm-io window has only been generated and decoded on the host, not booted on the device.
-- No owner-authored userdata image or root UUID exists, and no read-only GPT geometry has been captured.
-- The probe keeps the phase 2.5 AMFI skip poke because elden still publishes no PMGR.
-- No host build evidence exists for the probe kernel and no NativeUfs symbol has been checked yet; Stage 2 is code-complete but not verified.
+- LUN4 read-only capacity/GPT/block checks passed on hardware; LUN0/ipados publication and root mount remain unverified.
+- The existing 2 GiB ARMADA\_BACKUP is an empty test window, not an installed iPadOS root.
+- The standalone compressed recovery branch still needs TWRP hardware boot, USB, touch and FBE checks.
+- The new standalone EFI UFS backend needs tablet qualification. ADB slot transport has only root/su model tests. The actual external bundle and 3ffa745d signed bootstrap are packaged, with menu/reset and QEMU-ADT XNU-path evidence. Tablet UFS and physical power-loss behavior remain unqualified.
 
 ### Next action
 
-- Stage 2 resume: install a complete Xcode with the iPhoneOS SDK, run ".venv/bin/python .cache/phase2-plan/UniXNU/unixnu build kernel -D . -j 8", confirm NativeUfs symbols in the produced kernel, then build the probe image and hand it to the owner for a native-ufs-probe=2 RAM boot.
+- Test the new signed manual startup candidate, retain the 6GiB read-check as the device-qualified fallback, and inspect verified-image/media/mount stages before changing policy.
 
 ### Evidence
 
-- `source`: [Storage addresses, missing root inputs and phase 1 bypass decision; implementation remains a later phase.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/porting-analysis.md)
-- `source`: [Full SM8750 UFS inventory with Linux line references, driver reality, the arm-io window change and the four-stage probe plan.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE3-STORAGE.md)
-- `host`: [2026-11-01: the hardware DTS with ufs\_mem\_hc and ufs\_mem\_phy compiles; the decompiled tree keeps reg 0x0 0x1d84000 0x0 0x3000, interrupts &lt;0 0x109 4&gt;, dma-coherent and status okay.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE3-STORAGE.md)
+- `host`: [Base revision plus local working-tree patches. 2026-11-07: LUN0/ipados root header read is device-verified. New AVB-kernel-pinned complete-image and per-block verification, live readonly media ancestry bridge, SystemOS union and RAM Data startup candidate compile/link and host checks pass; new mount/startup remains untested on hardware.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STARTUP-USB-CANDIDATE-20261107.md)
+  Command: <code>python edl_work/audit_startup_candidates.py (Y700 work repository)</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `device`: [2026-11-07 owner photograph: new source kernel reads LUN0/ipados GPT bounds and SHNGROOT magic; manifest status0/windows2, SID60 slot0 CB0 inherited identity and no SMMU writes. This is the intended probe10 diagnostic panic, not an APFS root mount. Root image was independently fully hashed after Android reboot; Android setup/root also persisted.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/IPADOS-ROOT-TARGET-20261107.md)
+  Command: <code>Owner selected ELDEN IPADOS ROOT CHECK - LUN0; photograph and image identity in Y700 device-result.json</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `device`: [2026-11-07 device: /chosen/system-volume-auth-blob \(208-byte IM4P payload from the IPSW \*.dmg.root\_hash, sha384 vs BuildManifest\) is found and consumed — 'importing root hash' prints with no ENOENT; OS/SystemOS volumes publish; panic moves to IOKitBSDInit.cpp:984 waitForService timeout because no service claims boot-uuid-media. Manifest \(msys mtree\) transport remains open. Stock rollback 1738713600@0 unchanged.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/ROOT-MOUNT-AUTHBLOB-20261107.md)
+  Command: <code>startup-authblob-signed.img sha c264290c… flashed to boot_a via owner-operated delta write</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Independent read-only ipados target configuration and fixed-address MMIO load source patch added. This source candidate requires build and device checks. Stock rollback values unchanged.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/IPADOS-ROOT-TARGET-20261107.md)
+- `host`: [2026-11-06 prerequisites: official21H461 OS/SystemOS and original trust inputs are verified. Native readonly APFS inspection supplies actual filesystem UUIDs. A9381609472-byte raw root layout passes file readback and the actual RootLayout parser with file callbacks; Data, runtime policies and real root-target kernel remain pending. No hardware disk access. Source revision plus local working-tree changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PREREQUISITES-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-payload-loader.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [Local working-tree GPL UFS adapter built as separate EFI applications; five core/session host suites, 114 SHA vectors, 512 C/Python header checks, six interrupted-update points, and real AAVMF RAM-volume retry/cleanup passed. Stage2 packaging, 15 full C selection fault cases, actual external menu/reset and QEMU-ADT menu-to-XNU registration return=1 now pass. Tablet UFS remains unverified; ADB has root/su model tests only. No device access or accepted FD replacement.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/UFS-STAGE2-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-ufs-stage2.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write. Revision plus local working-tree patches.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/NIGHT-BRINGUP-20261106.md)
+  Command: <code>.venv/bin/python third_party/UniXNU/unixnu build kernel -D . -j4</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-05 offline: existing Mac probe kernel \(51,986,432 bytes\) was matched against the payload and checked for NativeUfs symbols and PROBE\_ONLY/READ\_ONLY/SM8750 compile flags. No new kernel build or device storage evidence. Root publication is absent; probe 7/8 are SMMU/CB diagnostics and probe 3 is rejected. See docs/OFFLINE-PAYLOAD-20261105.md. Source revision plus uncommitted local packaging changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/OFFLINE-PAYLOAD-20261105.md)
+  Command: <code>.venv/bin/python scripts/build_offline_ufs_packet.py --fd out/phase3/old-fd-verified.bin --source-payload out/phase3/payload-fat16.img --kernel third_party/UniXNU/out/elden/ipados-17.7.11-21H461/elden-ufs_probe/kernel/kernel.macho</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Storage addresses, missing root inputs and phase 1 bypass decision; implementation remains a later phase.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/porting-analysis.md)
+- `host`: [Owned candidate: 190 original storage slots, actual C2/D2, live class sizes 0x90/0x88 and native 4K qualified. SCTLR alias was independently checked against the unchanged kernel's real MSR input. Raw-entry VM evidence only; no UEFI/EBS/UFS hardware evidence.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STORAGE-ABI-20261106.md)
+  Command: <code>python out/elden-storage-abi/scripts/audit-elden-storage.py --candidate out/bringup-20261105/kernel-gop.macho --plan elden-ufs_probe/kernel/kernel.json --snapshot storage-snapshot.json</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Concrete NativeUfsBlock slot/signature verification and genuine original-class bindings require a qualified audit, candidate and prelink plan. New lifecycle patch refuses root work before actual class registration. Complete root-check link and final candidate audit remain separate checks.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/scripts/build-elden-ufs-bindings.py)
+- `host`: [Full root-check kernel compiled/prelinked \(07d4df1d…\) and its signed diagnostic derivative \(3fd40e9f…\) passed their own 190-slot static/live ABI audits. The actual menu arguments reach the genuine registration gate with result 1 before UFS MMIO. Hardware transport and root remain unverified.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STORAGE-ABI-20261106.md)
+  Command: <code>python out/build-rootcheck-kernel.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Complete XNU/Linux/vendor/TWRP compressed assets round-trip in 48.3 MiB. Standalone EFI decompression and recovery application added; compilation, firmware execution and hardware acceptance are separate gates. No firmware rebuild, device operation or KShimC removal.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/COMPRESSED-RESCUE-20261106.md)
+- `source`: [Optional 128-byte BootShim writes the live ABL FDT pointer only into a reserved RAM FAT slot; the default build remains identical. Recovery validates/copies the current FDT and restores table ownership after failure. Hardware recovery remains unverified.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/ENTRY-FDT-HANDOFF-20261106.md)
+- `source`: [Full SM8750 UFS inventory with Linux line references, driver reality, the arm-io window change and the four-stage probe plan.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE3-STORAGE.md)
+- `host`: [2026-11-01: the hardware DTS with ufs\_mem\_hc and ufs\_mem\_phy compiles; the decompiled tree keeps reg 0x0 0x1d84000 0x0 0x3000, interrupts &lt;0 0x109 4&gt;, dma-coherent and status okay.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE3-STORAGE.md)
   Command: <code>.cache/dtc-src/dtc -I dts -O dtb -i soc/sm8750/dts -o /tmp/elden.dtb dts/elden.dts</code>. Revision: `b82bb65b4b3ba7508ae8ec9b18d0f36ec183da9f`.
-- `host`: [2026-11-01: a decoupled ADT generated with scripts/unixnu/devicetree.py exports arm-io base 0x1000000 size 0x16000000, arm-io/ufshc reg 0xd84000/+0x3000, arm-io/ufsphy reg 0xd80000/+0x2000 and interrupts \(0, 265, 4\); the ADT grew from 13,152 to 13,624 bytes. No XNU boot is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE3-STORAGE.md)
+- `host`: [2026-11-01: a decoupled ADT generated with scripts/unixnu/devicetree.py exports arm-io base 0x1000000 size 0x16000000, arm-io/ufshc reg 0xd84000/+0x3000, arm-io/ufsphy reg 0xd80000/+0x2000 and interrupts \(0, 265, 4\); the ADT grew from 13,152 to 13,624 bytes. No XNU boot is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE3-STORAGE.md)
   Command: <code>.venv/bin/python -c 'generate(Path("/tmp/elden.dtb"), merged_board_config, unique_chip_id="0x1")'</code>. Revision: `b82bb65b4b3ba7508ae8ec9b18d0f36ec183da9f`.
 
 ## Display {#display}
@@ -394,8 +435,8 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [GOP menu display was observed on hardware.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-STATUS.md)
-- `source`: [Display topology, panel risk and GOP-first strategy.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/porting-analysis.md)
+- `source`: [GOP menu display was observed on hardware.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-STATUS.md)
+- `source`: [Display topology, panel risk and GOP-first strategy.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/porting-analysis.md)
 
 ## Input {#input}
 
@@ -440,8 +481,8 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Volume-key navigation reached the accepted menu.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-STATUS.md)
-- `source`: [Novatek SPI wiring and input bring-up requirements.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/porting-analysis.md)
+- `source`: [Volume-key navigation reached the accepted menu.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-STATUS.md)
+- `source`: [Novatek SPI wiring and input bring-up requirements.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/porting-analysis.md)
 
 ## GPU {#gpu}
 
@@ -483,7 +524,7 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Adreno 830 scope and exclusion from the first milestone.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/porting-analysis.md)
+- `source`: [Adreno 830 scope and exclusion from the first milestone.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/porting-analysis.md)
 
 ## Network {#network}
 
@@ -579,6 +620,7 @@ Collect evidence using the next action.
 
 ### Development findings
 
+- 2026-11-05 marker menu retains existing reset/shutdown actions and uses a 600-second no-input fallback to reset. No new PMIC write path or device power qualification; see docs/OFFLINE-PAYLOAD-20261105.md.
 - UEFI power and key handling are verified only at the firmware layer.
 - The selected OS profile does not supply sleep-disabled, so board.toml now adds it under \[adt.defaults.u32\].
 - The final Phase 2.1 ADT was decoded with sleep-disabled=1.
@@ -599,8 +641,8 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [Board hardware and payload policy values.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/board.toml)
-- `host`: [2026-10-25: independent ADT decode found /defaults sleep-disabled=1. This is source/host evidence, not a device suspend test.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
+- `source`: [Board hardware and payload policy values.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/board.toml)
+- `host`: [2026-10-25: independent ADT decode found /defaults sleep-disabled=1. This is source/host evidence, not a device suspend test.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
   Command: <code>.venv/bin/python scripts/phase2_1_audit.py --linux-dir .cache/elden-linux</code>. Revision: `16e592abee8a550dec8154ed1f38b5ebc4f16213`.
 
 ## Image assembly {#packaging}
@@ -628,6 +670,10 @@ Collect evidence using the next action.
 
 ### Development findings
 
+- 2026-11-07: manual120-second poweroff and8-second autostart candidates include unchanged FD/56MiB FAT,6GiB ADT, original TrustCache, RAM Data and session IDs. Independent RSA/data/stock properties and embedded-file audits pass; every boot index stays1738713600@0.
+- 2026-11-06 prerequisites: direct9ebc7b6a and KShimC6af63b3e experiments are signed at exact stock index. A frozen dual11 control rebuild is byte-identical; the48MiB recovery FAT preserves the full stock kernel/initrd and raises the explicit FreeExec copy bound to64MiB. Source runtime and old signed artifacts are preserved.
+- 2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write.
+- 2026-11-05 offline: ramdisk argv placement fixed; gzip made deterministic; embedded validation checks both header and actual x3 constant and rejects a FAT BPB extending past published bytes. The isolated marker candidate uses the accepted FD and a rebuilt 56 MiB shim, and passes kernel/ADT/FAT/FD checks. See docs/OFFLINE-PAYLOAD-20261105.md. No device run is claimed.
 - The documented Phase 1 build was device-verified and the current procedure rebuilds and passes structural checks.
 - The same current recipe produced 94b6a6315b04fc9d276bc15e9519107be292244380fc3bf139f5af6c96a3bb0a instead of the historical accepted image hash; byte-for-byte rebuild identity is not claimed, but the new image completed two owner RAM cold boots.
 - The verified UniXNU third-party pin is intentionally retained for the accepted build.
@@ -655,30 +701,38 @@ Collect evidence using the next action.
 
 ### Next action
 
-- Phase 2.4 is device-verified; Phase 2.5 starts with the entry probe. The owner RAM-boots out/phase2.4/elden-phase2.4-probe-boot.img \(a4ad1fc74abef35da9f947c350ff5763f2b8dea61da5adeee72aefcd0a67abf7\) twice and chooses xnu: a blue band across the screen middle, drawn before the kernel image runs, proves the entry instruction executed, while the green band alone only proves Entry.S ran. Host rebuild and judgement rules are in docs/PHASE2.4-STATUS.md.
+- Use the manual startup image first; autostart is not a qualified unattended fastboot recovery loop.
 
 ### Evidence
 
-- `source`: [Reproducible phase 1 build commands, hashes and verification checklist.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-HANDOFF.md)
-- `source`: [Preserved build inputs and remaining format 2 handoff work.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/FORMAT2-MIGRATION.md)
-- `source`: [Phase 2 gates mapped to the official porting steps, capacity and memory constraints, and separate loader/kernel acceptance criteria; planning only, with no new device qualification.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-HANDOFF.md)
-- `source`: [Source-derived FDT, firmware RAM and reservation audit, decoded ADT checks, boot CPU parameter policy and remaining runtime evidence.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
-- `source`: [Pinned kernelcache, 57-patch XNU build, prelink inventory, symbol/4 KiB audits and measured 56 MiB payload fit.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
-- `host`: [Phase 2.0 established a rebuilt phase 1 baseline, preserved prior candidates, verified format 2 output isolation, and did not generate a phase 2 boot image.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `host`: [Base revision plus local working-tree patches. 2026-11-07: manual120-second poweroff and8-second autostart candidates include unchanged FD/56MiB FAT,6GiB ADT, original TrustCache, RAM Data and session IDs. Independent RSA/data/stock properties and embedded-file audits pass; every boot index stays1738713600@0.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STARTUP-USB-CANDIDATE-20261107.md)
+  Command: <code>python edl_work/audit_startup_candidates.py (Y700 work repository)</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 prerequisites: direct9ebc7b6a and KShimC6af63b3e experiments are signed at exact stock index. A frozen dual11 control rebuild is byte-identical; the48MiB recovery FAT preserves the full stock kernel/initrd and raises the explicit FreeExec copy bound to64MiB. Source runtime and old signed artifacts are preserved. Source revision plus local working-tree changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PREREQUISITES-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-payload-loader.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write. Revision plus local working-tree patches.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/NIGHT-BRINGUP-20261106.md)
+  Command: <code>.venv/bin/python third_party/UniXNU/unixnu build kernel -D . -j4</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-05 offline: ramdisk argv placement fixed; gzip made deterministic; embedded validation checks both header and actual x3 constant and rejects a FAT BPB extending past published bytes. The isolated marker candidate uses the accepted FD and a rebuilt 56 MiB shim, and passes kernel/ADT/FAT/FD checks. See docs/OFFLINE-PAYLOAD-20261105.md. No device run is claimed. Source revision plus uncommitted local packaging changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/OFFLINE-PAYLOAD-20261105.md)
+  Command: <code>.venv/bin/python scripts/build_offline_ufs_packet.py --fd out/phase3/old-fd-verified.bin --source-payload out/phase3/payload-fat16.img --kernel third_party/UniXNU/out/elden/ipados-17.7.11-21H461/elden-ufs_probe/kernel/kernel.macho</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Reproducible phase 1 build commands, hashes and verification checklist.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-HANDOFF.md)
+- `source`: [Preserved build inputs and remaining format 2 handoff work.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/FORMAT2-MIGRATION.md)
+- `source`: [Phase 2 gates mapped to the official porting steps, capacity and memory constraints, and separate loader/kernel acceptance criteria; planning only, with no new device qualification.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-HANDOFF.md)
+- `source`: [Source-derived FDT, firmware RAM and reservation audit, decoded ADT checks, boot CPU parameter policy and remaining runtime evidence.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
+- `source`: [Pinned kernelcache, 57-patch XNU build, prelink inventory, symbol/4 KiB audits and measured 56 MiB payload fit.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
+- `host`: [Phase 2.0 established a rebuilt phase 1 baseline, preserved prior candidates, verified format 2 output isolation, and did not generate a phase 2 boot image.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>test -e .cache/phase2-plan/UniXNU/out/elden/ipados-17.7.11-21H461/elden/tree</code>. Revision: `dffc3020a85830d0d981a85871d9ab31aac5827d`.
-- `host`: [2026-10-25: kernelcache f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7 produced native kernel 02f216348851ba9ce70616430ff7607be9d3305cbc8b2ae1186f0e7d6b20fce7 and prelinked kernel.macho 65a3e799e1eb7f631a3b146dfc890ef5a8147c8fc613ee383a1665b398fb1ef9; runtime qualification remains false.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
+- `host`: [2026-10-25: kernelcache f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7 produced native kernel 02f216348851ba9ce70616430ff7607be9d3305cbc8b2ae1186f0e7d6b20fce7 and prelinked kernel.macho 65a3e799e1eb7f631a3b146dfc890ef5a8147c8fc613ee383a1665b398fb1ef9; runtime qualification remains false.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
   Command: <code>PATH=.cache/phase2-plan/toolchain/bin:.venv/bin:$PATH .venv/bin/python .cache/phase2-plan/UniXNU/unixnu build kernel -D .</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
-- `host`: [2026-10-25: a 58,720,256-byte FAT16 volume held all 54,063,968 payload bytes, left 3,734,016 bytes free, and round-tripped kernel.macho with SHA-256 65a3e799e1eb7f631a3b146dfc890ef5a8147c8fc613ee383a1665b398fb1ef9.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
+- `host`: [2026-10-25: a 58,720,256-byte FAT16 volume held all 54,063,968 payload bytes, left 3,734,016 bytes free, and round-tripped kernel.macho with SHA-256 65a3e799e1eb7f631a3b146dfc890ef5a8147c8fc613ee383a1665b398fb1ef9.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
   Command: <code>mformat -C -F -T 114688 -v ELDENPH2 -i .cache/phase2.2/payload-fit-56m-20261025-223638.img :: &amp;&amp; mcopy -i .cache/phase2.2/payload-fit-56m-20261025-223638.img -s .cache/phase2-plan/UniXNU/out/elden/ipados-17.7.11-21H461/elden/payload/stage/EFI ::/</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
-- `host`: [2026-11-01: FAT16 probe \(16,223 clusters\) and FAT16 56 MiB payload \(57,103 clusters\) replace the mformat -F FAT32 volumes EnhancedFatDxe rejects below 65,525 clusters. Probe image d6bf11a7a260856a525a831689def5b12ea028dedaca7dc2c78009bc6f0c6adf and final image 863d1b02ae7c7c5b7a7de0ac6cd8590aa36332dbf25540735ed4a264de8288e9 pass FAT type, BPB label, gzip\(shim+FD+payload\) and FV module checks; firmware is unchanged at 20b4b370d599aee9b081a283bd62faffe6ee66005d0de32967284d7d53adf245. Host evidence only; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.3-STATUS.md)
+- `host`: [2026-11-01: FAT16 probe \(16,223 clusters\) and FAT16 56 MiB payload \(57,103 clusters\) replace the mformat -F FAT32 volumes EnhancedFatDxe rejects below 65,525 clusters. Probe image d6bf11a7a260856a525a831689def5b12ea028dedaca7dc2c78009bc6f0c6adf and final image 863d1b02ae7c7c5b7a7de0ac6cd8590aa36332dbf25540735ed4a264de8288e9 pass FAT type, BPB label, gzip\(shim+FD+payload\) and FV module checks; firmware is unchanged at 20b4b370d599aee9b081a283bd62faffe6ee66005d0de32967284d7d53adf245. Host evidence only; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.3-STATUS.md)
   Command: <code>python3 scripts/make_phase2_probe.py &amp;&amp; python3 scripts/make_phase2_payload.py --from-image out/phase2.3/payload.img &amp;&amp; python3 scripts/build_phase2_image.py --kind probe --embed-payload &amp;&amp; python3 scripts/build_phase2_image.py --kind boot --embed-payload &amp;&amp; python3 scripts/verify_phase2_artifact.py --kind probe --image out/phase2.3/elden-phase2-embed-probe.img --shim out/phase2.3/shim-probe-embed.bin --embed-payload --payload out/phase2.3/probe.img &amp;&amp; python3 scripts/verify_phase2_artifact.py --kind boot --image out/phase2.3/elden-phase2-embed-boot.img --shim out/phase2.3/shim-boot-embed.bin --embed-payload --payload out/phase2.3/payload.img</code>. Revision: `5582de7371ea5d880235e05854f459c7b819b41a`.
-- `host`: [2026-10-31: phase-2 firmware dc8a97dcf1369066114f0d10e50f0b163876b78a37796c29d7d468a7f6d9d9bf, 56 MiB payload b2c96e08f71bbd3f8a84018024b1dc048994b72c2a81b56789686e503da82f80, probe image 9ea0174c275e7ebb42d9727c770b7a06ae09a6d44df9e36657a667c8de7e051b and final image d52dd8e37fa0ef87c44b2b15207497e93ac6285ca874cf20e5a668c4226ecf99 passed v3 header, gzip\(shim+FD\), FV module and FAT/config checks. Host evidence only; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.3-STATUS.md)
+- `host`: [2026-10-31: phase-2 firmware dc8a97dcf1369066114f0d10e50f0b163876b78a37796c29d7d468a7f6d9d9bf, 56 MiB payload b2c96e08f71bbd3f8a84018024b1dc048994b72c2a81b56789686e503da82f80, probe image 9ea0174c275e7ebb42d9727c770b7a06ae09a6d44df9e36657a667c8de7e051b and final image d52dd8e37fa0ef87c44b2b15207497e93ac6285ca874cf20e5a668c4226ecf99 passed v3 header, gzip\(shim+FD\), FV module and FAT/config checks. Host evidence only; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.3-STATUS.md)
   Command: <code>python3 scripts/verify_phase2_artifact.py --kind probe --image out/phase2.3/elden-phase2-probe.img &amp;&amp; python3 scripts/verify_phase2_artifact.py --kind boot --image out/phase2.3/elden-phase2-boot.img</code>. Revision: `57e68be133c407ef9fa7dc6b4f10f1bd4cd3aedd`.
-- `device`: [2026-11-01: owner booted both FAT16 embed-payload images; the menu showed config: \\EFI\\UniXNU\\unixnu.toml and the ELDEN 2.3 INITRD 56M entry from the embedded volume, so the kernel-field payload channel is device-verified. The menu scale was pinned to 4 afterwards.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.3-STATUS.md)
+- `device`: [2026-11-01: owner booted both FAT16 embed-payload images; the menu showed config: \\EFI\\UniXNU\\unixnu.toml and the ELDEN 2.3 INITRD 56M entry from the embedded volume, so the kernel-field payload channel is device-verified. The menu scale was pinned to 4 afterwards.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.3-STATUS.md)
   Command: <code>fastboot boot out/phase2.3/elden-phase2-embed-probe.img &amp;&amp; fastboot boot out/phase2.3/elden-phase2-embed-boot.img</code>. Revision: `509bc088641cb6d56d2a28b5526adb72dc88d51d`.
-- `device`: [2026-11-01: two RAM cold boots of the scaled image 3dc8ae9611ec899ff14d50032ecd0ce2dd1035b3af9f9d3183bbab6cd41bcd93 printed DARWINBOOT: ARM64 va=0xFFFFFFF00427C000 pa=0xB927C000 args=0xBDB58000 entry=0xBC3ED488 owned=0x10000000, video base=0xFC800000 1904x3040 row 7616 depth 32, and inputs validated; exiting boot services, then the top 1/16 green band. The EL/input check passed and the window was allocated; no kernel output followed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.4-STATUS.md)
+- `device`: [2026-11-01: two RAM cold boots of the scaled image 3dc8ae9611ec899ff14d50032ecd0ce2dd1035b3af9f9d3183bbab6cd41bcd93 printed DARWINBOOT: ARM64 va=0xFFFFFFF00427C000 pa=0xB927C000 args=0xBDB58000 entry=0xBC3ED488 owned=0x10000000, video base=0xFC800000 1904x3040 row 7616 depth 32, and inputs validated; exiting boot services, then the top 1/16 green band. The EL/input check passed and the window was allocated; no kernel output followed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.4-STATUS.md)
   Command: <code>fastboot boot out/phase2.3/elden-phase2-embed-boot.img (select xnu) twice</code>. Revision: `da1d077cf6856e3f2621785f4a612f2c5ebae260`.
-- `host`: [2026-11-01: probe kernel 54,050,912 bytes a8f04b455996a4656a3055254c127e42f0676187c9550aa0b5fa57bbbe94e2d9 with entry 0xFFFFFFF0073ED488 branching to stub 0xFFFFFFF008588000 and back to 0xFFFFFFF0073EF05C; preflight accepted 16 segments and the ADT; FAT payload 065282a2... and image a4ad1fc7... passed the v4/FAT16/FV checks and match the probe bytes. Host evidence only; the probe image has not been booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.4-STATUS.md)
+- `host`: [2026-11-01: probe kernel 54,050,912 bytes a8f04b455996a4656a3055254c127e42f0676187c9550aa0b5fa57bbbe94e2d9 with entry 0xFFFFFFF0073ED488 branching to stub 0xFFFFFFF008588000 and back to 0xFFFFFFF0073EF05C; preflight accepted 16 segments and the ADT; FAT payload 065282a2... and image a4ad1fc7... passed the v4/FAT16/FV checks and match the probe bytes. Host evidence only; the probe image has not been booted.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.4-STATUS.md)
   Command: <code>python3 scripts/make_entry_probe_kernel.py &amp;&amp; python3 scripts/make_phase2_payload.py --output out/phase2.4/payload.img --kernel out/phase2.4/probe/kernel.macho --adt out/phase2.4/probe/kernel.macho.adt --kernel-bytes 54050912 --kernel-sha256 a8f04b455996a4656a3055254c127e42f0676187c9550aa0b5fa57bbbe94e2d9 &amp;&amp; python3 scripts/build_phase2_image.py --kind boot --fd out/phase2.3/SILICIUM_UEFI.fd --payload out/phase2.4/payload.img --output out/phase2.4/elden-phase2.4-probe-boot.img --embed-payload --work out/phase2.4 &amp;&amp; python3 scripts/darwinboot_preflight.py --kernel out/phase2.4/probe/kernel.macho --adt out/phase2.4/probe/kernel.macho.adt &amp;&amp; python3 scripts/verify_phase2_artifact.py --kind boot --image out/phase2.4/elden-phase2.4-probe-boot.img --fd out/phase2.3/SILICIUM_UEFI.fd --shim out/phase2.4/shim-boot-embed.bin --report out/phase2.4/verify.json --embed-payload --payload out/phase2.4/payload.img --expect-kernel-bytes 54050912 --expect-kernel-sha256 a8f04b455996a4656a3055254c127e42f0676187c9550aa0b5fa57bbbe94e2d9</code>. Revision: `da1d077cf6856e3f2621785f4a612f2c5ebae260`.
 
 ## Diagnostics {#diagnostics}
@@ -705,6 +759,10 @@ Collect evidence using the next action.
 
 ### Development findings
 
+- 2026-11-07: panic duplication is fixed and device-confirmed. New generic MIT DWC3 core plus guarded elden adapter, nonblocking console ring, bounded panic drain, session-bound status and PID1 EL0 syscall observation are built; CDC hardware remains unqualified.
+- 2026-11-06 prerequisites: final EFI31744-byte application passes FDT mailbox, parent metadata and memory-report contracts, and reaches the same XNU registration return1 through the neutral-debug AAVMF driver. Known-read expectations are prepared but were not sampled on the tablet.
+- 2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write.
+- 2026-11-05 offline: marker menu fallback is 600 seconds; NativeUfs probe 2 deliberately panics to display read-only GCC/UFS diagnostics. Probes 7/8 inspect SMMU/CB; SM8750 rejects probe 3. This changes acceptance wording, not the driver. See docs/OFFLINE-PAYLOAD-20261105.md.
 - The original accepted image is b56ef4b7e5a71382b8c279c4ee1560764fabd126ba37ac0fd6e495c80b9ec6e1.
 - Earlier UFSDxe failure images are identified and must not be reused.
 - Phase 2 requires separate kernel and DarwinBoot evidence.
@@ -727,29 +785,38 @@ Collect evidence using the next action.
 
 ### Next action
 
-- Owner RAM-boots out/phase2.4/elden-phase2.4-probe-boot.img \(a4ad1fc74abef35da9f947c350ff5763f2b8dea61da5adeee72aefcd0a67abf7\) twice and chooses xnu; the blue band is the XNU entry checkpoint. Phase 2.5 then narrows any hang with arm\_init, ArmDTPlatform and cpu\_init probes; see docs/PHASE2.4-STATUS.md.
+- Run the PC CDC logger before boot. Require actual bytes, matching session, both mount results and repeated PID1 user-trap status; do not infer success from a launchd filename.
 
 ### Evidence
 
-- `source`: [Recorded phase 1 artifact sizes and SHA-256 values.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/out/build.json)
-- `source`: [The elden Linux reference now matches soc/sm8750/soc.toml at h0cheung/tb322fc-linux-kernel 6f97250ead155fc3b980856323e99a4623dae73d.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/unixnu.lock)
-- `host`: [2026-10-25: a fresh phase 1 rebuild completed in 6:46 and passed static Android v3, shim, FD, embedded FAT and module checks. Image SHA-256 was 94b6a6315b04fc9d276bc15e9519107be292244380fc3bf139f5af6c96a3bb0a and FD SHA-256 was e5420517d55f4b638c07617a252d3a65c95cfb731584dcb10dd1d98bae412580; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `host`: [Base revision plus local working-tree patches. 2026-11-07: panic duplication is fixed and device-confirmed. New generic MIT DWC3 core plus guarded elden adapter, nonblocking console ring, bounded panic drain, session-bound status and PID1 EL0 syscall observation are built; CDC hardware remains unqualified.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/STARTUP-USB-CANDIDATE-20261107.md)
+  Command: <code>python edl_work/audit_startup_candidates.py (Y700 work repository)</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Panic duplicates originate from console output plus PE\_kputc pointing to console\_write\_unbuffered. Both panic entry points now skip only that aliased second sink; panic buffer and independent future USB sink are preserved. Build and hardware checks pending.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PANIC-CONSOLE-ALIAS-20261107.md)
+- `host`: [2026-11-06 prerequisites: final EFI31744-byte application passes FDT mailbox, parent metadata and memory-report contracts, and reaches the same XNU registration return1 through the neutral-debug AAVMF driver. Known-read expectations are prepared but were not sampled on the tablet. Source revision plus local working-tree changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PREREQUISITES-20261106.md)
+  Command: <code>.venv/bin/python scripts/build-payload-loader.py</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-06 host: source GOP console kernel/archives/prelink completed; separate read-only UFS root-check archive compiled with inherited identity DMA and LUN selection. TWRP/Linux EFI prototype and userdata/ESP design remain hardware-unverified. Details and bounded evidence in docs/NIGHT-BRINGUP-20261106.md; no stock index change or device write. Revision plus local working-tree patches.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/NIGHT-BRINGUP-20261106.md)
+  Command: <code>.venv/bin/python third_party/UniXNU/unixnu build kernel -D . -j4</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `host`: [2026-11-05 offline: marker menu fallback is 600 seconds; NativeUfs probe 2 deliberately panics to display read-only GCC/UFS diagnostics. Probes 7/8 inspect SMMU/CB; SM8750 rejects probe 3. This changes acceptance wording, not the driver. See docs/OFFLINE-PAYLOAD-20261105.md. Source revision plus uncommitted local packaging changes.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/OFFLINE-PAYLOAD-20261105.md)
+  Command: <code>.venv/bin/python scripts/build_offline_ufs_packet.py --fd out/phase3/old-fd-verified.bin --source-payload out/phase3/payload-fat16.img --kernel third_party/UniXNU/out/elden/ipados-17.7.11-21H461/elden-ufs_probe/kernel/kernel.macho</code>. Revision: `33b55083a0b61630f71478230f648606163115eb`.
+- `source`: [Historical phase 1 size/hash table. The local-only out/build.json is absent on this checkout; this reference does not certify a new phase 1 build.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-STATUS.md)
+- `source`: [The elden Linux reference now matches soc/sm8750/soc.toml at h0cheung/tb322fc-linux-kernel 6f97250ead155fc3b980856323e99a4623dae73d.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/unixnu.lock)
+- `host`: [2026-10-25: a fresh phase 1 rebuild completed in 6:46 and passed static Android v3, shim, FD, embedded FAT and module checks. Image SHA-256 was 94b6a6315b04fc9d276bc15e9519107be292244380fc3bf139f5af6c96a3bb0a and FD SHA-256 was e5420517d55f4b638c07617a252d3a65c95cfb731584dcb10dd1d98bae412580; no device boot was performed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>.venv/bin/python scripts/build_phase1.py --skip-submodules --crypto-path $PWD/.cache/phase1/basecrypto</code>. Revision: `dffc3020a85830d0d981a85871d9ab31aac5827d`.
-- `device`: [2026-10-25: owner confirmed two RAM cold boots of image 94b6a6315b04fc9d276bc15e9519107be292244380fc3bf139f5af6c96a3bb0a; both reached the usable UniXNU menu and stock Android resumed after exit. This evidence covers phase 1 only.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `device`: [2026-10-25: owner confirmed two RAM cold boots of image 94b6a6315b04fc9d276bc15e9519107be292244380fc3bf139f5af6c96a3bb0a; both reached the usable UniXNU menu and stock Android resumed after exit. This evidence covers phase 1 only.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>fastboot boot out/elden-phase1.img</code>. Revision: `dffc3020a85830d0d981a85871d9ab31aac5827d`.
-- `host`: [2026-10-25: DTC 1.8.1-gf99e3af0 generated a 1,557-byte DTB with SHA-256 60316b6d4e753610610126d691f6d39ba54edd21e9b02875ec034e81e27a4371; round-trip inspection found the expected compatible strings, CPU MPIDRs, PSCI, GICv3, timer and DRAM data.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2-STATUS.md)
+- `host`: [2026-10-25: DTC 1.8.1-gf99e3af0 generated a 1,557-byte DTB with SHA-256 60316b6d4e753610610126d691f6d39ba54edd21e9b02875ec034e81e27a4371; round-trip inspection found the expected compatible strings, CPU MPIDRs, PSCI, GICv3, timer and DRAM data.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2-STATUS.md)
   Command: <code>.cache/dtc-src/dtc -I dts -O dtb -i soc/sm8750/dts -o /tmp/elden-phase2.0.dtb dts/elden.dts</code>. Revision: `f99e3af0ecb67a9085478a9b8ddbcc25aa64931d`.
-- `host`: [2026-10-25: live-FDT audit produced a 13,152-byte ADT. Independent checks passed for C2400000+10000000 RAM/reservation/initrd coverage, UEFI DXE conventional memory, framebuffer, eight MPIDRs, one running boot CPU, GIC, timer, CHRP NVRAM, optional placeholders and sleep-disabled=1. Report: .cache/phase2.1-live/audit.json.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.1-STATUS.md)
+- `host`: [2026-10-25: live-FDT audit produced a 13,152-byte ADT. Independent checks passed for C2400000+10000000 RAM/reservation/initrd coverage, UEFI DXE conventional memory, framebuffer, eight MPIDRs, one running boot CPU, GIC, timer, CHRP NVRAM, optional placeholders and sleep-disabled=1. Report: .cache/phase2.1-live/audit.json.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.1-STATUS.md)
   Command: <code>.venv/bin/python scripts/phase2_1_audit.py --firmware-dtb .cache/device/elden-live.fdt --output-dir .cache/phase2.1-live</code>. Revision: `16e592abee8a550dec8154ed1f38b5ebc4f16213`.
-- `host`: [2026-10-25: native kernel audited as arm64/iOS 17 with 4 KiB TG0 and TG1; 1,010 target objects passed; the pinned prelink XML lexer accepted 7,730 tags. No device checkpoint is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.2-STATUS.md)
+- `host`: [2026-10-25: native kernel audited as arm64/iOS 17 with 4 KiB TG0 and TG1; 1,010 target objects passed; the pinned prelink XML lexer accepted 7,730 tags. No device checkpoint is claimed.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.2-STATUS.md)
   Command: <code>python3 scripts/audit-xnu-kernel.py build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf &amp;&amp; python3 scripts/audit-xnu-objects.py &amp;&amp; python3 scripts/check-prelink-xml.py ../kernel/kernel.macho</code>. Revision: `c91a2191fdf591a401a03027ed8b7fbfdbcad3a7`.
-- `device`: [2026-11-01: owner booted both phase 2.3 embed-payload images; each reached the UniXNU menu with the green payload checkpoint, printed config: \\EFI\\UniXNU\\unixnu.toml and listed the ELDEN 2.3 INITRD 56M entry, proving the payload HOB, BlockIo, FAT16 mount and config discovery chain on device.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE2.3-STATUS.md)
+- `device`: [2026-11-01: owner booted both phase 2.3 embed-payload images; each reached the UniXNU menu with the green payload checkpoint, printed config: \\EFI\\UniXNU\\unixnu.toml and listed the ELDEN 2.3 INITRD 56M entry, proving the payload HOB, BlockIo, FAT16 mount and config discovery chain on device.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE2.3-STATUS.md)
   Command: <code>fastboot boot out/phase2.3/elden-phase2-embed-probe.img &amp;&amp; fastboot boot out/phase2.3/elden-phase2-embed-boot.img</code>. Revision: `509bc088641cb6d56d2a28b5526adb72dc88d51d`.
-- `device`: [Screen capture of the phase 2.3 56 MiB payload menu before the scale fix: config read from the embedded volume, entries ELDEN 2.3 INITRD 56M and Restart, green checkpoint band, footer truncated at scale 7.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/assets/phase23-menu-embed-20261101.jpg)
+- `device`: [Screen capture of the phase 2.3 56 MiB payload menu before the scale fix: config read from the embedded volume, entries ELDEN 2.3 INITRD 56M and Restart, green checkpoint band, footer truncated at scale 7.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/assets/phase23-menu-embed-20261101.jpg)
   Command: <code>fastboot boot out/phase2.3/elden-phase2-embed-boot.img</code>. Revision: `509bc088641cb6d56d2a28b5526adb72dc88d51d`.
-- `device`: [Two cold boots reached DISPLAY OK, INPUT OK, config loaded and menu shown.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/docs/PHASE1-STATUS.md)
+- `device`: [Two cold boots reached DISPLAY OK, INPUT OK, config loaded and menu shown.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/docs/PHASE1-STATUS.md)
   Command: <code>fastboot boot out/elden-phase1.img</code>. Revision: `c591b1a0a471f24978aba25c56c8f6ec9bd06668`.
-- `device`: [Screen capture shows the rendered UniXNU menu on the tablet.](https://github.com/jerry-2009/UNIXNU_elden/blob/33b55083a0b61630f71478230f648606163115eb/assets/phase1-menu-20261025.jpg)
+- `device`: [Screen capture shows the rendered UniXNU menu on the tablet.](https://github.com/jerry-2009/UNIXNU_elden/blob/c7fae2baaaad4be7406de3691a4e79cc5cc48664/assets/phase1-menu-20261025.jpg)
   Command: <code>fastboot boot out/elden-phase1.img</code>. Revision: `c591b1a0a471f24978aba25c56c8f6ec9bd06668`.
 
 </div>

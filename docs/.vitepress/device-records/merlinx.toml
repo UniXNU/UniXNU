@@ -6,7 +6,7 @@ soc = "MT6768"
 os_profile = "ipados-17.7.11-21H461"
 # Related repositories (rendered by the device documentation workflow):
 #   UniXNU-merlinx, uefi-merlinx, UniXNU-MT6768-common, NativeEmmc, Mali-G52, MaliMetal
-summary = "Redmi Note 9 bring-up: UEFI boot, native eMMC, SystemOS cache and launchd userland, plus a Mali-G52 kernel path that completes M2/M3/M4/M6, reads GPU_ID and reports MALI RC 0; a GPU job/fence, NativeMali service, PanVK device and userland display remain incomplete."
+summary = "Redmi Note 9 bring-up: UniXNU boots iPadOS 17.7.11 21H461 from p33 through UEFI, native eMMC and a Data seed, reaches launchd and draws the Lock Screen and Dock; the MT6768 OVL is reprogrammed to remove the one-frame offset, the FT8719 touch driver injects HID contacts, and the kernel exposes an EP0 MUSB log/command channel. PosterBoard, userland GPU, Wi-Fi, audio and battery reporting remain incomplete."
 repositories = [
   { name = "UniXNU-merlinx", url = "https://github.com/Dracen-W/UniXNU-merlinx", role = "device" },
   { name = "uefi-merlinx", url = "https://github.com/Dracen-W/uefi-merlinx", role = "firmware" },
@@ -14,12 +14,13 @@ repositories = [
   { name = "NativeEmmc", url = "https://github.com/Dracen-W/NativeEmmc", role = "storage" },
   { name = "Mali-G52", url = "https://github.com/Dracen-W/Mali-G52", role = "gpu-kernel" },
   { name = "MaliMetal", url = "https://github.com/Dracen-W/MaliMetal", role = "gpu-userland" },
+  { name = "FocalTechTouch-FT8719", url = "https://github.com/Dracen-W/FocalTechTouch-FT8719", role = "touch" },
 ]
 
 [[area]]
 id = "configuration"
 status = "device-verified"
-components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "DarwinBoot", "XnuPrelink"]
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "AppleKeyStoreState", "DarwinBoot", "XnuPrelink"]
 paths = ["board.toml", "configs/**", "components.toml", ".github/**"]
 inputs = ["MT6768 board resources, PMIC keys, p33 boot partition and the iPadOS 17.7.11 21H461 restore profile."]
 configuration = ["board.toml selects merlinx_defconfig, the iPad7,1 restore profile, the p33 boot layout and the native eMMC root path."]
@@ -90,7 +91,7 @@ paths = ["drivers/NativeEmmc", "drivers/RamBlock", "patches/xnu/offline-owner-*"
 inputs = ["The eMMC userdata partition, the OS and SystemOS APFS volumes and the local Data seed."]
 configuration = ["NativeEmmc publishes userdata and the OS and SystemOS volumes. The owner path mounts the SystemOS cache carrier and a packed Data seed."]
 procedure = ["Flash the boot image, start XNU and read the ROM/status output."]
-findings = ["NativeEmmc replaces the timed-out UEFI storage path. The kernel mounts SystemOS, executes initproc and reaches launchd, xpcproxy and SpringBoard. The macOS-generated Data seed mounts read-write and disables watchdogd through the launchd disabled plist."]
+findings = ["NativeEmmc replaces the timed-out UEFI storage path. The kernel mounts SystemOS, executes initproc and reaches launchd and xpcproxy. lsd completes its first LaunchServices build and SpringBoard draws the Lock Screen and Dock. The macOS-generated Data seed mounts read-write and disables watchdogd through the launchd disabled plist."]
 completion = ["Root and SystemOS mount, initproc runs, Data is writable and the launchd service graph remains alive."]
 limits = ["Data is a bring-up seed. The NativeEmmc manifest backend and UFS persistence are stubbed, so the Data store is volatile and the full user data set is not present."]
 next_action = ["Verify writable /private/var across reboot, then replace the bring-up stubs and keep watchdogd disabled only for diagnostics."]
@@ -102,32 +103,34 @@ evidence = [
 [[area]]
 id = "display"
 status = "implemented"
-components = []
-paths = ["patches/xnu/offline-owner-systemos-mount.patch", "scripts/xnu-panic-screen.c", "configs/merlinx_defconfig"]
+components = ["GopFramebuffer"]
+paths = ["patches/xnu/offline-owner-systemos-mount.patch", "scripts/xnu-panic-screen.c", "configs/merlinx_defconfig", "package/MerlinxLegacyDisplay.cpp", "scripts/build-gop-legacy-display.py"]
 inputs = ["The UEFI GOP framebuffer at 1080x2340 and the panning offset observed on the panel."]
-configuration = ["The kernel uses the retained GOP framebuffer for panic and boot-stage text. Userland display ownership is not configured."]
+configuration = ["The legacy display provider keeps the GOP framebuffer for panic and boot text, then reads the live OVL0 L3 layer address as the foreground scanout base and clears the L0 LK splash, without changing the enabled layer set."]
 procedure = ["Flash a diagnostic image and read the status lines from the panel."]
-findings = ["The GOP base, row stride and 32-bit format work. The kernel draws ROOT, VOL, CACHE, EXEC, LAUNCHD and Mali diagnostics. Userland reaches SpringBoard, but IOMFB_FDR_loader exits with status 1 and no scanout provider is published."]
-completion = ["The kernel console is visible and userland presentation and backlight control work."]
-limits = ["No userland display provider or renderer is implemented. IOMFB_FDR_loader fails before GPU display handoff. The scanout starts mid-panel."]
-next_action = ["Trace IOMFB_FDR_loader exit 1 and add the userland display and GPU scanout path after the service graph is stable."]
+findings = ["OVL0 starts with SRC=0x9, i.e. L0 (the LK splash at 0x7cdb0000) and L3 (the real foreground framebuffer) are both enabled. Forcing SRC_CON=1 disabled the working L3 and turned the panel black right after the colour bars, so the provider now leaves the layer set alone, takes L3_ADDR as the scanout base, aligns its offset to the XNU framebuffer and wipes L0 to opaque black. The ~1 cm vertical offset and the LK OEM/Android logo are gone, and a BOOT 0-100% bar above the framebuffer tracks ROOT, VOL, CACHE, LAUNCHD and the first SpringBoard frame."]
+completion = ["The kernel console is visible, userland presentation reaches the Lock Screen and the panel scans the framebuffer without an offset."]
+limits = ["Userland Metal/GPU composition is not implemented; SpringBoard renders through the legacy provider. Backlight control is not wired. CPU/CCI PLL boost on MT6768 + MT6358 requires raising VSRAM_PROC11/12 and VPROC11/12 via PWRAP WACS2 (0xc20) before writing ARMPLL_L_CON1 (0x20c) and ARMPLL_LL_CON1 (0x21c)."]
+next_action = ["Keep the OVL layer inspection read-only apart from the foreground address, verify 2.0 GHz / 1.7 GHz CPU boost and fast eMMC PIO on hardware, and add backlight control."]
 evidence = [
   { kind = "source", reference = "patches/xnu/offline-owner-systemos-mount.patch", result = "The GOP status lines and panic screen are linked into the kernel." },
 ]
 
 [[area]]
 id = "input"
-status = "planned"
-components = []
-paths = ["package/**", "scripts/**", "dts/**"]
-inputs = ["PMIC keys, volume-up, volume-down and power routing."]
-configuration = ["The UEFI menu uses volume-down to scroll and volume-up or power to select. No userland input path is configured."]
-procedure = ["Measure key events in the UEFI menu and later in userland."]
-findings = ["The PMIC mask covers power and volume-up, so both keys select a menu entry."]
+status = "implemented"
+components = ["FocalTechTouch"]
+paths = ["drivers/FocalTechTouch/**", "package/**", "scripts/**", "dts/**"]
+inputs = ["FocalTech FT8719 on SPI0 CS0 (GPIO85..88, reset GPIO92, IRQ GPIO1), Xinli panel firmware and PMIC/GPIO keys."]
+configuration = ["drivers/FocalTechTouch is registered as a submodule and built with package/MerlinxHidInput.cpp and package/MerlinxLegacyDisplay.cpp into libNativeLegacyDisplay.late.a; fts-touch=3 and sheng-touch-hid=1 enable the touch probe and IOHIDDevice bridge."]
+procedure = ["Boot with fts-touch=3 and sheng-touch-hid=1, inspect [FTS-HW] and [FTS-HID] lines over USB serial or run the touch USB command, and test touch gestures on Lock Screen."]
+findings = ["The FT8719 SPI protocol, Xinli PRAM firmware download and 10-contact seqlock snapshot bridge into IOHIDDevice (NativeHidInput) for backboardd."]
 completion = ["Touch or buttons produce stable HID events in userland."]
-limits = ["No userland touch or HID provider is implemented."]
-next_action = ["Define the input provider after the userland display path."]
-evidence = []
+limits = ["Real-hardware touch coordinate orientation and latency remain to be confirmed on the phone."]
+next_action = ["Verify FT8719 firmware download and Lock Screen swipe-to-unlock on hardware."]
+evidence = [
+  { kind = "source", reference = "drivers/FocalTechTouch/FtsProbe.cpp", result = "Staged FT8719 SPI probe, firmware loader and HID contact snapshot are wired to the board SPI0 and NativeHidInput bridge." },
+]
 
 [[area]]
 id = "gpu"
@@ -212,14 +215,14 @@ evidence = [
 id = "diagnostics"
 status = "device-verified"
 components = []
-paths = ["patches/xnu/offline-owner-cache-*", "scripts/xnu-panic-screen.c", "docs/devices/merlinx.md"]
+paths = ["patches/xnu/offline-owner-cache-*", "scripts/xnu-panic-screen.c", "scripts/merlinx_usb_log.py", "docs/devices/merlinx.md"]
 inputs = ["Panel output, panic screen and the GOP status lines."]
-configuration = ["The kernel draws ROOT, VOL, CACHE, EXEC and LAUNCHD through the GOP framebuffer. The panic screen renders kernel panics on the panel."]
-procedure = ["Flash a diagnostic image to p33 and read the panel."]
-findings = ["The status lines identified the cache and launchd checkpoints without a UART. The Mali diagnostics add MATCH, START, RC, M2W, M2P, PMIC, GIC and staged M2 voltage markers. The launchd exit trace showed IOMFB_FDR_loader exit 1 while SpringBoard did not exit."]
-completion = ["Each claimed milestone has a panel checkpoint or a reproducible panic result."]
-limits = ["There is no UART and no userland log transport. The current Mali image omits the panic screen because the local UEFI font input was unavailable. Data I/O and userland display remain inferred from panel checkpoints."]
-next_action = ["Add pwrap read sub-markers for the VSRAM path and restore the panic screen in the next CI payload build."]
+configuration = ["The kernel draws ROOT, VOL, CACHE, EXEC and LAUNCHD through the GOP framebuffer and exposes a Mode A MUSB EP0 log/command channel (VID 0x05AC, PID 0x12A8). The panic screen renders kernel panics on the panel."]
+procedure = ["Flash a diagnostic image to p33, read the panel, and stream the ring with scripts/merlinx_usb_log.py watch."]
+findings = ["The status lines identified the cache and launchd checkpoints without a UART. The Mali diagnostics add MATCH, START, RC, M2W, M2P, PMIC, GIC and staged M2 voltage markers. The MUSB channel now carries the kernel ring, ps, fault records and display/touch/tap/swipe/home/cpufreq commands to a host."]
+completion = ["Each claimed milestone has a panel checkpoint, a USB log line or a reproducible panic result."]
+limits = ["There is no UART; the MUSB channel needs the host-side pyusb client and depends on the EP0 PIO driver. The Mali image omits the panic screen unless the local UEFI font input is available."]
+next_action = ["Keep the USB command set and the panel markers in sync with new drivers."]
 evidence = [
   { kind = "source", reference = "docs/devices/merlinx.md", result = "The device page records the panel checkpoints and their limits." },
   { kind = "device", reference = "https://github.com/Dracen-W/UniXNU-merlinx", command = "fastboot flash boot <merlinx-boot.img>", revision = "237c204655577c1ed1c9536a4bdc890bb2eaf1cc", result = "The panel shows ROOT, VOL, CACHE, EXEC and LAUNCHD." },

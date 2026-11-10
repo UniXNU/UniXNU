@@ -6,7 +6,7 @@
 
 OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The old-fw CI kernel builds through a temporary mirror. The active interrupt path is GFander's source-level GICv3 design \(patches/xnu/10063-kebab-gic-vtimer.patch\); CI builds succeed, but source-GIC hardware images still show only colour bars. The binary-GIC no-early control kernel reaches bsd\_init \(band 14\); probe stubs inside bsd\_init stop the new kernel early and the framebuffer text logger stays silent, so source-level band markers \(bands 10-13\) are being built in CI. The BSD kebab\_ufs driver is linked with rd=ufsroot0 ufsroot=userdata rootrw=0; UFS root is not confirmed yet.
 
-源记录: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/porting.toml), `62d7738d3be89e271fb9b9c7ae6b8d5042d13a41`.
+源记录: [porting.toml](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/porting.toml), `a8b7c91e0ab81038875d934ee42c1b32bc20b8d5`.
 
 本页按设备记录自动生成。
 
@@ -72,12 +72,12 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 下一步
 
-- Keep the record current as firmware and kernel patches land.
+- Use the full QEMU device build once the Linux toolchain is ready, or fix the raw QEMU fixture boot\_args window; the kernel entry and arm\_init stack are valid, and the remaining fault is in the \_\_BOOTDATA/early-bootstrap path. UFS and IOFindBSDRoot are downstream.
 
 ### 证据
 
-- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/board.toml)
-- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/porting.toml)
+- `source`: [Format 2 board description with the SM8250 SoC feed and the five components above.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/board.toml)
+- `source`: [Thirteen areas with measured facts; python3 scripts/porting-record.py check --device ../UniXNU-kebab passes.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/porting.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -128,7 +128,7 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [UniXNU menu on the KB2000 panel listing the payload entry, keys working, full firmware and DarwinBoot log readable.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/darwin-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## CPU 与中断 {#cpu}
@@ -184,9 +184,9 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [Reboot six seconds after the stage bars with the probe after the MMU enable; no reboot with the probe after \_machine\_conf, so the kernel reached \_machine\_startup and stopped inside it.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>flash the reset-probe image and observe the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/scripts/patch-xnu-log-probe.py)
+- `source`: [Resolves 32 call sites, verifies every original bl, places 80-byte stubs in \_\_TEXT\_EXEC padding and checks each branch.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/scripts/patch-xnu-log-probe.py)
 
 ## 内存与 DMA {#memory}
 
@@ -233,7 +233,7 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [DarwinBoot reports the kernel at physical 0xC007C000 inside the 3 GiB window, and the kernel reaches the MMU enable.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>flash the entry-probe image and read the DarwinBoot physical base line</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## 存储与根卷 {#storage}
@@ -283,8 +283,8 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `source`: [Adds bsd/dev/kebab\_ufs.c, the bsd/conf/files entry and the rd=ufsroot0 hook in IOFindBSDRoot.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/patches/xnu/kebab-ufs-10063.patch)
-- `device`: [Early kernel log appears, but the last line is the btlog vm-tag warning and no bsd\_init/IOFindBSDRoot/KEBAB UFS marker appears.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `source`: [Adds bsd/dev/kebab\_ufs.c, the bsd/conf/files entry and the rd=ufsroot0 hook in IOFindBSDRoot.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/patches/xnu/kebab-ufs-10063.patch)
+- `device`: [Early kernel log appears, but the last line is the btlog vm-tag warning and no bsd\_init/IOFindBSDRoot/KEBAB UFS marker appears.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>flash the old-fw kernel with GIC/FB/bring-up and rd=ufsroot0</code>. Revision: `fab2f0f31aa13fa3a86579611c5df8b5e93c174a`.
 
 ## 显示 {#display}
@@ -328,7 +328,7 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [Menu, firmware log and DarwinBoot log render at 1080x2400 with correct geometry.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>boot the firmware and read the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## 输入 {#input}
@@ -366,7 +366,7 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [Menu selection and confirmation work with the physical keys.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>boot the firmware and press volume and power</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 ## GPU {#gpu}
@@ -565,9 +565,9 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [The image boots to the menu, the payload volume mounts and the kernel entry bar appears after the DarwinBoot hand-off.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>fastboot flash boot_a out/probe-final-boot.img; fastboot reboot</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
-- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/scripts/pack-payload-mbr.py)
+- `source`: [MBR wrapper for the payload FAT volume: status 0, type 0x0c partition at LBA 2048, 1 MiB pad.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/scripts/pack-payload-mbr.py)
 
 ## 诊断 {#diagnostics}
 
@@ -646,7 +646,7 @@ OnePlus 8T \(KB2000\). Firmware, menu, payload volume and DarwinBoot work. The o
 
 ### 证据
 
-- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/62d7738d3be89e271fb9b9c7ae6b8d5042d13a41/docs/bring-up.md)
+- `device`: [Seventeen exit-boot-services notifications, a hung notification phase and a passing hand-off after skipping them; kernel entry, MMU enable and \_machine\_startup all confirmed by bars and timed resets.](https://github.com/stevedang67889/UniXNU-kebab/blob/a8b7c91e0ab81038875d934ee42c1b32bc20b8d5/docs/bring-up.md)
   Command: <code>flash each bisect image and photograph the panel</code>. Revision: `97f6fea12dae49a1bbc30ccd22c098b82b97dbe4`.
 
 </div>

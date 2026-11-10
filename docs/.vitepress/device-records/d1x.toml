@@ -1,0 +1,553 @@
+schema_version = 1
+
+[device]
+name = "d1x"
+soc = "exynos9825"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Samsung Galaxy Note10 5G (SM-N971N, Exynos 9825) boots the iPadOS 17.7.11 userland from a recovery image: UEFI, prelinked XNU, UFS and APFS root and framebuffer scanout work. SpringBoard still exits on every launch because the legacy IOMobileFramebuffer client never serves selectors 3, 4, 5 and 6, so CoreAnimation has no surface to present. Input, GPU, Wi-Fi, audio and power management are not implemented."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "XnuPrelink"]
+paths = ["board.toml", "feeds.toml", "configs/**", "dts/**", "patches/**", ".github/**"]
+inputs = [
+  "SM-N971N (d1x) with Exynos 9825, 12 GB RAM and 256 GB UFS; bootloader N971NKSU2HWH5, hardware revision 23.",
+  "iPadOS 17.7.11 build 21H461 (iPad7,1 / J120AP), kernelcache sha256 f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7, XNU revision d8b80295118ef25ac3a784134bcf95cd8e88109f.",
+  "Live device tree, GPT and boot arguments captured on 2026-11-01 while Android was rooted. The ro.product properties are spoofed and were not used.",
+]
+configuration = [
+  "schema_version 2: board.name d1x, board.soc exynos9825, board.os_profile ipados-17.7.11-21H461, board.kit d1x.",
+  "Selected components: ArmDTPlatform, ArmCpu, SoftwareAES, DarwinBoot and XnuPrelink. The board-owned D1xDisk and D1xFramebuffer drivers are kernel archives, not catalog components.",
+  "kernel.defconfig d1x_defconfig with arch, SoC and OS configuration fragments and the arch, SoC, OS and device patch series.",
+  "payload volume D1XESP of 52 MiB, boot image header v2 with a 376 KiB one-entry dt_table, ADT chip_id 971, dram_size 0x80000000 and defaults vmm-present=1.",
+]
+procedure = [
+  "Run ./unixnu defconfig d1x_defconfig -D ../UniXNU-d1x and ./unixnu status --json -D ../UniXNU-d1x from UniXNU; inspect the resolved profile, components, source pins and patch order.",
+  "Build the kernel and payload with the bring-up scripts, flash the recovery image, boot for 300 s and pull the kernel console log.",
+]
+findings = [
+  "The device identifies itself through /proc/device-tree and the GPT. ro.product.model reports SM-S9280 and b0s; those values are spoofed and contradict the Exynos 9825 device tree.",
+  "The GPT uses 4096-byte logical blocks. boot is sda14 (55 MiB, LBA 27264-41343) and recovery is sda15; userdata spans LBA 3313152-62476282.",
+  "The boot image must carry a dt_table. A header v1 image without a device tree fails with [DTH] dt table header check fail; pasting the vendor dt_table after the ramdisk then fails with DT Load Fail. Header v2 with the live 376 KiB FDT wrapped in a one-entry dt_table boots.",
+  "12 GB of DRAM is not contiguous: about 2 GiB sits below 4 GiB and 10 GiB sits above 32 GiB. The ADT accepts one contiguous range, so only the low window is declared.",
+  "The kernel declares max_cpus 4 even though the device tree publishes cpu0 through cpu7.",
+  "profiles.py replaces arrays instead of merging them, so the board archives list restates the arm64 profile entries and then appends the D1x storage and display archives.",
+  "A defconfig that contains both CONFIG_X=y and a later # CONFIG_X is not set keeps the later line; duplicate blocks silently disabled the native display build once.",
+  "The prelink roots keep com.apple.iokit.IOMobileGraphicsFamily and com.apple.iokit.IOSurface. Removing either shifts the prelinked layout and panics in IOKitInitializeTime before bsd_init completes.",
+]
+completion = [
+  "unixnu status resolves the device, SoC and OS profile with no missing input.",
+  "The built image reaches launchd, reports Darwin 23.6.0 and runs 64 processes for the full 300 s window.",
+]
+limits = [
+  "The v28 working tree still lists two board archives by absolute /opt/unixnu/UniXNU-d1x path; they must become repository-relative before publication.",
+  "The SoC repository is not pinned to a reviewed commit and feeds.toml is still a placeholder.",
+  "Only the low 2 GiB DRAM window is described; the 10 GiB above 32 GiB is unused.",
+]
+next_action = [
+  "Pin exynos9825 to a reviewed commit and make the archive paths repository-relative before the next release.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Board identity, DRAM window, payload inputs and boot arguments used for the v28 build."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "Kernel console capture of the v198 boot: 300 s alive, 64 processes, Darwin 23.6.0."
+
+[[area]]
+id = "firmware"
+status = "implemented"
+components = ["DarwinBoot"]
+paths = ["package/**", "scripts/package.sh", "dts/**", "proprietary-files.txt", ".github/workflows/package.yml"]
+inputs = [
+  "Samsung LK bootloader with Odin download mode and no fastboot; only the recovery partition is used for bring-up.",
+  "55 MiB boot partition, 376 KiB live FDT, GOP framebuffer at 0xCA000000 and PSCI over SMC.",
+  "Mu-Silicium Samsung platform seed; the d1xPkg DSC is built from the unixnu-d1x branch.",
+]
+configuration = [
+  "firmware.dsc Platforms/Samsung/d1xPkg/d1x.dsc and firmware.fd Build/d1xPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd; ENABLE_SECUREBOOT=0 during bring-up.",
+  "bootimg.image header_version 2, base 0, kernel_offset 0x10008000, tags_offset 0x10000100, ramdisk_offset 0, pagesize 0x800; bootimg.dtb package/d1x/dt_table.bin.",
+  "BootShim paints 0xCA000000 with 0x964000 bytes of red before entering the firmware volume, as a loader heartbeat.",
+]
+procedure = [
+  "Build the firmware volume, wrap BootShim, the FD and the FAT payload into the recovery image, flash recovery over adb and reboot to Android.",
+  "Capture the serial console for the full 300 s test window and confirm the kernel checkpoints before the next change.",
+]
+findings = [
+  "The Samsung bootloader refuses a recovery image without a dt_table and also refuses the raw vendor table appended after the ramdisk. The working shape is header v2 plus a dtb section holding a one-entry dt_table with the full live FDT.",
+  "A red screen after flashing proves LK entered BootShim and the Decon still scans 0xCA000000. A screen that never changes means LK rejected the image or the framebuffer is no longer scanned.",
+  "The menu is configured with timeout 0 so the firmware boots without a working UEFI timer or key input; this is required for unattended 300 s tests.",
+  "The payload volume is limited to 52 MiB because BootShim plus the firmware volume take about 2.1 MiB of the 55 MiB boot partition.",
+]
+completion = [
+  "The flashed recovery image loads through LK, prints kernel checkpoints C0-C25 and reaches launchd without a panic.",
+  "The boot returns to Android after the 300 s test window.",
+]
+limits = [
+  "The firmware is built from a local Mu-Silicium branch that is not published as uefi-d1x.",
+  "Bring-up uses recovery only; nothing installs to the boot partition and no Odin tar is produced.",
+  "There is no interactive menu or fastboot path.",
+]
+next_action = [
+  "Publish the uefi-d1x branch and pin it in feeds.toml, then add Odin tar packaging and verify a cold boot from the boot partition.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-manifest.md"
+result = "Boot image shape, payload size and the v198 and v200 artifact hashes."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "Console capture proving the loader handoff reached the kernel and userspace."
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["dts/**", "configs/**", "patches/**"]
+inputs = [
+  "Eight cores: four Cortex-A55, two Cortex-A75 and two Exynos M4; MPIDR affinities 0x0-0x3, 0x4-0x5 and 0x100-0x101.",
+  "GIC-400 (GICv2): distributor 0x10101000, CPU interface 0x10102000, virtual interface 0x10106000; 26 MHz timebase.",
+]
+configuration = [
+  "CONFIG_XNU_ARMCPU=y; ADT cpu_regs 0x0,0x1,0x2,0x3,0x4,0x5,0x100,0x101; PSCI method smc.",
+  "Device tree cpu nodes and the arm,armv8-timer block feed the ADT and the platform expert.",
+]
+procedure = [
+  "Boot and inspect the C6 topology, C11 timer and C19 timebase checkpoints.",
+  "Read the GIC distributor, CPU interface and timer lines, then dump the IORegistry cpu nodes.",
+]
+findings = [
+  "GICv2 works on this kernel: the distributor reports type 0x0000fcef and IIDR 0x0200143b, and the timer arrives as PPI 27 in group 0 at 26 MHz.",
+  "pe_arm_map_interrupt_controller reports that it cannot find the interrupt controller before the GIC is programmed, yet the later gicd and gicc reads are valid. The message comes from the early mapping path and does not stop timer delivery.",
+  "The kernel declares max_cpus 4 in C23 and C24 while the device tree publishes eight cpu nodes; cores above the declared limit are not brought up by this image.",
+  "No inter-processor interrupt or per-core entry test has been recorded yet.",
+]
+completion = [
+  "The declared CPUs reach their entry point, the timer fires and launchd runs.",
+]
+limits = [
+  "Only four CPUs are declared; SMP bring-up of all eight cores and IPI delivery remain unverified.",
+  "CPU frequency and DVFS are owned by ACPM and are not implemented.",
+]
+next_action = [
+  "Raise max_cpus after adding a per-core entry check, then add an IPI test and record each core's MPIDR.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "GIC, timer, max_cpus and IORegistry cpu lines from the v198 boot."
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["dts/**", "board.toml", "configs/**"]
+inputs = [
+  "12 GB physical DRAM in eight live device-tree nodes: three below 4 GiB and five 2 GiB nodes starting at 0x880000000.",
+  "UEFI memory map, GOP framebuffer reservation at 0xCA000000 and the payload initrd.",
+]
+configuration = [
+  "The ADT receives dram_size 0x80000000, one contiguous range from 0x80000000 to 0xFFFFFFFF.",
+  "dts/d1x.dts declares the same low window as its single /memory node.",
+]
+procedure = [
+  "Compare the base DTB with /proc/device-tree on Android to confirm that the bootloader rewrites the memory nodes.",
+  "Boot the kernel and read the vm_page_bootstrap counters and the pmap startup lines.",
+]
+findings = [
+  "The bootloader exposes eight memory nodes, not the three in the base DTB. Ten of the twelve GiB sit above 32 GiB and cannot be described by the single ADT range.",
+  "vm_page_bootstrap reports 48062 free pages and 17474 wired pages; with 16 KiB pages that is 65536 pages, about 1 GiB accounted at bootstrap inside the declared 2 GiB window.",
+  "The rest of the low window is absent from the bootstrap free and wired counts. Firmware, the framebuffer, the payload and reserved regions account for part of it, but no complete map audit exists yet.",
+]
+completion = [
+  "The kernel accounts its memory, maps the framebuffer and runs launchd plus 64 processes without a memory panic.",
+]
+limits = [
+  "The 10 GiB above 32 GiB is unused and untested. DMA address widths and SMMU ownership are not described.",
+]
+next_action = [
+  "Export the UEFI memory map, add the high range as a second owned-memory region and verify that XNU can allocate above 32 GiB.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "vm_page_bootstrap, pmap startup and process count lines."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Declared DRAM range, memory split and payload inputs."
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["SoftwareAES"]
+paths = ["drivers/D1xDisk/**", "scripts/build-d1x-storage.py", "dts/**", "configs/**", "board.toml"]
+inputs = [
+  "Samsung Exynos UFS at 0x13D60000, HS-GEAR4 with two lanes, LUN0 of 238 GiB and 4096-byte logical blocks.",
+  "GPT with 37 entries; the OS, SystemOS, OwnerData, VAR and LOG windows are carved from userdata.",
+]
+configuration = [
+  "CONFIG_XNU_EXTRA_LD_ARCHIVES force-loads libD1xStorage.a; D1xDisk publishes one IOBlockStorageDevice per window over the prelinked IOStorageFamily.",
+  "SoftwareAES provides software AES-CBC through the kernel AES helpers and the IOAESAccelerator ABI; it is linked from the arm64 profile.",
+  "Boot arguments rd=md0, d1x-ufs-probe=1, d1x-ufs-enable=1, d1x-ufs-uic=1, d1x-ufs-utp=1, offline-apfs-load=1, d1x-var-apfs=1 and d1x-log-apfs=1.",
+  "userdata window first_lba 3313152, last_lba 62476282, lba_bytes 4096.",
+]
+procedure = [
+  "Boot and inspect the UFS capability, HCS and UniPro lines, then the D1xDisk publish sequence and the APFS media tree.",
+  "Confirm the OS volume mounts at /apfs/mnt9, the VAR seed mounts at /apfs/mnt9/private/var and launchd starts from the APFS root.",
+]
+findings = [
+  "The UFS controller reports CAP 0x01303ff1f, version 0x300, HCS 0x10f and a ready UniPro link; UIC and UTP commands complete.",
+  "Five APFS windows publish: disk1s1 OwnerData (184 MiB of a 512 MiB window), disk3s1 SystemOS (3.3 GB), disk5s1 OS (6.08 GB), disk7s1 VAR (32 MiB) and a 224 MiB LOG window with no volume slice.",
+  "The OS window mounts read-only at /apfs/mnt9 and becomes the root, replacing the ext2 skeleton that vfs_mountroot initially mounts from UFS. The 32 MiB VAR seed mounts read-write at /apfs/mnt9/private/var.",
+  "The 32 MiB VAR seed is 93.8 percent non-zero and full; launchd logs could not set create /private/var/mobile/tmp: No space left on device.",
+  "The 224 MiB LOG container publishes an IOMedia but no APFS volume. mount /dev/disk9 returns ENOENT, so the container from apfsprogs is not recognised as a container with a volume.",
+]
+completion = [
+  "GPT and APFS containers read correctly, the OS volume mounts, launchd runs and the 300 s test completes.",
+]
+limits = [
+  "The OS volume is read-only and the VAR volume is only 32 MiB; persistent writes larger than the seed fail.",
+  "The LOG container is unusable and there is no Data volume resize or fsck.",
+]
+next_action = [
+  "Repair or replace the LOG container with a container that Apple APFS accepts, then grow VAR or add a Data volume and measure read throughput.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "UFS, D1xDisk, APFS mount and out-of-space lines."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Storage windows, userdata geometry and storage-related boot arguments."
+
+[[area]]
+id = "display"
+status = "implemented"
+components = []
+paths = ["drivers/D1xFramebuffer/**", "scripts/build-d1x-display.py", "scripts/build-d1x-framebuffer.py", "docs/**", "configs/**"]
+inputs = [
+  "Samsung S6E3HA9 panel, 1080x2280 at 60 Hz, 4320-byte stride; firmware GOP framebuffer at 0xCA000000.",
+  "Prelinked IOMobileGraphicsFamily and IOSurface kexts; iPadOS 17.7.11 IOMobileFramebuffer.framework.",
+]
+configuration = [
+  "CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y force-loads libNativeLegacyDisplay.late.a, which publishes D1xFirmwareFramebuffer and NativeLegacyDisplay under /arm-io.",
+  "Boot arguments offline-legacy-gop=1, phase=4, unit-scale=3, sheng-vsync=60, offline-legacy-pm=1, validate=1, transfer=1, retire=1 and d1x-fb-bars=1.",
+  "d1x-backlight impersonates AppleARMBacklight and registers a 1024-level range; it does not program the panel backlight yet.",
+]
+procedure = [
+  "Boot and confirm the console framebuffer and the paint tick lines, then inspect D1xFirmwareFramebuffer and NativeLegacyDisplay in the IORegistry.",
+  "Disassemble IOMobileFramebuffer.framework from the 17.7.11 dyld cache, enumerate the user-client selector calls and compare them with the legacy client trace.",
+]
+findings = [
+  "Scanout works: the console reports fb ca000000 1080x2280 row 4320, the paint tick redraws the bars and the panel stays quiet after 20 s.",
+  "Seven processes open the legacy user client: backboardd (37), 64, 80, 105, 142, 178 and 198. They interpose the vtable but the v198 log records no selector trace, so selector logging must be restored before judging traffic.",
+  "The last complete client trace, from v193, was 88, 57, 15, 22, 8, 29, 33, 79, 74, 12, 6, 27, 84, 50 and 28: capability and status calls only, never 3, 4, 5 or 6.",
+  "The 17.7.11 framework calls selector 3 for the layer default surface (one 32-bit output), 4 for swap begin (one 64-bit id), 5 for swap with a 0x508-byte structure, 6 for swap wait and 8 for display size. iOS 16 used 0x46c bytes for selector 5.",
+  "Adding canvas-width, canvas-height, canvas-depth and canvas-rowbytes to the nub in v195 made every client stop issuing selectors; v198 removed the properties, but the captured log still shows no selector traffic, so the probe state must be re-established before the next test.",
+  "The sweet display classes cannot coexist with the prelinked kexts: IOSurfaceRootUserClient, AppleCLCD and IOMobileFramebuffer already exist, and removing the two kexts panics in IOKitInitializeTime with the class-name string in FAR 0x755365726f434f49, the ASCII bytes of IOCoreSu.",
+  "v200 implements selectors 3, 4, 5 and 6 in the legacy client: 3 returns 0 with a log line, 4 increments a swap id, 5 accepts at least 0x508 bytes, logs the mask and layer ids and paints the panel solid, and 6 returns success. The image is built but was never flashed because adb had no device.",
+]
+completion = [
+  "Stage 1: colour bars and a stable panel, achieved.",
+  "Stage 2: the framework issues 3, 4 and 5 and the panel leaves the bars.",
+  "Stage 3: SpringBoard draws the first UI frame.",
+]
+limits = [
+  "No surface object is wired to selector 3 yet; v200 returns 0 and paints a solid colour instead of copying layers.",
+  "The text console is not disabled on the first swap, there is no presenter thread, no screen surface reserve and no vsync source.",
+  "The backlight service is a stub.",
+]
+next_action = [
+  "Flash v200 and look for sel5 swap mask in the console. If selector 3 is never called, restore the pre-v195 probing state and check selectors 18, 28 and 72; once swap arrives, port SweetSurface as D1xSurfaceRoot and D1xSurfaceUserClient, copy layers with CPU memcpy, disable the text console and add the presenter thread.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "GOP, paint tick, user-client and IORegistry display lines."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-manifest.md"
+result = "v198 and v200 kernel and image hashes."
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["dts/**", "package/**", "drivers/**"]
+inputs = [
+  "Samsung sec_ts touch controller on HSI2C 0x104B0000 (i2c-4) at address 0x48; S Pen on i2c-9 at 0x56.",
+  "Three input devices reported by the vendor kernel: sec_touchscreen, sec_touchpad and sec_touchproximity; volume and power keys are wired to the PMIC.",
+]
+configuration = [
+  "No kernel configuration. The device tree carries the nodes but no HSI2C controller or sec_ts driver is selected.",
+]
+procedure = [
+  "Extract the sec_ts initialisation and ioctl sequences from the vendor kernel, then implement the HSI2C controller and the touch driver.",
+  "Bind the touch and key devices to IOHIDFamily and verify coordinates in SpringBoard.",
+]
+findings = [
+  "HSI2C is a Samsung controller, not a Qualcomm GENI block; no existing UniXNU component matches it.",
+  "sec_ts uses a private protocol and the component catalog has no implementation. The sm-t733 FocalTech path is not reusable.",
+  "No touch, key or S Pen event reaches userspace in the v28 log.",
+]
+completion = [
+  "Touch coordinates and key events reach SpringBoard and the UI responds.",
+]
+limits = [
+  "The touch protocol is undocumented; the HSI2C driver and the panel power sequence are missing.",
+]
+next_action = [
+  "Dump the sec_ts firmware and init sequence from the vendor kernel and add an HSI2C node plus a minimal probe.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Hardware inventory for the touch and S Pen buses."
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["drivers/**", "configs/**", "dts/**", "docs/**"]
+inputs = [
+  "ARM Mali-G76 MP12 integrated GPU; no GPU firmware, power domain or SMMU setup.",
+  "CoreAnimation on iPadOS 17.7.11 still contains the OpenGL ES renderer and the software renderer path.",
+]
+configuration = [
+  "No GPU configuration. Boot arguments still publish d1x-metal=1 accelerator services from the v183-v188 experiments.",
+]
+procedure = [
+  "Review the six plugin-model boots, then choose between an EAGL and OSMesa CPU renderer and a native Mali driver.",
+  "Build the chosen renderer, inject it into backboardd and SpringBoard and check which CoreAnimation renderer is selected.",
+]
+findings = [
+  "iOS 17.7 ignores IOAcceleratorES and AGXAccelerator services that carry MetalPluginName and MetalPluginClassName. Six boots from v183 to v188 falsified that model: backboardd opens AGXAccelerator and closes it immediately, Metal never matches and the plugin bundle is never loaded.",
+  "The accelerator services still appear in the v198 IORegistry dump, but no client uses them.",
+  "QuartzCore still carries CA::OGL::GLESImage, CAEAGLLayer, the OpenGLES framework path and CA_ENABLE_OGL, plus the CoreAnimation software renderer string. The EAGL to OSMesa route used by Scion on iOS 16.5 therefore has evidence on 17.7 but has not been built.",
+  "ios-topaz proves that a CPU-only renderer can drive the full iOS 16 UI, but its display classes collide with the prelinked kexts.",
+]
+completion = [
+  "A CoreAnimation renderer exists and SpringBoard draws its first frame.",
+]
+limits = [
+  "No GPU power, firmware or SMMU support; no Mesa, OSMesa or EAGL library for this OS build.",
+]
+next_action = [
+  "Build Mesa softpipe and libhakios.gl for iOS 17.7, inject them at exec time and record the renderer line; keep the sweet CPU compositor as the fallback.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "IORegistry dump with IOAcceleratorES and AGXAccelerator."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Falsified Metal plugin route and renderer notes."
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["dts/**", "package/**", "drivers/**"]
+inputs = [
+  "Broadcom BCM4375 Wi-Fi and Bluetooth combo; the vendor kernel uses bcmdhd and the firmware file bcmdhd_sta.bin.",
+  "Bus, power rails and firmware load sequence are not yet documented.",
+]
+configuration = [
+  "No configuration. The device tree has no enabled network node and no driver is selected.",
+]
+procedure = [
+  "Identify the host bus and firmware path from the vendor device tree and bcmdhd probe log.",
+  "Evaluate brcmfmac or a board port of bcmdhd, then bind the interface to the OS network stack.",
+]
+findings = [
+  "The existing UniXNU wireless component is ath12k for Qualcomm parts and does not apply.",
+  "No Wi-Fi or Bluetooth driver loads in the v28 boot; launchd fails to bootstrap wifid and CoreWifi lookups fail, so no network stack attaches.",
+]
+completion = [
+  "The interface scans, associates and passes traffic.",
+]
+limits = [
+  "The bus, firmware interface and power sequence are unknown.",
+]
+next_action = [
+  "Read the vendor device tree and bcmdhd probe log to identify the bus and firmware, then pick brcmfmac or bcmdhd.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Network hardware inventory."
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["dts/**", "package/**", "drivers/**"]
+inputs = [
+  "Exynos 9825 audio subsystem with an external codec; the codec part number and I2C address are not yet recorded.",
+  "Speaker, earpiece, headset and microphone routing; no DSP firmware.",
+]
+configuration = [
+  "No configuration and no audio driver.",
+]
+procedure = [
+  "Identify the codec from the vendor device tree and schematics, then document clocks, I2S and DSI routes and power.",
+  "Implement playback and capture and expose the routes to the OS audio server.",
+]
+findings = [
+  "audiomxd starts, but no codec or DSP driver exists, so no audio route is usable.",
+  "The ADT carries the iPad product audio identity, so the userland audio server initialises as it would on the reference device.",
+]
+completion = [
+  "Playback and recording work through the speaker, headset and microphone.",
+]
+limits = [
+  "Codec, DSP and routing are unidentified.",
+]
+next_action = [
+  "Identify the codec and its bus from the vendor device tree and add the minimum playback route.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "audiomxd spawn and CoreAudio lines."
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["dts/**", "package/**", "drivers/**"]
+inputs = [
+  "ACPM coprocessor owns DVFS and clock policy; PMIC identity is encoded as pmic_info=43 in the boot arguments and is not decoded.",
+  "Battery, charger, fuel gauge and thermal sensors are not described.",
+]
+configuration = [
+  "No regulator, clock or PMIC driver. The ADT declares vmm-present=1 so AMFI does not wait for a PMGR that this board does not have.",
+  "d1x-backlight publishes an AppleARMBacklight service with a 1024-level range as a stub.",
+]
+procedure = [
+  "Decode pmic_info, locate the PMIC and charger on their buses and document the regulator tree.",
+  "Implement CPU frequency scaling through ACPM and expose battery and thermal state.",
+]
+findings = [
+  "The ACPM firmware interface is undocumented; mainline exynos-acpm is the closest reference.",
+  "thermalmonitord, powerd and PerfPowerServices start but receive no real sensor or PMGR data.",
+  "The backlight stub satisfies clients that look for AppleARMBacklight but does not drive the panel backlight.",
+]
+completion = [
+  "CPU frequency scales, battery state is reported and thermal limits are enforced.",
+]
+limits = [
+  "No PMIC, regulator, charger or ACPM implementation.",
+]
+next_action = [
+  "Decode pmic_info=43 and the ACPM mailbox from the vendor kernel, then add the regulator tree to the device tree.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "Power service and backlight lines."
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = []
+paths = ["scripts/**", "package/**", ".github/workflows/package.yml", "board.toml"]
+inputs = [
+  "Odin-only bootloader; recovery partition used for bring-up; 55 MiB boot partition.",
+  "BootShim, UEFI firmware volume and a 52 MiB FAT payload.",
+]
+configuration = [
+  "Recovery image: 2 KiB boot header, BootShim plus firmware volume, then the FAT payload; header v2 and a 376 KiB dt_table.",
+  "Payload volume D1XESP, title Boot UniXNU, timeout 0 and the v28 kernel arguments.",
+]
+procedure = [
+  "Build the kernel, firmware and payload, assemble the recovery image, flash it over adb and boot for 300 s.",
+  "Record the kernel and image SHA-256 for every flashed build.",
+]
+findings = [
+  "BootShim plus the firmware volume take about 2.1 MiB, leaving 52 MiB for the FAT payload inside the 55 MiB boot partition.",
+  "A recovery image without a dt_table is rejected before the kernel runs; header v2 with the live FDT is the only shape that has booted.",
+  "There is no fastboot path. Flashing happens from Android over adb, and the device is powered off after the flash so the operator presses power once.",
+  "v198 image 3a8614b223caed6fd7adc3a8867103261c66b8531261d031e2caa2bdbcf1679d with kernel ca6282f331cd82ac3a2153a1c07f095fb2b04e7a73c2c3aaa4fad02dd36fee22 boots. v200 image 4c86450faa475972ea7eabead2ebeee0f55ff08e3084a73ada7ef00155d421c1 with kernel c3332383d31e6f381bbace5310a4f92970fdf6b46e622b41c2b29cb532695325 is built but not flashed.",
+]
+completion = [
+  "The assembled image flashes, boots to userspace and passes the 300 s test.",
+]
+limits = [
+  "No Odin tar, no boot partition install and no automated image verification in CI.",
+]
+next_action = [
+  "Add Odin tar packaging, a cold-boot test from the boot partition and a CI job that records the artifact hashes.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-manifest.md"
+result = "Artifact hashes and the handoff manifest."
+
+[[area]]
+id = "diagnostics"
+status = "implemented"
+components = []
+paths = ["scripts/**", "docs/**", "logs/**", "reports/**"]
+inputs = [
+  "Kernel console over the debug UART and /dev/console; 300 s test window with an automatic reset to Android.",
+  "Panic screen and the d1x checkpoint markers.",
+]
+configuration = [
+  "Kernel arguments -v serial=3 debug=0x14e -enable_kprintf_spam and the d1x-* bring-up flags.",
+  "The test harness prints d1x: alive 300 s and d1x: test boot over after 300 s, then resets.",
+]
+procedure = [
+  "Flash, boot, wait for the reset, pull the console log and count checkpoints, faults and processes.",
+  "Compare the SpringBoard and display traces against the previous build before changing code.",
+]
+findings = [
+  "Checkpoints C0 to C25 cover arm_init through bsd_init, and the bsd_init call markers localise a stall to a single subsystem.",
+  "The pass marker is d1x: alive 300 s followed by d1x: test boot over after 300 s. The v28 log is 24656 lines, 1308975 bytes of console text, 64 processes and no panic.",
+  "SpringBoard is exec'd 15 times and exits 15 times; 15 user faults carry ESR 0x92000005 with FAR 0x3adffc846. That signature is downstream of the missing renderer and is not a separate bug.",
+  "The two early debug_log_init: Error!! gPanicBase is still not initialized lines are emitted before the panic buffer is set up and do not stop the boot.",
+]
+completion = [
+  "Every boot produces a complete log with the pass marker and no panic; regressions are visible as a checkpoint change or a new fault signature.",
+]
+limits = [
+  "No KDP, no persistent ramoops and no automatic summary beyond the console log.",
+]
+next_action = [
+  "Emit a machine-readable boot summary with the last checkpoint, fault counts and process count, and attach it to each image.",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-boot.log"
+result = "Complete v198 console capture."
+
+[[area.evidence]]
+kind = "source"
+reference = "reports/v28-state.json"
+result = "Machine-readable summary of the same boot."
