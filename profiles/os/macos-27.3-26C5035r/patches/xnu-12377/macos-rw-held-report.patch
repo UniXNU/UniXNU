@@ -1,0 +1,23 @@
+Bring-up diagnostic: when a thread returns to user space holding rw locks, print each held lock and the code that took it
+(the rw lock debug record of MACH_ASSERT builds) before the panic, which only gives the count.
+--- a/osfmk/kern/thread_act.c
++++ b/osfmk/kern/thread_act.c
+@@ -1486,6 +1486,18 @@
+ #if MACH_ASSERT
+ 	if ((thread->sched_flags & TH_SFLAG_RW_PROMOTED) ||
+ 	    thread->rwlock_count > 0) {
++#if XNU_TARGET_OS_OSX
++		/* Name the held locks and the code that took them (the rw lock debug record), before the panic. */
++		for (unsigned i = 0; i < LCK_RW_EXPECTED_MAX_NUMBER; ++i) {
++			const struct rw_lock_debug_entry *e = &thread->rw_lock_held.rwld_locks[i];
++			if (e->rwlde_lock != NULL) {
++				printf("rw lock held on return to user: lock %p caller %#lx mode %d\n", e->rwlde_lock,
++				    (unsigned long)(vm_kernel_stext + e->rwlde_caller_packed), e->rwlde_mode_count);
++			}
++		}
++		printf("rw lock held on return to user: saved %u overflow %u acquired %u\n", thread->rw_lock_held.rwld_locks_saved,
++		    thread->rw_lock_held.rwld_overflow, thread->rw_lock_held.rwld_locks_acquired);
++#endif /* XNU_TARGET_OS_OSX */
+ 		panic("Returning to userspace with rw lock held, thread %p sched_flag %u rwlock_count %d", thread, thread->sched_flags, thread->rwlock_count);
+ 	}
+ 
