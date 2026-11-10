@@ -25,7 +25,7 @@
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
 | 🦷 Bluetooth | QCA6390 over UART (921600 baud): scan, connect and pair in Settings, Control Center button, off / on (slow); see the tests below | ⚠️ |
-| 📶 Cellular Data | | ❌ |
+| 📶 Cellular Data | The X55 modem boots from the kernel and registers on LTE with the SIM (kernel 0272); nothing in iOS uses it yet (no data, calls or SMS) | ⚠️ |
 | 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
@@ -126,9 +126,9 @@
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
 * **Cellular**: the Mi 10's modem is an external Snapdragon X55 on PCIe2. Kernel 0260 powers it (PMX55 warm reset)
-  and the link comes up (gen 3 x2, 17cb:0306); kernel 0261 loads sbl1 over BHI; kernel 0262 serves the other 12 images over MHI / Sahara (94 MB in 6.7 s); kernel 0263 takes it in mission mode: LOOPBACK echoes and the modem announces 63 QMI services over QRTR; kernel 0264 reads DMS / UIM / NAS; kernel 0265 serves its TFTP file requests and 0266 restarts it on request; each run it goes online, then \"shutting down\": kernel 0268 takes its EFS sync over Sahara; with kernel 0270 steering its operating mode it stays ONLINE and the radio sees the network (UMTS, -88 dBm), but it reports both SIM slots as empty (no card detected), so it does not register; kernel 0259's `AppleBaseband` stub keeps
-  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: the SIM (UIM power-up), then
-  registration, then a bridge to CommCenter, then a bridge to CommCenter
+  and the link comes up (gen 3 x2, 17cb:0306); kernel 0261 loads sbl1 over BHI; kernel 0262 serves the other 12 images over MHI / Sahara (94 MB in 6.7 s); kernel 0263 takes it in mission mode: LOOPBACK echoes and the modem announces 63 QMI services over QRTR; kernel 0264 reads DMS / UIM / NAS; kernel 0265 serves its TFTP file requests and 0266 restarts it on request; each run it goes online, then \"shutting down\": kernel 0268 takes its EFS sync over Sahara; with kernel 0270 steering its operating mode it stays online, and kernel 0272 activates the SIM: READY, REGISTERED on LTE (-90 dBm); nothing in iOS uses it yet; kernel 0259's `AppleBaseband` stub keeps
+  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: keep the modem service running,
+  then a bridge to CommCenter (SIM, operator, bars), mobile data (WDS), SMS (WMS), then a bridge to CommCenter
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build

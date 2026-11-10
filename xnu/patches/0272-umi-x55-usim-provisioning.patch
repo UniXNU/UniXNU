@@ -1,0 +1,115 @@
+From 6a74c194f50446a120653c4bba5833591d141fda Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 20:00:47 +0100
+Subject: [PATCH] umi: X55 UIM provisioning session (0x38) on the detected
+ USIM; app entry parsing fixed - SIM READY, REGISTERED on LTE (0272)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 51 +++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 42 insertions(+), 9 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index e2ad8c3..c4fab94 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -2190,6 +2190,13 @@ mx_opmode(unsigned m)
+ }
+ 
+ 
++/* The first USIM seen: its slot and AID, for the provisioning session. */
++static struct {
++	uint8_t slot, aidlen, state;
++	uint8_t aid[32];
++	bool activated;
++} mq_usim;
++
+ /* UIM card status (TLV 0x10 of get card status / the card status indication). */
+ static void
+ mx_uim_cards(const uint8_t *v, uint16_t tl)
+@@ -2206,16 +2213,27 @@ mx_uim_cards(const uint8_t *v, uint16_t tl)
+ 		o += 6;
+ 		for (unsigned a = 0; a < napps && o + 7 <= tl; ++a) {
+ 			unsigned at = v[o], as = v[o + 1], aidlen = v[o + 6];
+-			if (o + 7 + aidlen + 8 > tl) {
++			/* app: type, state, perso state / feature / retries / unblock retries, AID length + AID, then
++			   universal PIN, PIN1 state / retries, PUK1 retries, PIN2 state / retries, PUK2 retries (7 bytes) */
++			if (o + 7 + aidlen + 7 > tl) {
+ 				break;
+ 			}
+ 			const uint8_t *pin = v + o + 7 + aidlen;
+ 			static const char *const ats[] = { "unknown", "SIM", "USIM", "RUIM", "CSIM", "ISIM" };
+ 			static const char *const ass[] = { "unknown", "detected", "PIN1 required", "PUK1 required",
+ 				                           "perso", "PIN1 blocked", "illegal", "READY" };
+-			printf("SWEET MDM: UIM slot %u app %u: %s, state %u (%s), pin1 state %u retries %u\n", sl + 1, a + 1,
+-			    at < 6 ? ats[at] : "?", as, as < 8 ? ass[as] : "?", pin[1], pin[2]);
+-			o += 7 + aidlen + 8;
++			static const char *const ps[] = { "unknown", "enabled, not verified", "enabled, verified", "disabled",
++				                          "blocked", "permanently blocked" };
++			printf("SWEET MDM: UIM slot %u app %u: %s, state %u (%s), pin1 %u (%s) retries %u, puk1 retries %u\n", sl + 1,
++			    a + 1, at < 6 ? ats[at] : "?", as, as < 8 ? ass[as] : "?", pin[1], pin[1] < 6 ? ps[pin[1]] : "?", pin[2],
++			    pin[3]);
++			if (at == 2 && mq_usim.slot == 0 && aidlen <= sizeof(mq_usim.aid)) {
++				mq_usim.slot = (uint8_t)(sl + 1);
++				mq_usim.aidlen = (uint8_t)aidlen;
++				memcpy(mq_usim.aid, v + o + 7, aidlen);
++			}
++			mq_usim.state = (sl + 1 == mq_usim.slot && at == 2) ? as : mq_usim.state;
++			o += 7 + aidlen + 7;
+ 		}
+ 	}
+ }
+@@ -2304,9 +2322,10 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 				o += 10 + il;
+ 			}
+ 		}
+-	} else if (svc == 0x0b && (msg == 0x30 || msg == 0x31 || msg == 0x2e || msg == 0x46)) {
++	} else if (svc == 0x0b && (msg == 0x30 || msg == 0x31 || msg == 0x2e || msg == 0x46 || msg == 0x38)) {
+ 		printf("SWEET MDM: UIM %s: %s (error %#x)\n", msg == 0x31 ? "power up" : msg == 0x30 ? "power down" :
+-		    msg == 0x46 ? "switch slot" : "event registration", res == 0 ? "ok" : "refused", err);
++		    msg == 0x46 ? "switch slot" : msg == 0x38 ? "provisioning session" : "event registration",
++		    res == 0 ? "ok" : "refused", err);
+ 	} else if (svc == 0x03 && msg == 0x24 && (v = mx_tlv(m, len, 0x01, &tl)) != NULL && tl >= 5) {
+ 		static const char *const rs[] = { "not registered", "REGISTERED", "searching", "denied", "unknown" };
+ 		printf("SWEET MDM: NAS serving system: %s, cs attach %u ps attach %u, network %u, %u radio(s)\n",
+@@ -2393,13 +2412,26 @@ mx_qmi_survey(unsigned t_ms)
+ 			printf("SWEET MDM: QMI: UIM switch slot: logical 1 -> physical %u\n", slot);
+ 			mx_qmi_req(0x0b, 0x46, sw, 11);
+ 		}
++	} else if (mq.asked && mq.sim_step >= 6 && mq_usim.slot && !mq_usim.activated && mq_usim.state == 1) {
++		/* UIM change provisioning session (0x38): primary GW session, activate, on this slot / AID (as Android's
++		   radio layer does once the card's applications are known) */
++		uint8_t t[4 + 3 + 3 + 32];
++		unsigned k = 0;
++		t[k++] = 0x01; t[k++] = 0x02; t[k++] = 0x00; t[k++] = 0x00; t[k++] = 0x01;      /* session primary GW, activate */
++		t[k++] = 0x10; t[k++] = (uint8_t)(2 + mq_usim.aidlen); t[k++] = 0x00;
++		t[k++] = mq_usim.slot; t[k++] = mq_usim.aidlen;
++		memcpy(t + k, mq_usim.aid, mq_usim.aidlen);
++		k += mq_usim.aidlen;
++		mq_usim.activated = true;
++		printf("SWEET MDM: QMI: UIM activate the primary GW provisioning session on slot %u (USIM, AID %u bytes)\n",
++		    mq_usim.slot, mq_usim.aidlen);
++		mx_qmi_req(0x0b, 0x38, t, (uint16_t)k);
++		mq.sim_at = t_ms + 3000;
+ 	} else if (mq.asked && t_ms % 10000 == 0) {
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);
+ 		mx_qmi_req(0x02, 0x2d, NULL, 0);
+-		if (t_ms % 30000 == 0) {
+-			mx_qmi_req(0x0b, 0x2f, NULL, 0);
+-		}
++		mx_qmi_req(0x0b, 0x2f, NULL, 0);
+ 	}
+ }
+ 
+@@ -2571,6 +2603,7 @@ md_mission(void)
+ 		ef_start();
+ 	}
+ 	bzero(&mq, sizeof(mq));
++	bzero(&mq_usim, sizeof(mq_usim));
+ 	mq.opmode = 0xff;
+ 	bzero(mt, sizeof(mt));                  /* TFTP sessions of a previous modem run */
+ 	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
+-- 
+2.54.0 (Apple Git-157)
+

@@ -2,6 +2,26 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 20:00: 0272 THE X55 IS REGISTERED ON LTE: SIM READY, CS + PS attached, MCC 228 MNC 02, -90 dBm**
+  (patch `xnu/patches/0272-umi-x55-usim-provisioning.patch`, kernel 6a74c19, image
+  **`shim/out/umi-0272-x55usim.img`** = 0270's line (`sweetmdm=8 sweetmdmonline=1`); booted ~19:53; log: scratchpad
+  `umi-0272.log`). Everything is in the kernel (`sweet_mdm.c`), nothing in iOS user space uses it yet.
+  - 0271 rerun after the user moved the SIM to the other tray position (it had never been tried in this phone):
+    UIM slot status **physical slot 1 card PRESENT** (ICCID 10 bytes, not logged), slot 2 absent; card status slot 1
+    PRESENT with a USIM (+ ISIM) in state 1 "detected", NAS searching on UMTS (-95 / -102 dBm). The first position of
+    the SIM in the tray was not read by the modem (both slots ABSENT): a seating / tray-position matter, not code.
+  - 0272: **UIM change provisioning session (0x38): primary GW session, activate, slot 1 + the USIM's AID (16 bytes)**
+    -> ok. The USIM then went detected -> 4 (perso check) -> **7 READY**; PIN1 **disabled** (3 retries, PUK 10) - no
+    PIN needed. ~20 s later **NAS: REGISTERED, cs attach 1, ps attach 1, radio 8 (LTE), MCC 228 MNC 02, -90 / -91
+    dBm**, 21 of 24 polls registered to the end of the 240 s window; DMS online; SFR empty. Card-status parsing fixed
+    (7 bytes after the AID per application, not 8: slot 2 was garbage before).
+  - The full chain from a cold modem, all in the kernel, per phone boot: PMX55 warm reset, PCIe2 gen 3 x2, sbl1 by BHI,
+    12 images by Sahara (EFS from mdm1m9kefs1-3 or the RAM sync), AMSS on the same link, MHI channels (IPCR, DIAG,
+    EFS, LOOPBACK), QRTR v2, TFTP server (FAT modem partition read-only, /readwrite in RAM), remote-EFS sync into RAM,
+    DMS low power -> online, UIM provisioning session, NAS registration.
+  - Next: a kernel thread that keeps the modem service running past the window (and handles modem restarts); then
+    something iOS can use: CommCenter needs AppleBaseband / its QMI path (the 0259 stub answers zeros today), or a
+    stand-in that reports SIM / operator / bars; mobile data over IP_HW0 100/101 (WDS); SMS over WMS.
 - **2026-11-10 19:20: 0271 SIM: the modem sees NO CARD in either physical slot** (patch
   `xnu/patches/0271-umi-x55-uim-slots.patch`, image **`shim/out/umi-0271-x55sim.img`** = 0270's line; booted ~19:15;
   log: scratchpad `umi-0271.log`; user: a SIM is in the tray).
