@@ -1,0 +1,45 @@
+macOS userspace expects the macOS user address space: xzone malloc maps its range groups with VM_FLAGS_FIXED at
+455 to 512 GiB and stops launchd with brk when that fails. On XNU_TARGET_OS_OSX the user address space limit is the
+macOS value (0x7FFFFE000000); the user pmaps already use a 47-bit TTBR0 range. As on 16K macOS, the commpage then lies
+inside the user range, reserved by the VM, so the 4K nesting assertion does not apply (macOS-DroidVM uses the same layout,
+virt-user-va-512g and virt-user-va-commpage-inside, with a 39-bit range).
+--- a/osfmk/mach/arm/vm_param.h
++++ b/osfmk/mach/arm/vm_param.h
+@@ -148,6 +148,15 @@
+ #undef MACH_VM_MAX_ADDRESS_RAW
+ #define MACH_VM_MAX_ADDRESS_RAW 0x00007FFFFE000000ULL
+ #endif /* defined(XNU_PLATFORM_iPhoneOS) && EXTENDED_USER_VA_SUPPORT */
++#if defined(XNU_PLATFORM_iPhoneOS) && XNU_TARGET_OS_OSX && !EXTENDED_USER_VA_SUPPORT
++/*
++ * macOS userspace gets the macOS user address space: xzone malloc maps its range groups (24 GiB, VM_FLAGS_FIXED) at
++ * 455 to 512 GiB, above the GPU carveout. The user pmaps use a 47-bit TTBR0 range (T0SZ_USER, osfmk/arm64/proc_reg.h);
++ * the commpage nesting region and the GPU carveout stay reserved in every map (vm_reserved_regions).
++ */
++#undef MACH_VM_MAX_ADDRESS_RAW
++#define MACH_VM_MAX_ADDRESS_RAW 0x00007FFFFE000000ULL
++#endif
+ /* threshold for allocations to be placed in the large file range */
+ #define VM_LARGE_FILE_THRESHOLD (1ULL << 30)
+ #define MACH_VM_JUMBO_ADDRESS ((mach_vm_offset_t) 0x0000000FC0000000ULL)
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -11671,12 +11671,19 @@
+  */
+ 
+ #elif (ARM_PGSHIFT == 12)
++#if !XNU_TARGET_OS_OSX
+ /**
+  * Ensure that 64-bit devices using 4K pages can nest the commpage completely
+  * above the maximum userspace VA.
+  */
+ static_assert((_COMM_PAGE64_BASE_ADDRESS & ~ARM_TT_L1_OFFMASK) >= MACH_VM_MAX_ADDRESS);
+ #else
++/*
++ * macOS userspace on 4K pages: as on 16K macOS (above), the commpage lives within the userspace VA range and the VM
++ * keeps it as a reserved region (vm_reserved_regions).
++ */
++#endif
++#else
+ #error Nested shared page mapping is unsupported on this config
+ #endif
+ 
