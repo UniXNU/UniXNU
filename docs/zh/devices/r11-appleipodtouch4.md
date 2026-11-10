@@ -6,7 +6,7 @@
 
 OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware and boot image are derived from the device's own OFP package; the storage, display, input and power drivers are not written yet.
 
-源记录: [porting.toml](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/porting.toml), `af2c60d756265a9a2c484347a40afe488dd67501`.
+源记录: [porting.toml](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/porting.toml), `93ab51e474b3845b660677bb16280060de709e85`.
 
 本页按设备记录自动生成。
 
@@ -71,7 +71,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Format 2 board configuration with values traced to inputs/hw.json](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/board.toml)
+- `source`: [Format 2 board configuration with values traced to inputs/hw.json](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -118,7 +118,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Preflight checks the Display Reserved region the SDM660 memory map must keep; the map itself lives in the sibling uefi-r11 repository](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/scripts/check-r11.py)
+- `source`: [Preflight checks the Display Reserved region the SDM660 memory map must keep; the map itself lives in the sibling uefi-r11 repository](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/scripts/check-r11.py)
 
 ## CPU 与中断 {#cpu}
 
@@ -166,11 +166,11 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `device`: [S=0x12 / T=0x2A on the panel: initCPU\(\) and registerService\(\) returned, ArmCpu::start\(\) finished. The frame was frozen by the panel's own 120 s observation limit \(boot-progress=1\), so it says nothing about the kernel after that point.](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/docs/evidence/boot-irq11.img)
+- `device`: [S=0x12 / T=0x2A on the panel: initCPU\(\) and registerService\(\) returned, ArmCpu::start\(\) finished. The frame was frozen by the panel's own 120 s observation limit \(boot-progress=1\), so it says nothing about the kernel after that point.](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/docs/evidence/boot-irq11.img)
   Command: <code>fastboot boot docs/evidence/boot-irq11.img</code>. Revision: `9a193a520b30c7263d31189426052c5e5e50938f`.
-- `device`: [S=0x10 / T=0x26, hp=deadbeef, IRQ=0, gic=0.6: the stop is inside armcpu\_gic\_snapshot\(\), after both timer enables returned](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/docs/evidence/boot-irq10.img)
+- `device`: [S=0x10 / T=0x26, hp=deadbeef, IRQ=0, gic=0.6: the stop is inside armcpu\_gic\_snapshot\(\), after both timer enables returned](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/docs/evidence/boot-irq10.img)
   Command: <code>fastboot boot docs/evidence/boot-irq10.img</code>. Revision: `9a193a520b30c7263d31189426052c5e5e50938f`.
-- `source`: [Two-cluster MPIDR layout \(0x0-0x3, 0x100-0x103\) with E/P cluster types, taken from the stock device tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/dts/r11.dts)
+- `source`: [Two-cluster MPIDR layout \(0x0-0x3, 0x100-0x103\) with E/P cluster types, taken from the stock device tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/dts/r11.dts)
 
 ## 内存与 DMA {#memory}
 
@@ -213,7 +213,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [DRAM window and every reserved region decoded from the stock device tree and GPT images](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
+- `source`: [DRAM window and every reserved region decoded from the stock device tree and GPT images](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
 
 ## 存储与根卷 {#storage}
 
@@ -280,9 +280,9 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `host`: [userdata-root.img 8357150720 bytes \(7.78 GiB\), sha256 818e4e37…, in a partition of 56933462016 bytes: OS 5628790272 B at 0x100000, SystemOS 2726297600 B at 0x14fa00000. Built in 1m52s from the local IPSW; the flash command is printed by the step.](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/docs/evidence/userdata-build.txt)
+- `host`: [userdata-root.img 8357150720 bytes \(7.78 GiB\), sha256 818e4e37…, in a partition of 56933462016 bytes: OS 5628790272 B at 0x100000, SystemOS 2726297600 B at 0x14fa00000. Built in 1m52s from the local IPSW; the flash command is printed by the step.](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/docs/evidence/userdata-build.txt)
   Command: <code>./unixnu build userdata --ipsw iPhone10,3,iPhone10,6_16.5_20F66_Restore.ipsw</code>. Revision: `9a193a520b30c7263d31189426052c5e5e50938f`.
-- `source`: [GPT geometry: boot 245760-376831, userdata grow from LBA 10944512, 69 partitions](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/partitions.json)
+- `source`: [GPT geometry: boot 245760-376831, userdata grow from LBA 10944512, 69 partitions](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/partitions.json)
 
 ## 显示 {#display}
 
@@ -326,7 +326,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Panel node with its full init, timing and PHY tables and the splash reservation](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/r11-stock.dts)
+- `source`: [Panel node with its full init, timing and PHY tables and the splash reservation](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/r11-stock.dts)
 
 ## 输入 {#input}
 
@@ -364,7 +364,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Synaptics S3508 at i2c@c175000 address 0x20 and its interrupt line from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
+- `source`: [Synaptics S3508 at i2c@c175000 address 0x20 and its interrupt line from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
 
 ## 电源 {#power}
 
@@ -406,7 +406,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Kernel arguments and the vendor DXE list currently selected for power and charging](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/board.toml)
+- `source`: [Kernel arguments and the vendor DXE list currently selected for power and charging](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/board.toml)
 
 ## 镜像组装 {#packaging}
 
@@ -455,8 +455,8 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Stock boot image header fields that board.toml \[bootimg.image\] mirrors](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
-- `source`: [The 60 arch/SoC patches and the archive builders pass on macOS 12, and so does the kernel step: scripts/xnu-clang hides the three Xcode 15 arguments, two board patches replace the mig static\_asserts, CCC\_OVERRIDE\_OPTIONS clears the archive -Werror pair, and an iig patch declares IORPCMessageFromMach in the generated sources. .github/workflows/macos.yml stays available but is no longer required.](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/docs/host-toolchain.md)
+- `source`: [Stock boot image header fields that board.toml \[bootimg.image\] mirrors](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
+- `source`: [The 60 arch/SoC patches and the archive builders pass on macOS 12, and so does the kernel step: scripts/xnu-clang hides the three Xcode 15 arguments, two board patches replace the mig static\_asserts, CCC\_OVERRIDE\_OPTIONS clears the archive -Werror pair, and an iig patch declares IORPCMessageFromMach in the generated sources. .github/workflows/macos.yml stays available but is no longer required.](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/docs/host-toolchain.md)
 
 ## 诊断 {#diagnostics}
 
@@ -494,7 +494,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Boot arguments that route the console through the framebuffer](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/board.toml)
+- `source`: [Boot arguments that route the console through the framebuffer](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/board.toml)
 
 ## GPU {#gpu}
 
@@ -530,7 +530,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Adreno 512, GPU SMMU and GPUCC addresses decoded from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
+- `source`: [Adreno 512, GPU SMMU and GPUCC addresses decoded from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
 
 ## 网络 {#network}
 
@@ -566,7 +566,7 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [Integrated WLAN block address from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
+- `source`: [Integrated WLAN block address from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
 
 ## 音频 {#audio}
 
@@ -602,6 +602,6 @@ OPPO R11 \(CPH1707 / 16051\) on SDM660 + PM660/PM660L. Board inputs, firmware an
 
 ### 证据
 
-- `source`: [AK4376, TFA98xx and ADSP addresses decoded from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/af2c60d756265a9a2c484347a40afe488dd67501/inputs/hw.json)
+- `source`: [AK4376, TFA98xx and ADSP addresses decoded from the stock tree](https://github.com/appleiPodTouch4/unixnu-r11/blob/93ab51e474b3845b660677bb16280060de709e85/inputs/hw.json)
 
 </div>

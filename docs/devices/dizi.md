@@ -4,4 +4,4 @@
 
 Complete and validate [porting.toml](/porting/records) in the device repository to publish its subsystem record.
 
-vildangil/UniXNU-Dizi-Ruan: device.os\_profile must match board.toml
+vildangil/UniXNU-Dizi-Ruan: device.name must match board.toml
