@@ -22,6 +22,23 @@ The export runs once at the selected boot-log time. These switches do not schedu
 
 Touch report times bound the analysed intervals.
 
+## Board rows without tracing
+
+`log=1` with `log-gpu=1` prints these rows in every board log slot, without
+`gpu-trace`. `diag=1` keeps them and adds the latency lines of the kernel
+messages of each round as `[diag msgs]`.
+
+| Row | Content |
+| --- | --- |
+| `[gpu jobs]`, `[gpu long]`, `[gpu slow]` | Jobs over 8, 16, 33 and 100 ms, the eight longest jobs and the newest jobs over 8 ms, each with process, queue, ring, priority, IB count and size. `gpu-timeline=1` takes the durations from CP timestamps; otherwise they are an upper bound from the driver's clock. |
+| `[gpu kick]` | The CP's IB position at the first timed-out wait, at the stall stage and 500 microseconds later, and when the job retired. A position that never moved is a stuck CP; one that moved is a long job. |
+| `[gpu pool views]` | Viewed pool grants tracked through the kernel's last-unmap report, and their pages returned to the pool. |
+| `[log round]` | The last and longest round of the board log writer and its slowest step. A round over 10 s is reported in the kernel log, and a panic names the step a round was in. |
+
+`gpu-audit=1` runs the CPU cache line audits of submitted IBs and synchronized
+buffers. They only detect stale lines; the write-combining correction runs on
+every submission either way.
+
 ## Collection policy
 
 The kernel GPU ring holds submission, retirement, display arrival, display fence and latch, build identities and the render server's render, encode and completion thread identities. Other processes send nothing to it. Everything else of the render server goes to its own `frames.trace`, without a system call per record.

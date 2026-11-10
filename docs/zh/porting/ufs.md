@@ -86,6 +86,10 @@ PHY、复位、时钟和电源序列。
   只打开 UTRCE，按已清除的 doorbell 位找出完成的命令，与 Linux ufshcd 相同。
 - 小块命令每次都睡眠等中断，开销比命令本身还大。等待先轮询 200 微秒再睡眠，
   可保持 8 和 32 队列深度下的小块吞吐，长命令也会让出 CPU。
+- 轮询时不要阻塞。核心没有登记空闲退出延迟时，两次轮询之间的 `IODelay` 会
+  阻塞在定时器上，每次约 30 到 37 微秒。ShengUfs 在两次轮询之间用 WFE 等待
+  （`native-ufs-wait=1`，时长上限 `native-ufs-spin-us`），有其他线程等这个 CPU
+  时提前睡眠，不能睡眠的场合（中断屏蔽、抢占关闭、panic 路径）仍用 `IODelay`。
 - 修改链路前用 DME_GET 读取链路状态（`PA_TxGear`、`PA_RxGear`、`PA_HSSeries`、
   `PA_PWRMode`）。参考固件留下的是双通道 HS-G5 Rate A FAST 模式。
 
