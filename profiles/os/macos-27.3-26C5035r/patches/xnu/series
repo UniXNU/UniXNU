@@ -16,3 +16,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-kqworkloop-limits.patch
 ../xnu-12377/macos-exec-log.patch
 ../xnu-12377/macos-apfs-boot-shim.patch
+../xnu-12377/macos-read-only-system-volume.patch
