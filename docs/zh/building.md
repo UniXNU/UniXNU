@@ -289,6 +289,13 @@ package 步骤用 EDK II 构建 `package/`，输出到 `out/<device>/<os_profile
 
 `--skip-setup` 在 `--data-ramdisk` 提供的 Data 种子副本中把 Setup 标记为完成。
 
+macOS 配置（`--os macos-27`）用 `scripts/make-macos-data-seed.py` 从系统卷的
+`/System/Library/Templates/Data` 生成 Data 种子。模板保留文件所有者，所以脚本以 root 运行。缺少种子时
+构建停止并打印 `sudo` 命令，输出路径为 `runtime/data.dbr`。`private/`、`Users/`、`Library/Preferences/` 和
+`Library/Keychains/` 下的文件被复制；模板中的其他文件成为指向系统卷模板中同一文件的符号链接，与 macOS 对
+`Data.symlink-patterns` 路径的处理相同，使种子能放进 payload。之后的构建保留这个种子。内核把它挂载到
+`/System/Volumes/Data`，并设置系统卷 `/usr/share/firmlinks` 中的 firmlink。
+
 ### userdata
 
 userdata 步骤构建 `userdata` 分区的原始镜像，保存 IPSW 中未修改的 `OS` 和 `SystemOS` 磁盘镜像，前置 `SHNGROOT` manifest。macOS 上磁盘镜像用 `hdiutil` 只读挂载；Linux 上由 `scripts/unixnu/udif.py` 解码，LZFSE 块用 `lzfse` 解压。两者得到相同的字节。输出为 `out/<device>/<os_profile>/<config>/userdata/userdata-root.img` 和 `userdata-root.json`，报告会打印 `fastboot flash userdata` 命令。
