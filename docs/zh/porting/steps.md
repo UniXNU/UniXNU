@@ -35,6 +35,7 @@ UniXNU 通过 UEFI 在 ARM64 设备上运行 iOS 或 macOS。架构见[欢迎页
 新 OS profile 需要先完成 [XNU 与补丁输入](/zh/xnu/source-and-patches)以及
 [预链接 ABI 工作](/zh/concepts/prelink)，再验证硬件驱动。
 iOS 或 iPadOS 27 等 arm64e 系统仅适用于受支持的设备，见 [arm64e OS 配置](/zh/porting/arm64e)。
+macOS 使用 arm64e profile `macos-27.3-26C5035r`，以下各步同时阅读 [macOS 配置](/zh/porting/macos)。
 
 **结果：** 已选仓库及精确版本，以及待完成的硬件或 ABI 工作记录。
 
@@ -66,6 +67,8 @@ mv "$DEVICE_DIR/dts/board.dts" "$DEVICE_DIR/dts/${DEVICE}.dts"
 7. 填好必要占位符后移除 `board.example = true`。构建命令会拒绝标记为示例的仓库。
 
 数组会替换继承值。覆盖组件、归档、配置片段和补丁序列时，保留完整的必需列表。
+服务第二个 OS profile 的板子把该 profile 的值放在 `[os_overrides."<profile>"]` 下，
+把它的 defconfig 写入 `[package.defconfig]`，示例见 [macOS 的值](/zh/porting/macos#device)。
 
 **结果：** 源码固定版本和硬件参数明确的设备仓库。
 
@@ -78,6 +81,7 @@ mv "$DEVICE_DIR/dts/board.dts" "$DEVICE_DIR/dts/${DEVICE}.dts"
 ./unixnu tree
 ```
 
+`--os VERSION` 为单条命令选择另一个 profile，例如 `--os macos-27`。
 检查 `status` 中的 profile、组件来源、覆盖项和补丁顺序。
 组装后的源码位于 `out/<device>/<os_profile>/<config>/tree/`，
 设备 `package/` 映射为其中的 `kits/<board.kit>`。
@@ -106,6 +110,7 @@ boot image 另需设备固件使用的 DTB。
 沿[驱动适配](/zh/porting/drivers)依次完成平台与内存、存储、显示与亮度、输入、GPU、
 Wi-Fi、蓝牙、USB，再处理 DSP、音频和电源。每篇指南列出源码位置、板级输入、构建集成和预期观测。
 仅选择必需输入已满足的实现。
+macOS 在同一顺序上增加 [macOS 适配项](/zh/porting/macos#drivers)。
 
 **结果：** 每项能力都有配置和验证记录。在 TOML 中选择组件后，还需要对应归档配方和板级接口。
 
@@ -115,6 +120,7 @@ Wi-Fi、蓝牙、USB，再处理 DSP、音频和电源。每篇指南列出源�
 [本地构建配置](/zh/reference/configuration#local-build-inputs)。
 按[构建指南](/zh/building)依次生成内核、package、固件、payload、所需 userdata 和启动镜像，
 确认当前输出后继续。
+macOS 镜像的每条命令都带 `--os macos-27`，并且需要先准备 [Data seed](/zh/porting/macos#data-seed)。
 使用独立 UniXNU 分区时，先按[分区步骤](/zh/porting/dual-system-partition)准备目标分区，再安装镜像。
 
 按[启动验证顺序](/zh/porting/bring-up)检查固件、菜单、加载器、内核和根卷。
@@ -146,7 +152,7 @@ Wi-Fi、蓝牙、USB，再处理 DSP、音频和电源。每篇指南列出源�
 | 内容 | 文档 |
 | --- | --- |
 | 启动过程与镜像输入 | [启动链](/zh/concepts/boot-chain)、[预链接](/zh/concepts/prelink)、[payload](/zh/concepts/payload)、[userdata 布局](/zh/concepts/userdata)、[完整性与启动策略](/zh/concepts/security) |
-| 组件实现与开发 | [驱动分层](/zh/drivers/overview)、[驱动仓库和组件页面](/zh/drivers/repositories) |
+| 组件选择与开发 | [组件目录](/zh/reference/components)、[开发驱动](/zh/porting/driver-development) |
 | 内核修改 | [源码与补丁](/zh/xnu/source-and-patches)、[补丁参考](/zh/xnu/patch-reference)、[4 KiB 页表](/zh/xnu/four-k-page-tables) |
 | 构建与启动配置 | [命令行](/zh/reference/cli)、[设备配置](/zh/reference/configuration)、[启动配置](/zh/reference/boot-configuration)、[输出布局](/zh/reference/output-layout) |
 | 主机验证 | [QEMU 流程](/zh/reference/qemu) |

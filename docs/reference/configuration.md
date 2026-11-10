@@ -206,6 +206,7 @@ Runtime inputs prepared before the kernel build. The Data seed's volume UUID is 
 | `skip_setup` | boolean | Mark Setup as done in a new Data seed |
 | `data_seed_tool` | string | Seed script that runs as root. A missing seed stops the build with the command to run |
 | `gpu_addon` | boolean | Build the GPU addon (default `true`). With `false`, the trust bundle holds the original caches only |
+| `boot_shims` | boolean | Add the owner `apfs_boot_util` to the addon, for macOS with `apfs-boot-shim=1` |
 | `trust_components` | array | IPSW trust cache components bundled for the owner trust cache |
 | `wallpapers`, `audio_tool`, `wifi_tool`, `bluetooth_tool`, `appsync` | | Optional userspace layers added to the addon |
 

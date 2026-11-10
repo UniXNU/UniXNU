@@ -1,8 +1,8 @@
 # GPU and Metal adaptation
 
 Complete [platform DMA](/porting/platform) and basic [display presentation](/porting/display)
-first. Read the [Adreno740 runtime path](/drivers/adreno740) and
-[AdrenoMetal interface](/drivers/adreno-metal).
+first. The runtime path is Metal → AdrenoMetal → metal2vulkan → Turnip →
+Darwin KMD → Adreno740 → A740.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect
 initialization, archive recipes and the OS ABI, then run this page's hardware checks.
@@ -99,7 +99,7 @@ to distinguish allocation, mapping and execution failures.
 
 ### Scheduling and memory reuse {#scheduling}
 
-The reference enables mode 2 with `gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
+The reference enables mode 2 with `gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table.
 
 Runtime scheduling and completion threads use interactive QoS on iOS as well as macOS. The encoding thread adopts the render thread's scheduling policy and priority when that reference has a fixed policy.
 
@@ -111,7 +111,7 @@ With `fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an unbacked
 
 `turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
 
-`metal-flow=1` enables the metal2vulkan lowering thread, commit submission and pipeline warm pass for testing. The default is off. See [AdrenoMetal](/drivers/adreno-metal).
+`metal-flow=1` enables the metal2vulkan lowering thread, commit submission and pipeline warm pass for testing. The default is off.
 
 Metal clients use one sample by default. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves the requested sample count; texture types, pipeline counts and resolve handling follow that policy.
 

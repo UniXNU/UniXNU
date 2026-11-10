@@ -257,10 +257,10 @@ A driver can live in the firmware volume or in the payload.
 | Firmware volume | Add the INF to the DSC and FDF | Firmware dispatches it, or UniXNUDxe starts the application |
 | Payload | Build a standalone `.efi` | `[[driver]]` in `unixnu.toml` or a kit |
 
-See [UEFI drivers](/drivers/uefi-drivers) for the INF, entry point and injection details.
+See [Develop a driver](/porting/driver-development#uefi-driver) for the load options.
 
 ## Next steps
 
 - [Device tree](/porting/device-tree)
 - [Bring-up order](/porting/bring-up)
-- [UEFI drivers](/drivers/uefi-drivers)
+- [Develop a driver](/porting/driver-development)

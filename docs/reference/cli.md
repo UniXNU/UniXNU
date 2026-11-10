@@ -102,7 +102,7 @@ Runs the fixed steps `deps`, `preflight`, `patches`, `build`, `pack` and `verify
 | Option | Meaning |
 | --- | --- |
 | `-D DIR`, `--device DIR` | Device repository |
-| `--os VERSION` | OS profile for this run: `17`, `27` or a `profiles/os` directory name. The output directory follows it |
+| `--os VERSION` | OS profile for this run: `17`, `26`, `27`, `macos-27` or a `profiles/os` directory name. The output directory follows it |
 | `--out DIR` | Output root |
 | `-j N`, `--jobs N` | Parallel jobs |
 | `--local DIR` | Local tree with this repository's layout |

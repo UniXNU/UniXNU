@@ -253,10 +253,10 @@ clang --target=aarch64-none-elf -c \
 | 固件卷 | 把 INF 加入 DSC 和 FDF | 固件 dispatch，或 UniXNUDxe 启动应用 |
 | 负载 | 构建独立 `.efi` | `unixnu.toml` 的 `[[driver]]` 或 kit |
 
-INF、入口和注入细节见 [UEFI 驱动](/zh/drivers/uefi-drivers)。
+load options 见[开发驱动](/zh/porting/driver-development#uefi-driver)。
 
 ## 下一步
 
 - [设备树](/zh/porting/device-tree)
 - [bring-up 顺序](/zh/porting/bring-up)
-- [UEFI 驱动](/zh/drivers/uefi-drivers)
+- [开发驱动](/zh/porting/driver-development)

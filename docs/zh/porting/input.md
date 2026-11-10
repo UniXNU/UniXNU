@@ -21,8 +21,8 @@
 
 ## 1. 选择传输与传感器协议
 
-阅读 [QcomGeniSpi](/zh/drivers/qcom-geni-spi)、
-[ShengNovatekTouch](/zh/drivers/sheng-novatek-touch)和 [ShengHidInput](/zh/drivers/sheng-hid-input)。
+阅读 `QcomGeniSpi`、
+`ShengNovatekTouch` 和 `ShengHidInput`。
 
 
 不同传感器需要实现其识别、固件和报告协议。复用 Novatek 协议但更换总线控制器时，

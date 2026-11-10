@@ -27,7 +27,7 @@ windows = [
 ]
 ```
 
-IPSW 没有某个 `optional = true` 的窗口时跳过它。
+IPSW 没有某个 `optional = true` 的窗口时跳过它。macOS profile 还列出第三个窗口 `App`（`Cryptex1,AppOS`）。
 
 镜像大小为各窗口按 1 MiB 对齐后的总和，加上 1 MiB 头部区域。步骤拒绝超过分区容量的镜像。
 

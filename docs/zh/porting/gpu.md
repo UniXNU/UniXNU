@@ -1,7 +1,7 @@
 # GPU 与 Metal 适配
 
 先完成[平台 DMA](/zh/porting/platform)和基础[显示呈现](/zh/porting/display)。
-阅读 [Adreno740 运行路径](/zh/drivers/adreno740)与 [AdrenoMetal 接口](/zh/drivers/adreno-metal)。
+运行路径为 Metal → AdrenoMetal → metal2vulkan → Turnip → Darwin KMD → Adreno740 → A740。
 
 实现后按[驱动接入步骤](/zh/porting/drivers#build-integration)连接初始化调用、归档配方和 OS ABI，
 再执行本页对应的硬件验证。
@@ -87,7 +87,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 调度与内存复用 {#scheduling}
 
-参考实现用 `gpu-preempt=2` 启用模式 2。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
+参考实现用 `gpu-preempt=2` 启用模式 2。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。
 
 运行时调度与完成线程在 iOS、macOS 上都使用交互 QoS。渲染线程采用固定调度策略时，编码线程继承它的策略与优先级。
 
@@ -99,7 +99,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 `turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
 
-`metal-flow=1` 打开 metal2vulkan 的 lowering 线程、commit 直接提交和管线预热，用于测试，默认关闭。详见 [AdrenoMetal](/zh/drivers/adreno-metal)。
+`metal-flow=1` 打开 metal2vulkan 的 lowering 线程、commit 直接提交和管线预热，用于测试，默认关闭。
 
 Metal 客户端默认使用单采样。`NATIVE_METAL_SINGLE_SAMPLE=0` 保留请求的采样数；纹理类型、pipeline 采样数和 resolve 处理遵循该策略。
 

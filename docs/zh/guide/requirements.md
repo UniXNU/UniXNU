@@ -92,7 +92,7 @@ sudo scripts/linux/setup-toolchain.py --package-manager none --llvm-config /path
 
 ### 目标 IPSW
 
-OS 配置的目标可以是 iOS 或 iPadOS 恢复镜像，镜像类别须与设备身份一致（[MobileGestalt](/zh/guide/mobilegestalt#ipados-与-ios)）。arm64 目标为 iOS 16 和 iPadOS 17，arm64e 目标为 iOS 27 和 iPadOS 27。
+OS 配置的目标可以是 iOS、iPadOS 或 macOS 恢复镜像，镜像类别须与设备身份一致（[MobileGestalt](/zh/guide/mobilegestalt#ipados-与-ios)）。arm64 目标为 iOS 16 和 iPadOS 17，arm64e 目标为 iOS 27、iPadOS 27 和 macOS 27。
 
 | 架构 | 目标 | 版本 | Build | 恢复镜像 |
 | --- | --- | --- | --- | --- |
@@ -102,6 +102,8 @@ OS 配置的目标可以是 iOS 或 iPadOS 恢复镜像，镜像类别须与设�
 | arm64e | iPadOS，iPad Pro M5（iPad17,1 至 iPad17,4） | 27.0.1 | 24A446 | [iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw) |
 
 iOS 16 与 iPadOS 17 都是 arm64 镜像，共用 arm64 补丁系列（`profiles/arch/arm64`），对其中一个的修复同样适用于另一个。链接来自 [ipsw.me](https://ipsw.me)，指向 Apple 服务器。
+
+macOS profile 的目标是 `UniversalMac_27.3_26C5035r_Restore.ipsw`（Mac17,11），URL 为该 profile 的 `[ipsw] url`，其余输入见 [macOS 配置](/zh/porting/macos#inputs)。
 
 设备仓库的 `[ipsw] url` 是默认来源，`--ipsw` 或 `UNIXNU_IPSW` 覆盖它。镜像下载到仓库外。
 

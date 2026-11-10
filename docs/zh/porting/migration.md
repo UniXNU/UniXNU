@@ -181,7 +181,7 @@ include_dirs = ["soc:dts"]
 
 ## 5. 将硬件描述转换为 DTS
 
-阅读[设备树规范](/zh/porting/device-tree)和[驱动匹配规则](/zh/drivers/device-tree-matching)。检查已有 ADT 脚本及驱动读取的属性，按下表转换：
+阅读[设备树规范](/zh/porting/device-tree)和[驱动匹配规则](/zh/porting/driver-development#matching)。检查已有 ADT 脚本及驱动读取的属性，按下表转换：
 
 | 输入 | 操作 |
 | --- | --- |

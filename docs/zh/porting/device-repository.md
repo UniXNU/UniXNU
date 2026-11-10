@@ -140,6 +140,10 @@ include_dirs = ["soc:dts"]
 表按键合并，普通数组替换继承数组。组件依赖按构建顺序补全。`unixnu status --json`
 显示最终设置、源码、覆盖项和补丁顺序。
 
+`[os_overrides."<profile>"]` 保存某个 OS 配置特有的值，`[package.defconfig]`
+把每个配置映射到它的 defconfig。`--os` 为单条命令选择配置。字段见
+[配置参考](/zh/reference/configuration)，完整的覆盖示例见 [macOS 的值](/zh/porting/macos#device)。
+
 省略 `schema_version` 的文件使用格式 1 及其模块路径。格式 2 的输出位于
 `out/<device>/<os_profile>/<config>/`，其中 `<config>` 为去掉 `_defconfig` 的配置名。
 

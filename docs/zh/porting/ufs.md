@@ -1,7 +1,7 @@
 # UFS 移植
 
 先阅读设备 `porting.toml` 的存储部分和[组件目录](/zh/reference/components)。
-官方实现为 [ShengUfs](/zh/drivers/sheng-ufs)，运行时类名为 `NativeUfs`。
+官方实现为 `ShengUfs`，运行时类名为 `NativeUfs`。
 
 ShengUfs 包含 SM8550 控制器访问、固件状态接管、SMMU、GPT/窗口解析和板级
 持久存储策略。每个目标需要检查其硬件常量和板级策略。

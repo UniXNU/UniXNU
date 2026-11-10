@@ -235,7 +235,7 @@ ordered kernel inputs and its existing board-specific settings.
 ## 5. Convert the hardware description to DTS
 
 Read the [device-tree specification](/porting/device-tree) and
-[driver matching rules](/drivers/device-tree-matching). Inspect the port's ADT
+[driver matching rules](/porting/driver-development#matching). Inspect the port's ADT
 script and the properties read by its drivers. Convert them in this order:
 
 | Input | Action |

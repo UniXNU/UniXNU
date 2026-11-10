@@ -102,7 +102,7 @@ bluetooth_target = "ios27"
 [native-ios27.md](https://github.com/UniXNU/QcaBluetooth/blob/22ff97f93416452335bb61badb14c762da653487/native-ios27.md)
 重新定位补丁位置。
 
-配对密钥依赖钥匙串，钥匙串依赖 [AppleKeyStoreState](/zh/drivers/apple-key-store-state)。
+配对密钥依赖钥匙串，钥匙串依赖 [AppleKeyStoreState](/zh/porting/platform#block-and-os-services)。
 板级代码通过 `native_aks_device_id` 返回 `/chosen/unique-chip-id`。
 
 ## 6. 构建和验证

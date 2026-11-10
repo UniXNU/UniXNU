@@ -87,7 +87,7 @@ interfaces, and retain the applicable source licenses when reusing code.
 5. **Connect the OS service.** Identify the target OS audio provider, required
    methods, request layouts, mapped-memory types and completion notifications
    from the selected kernelcache and framework. Record these ABI inputs using
-   [built-in driver integration](/drivers/xnu-drivers#compile-against-the-kernel-abi).
+   [built-in driver integration](/porting/driver-development#compile-against-the-kernel-abi).
    Connect format selection, start/stop, position and buffer completion to the
    stream engine. Publish only formats and routes implemented by that endpoint.
 6. **Exercise the route.** Play a known PCM signal or record a known input. Check

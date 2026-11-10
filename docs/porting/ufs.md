@@ -2,7 +2,7 @@
 
 Start with the storage section of the device's `porting.toml` and the
 [component catalog](/reference/components). The official implementation is
-[ShengUfs](/drivers/sheng-ufs), with runtime class `NativeUfs`.
+`ShengUfs`, with runtime class `NativeUfs`.
 
 ShengUfs combines SM8550 controller access, firmware adoption, SMMU handling,
 GPT/window parsing and board persistence policy. Its hardware constants and

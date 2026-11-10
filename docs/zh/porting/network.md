@@ -1,7 +1,7 @@
 # Wi-Fi 适配
 
 先完成[平台中断和 DMA](/zh/porting/platform)。确认无线芯片、PCI ID、固件和 board-data 变体。
-实现回调前阅读 [Ath12kWifi](/zh/drivers/ath12k-wifi)和 `include/nw_abi.h`。
+实现回调前阅读 `Ath12kWifi`和 `include/nw_abi.h`。
 
 实现后按[驱动接入步骤](/zh/porting/drivers#build-integration)连接初始化调用、归档配方和 OS ABI，
 再执行本页对应的硬件验证。
