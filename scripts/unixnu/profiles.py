@@ -17,13 +17,21 @@ def merge(base, overlay):
 
 
 def resolve_os(ctx, wanted):
-    """--os 17, 26 or 27 (the OS major version) or a full profiles/os directory name."""
+    """--os 17, 26 or 27 (the OS major version) or a full profiles/os directory name.
+    A bare version resolves within the iPadOS profiles; prefix it with macos- (macos-27,
+    macos-27.3) or ipados- (ipados-27) when several OS families ship the same major."""
     names = sorted(path.name for path in (ctx.root / 'profiles/os').iterdir() if path.is_dir())
     if wanted in names:
         return wanted
-    matches = [name for name in names if name.startswith(f'ipados-{wanted}.')]
+    family, version = 'ipados-', wanted
+    for prefix in ('ipados-', 'macos-'):
+        if wanted.startswith(prefix):
+            family, version = prefix, wanted[len(prefix):]
+            break
+    matches = [name for name in names
+               if name.startswith(f'{family}{version}.') or name.startswith(f'{family}{version}-')]
     if len(matches) != 1:
-        raise Error(f'--os {wanted}: expected one of {", ".join(names)} or 17, 26, 27')
+        raise Error(f'--os {wanted}: expected one of {", ".join(names)} or 17, 26, 27, macos-27')
     return matches[0]
 
 

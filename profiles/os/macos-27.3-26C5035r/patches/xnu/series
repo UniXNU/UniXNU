@@ -1,0 +1,8 @@
+# OS patch paths for xnu-12377.121.6, one per line in application order.
+# No Darwin 26 XNU source is published yet; 26C5035r runs on xnu-12377 with the Darwin 26 system
+# calls and KPIs, the macOS machine options and the macOS kernel state added.
+arch:../../../patches/xnu-12377/zzz-boot-progress.patch
+arch:../../../patches/xnu-12377/darwin26-syscalls.patch
+arch:../../../patches/xnu-12377/darwin26-kpi.patch
+arch:../../../patches/xnu-12377/darwin26-shared-region.patch
+../xnu-12377/macos-machine-config.patch
