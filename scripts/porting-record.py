@@ -149,7 +149,7 @@ def check_changes(previous, current, changed):
 def markdown_text(value):
     """Render record prose as text in Markdown and Vue templates."""
     value = escape(value, quote=False).replace('{', '&#123;').replace('}', '&#125;')
-    return re.sub(r'([\\`*\[\]()#!|_~])', r'\\\1', value).replace('\n', ' ')
+    return re.sub(r'([\\`*\[\]()#!|_~])', r'\\\1', value).replace('\n', ' ').rstrip()
 
 
 def render(record, repository, revision, zh=False):
