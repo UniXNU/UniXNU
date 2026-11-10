@@ -1,0 +1,872 @@
+The macOS-DroidVM k27 fixes (Droid-VM/macOS-DroidVM main, 2026-11-08) that apply to sheng, after the audit in
+out/macos-work/AUDIT-droidvm-main.md:
+- 0015/0024 union lookup: a covered path leading back into the union ends with ENOENT instead of looping; a name missing
+  from a read-only union layer is looked up in the covered one for a create too (mkdir /dev gave EROFS).
+- 0017 native 4K code signing: a 4K page wholly past codeLimit in the last 16K block validates NX, not tainted.
+- 0022 exec-env=NAME:VAR=VALUE[,VAR=VALUE...] appends variables to one executable's environment.
+- 0023 the root union reports MNT_ROOTFS in statfs, getfsstat and the vfs sysctls (fseventsd's global logger).
+- 0038 vfs_flags hides the root union's MNT_UNION from kexts (Sandbox mds.sb); ".." of a firmlink target is the source's
+  parent; the last component of a delete or rename is not followed through a firmlink. kern_exec.c's union check reads
+  mnt_flag.
+- 0041 a realtime computation past max_rt_quantum is held to it (coreaudiod's I/O thread on the 19.2 MHz counter).
+- 0042 timebase-hz=24000000: a 24 MHz timebase for userspace over the 19.2 MHz counter (CoreAudio, Swift clocks).
+- 0047 mmap places mappings it chooses on 16K boundaries (V8, PartitionAlloc).
+- exit-trace: exit() calls the board's native_exit_trace (user frames of WindowServer and loginwindow by default).
+- 0035 deny-exec=PATH[,PATH...]: mobileactivationd and cryptexd (no Secure Enclave identity, no grafted cryptexes) do not run. Ours:
+  exec-stand-in=PATH runs a stand-in as the daemon's job, which closes every connection to its services (scripts/absent-service);
+  plain EPERM left clients waiting for a reply forever (mdmclient, so the login; run41/run42).
+- one device at "/": vnode_getattr, every getattrlist form (bulk entries, the real device id and fsid, volume attributes), proc_info
+  and the vfs fsid lists give the union's device id and fsid for a file of the root volume under it. They leaked the root volume's
+  own, which getfsstat hides, so CoreServices could not place those files (FileIDTreeGetVRefNumForDevice -36, run37/run38).
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -2965,7 +2965,24 @@
+ 	{ NULL, NULL}
+ };
+ 
++
++static bool native_exec_denied(struct vnode *vp);
++/* The stand-in for a daemon on the deny-exec list: see native_exec_denied. */
++static TUNABLE_STR(native_exec_stand_in, 128, "exec-stand-in", "/private/var/ngpu/bin/unixnu-absentd");
++
++static bool
++native_exec_stand_in_present(vfs_context_t ctx)
++{
++	vnode_t vp = NULLVP;
+ 
++	if (native_exec_stand_in[0] != '/' || vnode_lookup(native_exec_stand_in, 0, &vp, ctx) != 0) {
++		return false;
++	}
++	const bool regular = vnode_isreg(vp);
++	vnode_put(vp);
++	return regular;
++}
++
+ /*
+  * exec_activate_image
+  *
+@@ -3002,6 +3019,7 @@
+ 	int error;
+ 	int resid;
+ 	int once = 1;   /* save SGUID-ness for interpreted files */
++	int stood_in = 0;       /* the image was replaced by the deny-exec stand-in */
+ 	int i;
+ 	int itercount = 0;
+ 	proc_t p = vfs_context_proc(imgp->ip_vfs_context);
+@@ -3042,6 +3060,18 @@
+ 	}
+ 	imgp->ip_ndp = ndp;     /* successful namei(); call nameidone() later */
+ 	imgp->ip_vp = ndp->ni_vp;       /* if set, need to vnode_put() at some point */
++
++	/* A daemon on the deny-exec list runs as its stand-in when the board has one (native_exec_stand_in below). */
++	if (!stood_in && native_exec_denied(imgp->ip_vp) && native_exec_stand_in_present(imgp->ip_vfs_context)) {
++		stood_in = 1;
++		nameidone(ndp);
++		vnode_put(imgp->ip_vp);
++		imgp->ip_vp = NULL;     /* already put */
++		imgp->ip_ndp = NULL;    /* already nameidone */
++		NDINIT(ndp, LOOKUP, OP_LOOKUP, FOLLOW | LOCKLEAF,
++		    UIO_SYSSPACE, CAST_USER_ADDR_T(native_exec_stand_in), imgp->ip_vfs_context);
++		goto again;
++	}
+ 
+ 	/*
+ 	 * Before we start the transition from binary A to binary B, make
+@@ -6981,6 +7011,46 @@
+ 		}
+ 		imgp->ip_argspace -= new_ptr_size; /* to hold envv[] entry */
+ 		imgp->ip_envc++;
++	}
++
++	/*
++	 * exec-env=NAME:VAR=VALUE[,VAR=VALUE...] appends each VAR=VALUE to the
++	 * environment of every executable whose file name is NAME (an A/B test's variable for one
++	 * system daemon, whose launchd job lives on the read-only system volume).
++	 */
++	{
++		static char exec_env[256];
++		static int exec_env_state; /* 0 unread, 1 none, 2 read */
++		if (exec_env_state == 0) {
++			exec_env_state = PE_parse_boot_arg_str("exec-env", exec_env, sizeof(exec_env)) ? 2 : 1;
++		}
++		const char *colon = exec_env_state == 2 ? strchr(exec_env, ':') : NULL;
++		const char *path = imgp->ip_strings + strlen(EXECUTABLE_KEY);
++		const char *base = strrchr(path, '/');
++		base = base ? base + 1 : path;
++		if (colon && strlen(base) == (size_t)(colon - exec_env) &&
++		    strncmp(base, exec_env, colon - exec_env) == 0) {
++			for (const char *item = colon + 1; *item != '\0';) {
++				const char *end = strchr(item, ',');
++				size_t len = end ? (size_t)(end - item) : strlen(item);
++				char assignment[128];
++				if (len > 0 && len < sizeof(assignment)) {
++					memcpy(assignment, item, len);
++					assignment[len] = '\0';
++					error = exec_add_user_string(imgp, CAST_USER_ADDR_T(assignment), UIO_SYSSPACE, TRUE);
++					if (error) {
++						goto bad;
++					}
++					if (imgp->ip_argspace < new_ptr_size) {
++						error = E2BIG;
++						goto bad;
++					}
++					imgp->ip_argspace -= new_ptr_size;
++					imgp->ip_envc++;
++				}
++				item += len + (end ? 1 : 0);
++			}
++		}
+ 	}
+ 
+ 	/* Save space for envv[] NULL terminator */
+@@ -7481,7 +7551,47 @@
+  *		ETXTBSY			Text file busy [misuse of error code]
+  *	vnode_getattr:???
+  *	vnode_authorize:???
++ */
++/*
++ * deny-exec=PATH[,PATH...] (default /usr/libexec/mobileactivationd,/usr/libexec/cryptexd; macOS-DroidVM 0035): daemons that cannot
++ * run on this board. mobileactivationd validates the device identity from the Secure Enclave ("Failed to validate OIC: SEP
++ * communication") and crashed every 10 to 15 s, each time with a crash report; cryptexd wants grafted cryptex volumes that this board's
++ * plain cryptex directories are not.
++ *
++ * exec-stand-in=PATH (default /private/var/ngpu/bin/unixnu-absentd): when that program exists, a denied daemon's exec runs it instead
++ * (exec_activate_image), as the daemon's launchd job; it takes the job's Mach services and closes every connection, so a client gets
++ * "connection invalid" at once. Plain EPERM from the exec left launchd retrying the spawn every 10 s with the clients' requests
++ * queued for a daemon that never came: mdmclient waited for mobileactivationd's reply forever
++ * (-[MobileActivationMacOS getUCRTDEPEnrollmentState:]) and the login stopped in MCXMechanism:login (macOS run41/run42). Without
++ * the stand-in the exec fails with EPERM as before.
+  */
++static TUNABLE_STR(native_deny_exec, 256, "deny-exec", "/usr/libexec/mobileactivationd,/usr/libexec/cryptexd");
++static bool
++native_exec_denied(struct vnode *vp)
++{
++	if (native_deny_exec[0] == '\0') {
++		return false;
++	}
++	char *path = zalloc(ZV_NAMEI);
++	int len = MAXPATHLEN;
++	bool denied = false;
++	if (vn_getpath(vp, path, &len) == 0) {
++		for (const char *n = native_deny_exec; *n;) {
++			size_t l = 0;
++			while (n[l] && n[l] != ',') {
++				l++;
++			}
++			if (l && strlen(path) == l && strncmp(path, n, l) == 0) {
++				denied = true;
++				break;
++			}
++			n += l + (n[l] == ',');
++		}
++	}
++	zfree(ZV_NAMEI, path);
++	return denied;
++}
++
+ static int
+ exec_check_permissions(struct image_params *imgp)
+ {
+@@ -7495,6 +7605,9 @@
+ 	if (!vnode_isreg(vp)) {
+ 		return EACCES;
+ 	}
++	if (native_exec_denied(vp)) {
++		return EPERM;
++	}
+ 
+ 	/* Get the file attributes that we will be using here and elsewhere */
+ 	VATTR_INIT(vap);
+@@ -8142,7 +8255,8 @@
+ 	native_owner_cache_readonly = readonly;
+ 	native_owner_cache_actual_mount_flags = vfs_flags(cache_mount);
+ 	native_owner_cache_current_root = (uintptr_t)rootvnode;
+-	int native_union = (vfs_flags(cache_mount) & MNT_UNION) &&
++	/* mnt_flag, not vfs_flags: the macOS root union hides MNT_UNION from kexts (kpi_vfs.c). */
++	int native_union = (cache_mount->mnt_flag & MNT_UNION) &&
+ 	    vnode_mountedhere(original_os_root) == cache_mount && rootvnode == mounted_root;
+ 	native_owner_cache_native_union = native_union;
+ 	cache_authorized = readonly && actual == selected &&
+diff --git a/bsd/kern/kern_exit.c b/bsd/kern/kern_exit.c
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -1606,6 +1606,11 @@
+ void
+ exit(proc_t p, struct exit_args *uap, int *retval)
+ {
++	/* exit-trace (BootUiTraceProbe.c, the board's): the user frames of a listed process's exit(), with the cache slide. */
++	extern void native_exit_trace(int pid, const char *name, int status) __attribute__((weak_import));
++	if (native_exit_trace) {
++		native_exit_trace(proc_getpid(p), p->p_comm, (int)uap->rval);
++	}
+ 	p->p_xhighbits = ((uint32_t)(uap->rval) & 0xFF000000) >> 24;
+ 	exit1(p, W_EXITCODE((uint32_t)uap->rval, 0), retval);
+ 
+diff --git a/bsd/kern/kern_mman.c b/bsd/kern/kern_mman.c
+--- a/bsd/kern/kern_mman.c
++++ b/bsd/kern/kern_mman.c
+@@ -773,7 +773,18 @@
+ 	}
+ #endif
+ 
++#if defined(__arm64__) && !__ARM_16K_PG__
+ 	/*
++	 * A 4K kernel under arm64 macOS user space, which takes pages for 16K: Chromium's PartitionAlloc and V8 round with a
++	 * constant 16K mask (an aligned reservation maps size + alignment and trims both ends at 16K bounds), so a placed mapping
++	 * starts on a 16K boundary, as on Apple's 16K kernels. MAP_FIXED keeps the address it is given.
++	 */
++	const mach_vm_offset_t anywhere_mask = (flags & MAP_FIXED) ? 0 : (mach_vm_offset_t)0x3fff;
++#else
++	const mach_vm_offset_t anywhere_mask = 0;
++#endif
++
++	/*
+ 	 * Lookup/allocate object.
+ 	 */
+ 	if (handle == NULL) {
+@@ -802,7 +813,7 @@
+ 
+ 		result = mach_vm_map_kernel(user_map,
+ 		    vm_sanitize_wrap_addr_ref(&user_addr), user_size,
+-		    0, vmk_flags,
++		    anywhere_mask, vmk_flags,
+ 		    IPC_PORT_NULL, 0, FALSE,
+ 		    prot, maxprot,
+ 		    (flags & MAP_SHARED) ?
+@@ -898,7 +909,7 @@
+ 
+ 		result = vm_map_enter_mem_object_control(user_map,
+ 		    vm_sanitize_wrap_addr_ref(&user_addr), user_size,
+-		    0, vmk_flags,
++		    anywhere_mask, vmk_flags,
+ 		    control, vm_map_trunc_page(file_pos, user_mask),
+ 		    docow, prot, maxprot,
+ 		    (flags & MAP_SHARED) ?
+diff --git a/bsd/kern/proc_info.c b/bsd/kern/proc_info.c
+--- a/bsd/kern/proc_info.c
++++ b/bsd/kern/proc_info.c
+@@ -2710,7 +2710,12 @@
+ 	}
+ 
+ 	if (vp->v_mount != dead_mountp) {
++#if XNU_TARGET_OS_OSX
++		extern mount_t native_union_identity(mount_t mp);
++		vinfo->vi_fsid = native_union_identity(vp->v_mount)->mnt_vfsstat.f_fsid;   /* one volume at "/" */
++#else
+ 		vinfo->vi_fsid = vp->v_mount->mnt_vfsstat.f_fsid;
++#endif
+ 	} else {
+ 		vinfo->vi_fsid.val[0] = 0;
+ 		vinfo->vi_fsid.val[1] = 0;
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -6084,6 +6084,18 @@
+ #if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
+ 			if (PAGE_SHIFT == 12 && blob->csb_hash_pageshift == 14) {
+ 				vm_size_t index = (vm_size_t)offset >> PAGE_SHIFT;
++				if (!(offset & PAGE_MASK) && offset >= codeLimit &&
++				    offset < (off_t)(((uint64_t)codeLimit + 16383) & ~16383ULL)) {
++					/*
++					 * A 4K page wholly past codeLimit in the last 16K block: that block's hash stops at codeLimit, so on
++					 * 16K pages these bytes are part of a validated, NX page. Answer them the same, not tainted
++					 * (macOS-DroidVM 0017): dyld's PrebuiltLoader reads a dylib's code signature through such pages, and
++					 * every loginwindow after the first died with KERN_CODESIGN_ERROR.
++					 */
++					*bytes_processed = PAGE_SIZE;
++					*tainted = CS_VALIDATE_NX;
++					return TRUE;
++				}
+ 				if ((offset & PAGE_MASK) || offset >= codeLimit ||
+ 				    blob->csb_native4k_hashes == NULL ||
+ 				    index >= blob->csb_native4k_hash_count ||
+diff --git a/bsd/sys/user.h b/bsd/sys/user.h
+--- a/bsd/sys/user.h
++++ b/bsd/sys/user.h
+@@ -382,6 +382,8 @@
+ 	uint64_t        *syscall_rejection_mask;  /* mach_trap_count + nsysent bits */
+ 	uint64_t        *syscall_rejection_once_mask;  /* mach_trap_count + nsysent bits */
+ #endif /* CONFIG_DEBUG_SYSCALL_REJECTION */
++	/* getattrlistbulk: the mount of the directory being enumerated, for entries the file system packs without a vnode. */
++	struct mount    *uu_native_union_bulk;
+ };
+ 
+ typedef struct uthread * uthread_t;
+diff --git a/bsd/vfs/kpi_vfs.c b/bsd/vfs/kpi_vfs.c
+--- a/bsd/vfs/kpi_vfs.c
++++ b/bsd/vfs/kpi_vfs.c
+@@ -473,7 +473,20 @@
+ uint64_t
+ vfs_flags(mount_t mp)
+ {
+-	return (uint64_t)(mp->mnt_flag & (MNT_CMDFLAGS | MNT_VISFLAGMASK));
++	uint64_t flags = mp->mnt_flag & (MNT_CMDFLAGS | MNT_VISFLAGMASK);
++	vnode_t covered = mp->mnt_vnodecovered;
++
++	/*
++	 * The SystemOS volume union-mounted over the root volume stands in for the root volume, which on macOS is never a union
++	 * (macOS-DroidVM 0038). Kexts do not see MNT_UNION on it: Sandbox evaluates (file-attribute union-mounted-filesystem) with
++	 * vfs_flags and mds.sb denies file-read* there, so mds could read nothing of the root. The kernel's own code reads mnt_flag,
++	 * and statfs keeps the flag for libc's opendir (macos-union-one-volume.patch).
++	 */
++	if ((flags & MNT_UNION) && covered != NULLVP && (covered->v_flag & VROOT) && covered->v_mount != NULL &&
++	    (covered->v_mount->mnt_flag & MNT_ROOTFS)) {
++		flags &= ~(uint64_t)MNT_UNION;
++	}
++	return flags;
+ }
+ 
+ /* set any of the command modifier flags(MNT_CMDFLAGS) in mount_t */
+@@ -3103,6 +3116,30 @@
+ 	    vap->va_vaflags & VA_REALFSID || !(vap->va_vaflags & VA_USEFSID))) {
+ 		VATTR_RETURN(vap, va_fsid, vp->v_mount->mnt_vfsstat.f_fsid.val[0]);
+ 	}
++#if XNU_TARGET_OS_OSX
++	/*
++	 * One volume at "/" (macos-union-one-volume.patch): a file of the root volume under the SystemOS union carries the union's
++	 * device id and fsid wherever they leave the kernel, not only in stat and getattrlist: file system events (fseventsd), proc_info
++	 * and the bulk and extended attribute calls gave the root volume's own device id, which getfsstat does not list, so CoreServices
++	 * could not place those files (FileIDTreeGetVRefNumForDevice returned -36 a thousand times a boot, macOS run37/run38). A caller
++	 * that asks for the real fsid (VA_REALFSID) gets it.
++	 */
++	if (!(vap->va_vaflags & VA_REALFSID) && vp->v_mount != NULL) {
++		extern mount_t native_union_identity(mount_t mp);
++		mount_t top = native_union_identity(vp->v_mount);
++		if (top != vp->v_mount) {
++			if (VATTR_IS_ACTIVE(vap, va_fsid)) {
++				VATTR_RETURN(vap, va_fsid, top->mnt_vfsstat.f_fsid.val[0]);
++			}
++			if (VATTR_IS_SUPPORTED(vap, va_fsid64)) {
++				vap->va_fsid64 = top->mnt_vfsstat.f_fsid;
++			}
++			if (VATTR_IS_SUPPORTED(vap, va_devid)) {
++				vap->va_devid = top->mnt_vfsstat.f_fsid.val[0];
++			}
++		}
++	}
++#endif /* XNU_TARGET_OS_OSX */
+ 
+ out:
+ 	vap->va_vaflags &= ~VA_USEFSID;
+diff --git a/bsd/vfs/vfs_attrlist.c b/bsd/vfs/vfs_attrlist.c
+--- a/bsd/vfs/vfs_attrlist.c
++++ b/bsd/vfs/vfs_attrlist.c
+@@ -239,6 +239,19 @@
+ 
+ #if XNU_TARGET_OS_OSX
+ extern mount_t native_union_identity(mount_t mp);
++
++/*
++ * The union that stands in for the volume of the object being packed (native_union_identity), or NULL: from the mount the file
++ * system gave, the vnode, or for an entry of a bulk enumeration packed without either, the directory's mount.
++ */
++static mount_t
++native_union_pack_top(mount_t mp, vnode_t vp)
++{
++	mount_t real = mp != NULL ? mp : vp != NULL ? vp->v_mount : current_uthread()->uu_native_union_bulk;
++	mount_t top = real != NULL ? native_union_identity(real) : NULL;
++
++	return top != real ? top : NULL;
++}
+ #endif
+ 
+ /*
+@@ -1020,6 +1033,9 @@
+ 	attr_max_buffer = proc_support_long_paths(vfs_context_proc(ctx)) ?
+ 	    ATTR_MAX_BUFFER_LONGPATHS : ATTR_MAX_BUFFER;
+ 	mnt = vp->v_mount;
++#if XNU_TARGET_OS_OSX
++	mnt = native_union_identity(mnt);   /* the volume at "/" is the union, as statfs says */
++#endif
+ 
+ 	/* Check for invalid or dead mounts. */
+ 	if (!mnt || mnt == dead_mountp) {
+@@ -1768,17 +1784,21 @@
+ 		attrlist_pack_string(abp, cnp, cnl);
+ 		abp->actual.commonattr |= ATTR_CMN_NAME;
+ 	}
++#if XNU_TARGET_OS_OSX
++	/* A file of the root volume under the union is on the union, in every form of the device id and fsid (also the "real" ones). */
++	const mount_t union_top = native_union_pack_top(mp, vp);
++#endif
+ 	if (alp->commonattr & ATTR_CMN_DEVID) {
++#if XNU_TARGET_OS_OSX
++		if (union_top) {
++			ATTR_PACK4((*abp), union_top->mnt_vfsstat.f_fsid.val[0]);
++			abp->actual.commonattr |= ATTR_CMN_DEVID;
++		} else
++#endif
+ 		if (mp) { /* caller needs real devid */
+ 			ATTR_PACK4((*abp),
+ 			    mp->mnt_vfsstat.f_fsid.val[0]);
+-			abp->actual.commonattr |= ATTR_CMN_DEVID;
+-#if XNU_TARGET_OS_OSX
+-		} else if (vp && native_union_identity(vp->v_mount) != vp->v_mount) {
+-			/* A file of the root volume under the union is on the union (native_union_identity). */
+-			ATTR_PACK4((*abp), native_union_identity(vp->v_mount)->mnt_vfsstat.f_fsid.val[0]);
+ 			abp->actual.commonattr |= ATTR_CMN_DEVID;
+-#endif
+ 		} else if (VATTR_IS_ACTIVE(vap, va_fsid) && VATTR_IS_SUPPORTED(vap, va_fsid)) {
+ 			ATTR_PACK4((*abp), vap->va_fsid);
+ 			abp->actual.commonattr |= ATTR_CMN_DEVID;
+@@ -1794,15 +1814,16 @@
+ 		}
+ 	}
+ 	if (alp->commonattr & ATTR_CMN_FSID) {
++#if XNU_TARGET_OS_OSX
++		if (union_top) {
++			ATTR_PACK8((*abp), union_top->mnt_vfsstat.f_fsid);
++			abp->actual.commonattr |= ATTR_CMN_FSID;
++		} else
++#endif
+ 		if (mp) { /* caller needs real fsid */
+ 			ATTR_PACK8((*abp),
+ 			    mp->mnt_vfsstat.f_fsid);
+ 			abp->actual.commonattr |= ATTR_CMN_FSID;
+-#if XNU_TARGET_OS_OSX
+-		} else if (vp && native_union_identity(vp->v_mount) != vp->v_mount) {
+-			ATTR_PACK8((*abp), native_union_identity(vp->v_mount)->mnt_vfsstat.f_fsid);
+-			abp->actual.commonattr |= ATTR_CMN_FSID;
+-#endif
+ 		} else if (VATTR_IS_SUPPORTED(vap, va_fsid64)) {
+ 			ATTR_PACK8((*abp), vap->va_fsid64);
+ 			abp->actual.commonattr |= ATTR_CMN_FSID;
+@@ -2508,7 +2529,16 @@
+ 		abp->actual.forkattr |= ATTR_CMNEXT_NOFIRMLINKPATH;
+ 	}
+ 
++#if XNU_TARGET_OS_OSX
++	const mount_t union_top = native_union_pack_top(mp, vp);
++#endif
+ 	if (alp->forkattr & ATTR_CMNEXT_REALDEVID) {
++#if XNU_TARGET_OS_OSX
++		if (union_top) {
++			ATTR_PACK4((*abp), union_top->mnt_vfsstat.f_fsid.val[0]);
++			abp->actual.forkattr |= ATTR_CMNEXT_REALDEVID;
++		} else
++#endif
+ 		if (mp) {
+ 			ATTR_PACK4((*abp),
+ 			    mp->mnt_vfsstat.f_fsid.val[0]);
+@@ -2526,6 +2556,12 @@
+ 	}
+ 
+ 	if (alp->forkattr & ATTR_CMNEXT_REALFSID) {
++#if XNU_TARGET_OS_OSX
++		if (union_top) {
++			ATTR_PACK8((*abp), union_top->mnt_vfsstat.f_fsid);
++			abp->actual.forkattr |= ATTR_CMNEXT_REALFSID;
++		} else
++#endif
+ 		if (mp) {
+ 			ATTR_PACK8((*abp),
+ 			    mp->mnt_vfsstat.f_fsid);
+@@ -4452,8 +4488,10 @@
+ 			 * filesystem to be rapidly aged.
+ 			 */
+ 			ut->uu_flag |= UT_KERN_RAGE_VNODES;
++			ut->uu_native_union_bulk = dvp->v_mount;   /* for entries packed without a vnode (native_union_pack_top) */
+ 			error = VNOP_GETATTRLISTBULK(dvp, &al, va, auio, NULL,
+ 			    options, &eofflag, &count, ctx);
++			ut->uu_native_union_bulk = NULL;
+ 			ut->uu_flag &= ~UT_KERN_RAGE_VNODES;
+ 
+ 			zfree(ZV_NAMEI, va_name);
+@@ -4477,8 +4515,10 @@
+ 		count = 0;
+ 
+ 		ut->uu_flag |= UT_KERN_RAGE_VNODES;
++		ut->uu_native_union_bulk = dvp->v_mount;
+ 		error = readdirattr(dvp, fvdata, auio, &al, options,
+ 		    &count, &eofflag, ctx);
++		ut->uu_native_union_bulk = NULL;
+ 		ut->uu_flag &= ~UT_KERN_RAGE_VNODES;
+ 	}
+ 
+diff --git a/bsd/vfs/vfs_lookup.c b/bsd/vfs/vfs_lookup.c
+--- a/bsd/vfs/vfs_lookup.c
++++ b/bsd/vfs/vfs_lookup.c
+@@ -1215,7 +1215,8 @@
+ 	 * firmlink set with vnode_setasfirmlink across devices is followed here too.
+ 	 */
+ 	if (dp->v_type == VDIR && dp->v_fmlink != NULLVP && !(dp->v_flag & VFMLINKTARGET) &&
+-	    !(cnp->cn_flags & CN_FIRMLINK_NOFOLLOW)) {
++	    !(cnp->cn_flags & CN_FIRMLINK_NOFOLLOW) &&
++	    !((cnp->cn_flags & ISLASTCN) && (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME))) {   /* not the name itself */
+ 		vnode_t target = dp->v_fmlink;
+ 		if (target->v_type == VDIR && vnode_getwithref(target) == 0) {
+ 			vnode_put(dp);
+@@ -1635,6 +1636,27 @@
+ 			}
+ 		}
+ 
++#if CONFIG_FIRMLINKS
++		/*
++		 * ".." of a firmlink target is the source's parent, as cache_lookup_path does on a name cache hit (macOS-DroidVM
++		 * 0038): /Library resolves into the Data volume, and "/Library/.." comes back to "/", not to the Data volume's root.
++		 */
++		if ((dp->v_flag & VFMLINKTARGET) && dp->v_fmlink != NULLVP && !(cnp->cn_flags & CN_FIRMLINK_NOFOLLOW)) {
++			vnode_t target = dp;
++			dp = target->v_fmlink;
++			if (vnode_getwithref(dp)) {
++				vnode_put(target);
++				dp = NULLVP;
++				error = ENOENT;
++				goto bad;
++			}
++			vnode_put(target);
++			ndp->ni_dvp = dp;
++			dp_authorized = 0;
++			ndp->ni_flag |= NAMEI_FIRMLINK_FOLLOWED;
++		}
++#endif /* CONFIG_FIRMLINKS */
++
+ 		for (;;) {
+ 			if (dp == ndp->ni_rootdir || dp == rootvnode) {
+ 				ndp->ni_dvp = dp;
+@@ -1756,12 +1778,27 @@
+ 	if (error) {
+ lookup_error:
+ #if CONFIG_UNION_MOUNTS
+-		if ((error == ENOENT) &&
++		/*
++		 * A name missing from a read-only union layer is looked up in the covered one for a create too (EJUSTRETURN: the
++		 * layer would let the name be created but cannot; macOS-DroidVM 0024): with the SystemOS volume over the root volume
++		 * at "/", mkdir("/dev") failed with EROFS instead of EEXIST, so xpcproxy's mkpath_np of a job's StandardErrorPath
++		 * directory (kernelmanagerd's /dev/console) failed and kernelmanagerd never ran.
++		 */
++		if ((error == ENOENT || (error == EJUSTRETURN && dp->v_mount != NULL && vfs_isrdonly(dp->v_mount))) &&
+ 		    (dp->v_mount != NULL) &&
+ 		    (dp->v_mount->mnt_flag & MNT_UNION) &&
+ 		    !(ndp->ni_flag & NAMEI_NOUNION)) {
+ 			tdp = dp;
+ 			error = lookup_traverse_union(tdp, &dp, ctx);
++			if (error == 0 && dp->v_mount == tdp->v_mount) {
++				/*
++				 * The directory's path in the covered mount led back into this one (a framework of the root volume links
++				 * into /System/Cryptexes/OS, which is "/" again; macOS-DroidVM 0015): the lookup would retry the same
++				 * directory forever, and every LaunchServices client hung on coreservicesd.
++				 */
++				vnode_put(dp);
++				error = ENOENT;
++			}
+ 			vnode_put(tdp);
+ 			if (error) {
+ 				dp = NULLVP;
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -4790,6 +4790,10 @@
+ 
+ 
+ 
++#if XNU_TARGET_OS_OSX
++mount_t native_union_identity(mount_t mp);   /* below */
++#endif
++
+ static int
+ mount_fillfsids(fsid_t *fsidlst, int count)
+ {
+@@ -4799,6 +4803,11 @@
+ 	actual = 0;
+ 	mount_list_lock();
+ 	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
++#if XNU_TARGET_OS_OSX
++		if (native_union_identity(mp) != mp) {
++			continue;   /* the root volume under the union: not a volume of its own (getfsstat leaves it out too) */
++		}
++#endif
+ 		if (actual < count) {
+ 			fsidlst[actual] = mp->mnt_vfsstat.f_fsid;
+ 			actual++;
+@@ -4823,6 +4832,11 @@
+ 	*actual = 0;
+ 	mount_list_lock();
+ 	TAILQ_FOREACH(mp, &mountlist, mnt_list) {
++#if XNU_TARGET_OS_OSX
++		if (native_union_identity(mp) != mp) {
++			continue;
++		}
++#endif
+ 		(*actual)++;
+ 		if (*actual <= count) {
+ 			fsidlst[(*actual) - 1] = mp->mnt_vfsstat.f_fsid;
+@@ -4890,6 +4904,11 @@
+ /*
+  * Do a sysctl by fsid.
+  */
++uint32_t native_union_visflags(mount_t mp);   /* below */
++#if XNU_TARGET_OS_OSX
++mount_t native_union_identity(mount_t mp);
++#endif
++
+ static int
+ sysctl_vfs_ctlbyfsid(__unused struct sysctl_oid *oidp, void *arg1, int arg2,
+     struct sysctl_req *req)
+@@ -5039,7 +5058,7 @@
+ 			struct user64_statfs *sfs = &sfsbuf->osfs64;
+ 
+ 			bzero(sfs, sizeof(*sfs));
+-			sfs->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
++			sfs->f_flags = native_union_visflags(mp);
+ 			sfs->f_type = (short)mp->mnt_vtable->vfc_typenum;
+ 			sfs->f_bsize = (user64_long_t)sp->f_bsize;
+ 			sfs->f_iosize = (user64_long_t)sp->f_iosize;
+@@ -5060,7 +5079,7 @@
+ 			long temp;
+ 
+ 			bzero(sfs, sizeof(*sfs));
+-			sfs->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
++			sfs->f_flags = native_union_visflags(mp);
+ 			sfs->f_type = (short)mp->mnt_vtable->vfc_typenum;
+ 
+ 			/*
+@@ -13525,3 +13544,22 @@
+ 	return mp;
+ }
+ #endif /* XNU_TARGET_OS_OSX */
++
++/*
++ * The statfs flags of mp. The SystemOS volume union-mounted over the root volume's root stands in for the root volume, so it
++ * reports MNT_ROOTFS too (macOS-DroidVM 0023; its mnt_flag is unchanged): fseventsd makes its global disk logger only on the
++ * volume whose f_flags has it, and without one every FSEvents client (syspolicyd, so authd and loginwindow's first-session
++ * cleanup) waited on it for about 100 s.
++ */
++uint32_t
++native_union_visflags(mount_t mp)
++{
++	uint32_t flags = mp->mnt_flag & MNT_VISFLAGMASK;
++	vnode_t covered = mp->mnt_vnodecovered;
++
++	if ((mp->mnt_flag & MNT_UNION) && covered != NULLVP && (covered->v_flag & VROOT) && covered->v_mount != NULL &&
++	    (covered->v_mount->mnt_flag & MNT_ROOTFS)) {
++		flags |= MNT_ROOTFS;
++	}
++	return flags;
++}
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -3748,6 +3748,7 @@
+  *	vfs_update_vfsstat:???
+  *	munge_statfs:EFAULT
+  */
++extern uint32_t native_union_visflags(mount_t mp);   /* vfs_subr.c: MNT_ROOTFS for the root union */
+ #if XNU_TARGET_OS_OSX
+ extern mount_t native_union_identity(mount_t mp);
+ #define NATIVE_UNION_IDENTITY(mp) native_union_identity(mp)
+@@ -3848,7 +3849,7 @@
+ #endif
+ 	sfs->f_owner = vsfs->f_owner;
+ 	sfs->f_type = mp->mnt_vtable->vfc_typenum;
+-	sfs->f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
++	sfs->f_flags = native_union_visflags(mp);
+ 	sfs->f_fssubtype = vsfs->f_fssubtype;
+ 	sfs->f_flags_ext = vfs_getextflags(mp);
+ 	vfs_getfstypename(mp, sfs->f_fstypename, MFSTYPENAMELEN);
+@@ -14737,7 +14738,7 @@
+ 		struct user64_statfs sfs;
+ 		my_size = copy_size = sizeof(sfs);
+ 		bzero(&sfs, my_size);
+-		sfs.f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
++		sfs.f_flags = native_union_visflags(mp);
+ 		sfs.f_type = (short)mp->mnt_vtable->vfc_typenum;
+ 		sfs.f_reserved1 = (short)sfsp->f_fssubtype;
+ 		sfs.f_bsize = (user64_long_t)sfsp->f_bsize;
+@@ -14763,7 +14764,7 @@
+ 		my_size = copy_size = sizeof(sfs);
+ 		bzero(&sfs, my_size);
+ 
+-		sfs.f_flags = mp->mnt_flag & MNT_VISFLAGMASK;
++		sfs.f_flags = native_union_visflags(mp);
+ 		sfs.f_type = (short)mp->mnt_vtable->vfc_typenum;
+ 		sfs.f_reserved1 = (short)sfsp->f_fssubtype;
+ 
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -495,10 +495,16 @@
+  * USER_TIMEBASE_NOSPEC: EL0 has access to non speculative timebase reads (CNTVCTSS_EL0)
+  *
+  */
++
++extern uint32_t ml_timebase_scale_num, ml_timebase_scale_den;   /* the timebase's scale (below, timebase-hz) */
+ 
+ uint8_t
+ user_timebase_type(void)
+ {
++	/* A scaled timebase is not the counter EL0 would read: userspace takes it through the mach_absolute_time trap. */
++	if (ml_timebase_scale_num != ml_timebase_scale_den) {
++		return USER_TIMEBASE_NONE;
++	}
+ #if HAS_ACNTVCT
+ 	return USER_TIMEBASE_NOSPEC_APPLE;
+ #elif HAS_APPLE_GENERIC_TIMER
+@@ -2466,20 +2472,53 @@
+ #endif
+ 
+ /*
++ * The timebase is the architected counter scaled by num/den (pe_identify_machine.c, timebase-hz): 24 MHz over a
++ * 19.2 MHz counter is 5/4. Every kernel read of the counter goes through timebase_from_counter, a decrementer value is converted
++ * back to counter ticks, and userspace takes the timebase through the mach_absolute_time trap (user_timebase_type).
++ */
++uint32_t ml_timebase_scale_num = 1, ml_timebase_scale_den = 1;
++
++static inline bool
++timebase_scaled(void)
++{
++	return ml_timebase_scale_num != ml_timebase_scale_den;
++}
++
++static inline uint64_t
++timebase_from_counter(uint64_t counter)
++{
++	const uint64_t num = ml_timebase_scale_num, den = ml_timebase_scale_den;
++
++	if (__probable(num == den)) {
++		return counter;
++	}
++	return counter / den * num + counter % den * num / den;
++}
++
++/*
+  * Assumes fiq, irq disabled.
+  */
+ void
+ ml_set_decrementer(uint32_t dec_value)
+ {
+ 	cpu_data_t      *cdp = getCpuDatap();
++	uint64_t        counter_value = dec_value;
+ 
+ 	assert(ml_get_interrupts_enabled() == FALSE);
+ 	cdp->cpu_decrementer = dec_value;
+ 
++	if (timebase_scaled()) {
++		/* Counter ticks, rounded up: the timer fires at the deadline or just after it, never before. */
++		counter_value = (counter_value * ml_timebase_scale_den + ml_timebase_scale_num - 1) / ml_timebase_scale_num;
++		if (counter_value > 0x7fffffff) {
++			counter_value = 0x7fffffff;
++		}
++	}
++
+ 	if (cdp->cpu_set_decrementer_func) {
+-		cdp->cpu_set_decrementer_func(dec_value);
++		cdp->cpu_set_decrementer_func((uint32_t)counter_value);
+ 	} else {
+-		__builtin_arm_wsr64(KERNEL_CNTV_TVAL_EL0, (uint64_t)dec_value);
++		__builtin_arm_wsr64(KERNEL_CNTV_TVAL_EL0, counter_value);
+ 	}
+ }
+ 
+@@ -2490,7 +2529,7 @@
+ static inline uint64_t
+ speculative_timebase(void)
+ {
+-	return __builtin_arm_rsr64(KERNEL_CNTVCT_EL0);
++	return timebase_from_counter(__builtin_arm_rsr64(KERNEL_CNTVCT_EL0));
+ }
+ 
+ /**
+@@ -2502,7 +2541,7 @@
+ nonspeculative_timebase(void)
+ {
+ #if   __ARM_ARCH_8_6__
+-	return __builtin_arm_rsr64(KERNEL_CNTVCTSS_EL0);
++	return timebase_from_counter(__builtin_arm_rsr64(KERNEL_CNTVCTSS_EL0));
+ #else
+ 	// ISB required by ARMV7C.b section B8.1.2 & ARMv8 section D6.1.2
+ 	// "Reads of CNT[PV]CT[_EL0] can occur speculatively and out of order relative
+@@ -2619,6 +2658,11 @@
+ 		assert(wide_val == (uint64_t)dec);
+ 	}
+ 
++	/* Back in timebase ticks; a timer already past (TVAL negative) stays as read. */
++	if (timebase_scaled() && (int32_t)dec > 0) {
++		const uint64_t ticks = timebase_from_counter(dec);
++		dec = ticks > 0x7fffffff ? 0x7fffffff : (uint32_t)ticks;
++	}
+ 	return dec;
+ }
+ 
+@@ -2685,7 +2729,8 @@
+ 	 * If the SOC supports it (and it isn't broken), enable
+ 	 * EL0 access to the timebase registers.
+ 	 */
+-	if (user_timebase_type() != USER_TIMEBASE_NONE) {
++	if (user_timebase_type() != USER_TIMEBASE_NONE || timebase_scaled()) {
++		/* Scaled: EL0 keeps the counter (code that reads CNTVCT_EL0 itself sees it unscaled, rather than faulting). */
+ 		cntkctl |= (CNTKCTL_EL1_PL0PCTEN | CNTKCTL_EL1_PL0VCTEN);
+ 	}
+ 
+diff --git a/osfmk/kern/thread_policy.c b/osfmk/kern/thread_policy.c
+--- a/osfmk/kern/thread_policy.c
++++ b/osfmk/kern/thread_policy.c
+@@ -405,6 +405,15 @@
+ 		info = (thread_time_constraint_with_priority_policy_t)policy_info;
+ 
+ 
++		/*
++		 * A computation past the maximum is held to it rather than refused: the board's timer runs at 19.2 MHz,
++		 * where 50 ms is 960000 ticks, and coreaudiod asks for its I/O thread a computation of 1200000 ticks (50 ms
++		 * at Apple's 24 MHz), so every I/O thread it starts stays non-realtime and the HAL's clock never moves.
++		 */
++		if (info->computation > max_rt_quantum && info->constraint >= max_rt_quantum) {
++			info->computation = max_rt_quantum;
++		}
++
+ 		if (info->constraint < info->computation ||
+ 		    info->computation > max_rt_quantum ||
+ 		    info->computation < min_rt_quantum) {
+diff --git a/pexpert/arm/pe_identify_machine.c b/pexpert/arm/pe_identify_machine.c
+--- a/pexpert/arm/pe_identify_machine.c
++++ b/pexpert/arm/pe_identify_machine.c
+@@ -31,6 +31,39 @@
+  *
+  * Sets up platform parameters. Returns:    nothing
+  */
++/*
++ * The timebase userspace is built for, timebase-hz (macOS-DroidVM 0042) (24 MHz, every Apple arm64 SoC's), over an
++ * architected counter that runs at the host's rate (19.2 MHz on Qualcomm SoCs). iOS userspace assumes Apple's rate:
++ * libswift_Concurrency (swift_dispatchEnqueueWithDeadline) converts a ContinuousClock or SuspendingClock deadline to mach ticks as
++ * ns * 3 / 125, so on a 19.2 MHz counter every Task.sleep, debounce and timeout waited until 1.25 times the counter's value, a
++ * quarter of the host's uptime later (Settings' sidebar never took an update: its channel is debounced). The kernel scales every
++ * counter read by target/hardware (machine_routines.c), converts decrementer values back, and reports the target frequency here.
++ */
++extern uint32_t ml_timebase_scale_num, ml_timebase_scale_den;
++static void
++native_virtual_timebase(void)
++{
++	uint32_t target = 0;
++	const uint64_t hardware = gPEClockFrequencyInfo.timebase_frequency_hz;
++
++	if (!PE_parse_boot_argn("timebase-hz", &target, sizeof(target)) || target == 0 || hardware == 0 || target == hardware) {
++		return;
++	}
++	uint64_t a = target, b = hardware;
++	while (b != 0) {
++		const uint64_t r = a % b;
++		a = b;
++		b = r;
++	}
++	/* The scaled read (machine_routines.c) multiplies a remainder below den by num: both stay small. */
++	if (target / a > 0xffff || hardware / a > 0xffff) {
++		return;
++	}
++	ml_timebase_scale_num = (uint32_t)(target / a);
++	ml_timebase_scale_den = (uint32_t)(hardware / a);
++	gPEClockFrequencyInfo.timebase_frequency_hz = target;
++}
++
+ void
+ pe_identify_machine(boot_args * bootArgs)
+ {
+@@ -79,6 +112,7 @@
+ 				gPEClockFrequencyInfo.timebase_frequency_hz = *(uint32_t const *)value;
+ 			}
+ 		}
++		native_virtual_timebase();
+ 		gPEClockFrequencyInfo.dec_clock_rate_hz = gPEClockFrequencyInfo.timebase_frequency_hz;
+ 
+ 		/* Find the bus frequency next. */

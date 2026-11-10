@@ -1,12 +1,13 @@
 The SystemOS union on "/" is one volume to macOS. The owner chain union-mounts the SystemOS volume over the root
 volume, so files under "/" come from two APFS volumes and getfsstat lists two mounts on "/"; macOS CoreServices
 (FileIDTree) aborts on two volumes with one device id or on a device id no mount lists (macOS-DroidVM's
-virt-union-single-dev and virt-union-hide-lower meet the same). On XNU_TARGET_OS_OSX the union is reported as the root
-volume it covers, the identity native-union-statfs-fsid already gives statfs: getfsstat leaves it out, and stat,
-statfs and getattrlist give the root volume's device id and fsid.
+virt-union-single-dev and virt-union-hide-lower meet the same). On XNU_TARGET_OS_OSX the root volume under the union is
+reported as the union, as DroidVM's virt_union_top does: getfsstat leaves the root volume out, and stat, statfs and
+getattrlist give the SystemOS volume's device id and statfs (with MNT_UNION, which libc's opendir needs to merge and
+deduplicate the two layers; reported the other way round, readdir listed the upper layer only, macOS run33).
 --- a/bsd/vfs/vfs_subr.c
 +++ b/bsd/vfs/vfs_subr.c
-@@ -13504,3 +13504,22 @@
+@@ -13504,3 +13504,24 @@
  {
  	return os_atomic_load(&vp->v_ext_flag, relaxed) & VE_APPENDONLY;
  }
@@ -16,15 +17,17 @@ statfs and getattrlist give the root volume's device id and fsid.
 + * The volume macOS sees at "/". The owner chain union-mounts the SystemOS volume over the root volume's "/", so files
 + * there come from two APFS volumes with two device ids, and getfsstat lists two mounts on "/". macOS CoreServices
 + * (FileIDTree) identifies a volume by its device id and aborts on a second volume with the same one or on a device id
-+ * no mount lists. As native-union-statfs-fsid does for statfs, the union is reported as the root volume it covers:
-+ * getfsstat leaves it out and stat, statfs and getattrlist give the root volume's device id and fsid.
++ * no mount lists. As macOS-DroidVM's virt_union_top does, the root volume under the union is reported as the union:
++ * getfsstat leaves the root volume out and stat, statfs and getattrlist give the SystemOS volume's device id and statfs,
++ * which keeps MNT_UNION, so libc's opendir reads a directory of both layers whole and drops the duplicate names.
 + */
 +mount_t
 +native_union_identity(mount_t mp)
 +{
-+	if (mp != NULL && (mp->mnt_flag & MNT_UNION) && mp->mnt_vnodecovered != NULLVP &&
-+	    (mp->mnt_vnodecovered->v_flag & VROOT) && (mp->mnt_vnodecovered->v_mount->mnt_flag & MNT_ROOTFS)) {
-+		return mp->mnt_vnodecovered->v_mount;
++	mount_t top = rootvnode != NULLVP ? rootvnode->v_mount : NULL;
++	if (mp != NULL && top != NULL && top != mp && (top->mnt_flag & MNT_UNION) && top->mnt_vnodecovered != NULLVP &&
++	    top->mnt_vnodecovered->v_mount == mp && (mp->mnt_flag & MNT_ROOTFS)) {
++		return top;
 +	}
 +	return mp;
 +}
@@ -85,7 +88,7 @@ statfs and getattrlist give the root volume's device id and fsid.
  	int error, my_size;
  	vfs_context_t ctx = vfs_context_current();
  
-+	/* The SystemOS union on "/" is the root volume (native_union_identity). */
++	/* The root volume under the SystemOS union is the union (native_union_identity). */
 +	if (NATIVE_UNION_IDENTITY(mp) != mp) {
 +		return VFS_RETURNED;
 +	}
@@ -96,7 +99,7 @@ statfs and getattrlist give the root volume's device id and fsid.
  	struct statfs64 sfs;
  	int error;
  
-+	/* The SystemOS union on "/" is the root volume (native_union_identity). */
++	/* The root volume under the SystemOS union is the union (native_union_identity). */
 +	if (NATIVE_UNION_IDENTITY(mp) != mp) {
 +		return VFS_RETURNED;
 +	}
@@ -121,7 +124,7 @@ statfs and getattrlist give the root volume's device id and fsid.
  		sb->st_ino = (ino_t)va.va_fileid;
 +	}
 +#if XNU_TARGET_OS_OSX
-+	/* A file of the SystemOS union on "/" is on the root volume (native_union_identity). */
++	/* A file of the root volume under the union is on the union (native_union_identity). */
 +	if (native_union_identity(vp->v_mount) != vp->v_mount) {
 +		dev_t root_dev = native_union_identity(vp->v_mount)->mnt_vfsstat.f_fsid.val[0];
 +		if (isstat64 != 0) {
@@ -153,7 +156,7 @@ statfs and getattrlist give the root volume's device id and fsid.
  			abp->actual.commonattr |= ATTR_CMN_DEVID;
 +#if XNU_TARGET_OS_OSX
 +		} else if (vp && native_union_identity(vp->v_mount) != vp->v_mount) {
-+			/* A file of the SystemOS union on "/" is on the root volume (native_union_identity). */
++			/* A file of the root volume under the union is on the union (native_union_identity). */
 +			ATTR_PACK4((*abp), native_union_identity(vp->v_mount)->mnt_vfsstat.f_fsid.val[0]);
 +			abp->actual.commonattr |= ATTR_CMN_DEVID;
 +#endif

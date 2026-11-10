@@ -1,0 +1,47 @@
+/System/Volumes/Hardware on the owner Data volume.
+
+A Mac mounts the Hardware role volume there and mobileactivationd keeps its records in it; the owner layout has no such volume,
+so mobileactivationd could not create /System/Volumes/Hardware/MobileActivation and restarted every 10 s (sheng macOS run28).
+The mount point becomes a firmlink to /private/var/db/hardware-volume of the owner Data volume.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -8413,6 +8413,29 @@
+ }
+ #if XNU_TARGET_OS_OSX
+ #include <sys/xattr.h>   /* XATTR_NOSECURITY */
++/*
++ * /System/Volumes/Hardware: a Mac mounts the root container's Hardware role volume there (apfs_boot_util, mount-phase-1), and
++ * mobileactivationd and the factory data keep their records in it (MobileActivation, FactoryData). The owner layout has no such
++ * volume, so mobileactivationd failed to create its directory and was restarted every 10 seconds. The mount point is a directory of
++ * the read-only system volume; it is made a firmlink to /private/var/db/hardware-volume of the owner Data volume, as the system's
++ * own firmlinks reach Data, so the records persist with Data. Never fatal; the result is recorded.
++ */
++volatile int native_owner_hardware_volume_status = -1;
++static int native_gpu_addon_parents(proc_t p, user_addr_t scratch, const char *path);
++static void
++native_owner_macos_hardware_volume(proc_t p, user_addr_t scratch)
++{
++	vnode_t source = NULLVP, target = NULLVP;
++	vfs_context_t ctx = vfs_context_current();
++	int error = native_gpu_addon_parents(p, scratch, "/private/var/db/hardware-volume/.keep");
++	if (!error) error = vnode_lookup("/System/Volumes/Hardware", VNODE_LOOKUP_NOFOLLOW, &source, ctx);
++	if (!error) error = vnode_lookup("/private/var/db/hardware-volume", VNODE_LOOKUP_NOFOLLOW, &target, ctx);
++	if (!error) error = vnode_setasfirmlink(source, target);
++	if (target) vnode_put(target);
++	if (source) vnode_put(source);
++	native_owner_hardware_volume_status = error;
++	printf("owner Data: /System/Volumes/Hardware -> /private/var/db/hardware-volume: %d\n", error);
++}
+ /*
+  * macOS: +[IOGPUMetalDevice registerAcceleratorService:] loads <MetalPluginName>.bundle from the first of /Library/GPUBundles and
+  * /System/Library/Extensions that libsystem_sandbox's gpu_bundle_find_trusted accepts: rootless_check_trusted_class(bundle,
+@@ -9528,6 +9551,7 @@
+ 		extern volatile int native_owner_rosv_state;
+ 		native_owner_rosv_state = 2;
+ 	}
++	if (!error) native_owner_macos_hardware_volume(p, scratch);
+ 	if (!error) native_owner_macos_cryptex_view(p, scratch);
+ 	if (!error) native_owner_macos_gpu_addon(p, scratch);
+ 	if (!error) native_owner_macos_boot_shims(p, scratch);

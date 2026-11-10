@@ -1,0 +1,82 @@
+Authenticated opens of files on the owner-verified root.
+
+kernelmanagerd realizes driver extensions with openat_authenticated_np, which asks APFS to prove the file comes from a sealed
+volume; APFS refuses (EAUTH) for the owner-verified root, which has no Apple seal, so no system dext could start and a service
+matched to one (IOUserResources for IOUserDockChannelSerial) stayed busy, IOKit never went quiet (sheng macOS run29). Every
+block of the read-only root is checked against the owner-signed manifest, the guarantee the seal gives: after EAUTH the file
+is opened again without the check and kept only if the opened vnode is on that root mount.
+
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -5384,7 +5384,53 @@
+ 	    NULL, NULL, retval, fd, authfd);
+ 
+ 	return error;
++}
++
++#if XNU_TARGET_OS_OSX   /* owner root globals: bsd_init (XNU_OWNER_ROOT_TRUST is passed to bsd_init.o only) */
++/*
++ * An authenticated open (openat_authenticated_np, kernelmanagerd realizing a driver extension, among others) asks the file system to
++ * prove the file comes from a sealed volume (FSIOC_AUTH_FS); APFS answers EAUTH for the owner-verified root, which has no Apple seal.
++ * Every block of that read-only volume is checked against the owner-signed manifest before it is used (native_verified_block_root_authorized,
++ * bsd_init), the same guarantee the seal gives. So when the original check refuses, the file is opened again without it and kept only
++ * if the vnode that was opened is on that root mount; anything else is closed and keeps EAUTH. The check is on the opened vnode, so a
++ * path changing between two lookups cannot pass a file from elsewhere.
++ */
++volatile int native_owner_root_authenticated_opens = 0;
++static int
++native_owner_root_authenticated_open(struct openat_dprotected_np_args *uap, int32_t *retval)
++{
++	extern volatile int native_owner_root_accepted;
++	extern volatile dev_t native_owner_root_mount_device;
++	if (!native_owner_root_accepted || native_owner_root_mount_device == NODEV) {
++		return EAUTH;
++	}
++	int fd = -1;
++	int error = openat_dprotected_internal(vfs_context_current(), uap->path, uap->flags, uap->mode,
++	    uap->class, uap->dpflags & ~O_DP_AUTHENTICATE, uap->fd, uap->authfd, UIO_USERSPACE, &fd);
++	if (error) {
++		return EAUTH;
++	}
++	bool owner = false;
++	vnode_t vp = NULLVP;
++	if (file_vnode(fd, &vp) == 0) {
++		mount_t mp = vnode_mount(vp);
++		vnode_t devvp = mp ? vfs_devvp(mp) : NULLVP;
++		owner = devvp && (vfs_flags(mp) & MNT_RDONLY) && vnode_specrdev(devvp) == native_owner_root_mount_device;
++		if (devvp) {
++			vnode_put(devvp);
++		}
++		file_drop(fd);
++	}
++	if (!owner) {
++		proc_t p = current_proc();
++		close_nocancel(p, kauth_cred_get(), fd);
++		return EAUTH;
++	}
++	native_owner_root_authenticated_opens++;
++	*retval = fd;
++	return 0;
+ }
++#endif
+ 
+ int
+ openat_dprotected_np(__unused proc_t p, struct openat_dprotected_np_args *uap, int32_t *retval)
+@@ -5393,8 +5439,14 @@
+ 		return EINVAL;
+ 	}
+ 
+-	return openat_dprotected_internal(vfs_context_current(), uap->path, uap->flags, uap->mode,
+-	           uap->class, uap->dpflags, uap->fd, uap->authfd, UIO_USERSPACE, retval);
++	int error = openat_dprotected_internal(vfs_context_current(), uap->path, uap->flags, uap->mode,
++	    uap->class, uap->dpflags, uap->fd, uap->authfd, UIO_USERSPACE, retval);
++#if XNU_TARGET_OS_OSX   /* owner root globals: bsd_init (XNU_OWNER_ROOT_TRUST is passed to bsd_init.o only) */
++	if (error == EAUTH && (uap->dpflags & O_DP_AUTHENTICATE)) {
++		error = native_owner_root_authenticated_open(uap, retval);
++	}
++#endif
++	return error;
+ }
+ 
+ int
