@@ -1,0 +1,248 @@
+Counters and a sysctl for what code signatures with 16 KiB hash pages cost on 4 KiB pages.
+
+A code directory with 16 KiB hash pages is authenticated when its signature is added (cs_native4k_prepare,
+native-4k-signature-hash-cache.patch): the image is read up to its code limit, every 16 KiB block is hashed against the
+code directory and every 4 KiB page of it again, and the derived hashes stay wired for as long as the vnode keeps the
+blob. The thread that adds the signature waits for all of it: the exec of a main binary, dyld for a library or bundle,
+the first thread of launchd for the files of the dyld shared cache.
+
+This changes nothing that is read, accepted or refused, and adds:
+- by class (exec; library; large, above the uncached size: the shared cache files and any other image that large):
+  blobs, bytes and the time of the prepare;
+- the wired bytes of derived hashes held now and at most, the blobs released and refused, and the longest single
+  prepare with its file name;
+- the 16 KiB blocks that had a page validated at least once (one bit per block in a map the blob owns, set where
+  cs_validate_hash serves a derived hash): against the blocks hashed at load, this is what authenticating a block at
+  its first page validation would have read;
+- `sysctl vm.cs_native4k_stats`, one line of text, and cs_native4k_stats_text() for the board log.
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -105,6 +105,8 @@
+ static kern_return_t ubc_cs_convert_to_multilevel_hash(struct cs_blob *blob);
+ #if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
+ static int cs_native4k_prepare(vnode_t vp, struct cs_blob *blob);
++static int cs_native4k_prepare_measured(vnode_t vp, struct cs_blob *blob, bool image_activation);
++static void cs_native4k_forget(struct cs_blob *blob);
+ #endif
+ 
+ ZONE_DEFINE_TYPE(ubc_info_zone, "ubc_info zone", struct ubc_info,
+@@ -3962,6 +3964,9 @@
+ cs_blob_cleanup(struct cs_blob *blob)
+ {
+ 	if (blob->csb_native4k_hashes != NULL) {
++#if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
++		cs_native4k_forget(blob);
++#endif
+ 		kmem_free(kernel_map, (vm_offset_t)blob->csb_native4k_hashes,
+ 		    blob->csb_native4k_hashes_size);
+ 		blob->csb_native4k_hashes = NULL;
+@@ -4983,7 +4988,7 @@
+ 
+ #if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
+ 	/* Authenticate before publishing the signed object or taking its locks. */
+-	error = cs_native4k_prepare(vp, &tmp_blob);
++	error = cs_native4k_prepare_measured(vp, &tmp_blob, imgp != NULL);
+ 	if (error != 0) {
+ 		goto out;
+ 	}
+@@ -5994,6 +5999,179 @@
+ 	}
+ 	return error;
+ }
++
++/*
++ * What loading signatures with 16 KiB hash pages costs on this kernel, for sysctl vm.cs_native4k_stats and a board's log.
++ * cs_native4k_prepare reads such an image up to its code limit and hashes it twice when its signature is added, in the
++ * thread that adds it. The classes say who waits: [0] an image activation (exec), [1] a library or bundle whose signature
++ * dyld registers (F_ADDFILESIGS), [2] either kind above CS_NATIVE4K_UNCACHED (the dyld shared cache files and any other
++ * image that large), read uncached and so read again when their pages fault. Each has its blobs, the bytes read and the
++ * ticks spent in the prepare.
++ * cs_native4k_touched counts the original 16 KiB blocks that had a page validated at least once ([1]: those of class 2
++ * blobs): a kernel that authenticated a block when one of its pages is first validated would have read and hashed only
++ * these. The table numbers are the wired bytes of derived hashes held now and at most. Nothing here changes what is read,
++ * accepted or refused.
++ */
++struct cs_native4k_class {
++	uint64_t        blobs;
++	uint64_t        bytes;
++	uint64_t        ticks;
++};
++struct cs_native4k_class cs_native4k_classes[3];
++unsigned long cs_native4k_touched[2];
++unsigned long cs_native4k_table_bytes = 0;
++unsigned long cs_native4k_table_bytes_peak = 0;
++unsigned long cs_native4k_released_blobs = 0;
++unsigned long cs_native4k_refused_blobs = 0;
++/* The longest single prepare: its ticks, bytes and file name, under the lock. */
++static LCK_GRP_DECLARE(cs_native4k_lck_grp, "cs_native4k");
++static LCK_MTX_DECLARE(cs_native4k_longest_lock, &cs_native4k_lck_grp);
++static uint64_t cs_native4k_longest_ticks = 0;
++static uint64_t cs_native4k_longest_bytes = 0;
++static char cs_native4k_longest_name[32];
++
++/* One bit per original 16 KiB block of a blob with csb_native4k_hash_count derived hashes, in 32 bit words. */
++static vm_size_t
++cs_native4k_touched_words(vm_size_t hash_count)
++{
++	return (((hash_count + 3) >> 2) + 31) >> 5;
++}
++
++static int
++cs_native4k_prepare_measured(vnode_t vp, struct cs_blob *blob, bool image_activation)
++{
++	if (blob->csb_hash_pageshift <= PAGE_SHIFT) {
++		return 0;
++	}
++
++	const uint64_t start = mach_absolute_time();
++	const int error = cs_native4k_prepare(vp, blob);
++	const uint64_t ticks = mach_absolute_time() - start;
++
++	if (error != 0 || blob->csb_native4k_hashes == NULL) {
++		os_atomic_inc(&cs_native4k_refused_blobs, relaxed);
++		return error;
++	}
++
++	const uint64_t bytes = ntohl(blob->csb_cd->codeLimit);
++	struct cs_native4k_class *counts =
++	    &cs_native4k_classes[bytes > CS_NATIVE4K_UNCACHED ? 2 : (image_activation ? 0 : 1)];
++	os_atomic_inc(&counts->blobs, relaxed);
++	os_atomic_add(&counts->bytes, bytes, relaxed);
++	os_atomic_add(&counts->ticks, ticks, relaxed);
++
++	const unsigned long table_bytes =
++	    os_atomic_add(&cs_native4k_table_bytes, (unsigned long)blob->csb_native4k_hashes_size, relaxed);
++	if (table_bytes > os_atomic_load(&cs_native4k_table_bytes_peak, relaxed)) {
++		os_atomic_store(&cs_native4k_table_bytes_peak, table_bytes, relaxed);
++	}
++
++	/* Without the map the blob works the same and its blocks are not counted. */
++	blob->csb_native4k_touched = kalloc_data(
++		cs_native4k_touched_words(blob->csb_native4k_hash_count) * sizeof(uint32_t), Z_WAITOK | Z_ZERO);
++
++	if (ticks > os_atomic_load(&cs_native4k_longest_ticks, relaxed)) {
++		const char *name = vnode_getname(vp);
++		lck_mtx_lock(&cs_native4k_longest_lock);
++		if (ticks > cs_native4k_longest_ticks) {
++			os_atomic_store(&cs_native4k_longest_ticks, ticks, relaxed);
++			cs_native4k_longest_bytes = bytes;
++			strlcpy(cs_native4k_longest_name, name != NULL ? name : "?", sizeof(cs_native4k_longest_name));
++		}
++		lck_mtx_unlock(&cs_native4k_longest_lock);
++		if (name != NULL) {
++			vnode_putname(name);
++		}
++	}
++	return 0;
++}
++
++/* The blob's derived hashes are about to be freed: take them out of the count and free its map of touched blocks. */
++static void
++cs_native4k_forget(struct cs_blob *blob)
++{
++	os_atomic_sub(&cs_native4k_table_bytes, (unsigned long)blob->csb_native4k_hashes_size, relaxed);
++	os_atomic_inc(&cs_native4k_released_blobs, relaxed);
++	if (blob->csb_native4k_touched != NULL) {
++		kfree_data(blob->csb_native4k_touched,
++		    cs_native4k_touched_words(blob->csb_native4k_hash_count) * sizeof(uint32_t));
++		blob->csb_native4k_touched = NULL;
++	}
++}
++
++/* A page with this derived hash index is being validated: count its original block the first time. */
++static void
++cs_native4k_touch(const struct cs_blob *blob, vm_size_t index, bool uncached)
++{
++	uint32_t *map = blob->csb_native4k_touched;
++	const vm_size_t block = index >> 2;
++	const uint32_t bit = 1U << (block & 31);
++
++	if (map == NULL || (os_atomic_or_orig(&map[block >> 5], bit, relaxed) & bit) != 0) {
++		return;
++	}
++	os_atomic_inc(&cs_native4k_touched[0], relaxed);
++	if (uncached) {
++		os_atomic_inc(&cs_native4k_touched[1], relaxed);
++	}
++}
++
++/*
++ * The counters as one line: per class blobs/size/ms, then the ms inside the reads and inside the hashing, the 16 KiB
++ * blocks hashed and the ones touched (of those, in class 2 blobs), the page validations served from derived hashes, the
++ * wired KiB of derived hashes now and at most, the blobs released and refused, and the longest prepare.
++ */
++size_t cs_native4k_stats_text(char *text, size_t size);
++size_t
++cs_native4k_stats_text(char *text, size_t size)
++{
++	uint64_t class_ns[3], read_ns, hash_ns, longest_ns = 0, longest_bytes = 0;
++	char longest_name[sizeof(cs_native4k_longest_name)] = "";
++
++	for (unsigned int i = 0; i < 3; i++) {
++		absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_classes[i].ticks, relaxed), &class_ns[i]);
++	}
++	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_read_ticks, relaxed), &read_ns);
++	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_hash_ticks, relaxed), &hash_ns);
++	/* While a prepare is recording itself the line is printed without the longest one; the caller never waits here. */
++	if (lck_mtx_try_lock(&cs_native4k_longest_lock)) {
++		absolutetime_to_nanoseconds(cs_native4k_longest_ticks, &longest_ns);
++		longest_bytes = cs_native4k_longest_bytes;
++		strlcpy(longest_name, cs_native4k_longest_name, sizeof(longest_name));
++		lck_mtx_unlock(&cs_native4k_longest_lock);
++	}
++	return (size_t)scnprintf(text, size,
++	           "exec %llu/%lluK/%llums lib %llu/%lluK/%llums large %llu/%lluM/%llums read %llums hash %llums "
++	           "blocks %lu touched %lu large %lu checks %lu table %luK peak %luK released %lu refused %lu "
++	           "longest %llums %lluK %s",
++	           os_atomic_load(&cs_native4k_classes[0].blobs, relaxed),
++	           os_atomic_load(&cs_native4k_classes[0].bytes, relaxed) >> 10, class_ns[0] / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_classes[1].blobs, relaxed),
++	           os_atomic_load(&cs_native4k_classes[1].bytes, relaxed) >> 10, class_ns[1] / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_classes[2].blobs, relaxed),
++	           os_atomic_load(&cs_native4k_classes[2].bytes, relaxed) >> 20, class_ns[2] / NSEC_PER_MSEC,
++	           read_ns / NSEC_PER_MSEC, hash_ns / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_full_blocks, relaxed),
++	           os_atomic_load(&cs_native4k_touched[0], relaxed), os_atomic_load(&cs_native4k_touched[1], relaxed),
++	           os_atomic_load(&cs_native4k_page_checks, relaxed),
++	           os_atomic_load(&cs_native4k_table_bytes, relaxed) >> 10,
++	           os_atomic_load(&cs_native4k_table_bytes_peak, relaxed) >> 10,
++	           os_atomic_load(&cs_native4k_released_blobs, relaxed),
++	           os_atomic_load(&cs_native4k_refused_blobs, relaxed),
++	           longest_ns / NSEC_PER_MSEC, longest_bytes >> 10, longest_name);
++}
++
++static int
++sysctl_cs_native4k_stats SYSCTL_HANDLER_ARGS
++{
++#pragma unused(oidp, arg1, arg2)
++	char text[512];
++
++	(void)cs_native4k_stats_text(text, sizeof(text));
++	return SYSCTL_OUT(req, text, strlen(text) + 1);
++}
++SYSCTL_PROC(_vm, OID_AUTO, cs_native4k_stats, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
++    0, 0, sysctl_cs_native4k_stats, "A", "Cost of code signatures with 16 KiB hash pages on 4 KiB pages");
+ #endif
+ static boolean_t
+ cs_validate_hash(
+@@ -6082,6 +6260,7 @@
+ 				hash = blob->csb_native4k_hashes + index * hashtype->cs_size;
+ 				native4k_cached = TRUE;
+ 				os_atomic_inc(&cs_native4k_page_checks, relaxed);
++				cs_native4k_touch(blob, index, codeLimit > CS_NATIVE4K_UNCACHED);
+ 			} else
+ #endif
+ 			{
+diff --git a/bsd/sys/ubc_internal.h b/bsd/sys/ubc_internal.h
+--- a/bsd/sys/ubc_internal.h
++++ b/bsd/sys/ubc_internal.h
+@@ -169,6 +169,8 @@
+ 	const uint8_t   *csb_native4k_hashes;
+ 	vm_size_t       csb_native4k_hashes_size;
+ 	vm_size_t       csb_native4k_hash_count;
++	/* Which original 16K blocks had a page validated, one bit each; a measurement, never read to decide anything. */
++	uint32_t        *csb_native4k_touched;
+ };
+ 
+ /*

@@ -132,9 +132,11 @@ def main():
     if not data:
         raise SystemExit(f'{firmware}: empty touch firmware')
     firmware_source = out / 'NvtFirmware.c'
+    # The macOS collection has no room for the image in the kernel's __TEXT or __DATA_CONST; __DATA has room.
+    placement = '__attribute__((section("__DATA,__firmware"))) ' if os.environ.get('UNIXNU_XNU_TARGET') == 'macosx' else ''
     firmware_source.write_text('/* Generated vendor firmware; build output only. */\n#include <stdint.h>\n'
                                f'const uint32_t native_touch_firmware_size = {len(data)};\n'
-                               f'const uint8_t native_touch_firmware[{len(data)}] = {{' +
+                               f'{placement}const uint8_t native_touch_firmware[{len(data)}] = {{' +
                                ','.join(str(value) for value in data) + '};\n')
     components = {
         'ShengUfs': [(device / 'drivers/ShengUfs/NativeUfs.cpp', [

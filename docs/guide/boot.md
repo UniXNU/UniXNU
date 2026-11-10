@@ -157,14 +157,9 @@ If firmware stalls before the menu, capture the last output, reset into the boot
 
 ## macOS
 
-A macOS port needs an OS profile matching its XNU version, kernelcache, prelink
-roots, private driver ABIs, trust caches and root layout. Qualify those inputs
-with [kernel preparation](/guide/build-kernel) and [prelink](/concepts/prelink).
-The supplied profiles describe their named iOS or iPadOS builds.
-
-Select the completed OS profile in `board.os_profile`, inspect `status --json`,
-then repeat the build and bring-up sequence. Record macOS results against that
-profile and the target device.
+macOS uses the `macos-27.3-26C5035r` profile. Pass `--os macos-27` to every
+build command; the image boots with the same commands as above.
+[macOS profile](/porting/macos) lists its inputs, Data seed and checkpoints.
 
 ## Next steps
 

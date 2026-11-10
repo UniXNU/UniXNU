@@ -1,0 +1,52 @@
+The macOS options of the bcm2837 machine. macOS userspace and the macOS kexts need the
+parts of Apple's MASTER.arm64.MacOSX that the iPhoneOS-based machine file leaves out: System V
+IPC, sendfile, disk quotas (the HFS quota KPIs), /.vol paths, setuid on mounts, the external
+resolver, searchfs, firmlinks and file leases, mount by role (Data, VM, Preboot and Recovery), AppleDouble files, nullfs, the commpage preemption-free zone that macOS
+libplatform calls for OSAtomicFifo, audit, CSR with its configuration from the device tree,
+supplemental signatures and a second static trust cache. The rest of the machine file, the
+memory and code signing configuration proven on this board, stays as it is. Only the macOS
+profile applies this patch; iPadOS reads the machine file unchanged.
+diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
+--- a/config/MASTER.arm64.bcm2837
++++ b/config/MASTER.arm64.bcm2837
+@@ -24,11 +24,11 @@
+ #  BSD_EXTRAS_BASE = [ ]
+ #  BSD_EXTRAS_DEV = [ config_coredump config_ucoredump ]
+ #  BSD_EXTRAS_DEBUG = [ config_coredump config_ucoredump ]
+-#  BSD_BASE =       [ mach_bsd psynch config_proc_uuid_policy config_personas config_imageboot config_imageboot_img4 BSD_EXTRAS_BASE ]
++#  BSD_BASE =       [ mach_bsd sysv_sem sysv_msg sysv_shm psynch config_proc_uuid_policy config_personas config_imageboot config_imageboot_img4 BSD_EXTRAS_BASE ]
+ #  BSD_RELEASE =    [ BSD_BASE no_printf_str no_kprintf_str secure_kernel config_imgsrc_access ]
+ #  BSD_DEV =        [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEV ]
+ #  BSD_DEBUG =      [ BSD_BASE config_netboot config_imgsrc_access pgo config_vnguard rosetta BSD_EXTRAS_DEBUG ]
+-#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs]
++#  FILESYS_BASE =   [ devfs fifo fs_compression config_protect config_mnt_rootsnap config_triggers config_fse routefs namedstreams config_dataless_files bindfs quota config_volfs config_mnt_suid config_ext_resolver config_searchfs config_firmlinks config_file_leases config_rosv_startup config_mount_vm config_mount_prebootrecovery config_appledouble nullfs ]
+ #  FILESYS_RELEASE= [ FILESYS_BASE ]
+ #  FILESYS_DEV =    [ FILESYS_BASE fdesc config_union_mounts ]
+ #  FILESYS_DEBUG =  [ FILESYS_BASE fdesc config_union_mounts ]
+@@ -36,7 +36,7 @@
+ #  SKYWALK_RELEASE = [ SKYWALK_BASE ]
+ #  SKYWALK_DEV =    [ SKYWALK_BASE ]
+ #  SKYWALK_DEBUG =  [ SKYWALK_BASE ]
+-#  NETWORKING =     [ inet tcpdrop_synfin bpfilter if_bridge traffic_mgt dummynet ah_all_crypto if_fake if_redirect vlan ]
++#  NETWORKING =     [ inet tcpdrop_synfin bpfilter if_bridge traffic_mgt dummynet sendfile ah_all_crypto if_fake if_redirect vlan ]
+ #  NETWORKING_RELEASE = [ NETWORKING ]
+ #  NETWORKING_DEV = [ NETWORKING_RELEASE packet_mangler if_headless kctl_test ]
+ #  NETWORKING_DEBUG = [ NETWORKING_DEV ]
+@@ -69,7 +69,7 @@
+ #else
+ #  PARAVIRT_BASE =  [ ]
+ #endif
+-#  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_library_validation config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats phys_write_acct config_service_port_info PARAVIRT_BASE ]
++#  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_library_validation config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats config_arm_pfz phys_write_acct config_service_port_info PARAVIRT_BASE ]
+ #  MACH_RELEASE =   [ MACH_BASE config_skip_precise_user_kernel_time debugger_for_zone_info ]
+ #  MACH_DEV =       [ MACH_BASE config_io_accounting importance_trace config_task_suspend_stats ]
+ #  MACH_DEBUG =     [ MACH_BASE config_io_accounting importance_trace importance_debug config_task_suspend_stats ]
+@@ -92,7 +92,7 @@
+ #  VM_DEV =         [ VM_BASE dynamic_codesigning ubsan_minimal VM_EXTRA_DEV ]
+ #  VM_DEBUG =       [ VM_BASE dynamic_codesigning ubsan_minimal VM_EXTRA_DEV ]
+ #  VM_KASAN =       [ VM_BASE dynamic_codesigning config_kasan config_ubsan config_kcov config_ksancov kernel_tagging kernel_tbi]
+-#  SECURITY_BASE =    [ config_macf kernel_integrity config_secure_bsd_root reslide_shared_cache ]
++#  SECURITY_BASE =    [ config_macf config_audit kernel_integrity config_csr config_csr_from_dt config_secure_bsd_root config_supplemental_signatures second_static_trust_cache reslide_shared_cache ]
+ #  SECURITY_RELEASE = [ SECURITY_BASE ]
+ #  SECURITY_DEV =     [ SECURITY_BASE config_setuid config_kas_info ]
+ #  SECURITY_DEBUG =   [ SECURITY_BASE config_setuid config_kas_info ]

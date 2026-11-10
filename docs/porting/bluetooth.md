@@ -106,7 +106,7 @@ The adapter is locked to one `bluetoothd` hash. For another OS build, follow
 [native-ios27.md](https://github.com/UniXNU/QcaBluetooth/blob/22ff97f93416452335bb61badb14c762da653487/native-ios27.md)
 and locate its patch sites again.
 
-Pairing keys need the keychain, which needs [AppleKeyStoreState](/drivers/apple-key-store-state).
+Pairing keys need the keychain, which needs [AppleKeyStoreState](/porting/platform#block-and-os-services).
 The board returns `/chosen/unique-chip-id` through `native_aks_device_id`.
 
 ## 6. Build and verify
@@ -119,7 +119,7 @@ python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
-From the UniXNU checkout, with `sheng-bluetooth=1` and `log-bluetooth=2` in the board's boot
+From the UniXNU checkout, with `bluetooth=1` and `log-bluetooth=2` in the board's boot
 arguments:
 
 ```sh

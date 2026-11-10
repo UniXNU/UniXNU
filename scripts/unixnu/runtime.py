@@ -48,6 +48,12 @@ def prepare(ctx, kernel_build=False):
         raise Error('--init-data cannot replace --data-ramdisk; use one first-install seed or reuse the original')
     if init and not kernel_build:
         raise Error('--init-data needs a kernel build to bind its new Data volume UUID')
+    seed_tool = spec.get('data_seed_tool')
+    if not seed.is_file() and seed_tool:
+        # This seed keeps file owners, which only root can write.
+        raise Error(f'No Data seed. Create the first-install seed as root, then build again:\n'
+                    f'  sudo python3 {ctx.tree / seed_tool} {Ipsw(ctx).disk_image("OS")} {seed} --gib {spec["data_gib"]}'
+                    + (' --skip-setup' if spec.get('skip_setup') else ''))
     if not seed.is_file() and not init:
         raise Error('No preserved Data seed. Pass --data-ramdisk FILE for an existing installation, '
                     'or --init-data for a FIRST installation; a missing cache never regenerates Data automatically')
@@ -59,15 +65,18 @@ def prepare(ctx, kernel_build=False):
     owner = getattr(args, 'owner_trust_cache', None)
     trust = owner or getattr(args, 'trust_cache', None)
     addon = getattr(args, 'gpu_addon', None)
+    want_addon = spec.get('gpu_addon', True)
+    if addon and not want_addon:
+        raise Error('this OS profile builds no GPU addon ([payload.runtime] gpu_addon = false)')
     for name, path in [('Data seed', args.data_ramdisk), ('trust bundle', trust), ('GPU addon', addon)]:
         if path and not Path(path).expanduser().is_file():
             raise Error(f'{name} not found: {path}')
     # Preserve explicit inputs. A source-built addon must be paired with newly
     # collected CDHashes, so an explicit trust bundle alone is not sufficient.
-    if trust and not addon:
+    if trust and not addon and want_addon:
         raise Error('Pass both --gpu-addon and its --owner-trust-cache, or omit both to build them from source')
     request = dict(spec, tree=str(ctx.tree), device=str(ctx.device), output=str(out),
-                   data_ramdisk=str(seed), init_data=init,
+                   data_ramdisk=str(seed), init_data=init, gpu_addon_enabled=want_addon,
                    gpu_addon=str(Path(addon).expanduser().resolve()) if addon else None,
                    trust_cache=str(Path(trust).expanduser().resolve()) if trust else None)
     if spec.get('appsync'):
@@ -78,9 +87,9 @@ def prepare(ctx, kernel_build=False):
         if bluetooth.path is None:
             raise Error('QcaBluetooth source missing; run unixnu fetch')
         request['bluetooth_component'] = str(bluetooth.path.resolve())
-    if not seed.is_file() or not trust or not addon or spec.get('wifi_tool') or spec.get('bluetooth_tool') or spec.get('appsync'):
+    if not seed.is_file() or not trust or (want_addon and not addon) or spec.get('wifi_tool') or spec.get('bluetooth_tool') or spec.get('appsync'):
         source = Ipsw(ctx)
-        if not seed.is_file() or not addon or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool') or spec.get('appsync'):
+        if not seed.is_file() or (want_addon and not addon) or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool') or spec.get('appsync'):
             request['os_image'] = str(source.disk_image('OS'))
         if not trust:
             request['trust_modules'] = [str(source.extract(name)) for name in spec['trust_components']]
@@ -108,13 +117,13 @@ def prepare(ctx, kernel_build=False):
             raise Error('runtime Data requires exactly one CONFIG_XNU_OWNER_DATA_VOLUME_UUID')
         ctx.config_path.write_text(text)
         ctx.need_config()
-    args.data_ramdisk, args.gpu_addon = str(seed), str(addon)
+    args.data_ramdisk, args.gpu_addon = str(seed), (str(addon) if addon else None)
     if owner:
         args.owner_trust_cache = str(trust)
     else:
         args.trust_cache = str(trust)
     inputs = {name: {'path': str(path), 'sha256': sha256_file(Path(path))}
-              for name, path in [('data_ramdisk', seed), ('trust_cache', trust), ('gpu_addon', addon)]}
+              for name, path in [('data_ramdisk', seed), ('trust_cache', trust), ('gpu_addon', addon)] if path}
     (out / 'inputs.json').write_text(json.dumps(dict(inputs=inputs, data_volume_uuid=identity), indent=2) + '\n')
     log(f'runtime: Data UUID {identity}; preserved seed sha256 {inputs["data_ramdisk"]["sha256"]}')
     ctx._runtime_prepared = True

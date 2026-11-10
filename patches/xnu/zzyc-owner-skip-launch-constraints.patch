@@ -23,7 +23,7 @@ index b64da95..c548aa1 100644
  mac_proc_check_launch_constraints(proc_t curp, struct image_params *imgp, os_reason_t *reasonp)
  {
 +	uint32_t skip = 0;
-+	if (PE_parse_boot_argn("sheng-no-lc", &skip, sizeof(skip)) && skip != 0) {
++	if (PE_parse_boot_argn("no-lc", &skip, sizeof(skip)) && skip != 0) {
 +		return 0;
 +	}
  	char *fatal_failure_desc = NULL;

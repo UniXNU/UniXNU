@@ -28,6 +28,8 @@ cd UniXNU
 
 `status` reports the effective profiles, revisions, patch order and output directory. `-D` is remembered in
 `out/state.json`. Run subsequent commands from the main UniXNU checkout.
+`--os VERSION` selects another OS profile for one command. A macOS build passes
+`--os macos-27` to every command and follows [macOS profile](/porting/macos).
 
 **Expected result:** the intended device/configuration and resolved source paths.
 
@@ -205,6 +207,7 @@ The Linux path uses the same selected profiles, archive recipes and prelink chec
 | Option | Meaning |
 | --- | --- |
 | `-D DIR` | Device repository. Remembered after the first use. |
+| `--os VERSION` | OS profile for this run: `17`, `26`, `27`, `macos-27` or a `profiles/os` directory name. Default `board.os_profile`. |
 | `--out DIR` | Output root. Default `out/` in this repository. |
 | `-j N` | Parallel jobs. Default is `JOBS` or the CPU count. |
 | `--target DEBUG\|RELEASE` | EDK II build target. Default `DEBUG`. |
@@ -297,6 +300,14 @@ The kernel command line comes from `[payload] kernel_args`. An extra `--kernel-a
 `--owner-trust-cache` supplies an owner-signed bundle with the original caches and extra modules. It replaces `--trust-cache` and skips `[payload] trust_cache_sha256`.
 
 `--skip-setup` marks Setup as done in a copy of the Data seed supplied with `--data-ramdisk`.
+
+A macOS profile (`--os macos-27`) makes its Data seed from the system volume's
+`/System/Library/Templates/Data` with `scripts/make-macos-data-seed.py`. The template keeps its file
+owners, so the script runs as root. Files below `private/`, `Users/`, `Library/Preferences/` and
+`Library/Keychains/` are copied; every other template file becomes a symbolic link to its copy in the system
+volume's template, as macOS does for the paths of `Data.symlink-patterns`, so the seed fits the payload.
+Without a seed the build stops and prints the `sudo` command, with the output path `runtime/data.dbr`. Keep that seed for later builds. The kernel mounts it at
+`/System/Volumes/Data` and sets the firmlinks of the system volume's `/usr/share/firmlinks`.
 
 ### userdata
 

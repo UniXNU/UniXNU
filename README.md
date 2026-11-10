@@ -44,6 +44,8 @@ Clone with `--recurse-submodules`.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+The macOS 27 profile follows [macOS-DroidVM](https://github.com/Droid-VM/macOS-DroidVM), the DroidVM port booted with UniXNU, for its kernel patches (the union root volume, code signature pages on a 4K kernel, the 24 MHz timebase, the realtime and mmap fixes, exec denial) and for the account setup in the Data seed.
+
 ## License
 
 BSD-2-Clause-Patent. See [LICENSE](LICENSE).

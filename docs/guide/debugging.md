@@ -147,7 +147,7 @@ The page uses 48 rows of 120 columns. On a panel at least 2160 by 1400 the scale
 Label the image so a photograph identifies the build:
 
 ```
-sheng-build-tag=ks-001
+build-tag=ks-001
 ```
 
 The title bar then starts with `[ks-001]`.
@@ -307,7 +307,7 @@ The trace rotates one page every 8 seconds. Take three or four photographs sever
 
 The diagnostic page is built to be photographed. Use this sequence:
 
-1. Set `sheng-build-tag` to a short image label.
+1. Set `build-tag` to a short image label.
 2. Enable `boot-progress=1` for a frozen page, or `boot-progress=2` for a live page.
 3. Set `boot-diag-resume` when userland blanks the panel.
 4. Place the device on a stand. Keep the camera parallel to the panel.
@@ -355,10 +355,10 @@ python3 scripts/qemu-entry/gdb-stop.py --help
 | `kextlog=0xfff` | Kext logging |
 | `boot-progress=1` | Diagnostic page with a 30 second stall freeze |
 | `boot-progress=2` | Diagnostic page with continuous operation |
-| `sheng-build-tag=<tag>` | Image label in the title bar |
+| `build-tag=<tag>` | Image label in the title bar |
 | `boot-diag-resume=<seconds>` | Take the panel back after the OS stops scanning out |
-| `sheng-platform-stage=<n>` | Stop the platform expert at a stage |
-| `sheng-touch=<n>` | Touch probe stage |
+| `platform-stage=<n>` | Stop the platform expert at a stage |
+| `touch=<n>` | Touch probe stage |
 | `offline-legacy-phase=<n>` | Display probe stage |
 | `-no_slto_panic` | Suppress the SLTO panic |
 | `cs_debug=<mask>` | Code signing output |

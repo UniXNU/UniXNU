@@ -29,7 +29,8 @@ def paths(ctx):
 
 def check_args(arguments):
     for value in arguments:
-        if not re.fullmatch(r'[A-Za-z0-9_.\-]+(=[A-Za-z0-9_.,/\-]+)?', value):
+        # A value may hold ':' and '=' (exec-env=NAME:VAR=VALUE); no space, quote or shell character.
+        if not re.fullmatch(r'[A-Za-z0-9_.\-]+(=[A-Za-z0-9_.,/\-:=]+)?', value):
             raise Error(f'unsupported kernel argument: {value}')
     line = ' '.join(arguments)
     # DarwinBoot copies the command line into a 1024-byte buffer and refuses a longer one.
@@ -66,8 +67,8 @@ def check_native_root(kernel, arguments, vmm_present=False):
             values.setdefault(key, []).append(value)
     if '1' not in values.get('native-ufs-root', []):
         return
-    if values.get('sheng-pmgr') != ['2']:
-        raise Error('native UFS root boot needs exactly one sheng-pmgr=2; the unchanged target AMFI otherwise panics with No PMGR')
+    if values.get('pmgr') != ['2']:
+        raise Error('native UFS root boot needs exactly one pmgr=2; the unchanged target AMFI otherwise panics with No PMGR')
     symbols = run([tool('llvm-nm', 'brew install llvm'), '--defined-only', kernel], capture=True)
     if not any(line.split()[-1:] == ['_sheng_pmgr_run'] for line in symbols.splitlines()):
         raise Error('the native UFS root kernel lacks the linked sheng PMGR integration')

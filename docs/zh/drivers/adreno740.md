@@ -19,7 +19,7 @@ Metal → AdrenoMetal → metal2vulkan → Turnip → Darwin KMD → Adreno740 �
 
 每个环独立记录已排队的上下文和页表。CP 在 `CP_SMMU_TABLE_UPDATE` 后记录实际执行的页表，抢占恢复该快照。切环保存 GMEM，执行性能计数器 SRAM postamble，并保持 GMU keepalive，直到目标环 WPTR 恢复。读指针使用各环自己的 shadow。fence 历史表绕回后，未完成任务仍保留正确的环归属。
 
-参考实现用 `sheng-gpu-preempt=2` 启用模式 2。模式 1 仅将 low/background 请求送往 ring 1，模式 0 使用单环。由 CPU 切换页表时也仅使用 ring 0。切环超时为 1 秒。切换失败后停止抢占，恢复流程在 ring 0 重放待执行任务，诊断记录保留失败信息。
+参考实现用 `gpu-preempt=2` 启用模式 2。模式 1 仅将 low/background 请求送往 ring 1，模式 0 使用单环。由 CPU 切换页表时也仅使用 ring 0。切环超时为 1 秒。切换失败后停止抢占，恢复流程在 ring 0 重放待执行任务，诊断记录保留失败信息。
 
 ## 构建和验证
 

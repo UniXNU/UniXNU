@@ -28,4 +28,4 @@ Shared code lives in UniXNU and its component repositories. SoC repositories add
 
 ## Next
 
-Follow [Port a device](/porting/steps) in order.
+Follow [Port a device](/porting/steps) in order. For macOS, read [macOS profile](/porting/macos) beside it.

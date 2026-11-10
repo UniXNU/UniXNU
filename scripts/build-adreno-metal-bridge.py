@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build the native Metal bridge (drivers/AdrenoMetal/bridge/NativeMetalBridge.rs): the pinned metal2vulkan runtime behind a C ABI, as a static library.
 
---target ios (default) cross-builds for arm64-apple-ios17.0, --target ios27 for arm64e-apple-ios27.0 (nightly, std built from source), --target host for the macOS host simulation. The runtime's own example library
+--target ios (default) cross-builds for arm64-apple-ios17.0, --target ios27 for arm64e-apple-ios27.0 and --target macos27 for arm64e-apple-macos27.0 (nightly, std built from source), --target host for the macOS host simulation. The runtime's own example library
 (runtime_examples.ll) and its function-constant fixture are assembled to AIR with llvm-as and embedded for the self-tests. Only generated build files hold local paths; nothing here
 is committed. Output: build/adreno-metal-bridge/<target>/libadreno_metal_bridge.a"""
 import argparse
@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PIN = json.loads((ROOT / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())['translator']['commit']
 SOURCE = ROOT / '.cache/gpu-reference/metal2vulkan'
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument('--target', choices=['ios', 'ios27', 'host'], default='ios')
+parser.add_argument('--target', choices=['ios', 'ios27', 'macos27', 'host'], default='ios')
 parser.add_argument('--manifest-only', action='store_true',
                     help='write build/adreno-metal-bridge/Cargo.toml (patched source, fixtures) and stop before cargo, for `cargo fetch`')
 args = parser.parse_args()
@@ -62,7 +62,7 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # The threads that bring command buffers to their handlers run at the user-interactive class and the compile threads at least at
     # the user-initiated class on iOS too, not on macOS alone: on the iPad they ran at the default class and woke up to 50 ms late.
     '0023-quality-of-service-on-ios.patch',
-    # The host's diagnostics switch (SHENG_DIAG, from the boot argument sheng-diag=1): without it the stage ring and the allocation sites
+    # The host's diagnostics switch (SHENG_DIAG, from the boot argument diag=1): without it the stage ring and the allocation sites
     # keep nothing. The stage ring also marks the steps inside a batch's submission (SubmitStep: placed, gathered, vkQueueSubmit, changes).
     '0024-diagnostics-switch-and-submit-steps.patch',
     # Share large indexed constants, read constant GEP offsets, expose Vulkan allocation sizes and name a made function.
@@ -74,7 +74,21 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0029-latency-stage-selection.patch',
     # Spare image blocks have no byte limit (they age, go when a block cannot be made and on memory pressure), and the room keeper takes
     # a spare block before it makes a new one: the limit freed spares the render server made again within seconds, each a fresh wiring.
-    '0030-spare-image-blocks-give-room.patch']]
+    '0030-spare-image-blocks-give-room.patch',
+    # Live blocks by kind and size class and the driver's commitment of lazily allocated ones, for the MK and ML rows.
+    '0031-memory-kinds-by-size.patch',
+    # A cache hit stops refreshing access times after the platform refuses it once.
+    '0032-shader-cache-touch-refused-once.patch',
+    # The room thread's timed spare aging runs inside an exit-guard section.
+    '0033-room-thread-ages-spares-in-a-section.patch',
+    # Parked objects and kept empty blocks go by time, so a discarded volatile resource's block is returned without a later submission.
+    '0034-parked-objects-and-kept-blocks-age-by-time.patch',
+    # A two-plane YCbCr surface texture that is only sampled is made over the surface's planes alone, its converted image only at a
+    # binding that needs one.
+    '0035-ycbcr-surface-textures-over-their-planes.patch',
+    # A read-only system cache layer a device asks for what its own cache directory lacks, read only where every level is owned by a
+    # trusted user and not writable by group or others; and a cache directory whose entries everyone may read, for the process that fills it.
+    '0036-system-shader-cache-layer.patch']]
 
 
 def git_tree(*steps):
@@ -139,14 +153,15 @@ manifest.write_text('\n'.join([
 if args.manifest_only:
     print(manifest)
     raise SystemExit(0)
-triple = {'ios': 'aarch64-apple-ios', 'ios27': 'arm64e-apple-ios', 'host': 'aarch64-apple-darwin'}[args.target]
+triple = {'ios': 'aarch64-apple-ios', 'ios27': 'arm64e-apple-ios', 'macos27': 'arm64e-apple-darwin', 'host': 'aarch64-apple-darwin'}[args.target]
+ARM64E = args.target in ('ios27', 'macos27')
 # arm64e has no prebuilt std: it is built from rust-src (RUSTC_BOOTSTRAP for -Z); the iPadOS 27 processes that load the plugin are arm64e.
-cargo = ['cargo', '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if args.target == 'ios27' else [])
+cargo = ['cargo', '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if ARM64E else [])
 # The translator source the runtime is built from (its pin and recorded patches), which keys the shader cache: shader priming keeps what it
 # finished while this stays the same (PrimeShaders.h).
 runtime_id = hashlib.sha256((PIN + '\n' + states[-1]).encode()).hexdigest()[:32]
-env = dict(os.environ, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='14.0')
-if args.target == 'ios27':
+env = dict(os.environ, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
+if ARM64E:
     env['RUSTC_BOOTSTRAP'] = '1'
 target_dir = ROOT / 'build/m2v-target'
 log = out / ('build-%s.log' % args.target)

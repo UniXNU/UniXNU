@@ -116,3 +116,6 @@ the relevant symbols, call order, data ownership and error handling. Use board
 sources as references and keep device status in device records. Each step states
 what to change and how to observe its result. Use matching source references in
 the English and Chinese editions.
+
+A porting page links other porting pages for adaptation steps. Component pages
+under `drivers/` are reference and are reached from [Technical reference](/reference/).

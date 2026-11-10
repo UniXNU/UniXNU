@@ -15,6 +15,15 @@ AVAILABILITY_TAG=${UNIXNU_AVAILABILITYVERSIONS_TAG:-AvailabilityVersions-141.1}
 # The architecture and OS profiles select the kernel slice and the deployment target.
 XNU_ARCH_STRING=${UNIXNU_XNU_ARCH:-arm64}
 IOS_VERSION=${UNIXNU_IOS_VERSION:-17.0}
+# The OS profile names the userspace the kernel serves: ios (default) or macosx. Both build the same
+# iOS-platform kernel with the same memory layout and link address; macosx defines XNU_TARGET_OS_OSX
+# instead of XNU_TARGET_OS_IOS, which gives IOKit classes the padded vtables and aligned containers
+# that macOS kexts are built against and turns on the macOS paths of the kernel.
+case "${UNIXNU_XNU_TARGET:-ios}" in
+  ios) XNU_TARGET_DEFINE=-DXNU_TARGET_OS_IOS ;;
+  macosx) XNU_TARGET_DEFINE=-DXNU_TARGET_OS_OSX ;;
+  *) echo 'UNIXNU_XNU_TARGET must be ios or macosx' >&2; exit 1 ;;
+esac
 if [ ! -d refer/xnu/.git ]; then
   git clone --depth 1 --branch "$XNU_TAG" https://github.com/apple-oss-distributions/xnu.git refer/xnu
 fi
@@ -425,7 +434,7 @@ if [ "$OWNER_DATA_MOUNT" = 1 ] && [ "$OWNER_BOOT_MANIFEST" != 1 ]; then
   exit 1
 fi
 OWNER_DATA_HEADER=$ROOT/build/xnu/owner-data-volume.h
-python3 - "$OWNER_DATA_HEADER" "$OWNER_DATA_MOUNT" "$NATIVE_RAM_BLOCK" "${XNU_OWNER_DATA_VOLUME_UUID:-}" "${XNU_OWNER_CACHE_VOLUME_UUID:-}" "${XNU_OWNER_ROOT_VOLUME_UUID:-}" "$OWNER_BOOT_MANIFEST" <<'PY_DATA_UUID'
+python3 - "$OWNER_DATA_HEADER" "$OWNER_DATA_MOUNT" "$NATIVE_RAM_BLOCK" "${XNU_OWNER_DATA_VOLUME_UUID:-}" "${XNU_OWNER_CACHE_VOLUME_UUID:-}" "${XNU_OWNER_ROOT_VOLUME_UUID:-}" "$OWNER_BOOT_MANIFEST" "${XNU_OWNER_APP_VOLUME_UUID:-}" <<'PY_DATA_UUID'
 from pathlib import Path
 import sys
 import uuid
@@ -453,14 +462,20 @@ if len(sys.argv) > 6 and sys.argv[6]:
         raise SystemExit('Set XNU_OWNER_ROOT_VOLUME_UUID to the OS volume UUID of the signed policy')
 elif len(sys.argv) > 7 and sys.argv[7] == '1':
     raise SystemExit('The owner boot manifest needs XNU_OWNER_ROOT_VOLUME_UUID (OS profile [root] os_volume_uuid)')
+# The application cryptex volume (macOS: Safari), when the OS profile names one ([root] app_volume_uuid).
+if len(sys.argv) > 8 and sys.argv[8]:
+    try:
+        text += '#define XNU_OWNER_APP_VOLUME_UUID "' + str(uuid.UUID(sys.argv[8])).upper() + '"\n'
+    except ValueError:
+        raise SystemExit('Set XNU_OWNER_APP_VOLUME_UUID to the App volume UUID of the signed policy')
 path.parent.mkdir(parents=True, exist_ok=True)
 if not path.exists() or path.read_text() != text:
     path.write_text(text)
 PY_DATA_UUID
 OWNER_DATA_STAMP=$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/.owner-data-mount-mode
-if [ "$(cat "$OWNER_DATA_STAMP" 2>/dev/null || echo 0)" != "$OWNER_DATA_MOUNT:$NATIVE_RAM_BLOCK:${XNU_OWNER_CACHE_VOLUME_UUID:-}:${XNU_OWNER_ROOT_VOLUME_UUID:-}" ]; then
+if [ "$(cat "$OWNER_DATA_STAMP" 2>/dev/null || echo 0)" != "$OWNER_DATA_MOUNT:$NATIVE_RAM_BLOCK:${XNU_OWNER_CACHE_VOLUME_UUID:-}:${XNU_OWNER_ROOT_VOLUME_UUID:-}:${XNU_OWNER_APP_VOLUME_UUID:-}" ]; then
   rm -f "$ROOT/build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/bsd/DEVELOPMENT/kern_exec.o"
-  printf '%s\n' "$OWNER_DATA_MOUNT:$NATIVE_RAM_BLOCK:${XNU_OWNER_CACHE_VOLUME_UUID:-}:${XNU_OWNER_ROOT_VOLUME_UUID:-}" > "$OWNER_DATA_STAMP"
+  printf '%s\n' "$OWNER_DATA_MOUNT:$NATIVE_RAM_BLOCK:${XNU_OWNER_CACHE_VOLUME_UUID:-}:${XNU_OWNER_ROOT_VOLUME_UUID:-}:${XNU_OWNER_APP_VOLUME_UUID:-}" > "$OWNER_DATA_STAMP"
 fi
 OWNER_CRYPTEX_FILES=${XNU_OWNER_CRYPTEX_FILES:-0}
 if [ "$OWNER_CRYPTEX_FILES" != 0 ] && [ "$OWNER_CRYPTEX_FILES" != 1 ]; then
@@ -821,7 +836,7 @@ make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iph
   MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT \
   ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="$XNU_ARCH_STRING" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY \
   ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 \
-  DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION -DXNU_TARGET_OS_IOS" \
+  DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION $XNU_TARGET_DEFINE" \
   DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_VERSION" \
   RC_DARWIN_KERNEL_VERSION="$XNU_DARWIN" RC_ProjectSourceVersion="$XNU_VERSION" \
   BUILD_LTO=0 BOUND_CHECKS=0 BUILD_WERROR="${XNU_BUILD_WERROR:-0}" MAKEJOBS=-j"${JOBS:-4}" \

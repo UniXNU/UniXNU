@@ -1,0 +1,280 @@
+The pass that prepares a 16 KiB-signed image for the 4 KiB kernel, on every processor.
+
+launchd registers the 82 files of the dyld shared cache (6873 MiB) one after the other before the first daemon
+starts, and the kernel reads each to its code limit and hashes it twice in that one thread: about 30 s of every
+boot at 225 MiB/s, storage taking about 2 s of it. For an image above 32 MiB the caller now shares the chunks
+with one helper thread per further processor. Each thread reads into a buffer of its own, authenticates every
+16 KiB block against the code directory and derives the 4 KiB hashes from the same bytes, as before; the first
+error ends the pass, nothing is published unless every block passed, and the table is made read-only before
+the blob is visible. Smaller images are prepared by the caller alone.
+
+Has not run on hardware.
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -67,6 +67,8 @@
+ #include <kern/kalloc.h>
+ #include <kern/zalloc.h>
+ #include <kern/thread.h>
++#include <mach/thread_act.h>
++#include <machine/machine_routines.h>
+ #include <vm/pmap.h>
+ #include <vm/vm_pageout.h>
+ #include <vm/vm_map.h>
+@@ -5882,72 +5884,63 @@
+ #define CS_NATIVE4K_CHUNK       (1024 * 1024)
+ #define CS_NATIVE4K_UNCACHED    (32 * 1024 * 1024)
+ 
+-__attribute__((noinline))
+-static int
+-cs_native4k_prepare(vnode_t vp, struct cs_blob *blob)
+-{
+-	const CS_CodeDirectory *cd = blob->csb_cd;
+-	const struct cs_hash *md = blob->csb_hashtype;
+-	vm_offset_t storage = 0;
+-	vm_size_t allocation = 0, count = 0;
+-	uint8_t *buffer = NULL;
+-	uint64_t limit, offset, chunk;
+-	int error = EBADEXEC, ioflags;
+-	kern_return_t kr;
++/*
++ * The pass over one image. Each thread of it takes the next chunk, reads it into a buffer of its own and authenticates and derives
++ * as described above; the first error ends the pass for every thread. An image above CS_NATIVE4K_UNCACHED is shared between the
++ * caller and one helper thread per further processor: the files of the dyld shared cache are several gigabytes that
++ * launchd registers one after the other before the first daemon starts.
++ */
++struct cs_native4k_pass {
++	vnode_t                 vp;
++	struct cs_blob          *blob;
++	const CS_CodeDirectory  *cd;
++	const struct cs_hash    *md;
++	vm_offset_t             storage;
++	uint64_t                limit;
++	int                     ioflags;
++	kauth_cred_t            cred;
++	_Atomic uint64_t        next;           /* offset of the next chunk nobody has taken */
++	_Atomic int             error;          /* the first error */
++	lck_mtx_t               lock;
++	unsigned int            helpers;        /* helper threads still running, under the lock */
++};
++static LCK_GRP_DECLARE(cs_native4k_pass_grp, "cs_native4k_pass");
+ 
+-	if (blob->csb_hash_pageshift <= PAGE_SHIFT) {
+-		return 0;
++static void
++cs_native4k_pass_run(struct cs_native4k_pass *pass)
++{
++	const CS_CodeDirectory *cd = pass->cd;
++	const struct cs_hash *md = pass->md;
++	const struct cs_blob *blob = pass->blob;
++	uint8_t *buffer = kalloc_data(CS_NATIVE4K_CHUNK, Z_WAITOK);
++	int error = 0;
++
++	if (buffer == NULL) {
++		error = ENOMEM;
+ 	}
+-	if (PAGE_SHIFT != 12 || blob->csb_hash_pageshift != 14 || cd == NULL || md == NULL ||
+-	    md->cs_size == 0 || md->cs_size > CS_HASH_MAX_SIZE ||
+-	    md->cs_digest_size > CS_HASH_MAX_SIZE || blob->csb_base_offset < 0 ||
+-	    (blob->csb_base_offset & PAGE_MASK) || blob->csb_hash_firstlevel_pageshift ||
+-	    ((ntohl(cd->version) >= CS_SUPPORTSSCATTER) && ntohl(cd->scatterOffset))) {
+-		return ENOTSUP;
+-	}
+-	limit = ntohl(cd->codeLimit);
+-	if (!limit || ((ntohl(cd->version) >= CS_SUPPORTSCODELIMIT64) &&
+-	    ntohll(cd->codeLimit64) && ntohll(cd->codeLimit64) != limit) ||
+-	    ntohl(cd->nCodeSlots) != ((limit + 16383) >> 14)) {
+-		return ENOTSUP;
+-	}
+-	count = (limit + PAGE_MASK) >> PAGE_SHIFT;
+-	if (os_mul_overflow(count, (vm_size_t)md->cs_size, &allocation) ||
+-	    round_page_overflow(allocation, &allocation)) {
+-		return EOVERFLOW;
+-	}
+-	kr = kmem_alloc(kernel_map, &storage, allocation,
+-	    KMA_KOBJECT | KMA_DATA | KMA_ZERO, VM_KERN_MEMORY_SECURITY);
+-	if (kr != KERN_SUCCESS) {
+-		return ENOMEM;
+-	}
+-	buffer = kalloc_data(CS_NATIVE4K_CHUNK, Z_WAITOK);
+-	if (buffer == NULL) {
+-		error = ENOMEM;
+-		goto out;
+-	}
+-	/* Executables are faulted in right after their signature is added and stay cached. */
+-	ioflags = limit > CS_NATIVE4K_UNCACHED ? IO_NOCACHE : 0;
+-	for (chunk = 0; chunk < limit; chunk += CS_NATIVE4K_CHUNK) {
+-		size_t chunk_length = MIN((uint64_t)CS_NATIVE4K_CHUNK, limit - chunk);
++	while (error == 0 && os_atomic_load(&pass->error, relaxed) == 0) {
++		const uint64_t chunk = os_atomic_add_orig(&pass->next, (uint64_t)CS_NATIVE4K_CHUNK, relaxed);
++		if (chunk >= pass->limit) {
++			break;
++		}
++		size_t chunk_length = MIN((uint64_t)CS_NATIVE4K_CHUNK, pass->limit - chunk);
+ 		int resid = 0;
+ 		off_t position;
+ 		if (os_add_overflow(blob->csb_base_offset, (off_t)chunk, &position)) {
+ 			error = EOVERFLOW;
+-			goto out;
++			break;
+ 		}
+ 		const uint64_t read_start = mach_absolute_time();
+-		error = vn_rdwr(UIO_READ, vp, (caddr_t)buffer, (int)chunk_length, position,
+-		    UIO_SYSSPACE, ioflags, vfs_context_ucred(vfs_context_current()),
+-		    &resid, current_proc());
++		error = vn_rdwr(UIO_READ, pass->vp, (caddr_t)buffer, (int)chunk_length, position,
++		    UIO_SYSSPACE, pass->ioflags, pass->cred, &resid, current_proc());
+ 		const uint64_t hash_start = mach_absolute_time();
+ 		os_atomic_add(&cs_native4k_read_ticks, hash_start - read_start, relaxed);
+ 		os_atomic_add(&cs_native4k_bytes, (uint64_t)chunk_length, relaxed);
+ 		if (error || resid) {
+ 			error = error ? error : EIO;
+-			goto out;
++			break;
+ 		}
+-		for (size_t block = 0; block < chunk_length; block += 16384) {
++		for (size_t block = 0; block < chunk_length && error == 0; block += 16384) {
+ 			union cs_hash_union ctx;
+ 			uint8_t digest[CS_HASH_MAX_SIZE];
+ 			const uint8_t *expected;
+@@ -5955,11 +5948,11 @@
+ 			const char *lower = blob->csb_mem_kaddr;
+ 			const char *upper = lower + blob->csb_mem_size;
+ 			size_t length = MIN((size_t)16384, chunk_length - block);
+-			offset = chunk + block;
++			const uint64_t offset = chunk + block;
+ 			expected = hashes(cd, (uint32_t)(offset >> 14), md->cs_size, lower, upper);
+ 			if (expected == NULL) {
+ 				error = EBADEXEC;
+-				goto out;
++				break;
+ 			}
+ 			md->cs_init(&ctx);
+ 			md->cs_update(&ctx, data, length);
+@@ -5967,7 +5960,7 @@
+ 			if (bcmp(expected, digest, md->cs_size)) {
+ 				os_atomic_inc(&cs_validate_page_bad_hash, relaxed);
+ 				error = EBADEXEC;
+-				goto out;
++				break;
+ 			}
+ 			os_atomic_inc(&cs_native4k_full_blocks, relaxed);
+ 			for (size_t sub = 0; sub < length; sub += PAGE_SIZE) {
+@@ -5976,11 +5969,109 @@
+ 				md->cs_init(&ctx);
+ 				md->cs_update(&ctx, data + sub, bytes);
+ 				md->cs_final(digest, &ctx);
+-				memcpy((void *)(storage + index * md->cs_size), digest, md->cs_size);
++				memcpy((void *)(pass->storage + index * md->cs_size), digest, md->cs_size);
+ 			}
+ 		}
+ 		os_atomic_add(&cs_native4k_hash_ticks, mach_absolute_time() - hash_start, relaxed);
+ 	}
++	if (error != 0) {
++		int none = 0;
++		(void)os_atomic_cmpxchgv(&pass->error, 0, error, &none, relaxed);
++	}
++	if (buffer != NULL) {
++		kfree_data(buffer, CS_NATIVE4K_CHUNK);
++	}
++}
++
++static void
++cs_native4k_pass_helper(void *parameter, __unused wait_result_t result)
++{
++	struct cs_native4k_pass *pass = parameter;
++
++	cs_native4k_pass_run(pass);
++	lck_mtx_lock(&pass->lock);
++	if (--pass->helpers == 0) {
++		wakeup(&pass->helpers);
++	}
++	lck_mtx_unlock(&pass->lock);
++	thread_terminate(current_thread());
++}
++
++__attribute__((noinline))
++static int
++cs_native4k_prepare(vnode_t vp, struct cs_blob *blob)
++{
++	const CS_CodeDirectory *cd = blob->csb_cd;
++	const struct cs_hash *md = blob->csb_hashtype;
++	vm_offset_t storage = 0;
++	vm_size_t allocation = 0, count = 0;
++	uint64_t limit;
++	int error = EBADEXEC;
++	kern_return_t kr;
++
++	if (blob->csb_hash_pageshift <= PAGE_SHIFT) {
++		return 0;
++	}
++	if (PAGE_SHIFT != 12 || blob->csb_hash_pageshift != 14 || cd == NULL || md == NULL ||
++	    md->cs_size == 0 || md->cs_size > CS_HASH_MAX_SIZE ||
++	    md->cs_digest_size > CS_HASH_MAX_SIZE || blob->csb_base_offset < 0 ||
++	    (blob->csb_base_offset & PAGE_MASK) || blob->csb_hash_firstlevel_pageshift ||
++	    ((ntohl(cd->version) >= CS_SUPPORTSSCATTER) && ntohl(cd->scatterOffset))) {
++		return ENOTSUP;
++	}
++	limit = ntohl(cd->codeLimit);
++	if (!limit || ((ntohl(cd->version) >= CS_SUPPORTSCODELIMIT64) &&
++	    ntohll(cd->codeLimit64) && ntohll(cd->codeLimit64) != limit) ||
++	    ntohl(cd->nCodeSlots) != ((limit + 16383) >> 14)) {
++		return ENOTSUP;
++	}
++	count = (limit + PAGE_MASK) >> PAGE_SHIFT;
++	if (os_mul_overflow(count, (vm_size_t)md->cs_size, &allocation) ||
++	    round_page_overflow(allocation, &allocation)) {
++		return EOVERFLOW;
++	}
++	kr = kmem_alloc(kernel_map, &storage, allocation,
++	    KMA_KOBJECT | KMA_DATA | KMA_ZERO, VM_KERN_MEMORY_SECURITY);
++	if (kr != KERN_SUCCESS) {
++		return ENOMEM;
++	}
++
++	struct cs_native4k_pass pass = {
++		.vp = vp, .blob = blob, .cd = cd, .md = md, .storage = storage, .limit = limit,
++		/* Executables are faulted in right after their signature is added and stay cached. */
++		.ioflags = limit > CS_NATIVE4K_UNCACHED ? IO_NOCACHE : 0,
++		.cred = vfs_context_ucred(vfs_context_current()),
++	};
++	lck_mtx_init(&pass.lock, &cs_native4k_pass_grp, LCK_ATTR_NULL);
++	if (limit > CS_NATIVE4K_UNCACHED) {
++		/* The caller holds the vnode, the blob and the credential until every helper has ended. */
++		const uint64_t chunks = (limit + CS_NATIVE4K_CHUNK - 1) / CS_NATIVE4K_CHUNK;
++		for (uint32_t cpu = 1; cpu < ml_get_cpu_count() && cpu < chunks; cpu++) {
++			thread_t helper = THREAD_NULL;
++			lck_mtx_lock(&pass.lock);
++			pass.helpers++;
++			lck_mtx_unlock(&pass.lock);
++			if (kernel_thread_start(cs_native4k_pass_helper, &pass, &helper) != KERN_SUCCESS) {
++				lck_mtx_lock(&pass.lock);
++				pass.helpers--;
++				lck_mtx_unlock(&pass.lock);
++				break;
++			}
++			thread_deallocate(helper);
++		}
++	}
++	cs_native4k_pass_run(&pass);
++	lck_mtx_lock(&pass.lock);
++	while (pass.helpers != 0) {
++		(void)msleep(&pass.helpers, &pass.lock, PVFS, "cs_native4k", NULL);
++	}
++	lck_mtx_unlock(&pass.lock);
++	lck_mtx_destroy(&pass.lock, &cs_native4k_pass_grp);
++	error = os_atomic_load(&pass.error, relaxed);
++	if (error != 0) {
++		goto out;
++	}
++
+ 	kr = mach_vm_protect(kernel_map, storage, allocation, FALSE, VM_PROT_READ);
+ 	if (kr != KERN_SUCCESS) {
+ 		error = EPERM;
+@@ -5993,7 +6084,6 @@
+ 	os_atomic_inc(&cs_native4k_ready_blobs, relaxed);
+ 	error = 0;
+ out:
+-	kfree_data(buffer, CS_NATIVE4K_CHUNK);
+ 	if (storage) {
+ 		kmem_free(kernel_map, storage, allocation);
+ 	}

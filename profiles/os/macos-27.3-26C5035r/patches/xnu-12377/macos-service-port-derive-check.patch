@@ -1,0 +1,113 @@
+The Darwin 26 MAC hook mpo_proc_check_service_port_derive (mac_policy_ops slot 44). xnu-12377 has a void notification,
+mpo_proc_notify_service_port_derive, in that slot; Darwin 26 made it an access check that returns an errno.
+macOS 27's EndpointSecurity fills slot 44 with es_proc_check_service_port_derive, signed with the int function type,
+so xnu's void-typed call failed pointer authentication on the first connection port (mach_port_construct). As in
+the Darwin 26 kernel, a denial frees the derived sandbox label and the port is not created (KERN_DENIED).
+--- a/security/mac_policy.h
++++ b/security/mac_policy.h
+@@ -3970,11 +3970,13 @@
+ 	);
+ 
+ /**
+- *  @brief Notification of connection port derivation from service port
++ *  @brief Access control check for connection port derivation from service port
+  *  @param cred Subject process credential
+  *  @param sp_info Service port info
+  *
+  *  Called when a process derives a connection port from a service port.
++ *  This is the Darwin 26 form of the hook (proc_notify_service_port_derive,
++ *  a notification, in xnu-12377); macOS 27's EndpointSecurity implements it.
+  *
+  *  Notes:
+  *  - Port derivation is only mandatory if the receiving end of the
+@@ -3982,8 +3984,11 @@
+  *  - MAC policies should not perform upcalls or expensive operations in
+  *    this hook.
+  *  - Only called on macOS.
++ *
++ *  @return Return 0 if access is granted, otherwise an appropriate value for
++ *  errno should be returned; the connection port is then not created.
+  */
+-typedef void mpo_proc_notify_service_port_derive_t(
++typedef int mpo_proc_check_service_port_derive_t(
+ 	kauth_cred_t cred,
+ 	struct mach_service_port_info *sp_info
+ 	);
+@@ -6082,7 +6087,7 @@
+ 	mpo_file_notify_close_t                 *mpo_file_notify_close;
+ 
+ 	mpo_proc_check_launch_constraints_t     *mpo_proc_check_launch_constraints;
+-	mpo_proc_notify_service_port_derive_t   *mpo_proc_notify_service_port_derive;
++	mpo_proc_check_service_port_derive_t    *mpo_proc_check_service_port_derive;
+ 	mpo_proc_check_set_task_exception_port_t *mpo_proc_check_set_task_exception_port;
+ 	mpo_proc_check_set_thread_exception_port_t *mpo_proc_check_set_thread_exception_port;
+ 
+--- a/security/mac_mach_internal.h
++++ b/security/mac_mach_internal.h
+@@ -142,7 +142,7 @@
+ 
+ void mac_proc_notify_exec_complete(struct proc *proc);
+ int mac_proc_check_remote_thread_create(struct task *task, int flavor, thread_state_t new_state, mach_msg_type_number_t new_state_count);
+-void mac_proc_notify_service_port_derive(struct mach_service_port_info *sp_info);
++int mac_proc_check_service_port_derive(struct mach_service_port_info *sp_info);
+ 
+ struct label *mac_exc_create_label_for_proc(struct proc *proc);
+ struct label *mac_exc_create_label_for_current_proc(void);
+--- a/security/mac_process.c
++++ b/security/mac_process.c
+@@ -400,11 +400,15 @@
+ 	return error;
+ }
+ 
+-void
+-mac_proc_notify_service_port_derive(struct mach_service_port_info *sp_info)
++int
++mac_proc_check_service_port_derive(struct mach_service_port_info *sp_info)
+ {
+-	MAC_PERFORM(proc_notify_service_port_derive,
++	int error;
++
++	MAC_CHECK(proc_check_service_port_derive,
+ 	    current_cached_proc_cred(PROC_NULL), sp_info);
++
++	return error;
+ }
+ 
+ int
+--- a/osfmk/ipc/ipc_service_port.c
++++ b/osfmk/ipc/ipc_service_port.c
+@@ -251,6 +251,7 @@
+  *   KERN_INVALID_NAME: service_port_name is mach_port_null or mach_port_dead
+  *   KERN_INVALID_RIGHT: service_port_name is not a send right
+  *   KERN_INVALID_CAPABILITY: service_port_name is not a right to a service port
++ *   KERN_DENIED: a MAC policy denied the derivation (macOS)
+  */
+ kern_return_t
+ ipc_service_port_derive_sblabel(
+@@ -329,8 +330,13 @@
+ 		}
+ 
+ #if CONFIG_MACF && XNU_TARGET_OS_OSX
+-		if (!ipc_service_port_string_name_is_empty(&sp_info) && is_forward_connection_channel) {
+-			mac_proc_notify_service_port_derive(&sp_info);
++		if (!ipc_service_port_string_name_is_empty(&sp_info) && is_forward_connection_channel &&
++		    mac_proc_check_service_port_derive(&sp_info) != 0) {
++			if (label->iol_connection) {
++				mach_msg_filter_dealloc_service_port_sblabel_callback(label->iol_connection);
++				label->iol_connection = NULL;
++			}
++			return KERN_DENIED;
+ 		}
+ #endif
+ 	}
+--- a/bsd/kern/policy_check.c
++++ b/bsd/kern/policy_check.c
+@@ -179,7 +179,7 @@
+ 	CHECK_SET_HOOK(file_label_associate)
+ 	CHECK_SET_HOOK(file_notify_close)
+ 	CHECK_SET_HOOK(proc_check_launch_constraints)
+-	CHECK_SET_HOOK(proc_notify_service_port_derive)
++	CHECK_SET_HOOK(proc_check_service_port_derive)
+ 	CHECK_SET_HOOK(proc_check_set_task_exception_port)
+ 	CHECK_SET_HOOK(proc_check_set_thread_exception_port)
+ 

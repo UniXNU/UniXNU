@@ -54,33 +54,33 @@ mtype -i out/<device>/<os_profile>/<config>/payload/payload.img ::/EFI/UniXNU/un
 
 | 参数 | 用途 |
 | --- | --- |
-| `sheng-platform-stage=<n>` | 在平台专家固定阶段停住 |
-| `sheng-pmgr=<n>` | 选择板级 PMGR 集成 |
+| `platform-stage=<n>` | 在平台专家固定阶段停住 |
+| `pmgr=<n>` | 选择板级 PMGR 集成 |
 | `native-ufs-root=1` | 使用原生 UFS 根路径 |
 | `native-ufs-stats-delay=<n>` | 延迟 UFS 统计读取 |
 | `armcpu-diagnostics=1` | 打印 CPU 和中断状态 |
 | `armcpu-spi-ipi=1` | 使用 SPI 路径发送核间中断 |
-| `sheng-smp=1` | 启动 secondary CPU |
-| `sheng-cpufreq=<n>` | 选择 CPU 频率路径 |
-| `sheng-touch=<n>` | 运行触控探针阶段 |
-| `sheng-touch-hz=<n>` | 选择触控 SPI 时钟 |
-| `sheng-touch-mode=<n>` | 强制触控 SPI 模式 |
-| `sheng-touch-hid=1` | 把触控点发布到 HID |
-| `sheng-aks=1` | 启用 AKS 路径 |
-| `sheng-aks-sls=<n>` | 选择上报的锁定状态；3 表示无密码 |
-| `sheng-usb=<n>` | 运行 QcomDwc3；2 增加寄存器采样，3 另外让总线断开重连一次 |
-| `sheng-usb-host=<s>` | 延时后强制进入 USB 主机模式 |
-| `sheng-usb-back=<s>` | 强制主机模式持续该时间后，回到线缆决定的角色 |
-| `sheng-gpu-power=<n>` | 选择 GPU 电源序列 |
-| `sheng-gpu-metal=1` | 启用 Metal 路径 |
-| `sheng-gpu-addon=1` | 挂载 GPU addon 内容 |
-| `sheng-data-persist=<n>` | 1 只验证 Data store 窗口，2 打开写窗口 |
-| `sheng-data-reset=<n>` | 1 丢弃 Data overlay，2 同时要求 Setup |
-| `sheng-log-reserve=<mib>` | userdata 末尾为诊断日志和导出区保留的空间，默认 1024 |
-| `sheng-data-fua=1` | Data store 改为直写（每次写入带 FUA），不使用回写 |
-| `sheng-ufs-bench=1` | 在启动继续之前运行 UFS 读取基准，结果写入日志，然后重启回 fastboot |
-| `sheng-disable-watchdogd=1` | 停止 watchdog daemon |
-| `sheng-disable-jobs=<list>` | 跳过指定 launch job |
+| `smp=1` | 启动 secondary CPU |
+| `cpufreq=<n>` | 选择 CPU 频率路径 |
+| `touch=<n>` | 运行触控探针阶段 |
+| `touch-hz=<n>` | 选择触控 SPI 时钟 |
+| `touch-mode=<n>` | 强制触控 SPI 模式 |
+| `touch-hid=1` | 把触控点发布到 HID |
+| `aks=1` | 启用 AKS 路径 |
+| `aks-sls=<n>` | 选择上报的锁定状态；3 表示无密码 |
+| `usb=<n>` | 运行 QcomDwc3；2 增加寄存器采样，3 另外让总线断开重连一次 |
+| `usb-host=<s>` | 延时后强制进入 USB 主机模式 |
+| `usb-back=<s>` | 强制主机模式持续该时间后，回到线缆决定的角色 |
+| `gpu-power=<n>` | 选择 GPU 电源序列 |
+| `gpu-metal=1` | 启用 Metal 路径 |
+| `gpu-addon=1` | 挂载 GPU addon 内容 |
+| `data-persist=<n>` | 1 只验证 Data store 窗口，2 打开写窗口 |
+| `data-reset=<n>` | 1 丢弃 Data overlay，2 同时要求 Setup |
+| `log-reserve=<mib>` | userdata 末尾为诊断日志和导出区保留的空间，默认 1024 |
+| `data-fua=1` | Data store 改为直写（每次写入带 FUA），不使用回写 |
+| `ufs-bench=1` | 在启动继续之前运行 UFS 读取基准，结果写入日志，然后重启回 fastboot |
+| `disable-watchdogd=1` | 停止 watchdog daemon |
+| `disable-jobs=<list>` | 跳过指定 launch job |
 | `offline-legacy-*=1` | 启用 legacy 显示和输入探针 |
 | `offline-owner-root-check=1` | 启动 verified root 检查 |
 | `offline-owner-root-audit=1` | 启用根绑定审计 |
@@ -112,7 +112,7 @@ if (PE_parse_boot_argn("my-driver-stage", &stage, sizeof(stage))) {
 | 早期内核输出 | `-v serial=3 debug=0x14e` |
 | kext 加载细节 | `kextlog=0xfff` |
 | 启动进度 | `boot-progress=2` |
-| 平台停点 | `sheng-platform-stage=<n>` |
+| 平台停点 | `platform-stage=<n>` |
 | 存储细节 | `native-ufs-root=1 native-ufs-stats-delay=30` |
 | 显示细节 | `offline-legacy-gop=1 offline-legacy-phase=<n>` |
 | 代码签名细节 | `cs_debug=<mask>` |

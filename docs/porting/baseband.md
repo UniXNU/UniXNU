@@ -2,7 +2,7 @@
 
 Wi-Fi-only tablets without a cellular modem can skip this page. Set the cellular area of `porting.toml` to `not-applicable` and give the hardware reason in `limits`.
 
-The example is [QcomBaseband](/drivers/qcom-baseband), written by **HoshinoYumeka ([@chiba233](https://github.com/chiba233))**. It connects iOS's ABM, BBUpdater and CommCenter to a Qualcomm modem. Its Coachz example targets SC7180, IPA v4.2 and iOS 17 (21H461).
+The example is `QcomBaseband`, written by **HoshinoYumeka ([@chiba233](https://github.com/chiba233))**. It connects iOS's ABM, BBUpdater and CommCenter to a Qualcomm modem. Its Coachz example targets SC7180, IPA v4.2 and iOS 17 (21H461).
 
 Start after [platform memory and DMA](/porting/platform). Identify the modem, its control transport, data engine, firmware, SIM connection and EFS/NV storage.
 

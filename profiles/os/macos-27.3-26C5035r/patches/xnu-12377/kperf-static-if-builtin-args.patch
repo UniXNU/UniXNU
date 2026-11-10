@@ -1,0 +1,55 @@
+The static keys read the board's built-in boot arguments.
+
+static_if_init() runs before PE_parse_boot_argn() can be used and parses the boot loader's command line by itself.
+Without the built-in arguments its switches (validation_disables, serverperfmode, lcks, wdt: assertions, read-write
+lock checks, the scheduler hygiene timestamps) can only come from that line, while every other reader of the same
+arguments also sees PE_builtin_boot_args. The macOS line of this board is 874 of the 1000 bytes the boot loader takes
+and a test run adds about 100, so the switches a board always sets belong in the built-in arguments.
+static_if_boot_arg_uint64() takes its default from them; an argument on the command line wins, as in
+pexpert/gen/bootargs.c. The weak empty definition here keeps a kernel linking whose board defines none.
+
+With validation_disables=0x11040 built in (package/BootWatchdogPolicy.c of the device) the static keys
+sched_debug_preemption_disable and sched_debug_interrupt_disable are off: no call into the measurement at every
+preemption disable, and no timestamp at every interrupt mask and unmask (osfmk/arm/machine_routines_common.c takes
+those in every mode while the key is on). Not run on hardware.
+diff --git a/osfmk/kern/static_if_common.c b/osfmk/kern/static_if_common.c
+--- a/osfmk/kern/static_if_common.c
++++ b/osfmk/kern/static_if_common.c
+@@ -177,8 +177,9 @@
+ 	}
+ }
+ 
+-MARK_AS_FIXUP_TEXT uint64_t
+-static_if_boot_arg_uint64(const char *args, const char *key, uint64_t defval)
++__attribute__((always_inline))
++static inline uint64_t
++static_if_boot_arg_lookup(const char *args, const char *key, uint64_t defval)
+ {
+ 	uint64_t ret = defval;
+ 
+@@ -198,6 +199,25 @@
+ 	}
+ 
+ 	return ret;
++}
++
++#ifndef STATIC_IF_TEST
++/* The arguments a board builds into its kernel: its own object defines them, a kernel without one gets this empty string. */
++__attribute__((weak)) char PE_builtin_boot_args[] = "";
++#endif /* STATIC_IF_TEST */
++
++/*
++ * The static keys are set from the command line before PE_parse_boot_argn() can be used. The board's built-in
++ * arguments apply here as they do there (pexpert/gen/bootargs.c): an argument on the command line wins, one absent
++ * from it is looked up in the built-in ones.
++ */
++MARK_AS_FIXUP_TEXT uint64_t
++static_if_boot_arg_uint64(const char *args, const char *key, uint64_t defval)
++{
++#ifndef STATIC_IF_TEST
++	defval = static_if_boot_arg_lookup(PE_builtin_boot_args, key, defval);
++#endif /* STATIC_IF_TEST */
++	return static_if_boot_arg_lookup(args, key, defval);
+ }
+ 
+ 

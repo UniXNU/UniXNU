@@ -41,7 +41,9 @@ for a function outside the board's scope. Use `planned` for unfinished work.
 ## Record format
 
 Copy `examples/device/porting.toml`. Its device name, SoC and OS profile must
-match `board.toml`. Each `[[area]]` contains:
+match `board.toml`. A board that serves several OS profiles keeps one record
+under its default profile; results for another profile, such as macOS, go into
+the same areas and name that profile and build. Each `[[area]]` contains:
 
 | Field | Content |
 | --- | --- |

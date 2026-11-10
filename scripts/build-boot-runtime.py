@@ -89,7 +89,25 @@ def build_plugin(target):
     # Replay is a diagnostic capture from a host GPU simulation, not a runtime
     # dependency. Do not require unrelated test fixtures in a release build.
     script('build-adreno-metal-plugin.py', '--target', target, '--no-replay')
-    return ROOT / 'build' / ('adreno-metal-plugin27' if target == 'ios27' else 'adreno-metal-plugin')
+    return ROOT / 'build' / {'ios27': 'adreno-metal-plugin27', 'macos27': 'adreno-metal-plugin-macos27'}.get(target, 'adreno-metal-plugin')
+
+
+def build_boot_shims(work, base=None):
+    """macOS on a read-only root container: the owner apfs_boot_util (scripts/macos-boot-shims) below bootshim/ of the addon
+    (BASE, or one of its own), which the kernel shows over apfs.fs/Contents/Resources with apfs-boot-shim=1."""
+    tree = work / 'boot-shims'
+    (tree / 'bootshim').mkdir(parents=True)
+    exe = tree / 'bootshim/apfs_boot_util'
+    sdk = subprocess.check_output(['xcrun', '--sdk', 'macosx', '--show-sdk-path'], text=True).strip()
+    run('xcrun', '--sdk', 'macosx', 'clang', '-target', 'arm64e-apple-macos27.0', '-isysroot', sdk, '-O2', '-Wall', '-Werror',
+        ROOT / 'scripts/macos-boot-shims/apfs_boot_util.c', '-o', exe)
+    run('codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.unixnu.apfs_boot_util', exe)
+    if base is None:
+        base = work / 'boot-shims-empty.bin'
+        base.write_bytes(b'NGPUADD2' + struct.pack('<IIQ', 0, 0, 24))
+    addon = work / 'boot-shims.bin'
+    script('addon-add-dir.py', base, addon, 'bootshim', tree / 'bootshim')
+    return addon
 
 
 def bundle_cdhash(path, options=()):
@@ -218,16 +236,17 @@ def main():
     seed = Path(request['data_ramdisk'])
     addon = Path(request['gpu_addon']) if request.get('gpu_addon') else None
     trust = Path(request['trust_cache']) if request.get('trust_cache') else None
+    want_addon = request.get('gpu_addon_enabled', True)
     with tempfile.TemporaryDirectory(prefix='prepare-', dir=out) as td:
         work = Path(td)
-        if not seed.is_file() or addon is None:
+        if not seed.is_file() or (addon is None and want_addon):
             with os_mount(request['os_image'], work) as mount:
                 if not seed.is_file():
                     if not request['init_data']:
                         raise SystemExit('refuse to generate Data without --init-data')
                     script('make-data-seed.py', mount, seed, '--gib', str(request['data_gib']),
                            '--build', request['build'], *(['--skip-setup'] if request.get('skip_setup') else []))
-                if addon is None:
+                if addon is None and want_addon:
                     plugin = build_plugin(request['target'])
                     extra = []
                     for profile in request.get('wallpapers', []):
@@ -235,13 +254,20 @@ def main():
                         script('make-wallpaper-overlay.py', mount, destination, profile)
                         extra += ['--wallpaper-floating' if profile.endswith('-floating') else '--wallpaper', destination]
                     candidate = work / 'gpuaddon.bin'
+                    # macOS: the plugin goes to /Library/GPUBundles (GPUBundles/ files; the kernel writes and protects them).
+                    if request['target'] == 'macos27':
+                        extra += ['--prefix', 'GPUBundles']
                     script('make-gpu-addon.py', '--publish', '--no-daemon', *extra, candidate,
                            env=dict(os.environ, ADRENO_PLUGIN_DIR=str(plugin)))
+                    if request.get('boot_shims'):
+                        candidate = build_boot_shims(work, candidate)
                     if request.get('audio_tool'):
                         audio = work / 'audio'
                         run(sys.executable, Path(request['device']) / request['audio_tool'], audio, request['audio_target'])
                         combined = work / 'combined.bin'
-                        bundles = ['audio/ShengAudio.driver', audio / 'ShengAudio.driver']
+                        # macOS: the audio server's own driver directory on Data (Library/ files of the addon).
+                        prefix = ('Library/Audio/Plug-Ins/HAL' if request['target'] == 'macos27' else 'audio')
+                        bundles = [f'{prefix}/ShengAudio.driver', audio / 'ShengAudio.driver']
                         # The overlay hides the system's plug-in directory from the audio server's listing,
                         # so a system plug-in the board needs is listed by carrying its unchanged bundle.
                         for name in request.get('audio_system_plugins', []):
@@ -250,6 +276,9 @@ def main():
                         candidate = combined
                     addon = out / 'gpuaddon.bin'
                     candidate.replace(addon)
+        if addon is None and not want_addon and request.get('boot_shims'):
+            addon = out / 'boot-shims.bin'
+            build_boot_shims(work).replace(addon)
         bluetooth_report = None
         if request.get('bluetooth_tool'):
             bluetooth = work / 'bluetooth'
@@ -279,7 +308,8 @@ def main():
             wifi_report = json.loads((wifi / 'report.json').read_text())
             if wifi_report.get('firmware_prefix'):
                 extra += [wifi_report['firmware_prefix'], wifi / 'firmware']
-            if request.get('wifi_launchd_cache') or bluetooth_report is not None:
+            # A Bluetooth runtime without job overrides (macOS: the system's own jobs start it) needs no merged cache.
+            if request.get('wifi_launchd_cache') or (bluetooth_report is not None and bluetooth_report.get('launchd_job_overrides')):
                 cache_work = work / 'launchd-cache'
                 cache_work.mkdir()
                 with os_mount(request['os_image'], cache_work) as mount:
@@ -291,11 +321,11 @@ def main():
                 (out / 'wifi-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
             candidate = work / 'wifi-addon.bin'
             script('addon-add-dir.py', addon, candidate, request.get('wifi_bin_prefix', 'bin'), wifi / 'bin',
-                   'etc/wifi', wifi / 'etc/wifi', 'daemons', wifi / 'daemons', *extra)
+                   'etc/wifi', wifi / 'etc/wifi', wifi_report.get('daemons_prefix', 'daemons'), wifi / 'daemons', *extra)
             addon = out / 'wifi-addon.bin'
             candidate.replace(addon)
             (out / 'wifi-service.json').write_bytes((wifi / 'report.json').read_bytes())
-        elif bluetooth_report is not None:
+        elif bluetooth_report is not None and bluetooth_report.get('launchd_job_overrides'):
             daemons = work / 'empty-daemons'
             daemons.mkdir()
             cache_work = work / 'bluetooth-cache'
@@ -327,7 +357,57 @@ def main():
             addon = out / 'appsync-addon.bin'
             candidate.replace(addon)
             (out / 'appsync-service.json').write_bytes((appsync / 'report.json').read_bytes())
-        if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None or appsync_report is not None):
+        absent_report = None
+        if request.get('target') == 'macos27' and addon is not None:
+            # macOS: the stand-in the kernel runs in place of a daemon on its deny-exec list (scripts/absent-service), at
+            # /private/var/ngpu/bin/unixnu-absentd; its hash joins the owner trust with the addon's other executables.
+            absent = work / 'absent'
+            script('absent-service/build.py', absent, 'macos27')
+            absent_report = json.loads((absent / 'report.json').read_text())
+            candidate = work / 'absent-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'bin', absent / 'bin')
+            addon = out / 'absent-addon.bin'
+            candidate.replace(addon)
+            (out / 'absent-service.json').write_bytes((absent / 'report.json').read_bytes())
+            # macOS: .skipbuddy in the Data volume's user template (/Library/User Template/Non_localized, which createhomedir copies
+            # into every new home). A new account's first login otherwise runs Setup Assistant's MiniBuddy (MiniLauncherPlugin sets
+            # MiniBuddyLaunch unless the home holds .skipbuddy), which keeps loginwindow from starting the Dock and Finder; this
+            # board has no activation or Apple account setup to offer there (macOS run42/run44). macOS-DroidVM makes each home
+            # with the marker from a boot job; a job in /Library/LaunchDaemons starts only when loginwindow has launched, too late
+            # for an automatic login (run44: 1.5 s after loginwindow had made the home).
+            template = work / 'user-template'
+            template.mkdir()
+            (template / '.skipbuddy').write_bytes(b'\n')
+            candidate = work / 'template-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'Library/User Template/Non_localized', template)
+            addon = out / 'template-addon.bin'
+            candidate.replace(addon)
+        test_scripts = os.environ.get('UNIXNU_MACOS_TEST')
+        if request.get('target') == 'macos27' and addon is not None and test_scripts:
+            # Unattended testing only (never set for a release): UNIXNU_MACOS_TEST names a directory with daemon.sh (run as root at
+            # boot) and/or agent.sh (run in the user's session after login). They go to /private/var/ngpu/test with a launchd job
+            # each, and write to /Users/Shared/unixnu-test, which the log reader mirrors afterwards.
+            source = Path(test_scripts)
+            staged, jobs_d, jobs_a = work / 'test', work / 'test-daemons', work / 'test-agents'
+            for directory in (staged, jobs_d, jobs_a):
+                directory.mkdir()
+            for name, jobs, extra in (('daemon', jobs_d, {}), ('agent', jobs_a, {'LimitLoadToSessionType': 'Aqua'})):
+                script_file = source / (name + '.sh')
+                if not script_file.is_file():
+                    continue
+                (staged / (name + '.sh')).write_bytes(script_file.read_bytes())
+                command = (f'/bin/mkdir -p /Users/Shared/unixnu-test; exec /bin/sh /private/var/ngpu/test/{name}.sh '
+                           f'>> /Users/Shared/unixnu-test/{name}.log 2>&1')
+                (jobs / f'org.unixnu.test.{name}.plist').write_bytes(plistlib.dumps(dict(
+                    Label=f'org.unixnu.test.{name}', RunAtLoad=True, ProgramArguments=['/bin/sh', '-c', command], **extra),
+                    fmt=plistlib.FMT_XML))
+            candidate = work / 'test-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'test', staged, 'Library/LaunchDaemons', jobs_d,
+                   'Library/LaunchAgents', jobs_a)
+            addon = out / 'test-addon.bin'
+            candidate.replace(addon)
+        if trust is not None and (request.get('wifi_tool') or bluetooth_report is not None or appsync_report is not None
+                                  or absent_report is not None):
             # Keep every original module intact. Append only absent hashes;
             # rebuilding from a previously integrated addon stays idempotent.
             hashes = addon_hashes(addon, work / 'signed-addon', request.get('audio_system_plugins', ()),
@@ -354,12 +434,15 @@ def main():
             original = work / 'apple-trust.bundle'
             script('bundle-ipsw-trust.py', original, *request['trust_modules'])
             hashes = addon_hashes(addon, work / 'addon', request.get('audio_system_plugins', ()),
-                                  appsync_report['system_executables'] if appsync_report else None)
+                                  appsync_report['system_executables'] if appsync_report else None) if addon else []
             candidate = work / 'owner-trust.bundle'
-            script('trust-append-module.py', original, candidate, *hashes)
+            if hashes:
+                script('trust-append-module.py', original, candidate, *hashes)
+            else:
+                original.replace(candidate)
             trust = out / 'owner-trust.bundle'
             candidate.replace(trust)
-        (out / 'generated.json').write_text(json.dumps(dict(data_ramdisk=str(seed), gpu_addon=str(addon),
+        (out / 'generated.json').write_text(json.dumps(dict(data_ramdisk=str(seed), gpu_addon=str(addon) if addon else None,
                                                           trust_cache=str(trust)), indent=2) + '\n')
 
 

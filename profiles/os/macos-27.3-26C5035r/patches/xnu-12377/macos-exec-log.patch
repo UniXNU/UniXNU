@@ -1,0 +1,47 @@
+Bring-up diagnostic, default off: exec-log=1 prints every image activation and every exit with its wait status and
+exit reason on the console (macOS-DroidVM virt-exec-log). It names the launchd boot task that fails.
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -2811,6 +2811,19 @@
+ 
+ 	proc_setexecutableuuid(p, &load_result.uuid[0]);
+ 
++	/* exec-log=1 (bring-up, default off): report every image activation on the console. */
++	{
++		static int exec_log = -1;
++		if (exec_log < 0) {
++			int value = 0;
++			PE_parse_boot_argn("exec-log", &value, sizeof(value));
++			exec_log = value;
++		}
++		if (exec_log) {
++			printf("exec: pid %d %s\n", proc_getpid(p), p->p_comm);
++		}
++	}
++
+ #if CONFIG_DTRACE
+ 	dtrace_proc_exec(p);
+ #endif
+--- a/bsd/kern/kern_exit.c
++++ b/bsd/kern/kern_exit.c
+@@ -2399,6 +2399,20 @@
+ 	proc_unlock(p);
+ 	pid = proc_getpid(p);
+ 	exitval = p->p_xstat;
++	/* exec-log=1 (bring-up, default off): also report every exit with its wait status and exit reason. */
++	{
++		int exec_log = 0;
++		if (PE_parse_boot_argn("exec-log", &exec_log, sizeof(exec_log)) && exec_log) {
++			os_reason_t reason = p->p_exit_reason;
++			if (reason != OS_REASON_NULL) {
++				char *desc = exit_reason_get_string_desc(reason);
++				printf("exit: pid %d %s status %#x reason %u:%llu flags %#llx%s%s\n", proc_getpid(p), p->p_comm, exitval,
++				    reason->osr_namespace, reason->osr_code, reason->osr_flags, desc ? " " : "", desc ? desc : "");
++			} else {
++				printf("exit: pid %d %s status %#x\n", proc_getpid(p), p->p_comm, exitval);
++			}
++		}
++	}
+ 	KERNEL_DEBUG_CONSTANT_IST(KDEBUG_COMMON,
+ 	    BSDDBG_CODE(DBG_BSD_PROC, BSD_PROC_EXIT) | DBG_FUNC_START,
+ 	    pid, exitval, 0, 0, 0);

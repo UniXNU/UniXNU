@@ -9,7 +9,7 @@ index 9969eb6f..166272c7 100644
 +/* Boot-time read-only union views of owner-provided GPU addon content over sealed system directories, mounted after the Data mount and
 + * before launchd starts: the Adreno Metal plugin bundle over /System/Library/Extensions (the original Metal discovery loads
 + * /System/Library/Extensions/<MetalPluginName>.bundle) and an owner launchd job over /System/Library/LaunchDaemons (a process outside
-+ * every sandbox profile). Only with boot-arg sheng-gpu-addon=1. Never panics: a missing source directory or a refused mount only
++ * every sandbox profile). Only with boot-arg gpu-addon=1. Never panics: a missing source directory or a refused mount only
 + * records its status. The backing directories are owner Data (not an authenticated immutable volume); code in them still has to
 + * pass AMFI through the loaded trust cache. */
 +extern volatile int native_bindfs_boot_mount;
@@ -298,7 +298,7 @@ index 9969eb6f..166272c7 100644
 +native_gpu_addon_prepare(proc_t p, user_addr_t scratch)
 +{
 +	uint32_t enabled = 0;
-+	if (!PE_parse_boot_argn("sheng-gpu-addon", &enabled, sizeof(enabled)) || enabled != 1) {
++	if (!PE_parse_boot_argn("gpu-addon", &enabled, sizeof(enabled)) || enabled != 1) {
 +		return;
 +	}
 +	native_gpu_addon_install(p, scratch);

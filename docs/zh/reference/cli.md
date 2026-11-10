@@ -96,7 +96,7 @@ unixnu release [--os VERSION] [--no-deps] [--check]
 | 选项 | 含义 |
 | --- | --- |
 | `-D DIR`、`--device DIR` | 设备仓库 |
-| `--os VERSION` | 本次运行的 OS profile：`17`、`27` 或 `profiles/os` 目录名，输出目录随之变化 |
+| `--os VERSION` | 本次运行的 OS profile：`17`、`26`、`27`、`macos-27` 或 `profiles/os` 目录名，输出目录随之变化 |
 | `--out DIR` | 输出根 |
 | `-j N`、`--jobs N` | 并行任务 |
 | `--local DIR` | 与本仓库布局相同的本地树 |

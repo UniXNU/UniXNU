@@ -1,8 +1,8 @@
 # Platform, memory and OS services
 
 Start with a [resolved device repository](/porting/steps). Read the
-[device-tree bindings](/porting/device-tree), [matching rules](/drivers/device-tree-matching),
-[ArmDTPlatform](/drivers/arm-dt-platform) and [ArmCpu](/drivers/arm-cpu).
+[device-tree bindings](/porting/device-tree), [matching rules](/porting/driver-development#matching),
+`ArmDTPlatform` and `ArmCpu`.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect
 initialization, archive recipes and the OS ABI, then run this page's hardware checks.
@@ -69,7 +69,7 @@ the loader's owned-memory request has its own size and alignment constraints.
 Keep both consistent with the actual UEFI memory map.
 
 For each DMA device, record address width, physical-to-IOVA mapping, SMMU
-instance/stream/context ownership and cache policy. Read [ArmSmmu4K](/drivers/arm-smmu4k)
+instance/stream/context ownership and cache policy. Read `ArmSmmu4K`
 where its translation model matches the target. GPU, UFS, SPI and PCIe may use
 different streams and allocation policies. Trace the consumer's MMIO and mapping inputs to DTS properties or board constants.
 
@@ -81,14 +81,14 @@ Continue with [UFS adaptation](/porting/ufs) for the storage controller.
 
 | Component | Adaptation work | Expected observation |
 | --- | --- | --- |
-| [RamBlock](/drivers/ram-block) | Match dense/packed Data format and ADT placeholders. Implement the `native_ufs_store` persistence callbacks for the target storage policy | Data mounts; writes and restart behavior match the selected persistence mode |
-| [VirtioMmioBlock](/drivers/virtio-mmio-block) | Supply a VirtIO MMIO device, queues, DMA and interrupt routing; qualify storage ABI bindings | Capacity and reads are correct before mounting root |
-| [VerifiedRoot](/drivers/verified-root) | Supply the selected image's owner policy and trust inputs; connect the storage policy archive | Policy validation succeeds for the intended image |
-| [SoftwareAES](/drivers/software-aes) | Match XNU AES helpers and IOCryptoAcceleratorFamily ABI; build its bindings for the OS profile | The crypto service publishes and required volume operations complete |
-| [AppleKeyStoreState](/drivers/apple-key-store-state) | Qualify selectors and state callbacks against the OS; connect initialization and event callers | Required state queries and notifications complete |
-| [XnuPrelink](/drivers/xnu-prelink) | Select matching XNU, original kernelcache, archive bindings and patch order | Prelink resolves the selected drivers and produces the kernel |
-| [DarwinBoot](/drivers/darwin-boot) | Include the loader in firmware or payload; provide Mach-O, ADT and selected sidecars | Loader validates the inputs and reports kernel handoff |
-| [ShengPreflight](/drivers/sheng-preflight) | Read its board checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
+| `RamBlock` | Match dense/packed Data format and ADT placeholders. Implement the `native_ufs_store` persistence callbacks for the target storage policy | Data mounts; writes and restart behavior match the selected persistence mode |
+| `VirtioMmioBlock` | Supply a VirtIO MMIO device, queues, DMA and interrupt routing; qualify storage ABI bindings | Capacity and reads are correct before mounting root |
+| `VerifiedRoot` | Supply the selected image's owner policy and trust inputs; connect the storage policy archive | Policy validation succeeds for the intended image |
+| `SoftwareAES` | Match XNU AES helpers and IOCryptoAcceleratorFamily ABI; build its bindings for the OS profile | The crypto service publishes and required volume operations complete |
+| `AppleKeyStoreState` | Qualify selectors and state callbacks against the OS; connect initialization and event callers | Required state queries and notifications complete |
+| `XnuPrelink` | Select matching XNU, original kernelcache, archive bindings and patch order | Prelink resolves the selected drivers and produces the kernel |
+| `DarwinBoot` | Include the loader in firmware or payload; provide Mach-O, ADT and selected sidecars | Loader validates the inputs and reports kernel handoff |
+| `ShengPreflight` | Read its board checks, then write checks for the target's firmware and memory layout | Target-specific firmware inputs pass their checks |
 
 Use [prelink](/concepts/prelink), [integrity policy](/concepts/security),
 [payload](/concepts/payload) and [userdata](/guide/userdata) for the required

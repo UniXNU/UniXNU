@@ -321,6 +321,26 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
         if not 0x10000000 <= size <= 0x200000000 or size % 0x200000:
             raise Error('Owned memory must be 256 MiB to 8 GiB in 2 MiB steps')
         chosen.append(('darwinboot-memory-size', struct.pack('<Q', size)))
+    # A table DarwinBoot fills with the ranges of the window the kernel must not use (gaps between DRAM banks, memory the firmware
+    # keeps). With it the window may span more than one run of free memory; only an OS profile whose XNU reads the property sets it.
+    if options.get('owned_memory_excluded_ranges'):
+        value = options['owned_memory_excluded_ranges']
+        slots = 0 if isinstance(value, bool) else int(str(value), 0)
+        if not 1 <= slots <= 4096:
+            raise Error('Owned memory excluded ranges: a table size of 1 to 4096 ranges')
+        chosen.append(('darwinboot-memory-excluded', bytes(16 * slots)))
+    # Two empty records DarwinBoot fills with where its inputs lie in the firmware's memory map (the payload RAM disk and the
+    # entry's initrd buffer); the kernel reports them as kern.boot_payload_memory. With the excluded-range table the loader
+    # also counts the whole pages of a verified input inside the window as usable memory.
+    if options.get('loader_inputs'):
+        chosen.append(('darwinboot-loader-inputs', bytes(64)))
+    # A table DarwinBoot fills with the largest runs of free memory outside the window (a DRAM bank too far from it for the
+    # kernel's page array), for a driver that manages memory of its own.
+    if options.get('owned_memory_outside_ranges'):
+        slots = int(str(options['owned_memory_outside_ranges']), 0)
+        if not 1 <= slots <= 64:
+            raise Error('Owned memory outside ranges: a table size of 1 to 64 ranges')
+        chosen.append(('darwinboot-memory-outside', bytes(16 * slots)))
     if options.get('root_match_volume_uuid'):
         volume = str(uuid.UUID(options['root_match_volume_uuid'])).upper()
         chosen.append(('root-matching', ('<dict><key>IOProviderClass</key><string>IOMedia</string>'
@@ -332,12 +352,18 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
             if not re.fullmatch(r'[A-Za-z0-9_.\-]{1,63},[0-9a-fA-F]{1,16},(?:[0-9a-fA-F]{2}){1,16},(?:[0-9a-fA-F]{2}){1,16}', value) or len(value) >= 160:
                 raise Error(f'Malformed text fixup: {value}')
         chosen.append(('text-fixups', b''.join(value.encode() + b'\0' for value in payload['text_fixups'])))
-    chosen += typed_properties(platform.get('chosen', {}))
+    # [adt.chosen]: property tables by type, and any other key as a child node of /chosen (macOS: asmb, the local boot policy).
+    chosen_table = platform.get('chosen', {})
+    chosen += typed_properties({kind: value for kind, value in chosen_table.items() if kind in PROPERTY_TYPES})
+    for child, value in chosen_table.items():
+        if child not in PROPERTY_TYPES and not isinstance(value, dict):
+            raise Error(f'ADT node chosen: {child} is neither a property type nor a child node')
+    chosen_children = [platform_node(child, value) for child, value in chosen_table.items() if child not in PROPERTY_TYPES]
     mappings = [('PackedRAMDisk' if options.get('packed_data_ramdisk') else 'RAMDisk', bytes(16))] if data else []
     mappings += [('TrustCache', bytes(16))] if trust else []
     mappings += [('GpuAddon', bytes(16))] if addon else []
     mappings += [('RootPolicies', bytes(16))] if root_policies else []
-    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties')])]
+    children = [node('chosen', chosen, [node('memory-map', mappings), node('manifest-properties'), *chosen_children])]
     cpus = next((entry for entry in root.children if entry.name == 'cpus'), None)
     if cpus is None:
         raise Error('Hardware DTS requires /cpus')

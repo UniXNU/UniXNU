@@ -134,7 +134,7 @@
  } *shared_region_pager_t;
  #define SHARED_REGION_PAGER_NULL        ((shared_region_pager_t) NULL)
  
-@@ -472,9 +476,191 @@
+@@ -472,9 +476,199 @@
  {
  	panic("shared_region_pager_data_initialize: should never get called");
  	return KERN_FAILURE;
@@ -189,6 +189,14 @@
 +		vm_page_validate_cs_mapped(page, PAGE_SIZE, 0, source);
 +	}
 +	const bool tainted = page->vmp_cs_tainted;
++	if (page->vmp_q_state != VM_PAGE_ON_SPECULATIVE_Q) {
++		/* As the source fault of a data request does: a page left on no queue is never reclaimed. */
++		vm_page_lockspin_queues();
++		if (page->vmp_q_state != VM_PAGE_ON_SPECULATIVE_Q) {
++			vm_page_speculate(page, FALSE);
++		}
++		vm_page_unlock_queues();
++	}
 +	if (!tainted) {
 +		bcopy(source, buffer, PAGE_SIZE);
 +	}
@@ -326,7 +334,7 @@
   * shared_region_pager_data_request()
   *
   * Handles page-in requests from VM.
-@@ -707,6 +893,28 @@
+@@ -707,6 +901,49 @@
  		 * Process the original contents of the source page
  		 * into the destination page.
  		 */
@@ -338,6 +346,26 @@
 +			    offset_in_backing_object >= pager->srp_slide_info->si_end) {
 +				shared_region_pager_copied++;
 +			} else {
++				/*
++				 * The source page (and its placeholder in the top object) is released before the part is slid: sliding
++				 * a later part reads the earlier parts of its 16 KiB slide page from the file when they are no longer
++				 * resident, and APFS pages a file with integrity verification in by the whole verification block, with
++				 * a UPL over all of its pages. That UPL waited, uninterruptibly, for the page this thread itself still
++				 * held busy: a self-deadlock at the first read of such a page (a process's main thread parked in
++				 * vm_page_sleep under apfs_pagein_with_verification).
++				 */
++				vm_object_lock(src_page_object);
++				vm_page_wakeup_done(src_page_object, src_page);
++				src_page = VM_PAGE_NULL;
++				vm_object_paging_end(src_page_object);
++				vm_object_unlock(src_page_object);
++				if (top_page != VM_PAGE_NULL) {
++					vm_object_lock(src_top_object);
++					VM_PAGE_FREE(top_page);
++					vm_object_paging_end(src_top_object);
++					vm_object_unlock(src_top_object);
++					top_page = VM_PAGE_NULL;
++				}
 +				kr = shared_region_pager_slide_part(pager, dst_vaddr, offset_in_backing_object, slide_start_address, &fault_info);
 +				if (kr != KERN_SUCCESS) {
 +					if (panic_on_dyld_issue) {
@@ -348,6 +376,7 @@
 +				} else {
 +					shared_region_pager_slid++;
 +				}
++				continue;       /* the source page is already released (above) */
 +			}
 +			goto part_done;
 +		}
@@ -355,7 +384,7 @@
  		for (offset_in_page = 0;
  		    offset_in_page < PAGE_SIZE;
  		    offset_in_page += slide_info_page_size) {
-@@ -789,6 +997,9 @@
+@@ -789,6 +1026,9 @@
  			shared_region_pager_slid++;
  		}
  
@@ -365,7 +394,7 @@
  		assert(VM_PAGE_OBJECT(src_page) == src_page_object);
  		assert(src_page->vmp_busy);
  		assert(src_page_object->paging_in_progress > 0);
-@@ -989,6 +1200,12 @@
+@@ -989,6 +1229,12 @@
  			pager->srp_slide_info = NULL;
  		}
  
@@ -378,7 +407,7 @@
  		if (pager->srp_header.mo_control != MEMORY_OBJECT_CONTROL_NULL) {
  			memory_object_control_deallocate(pager->srp_header.mo_control);
  			pager->srp_header.mo_control = MEMORY_OBJECT_CONTROL_NULL;
-@@ -1180,6 +1397,10 @@
+@@ -1180,6 +1426,10 @@
  	pager->srp_header.mo_control = MEMORY_OBJECT_CONTROL_NULL;
  	pager->srp_header.mo_last_unmap_ctid = 0;
  

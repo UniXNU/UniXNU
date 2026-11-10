@@ -52,18 +52,24 @@ def version_env(modules, ctx=None):
             env['UNIXNU_XNU_TAG'] = 'xnu-' + profile['xnu_version']
         if profile.get('ios_version'):
             env['UNIXNU_IOS_VERSION'] = profile['ios_version']
+        # The userspace the kernel serves: ios (default) or macosx (XNU_TARGET_OS_OSX instead of XNU_TARGET_OS_IOS).
+        env['UNIXNU_XNU_TARGET'] = profile.get('target', 'ios')
         # The root images of the OS: volume UUIDs and image digests the kernel and the storage builder check.
         root = ctx.board.get('root', {})
         for key, variable in (('os_volume_uuid', 'XNU_OWNER_ROOT_VOLUME_UUID'),
                               ('systemos_volume_uuid', 'XNU_OWNER_CACHE_VOLUME_UUID'),
+                              ('app_volume_uuid', 'XNU_OWNER_APP_VOLUME_UUID'),
                               ('os_image_sha256', 'UNIXNU_ROOT_OS_SHA256'),
-                              ('systemos_image_sha256', 'UNIXNU_ROOT_SYSTEMOS_SHA256')):
+                              ('systemos_image_sha256', 'UNIXNU_ROOT_SYSTEMOS_SHA256'),
+                              ('app_image_sha256', 'UNIXNU_ROOT_APP_SHA256')):
             if root.get(key):
                 env[variable] = root[key]
         if root.get('os_volume_uuid'):
             env['UNIXNU_ROOT_OS_UUID'] = root['os_volume_uuid']
         if root.get('systemos_volume_uuid'):
             env['UNIXNU_ROOT_SYSTEMOS_UUID'] = root['systemos_volume_uuid']
+        if root.get('app_volume_uuid'):
+            env['UNIXNU_ROOT_APP_UUID'] = root['app_volume_uuid']
         env['UNIXNU_IPSW_BUILD'] = ctx.board.get('ipsw', {}).get('build', '')
         env['UNIXNU_XNU_ARCH'] = load_toml(ctx.profile_roots['arch'] / 'profile.toml').get('arch', {}).get('name', 'arm64')
     return env
@@ -275,8 +281,9 @@ def prelink(ctx):
     if wanted and sha256_file(cache) != wanted:
         raise Error(f'{cache} does not match the kernelcache this board was qualified against (sha256 {wanted})')
     output.parent.mkdir(parents=True, exist_ok=True)
+    # A fileset stays at the native link address and has no slide; the static-prelink format needs one.
     command = ['python3', ctx.tree / spec['tool'], '--kernel', kernel, '--prelinked', cache,
-               f'--slide={spec["slide"]}']
+               f'--slide={spec.get("slide", "0")}']
     for root in spec.get('roots', []):
         command += ['--root', root]
     if spec.get('early_security_init'):

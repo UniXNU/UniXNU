@@ -1,0 +1,166 @@
+A report of the memory the loader's image takes from the kernel's window.
+
+Behind the kernel collection the loader places, up to boot_args.topOfKernelData, the boot arguments, the device tree
+and the ranges it names in /chosen/memory-map: a packed or dense RAM disk, the trust caches, an addon, root policies.
+All of it is wired from the first page allocation on, and nothing reported how much each piece takes or whether any
+of it was given back. `sysctl kern.boot_payload_memory` prints the window, the image and kernel sizes, every
+(base, size) range of /chosen/memory-map, the pages ml_static_mfree() gave to the VM and the requests it dropped, and,
+when the loader wrote /chosen/darwinboot-loader-inputs, where its payload RAM disk and the boot entry's initrd buffer
+lie in the firmware's memory map.
+
+ml_static_mfree() returns without freeing when the address lies below the physical aperture ("It is acceptable (if
+bad) to fail to free"). On a kernel without a monitor and without ARM_LARGE_MEMORY the aperture starts behind
+topOfKernelData and aliases only the memory in front of the collection, so the boot-time requests for parts of the
+loaded image (OSKext::jettisonFileSetLinkeditSegment for the fileset's __LINKEDIT, arm_vm_prot_finalize for
+__BOOTDATA, removeKextBootstrap for __KLDDATA) end there. Two counters record the dropped calls and bytes and one the
+pages freed. No behaviour changes.
+
+diff --git a/bsd/kern/kern_sysctl.c b/bsd/kern/kern_sysctl.c
+index 94a949b..83f1b7c 100644
+--- a/bsd/kern/kern_sysctl.c
++++ b/bsd/kern/kern_sysctl.c
+@@ -7150,3 +7150,101 @@ SCALABLE_COUNTER_DEFINE(mach_eventlink_handoff_success_count);
+ SYSCTL_SCALABLE_COUNTER(_kern, mach_eventlink_handoff_success_count,
+     mach_eventlink_handoff_success_count, "Number of successful handoffs");
+ #endif /* DEBUG || DEVELOPMENT*/
++
++#if defined(__arm64__)
++/*
++ * kern.boot_payload_memory: the memory the loader's image takes from the kernel's window, by piece, and what
++ * was given back. The image is the kernel collection followed, up to boot_args.topOfKernelData, by the boot
++ * arguments, the device tree and the ranges the loader names in /chosen/memory-map (a packed or dense RAM disk,
++ * the trust caches, an addon, root policies); all of it is wired from the first page allocation on.
++ * "freed" and "dropped" are the results of ml_static_mfree() since boot. The two "loader" records are
++ * /chosen/darwinboot-loader-inputs when the loader wrote it: where its payload RAM disk and the boot entry's
++ * initrd buffer lie in the firmware's memory map (base, size, UEFI memory type, state bits 1 located,
++ * 2 verified, 4 inside the window, 8 counted as usable memory, usable bytes).
++ */
++#include <pexpert/device_tree.h>
++extern uint64_t ml_static_mfree_pages, ml_static_mfree_dropped_calls, ml_static_mfree_dropped_bytes;
++extern vm_offset_t end_kern;
++extern unsigned long gVirtBase;
++
++static size_t
++boot_payload_append(char *text, size_t size, size_t at, const char *format, ...) __printflike(4, 5);
++
++static size_t
++boot_payload_append(char *text, size_t size, size_t at, const char *format, ...)
++{
++	va_list arguments;
++	int length;
++
++	if (at >= size - 1) {
++		return at;
++	}
++	va_start(arguments, format);
++	length = vsnprintf(text + at, size - at, format, arguments);
++	va_end(arguments);
++	return (length < 0) ? at : MIN(at + (size_t)length, size - 1);
++}
++
++static int
++sysctl_boot_payload_memory SYSCTL_HANDLER_ARGS
++{
++#pragma unused(oidp, arg1, arg2)
++	const boot_args *args = (const boot_args *)PE_state.bootArgs;
++	const size_t size = 1024;
++	char *text = kalloc_data(size, Z_WAITOK | Z_ZERO);
++	DTEntry entry;
++	void const *value = NULL;
++	unsigned int length = 0;
++	size_t at = 0;
++	int error;
++
++	if (text == NULL) {
++		return ENOMEM;
++	}
++	at = boot_payload_append(text, size, at, "window 0x%llx+0x%llx usable 0x%llx image 0x%llx kernel 0x%llx",
++	    args->physBase, args->memSize, args->memSizeActual, args->topOfKernelData - args->physBase,
++	    (uint64_t)(end_kern - gVirtBase));
++	if (SecureDTLookupEntry(NULL, "chosen/memory-map", &entry) == kSuccess) {
++		OpaqueDTPropertyIterator iterator;
++		char const *name = NULL;
++
++		if (SecureDTInitPropertyIterator(entry, &iterator) == kSuccess) {
++			while (SecureDTIterateProperties(&iterator, &name) == kSuccess) {
++				uint64_t range[2];
++
++				if (SecureDTGetProperty(entry, name, &value, &length) != kSuccess || length != sizeof(range)) {
++					continue;
++				}
++				memcpy(range, value, sizeof(range));
++				at = boot_payload_append(text, size, at, " | %s 0x%llx+0x%llx", name, range[0], range[1]);
++			}
++		}
++	}
++	at = boot_payload_append(text, size, at, " | freed %llu pages, dropped %llu calls 0x%llx bytes",
++	    os_atomic_load(&ml_static_mfree_pages, relaxed), os_atomic_load(&ml_static_mfree_dropped_calls, relaxed),
++	    os_atomic_load(&ml_static_mfree_dropped_bytes, relaxed));
++	if (SecureDTLookupEntry(NULL, "/chosen", &entry) == kSuccess &&
++	    SecureDTGetProperty(entry, "darwinboot-loader-inputs", &value, &length) == kSuccess && length == 64) {
++		static const char * const names[2] = { "disk", "initrd" };
++
++		for (unsigned int index = 0; index < 2; index++) {
++			struct {
++				uint64_t base;
++				uint64_t size;
++				int32_t  type;
++				uint32_t state;
++				uint64_t usable;
++			} record;
++
++			memcpy(&record, (const uint8_t *)value + 32 * index, sizeof(record));
++			at = boot_payload_append(text, size, at, " | loader %s 0x%llx+0x%llx type %d state %x usable 0x%llx",
++			    names[index], record.base, record.size, record.type, record.state, record.usable);
++		}
++	}
++	error = SYSCTL_OUT(req, text, at + 1);
++	kfree_data(text, size);
++	return error;
++}
++SYSCTL_PROC(_kern, OID_AUTO, boot_payload_memory, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_KERN | CTLFLAG_LOCKED,
++    0, 0, sysctl_boot_payload_memory, "A", "memory of the loader's image by piece, and what was given back");
++#endif /* defined(__arm64__) */
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+index b8856d2..48e9ae6 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2152,6 +2152,20 @@ ml_release_deferred_pages(void)
+ 	ml_static_mfree_queue_up = false;
+ }
+ 
++/*
++ * What became of the requests to ml_static_mfree(), for the sysctl
++ * kern.boot_payload_memory: the pages given to the VM, and the requests
++ * dropped whole because their address lies below the physical aperture.
++ * Only memory the aperture aliases can be given back. A kernel without a
++ * monitor and without ARM_LARGE_MEMORY aliases the memory in front of the
++ * kernel collection and the memory behind boot_args.topOfKernelData, so a
++ * request for a segment of the collection (the fileset's __LINKEDIT,
++ * __BOOTDATA, __KLDDATA) is dropped there.
++ */
++uint64_t ml_static_mfree_pages;
++uint64_t ml_static_mfree_dropped_calls;
++uint64_t ml_static_mfree_dropped_bytes;
++
+ /*
+  *	Routine:        ml_static_mfree
+  *	Function:
+@@ -2170,6 +2184,8 @@ ml_static_mfree(
+ 
+ 	/* It is acceptable (if bad) to fail to free. */
+ 	if (vaddr < physmap_base) {
++		os_atomic_inc(&ml_static_mfree_dropped_calls, relaxed);
++		os_atomic_add(&ml_static_mfree_dropped_bytes, (uint64_t)size, relaxed);
+ 		return;
+ 	}
+ 
+@@ -2222,6 +2238,8 @@ ml_static_mfree(
+ 		}
+ 	}
+ 
++	os_atomic_add(&ml_static_mfree_pages, (uint64_t)freed_pages, relaxed);
++
+ 	vm_page_lockspin_queues();
+ 	vm_page_wire_count -= freed_pages;
+ 	vm_page_wire_count_initial -= freed_pages;

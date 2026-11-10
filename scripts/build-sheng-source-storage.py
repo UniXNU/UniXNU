@@ -113,8 +113,10 @@ def main():
     # A bring-up image can carry one policy: the boot image must stay under the
     # 192 MiB fastboot limit, and the second table does not fit yet.
     tables_in_userdata = os.environ.get('XNU_SOURCE_STORAGE_TABLES', '') == 'userdata'
-    selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', 'OS,SystemOS')).split(',')
-                if name.strip() in ('OS', 'SystemOS')]
+    # The App window (the application cryptex of macOS) has a policy when its policy directory ships one.
+    default_policies = 'OS,SystemOS,App' if (policies / 'App').is_dir() else 'OS,SystemOS'
+    selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', default_policies)).split(',')
+                if name.strip() in ('OS', 'SystemOS', 'App')]
     if not selected:
         parser.error('UNIXNU_SOURCE_STORAGE_POLICIES names no policy')
     manifest_paths = [policies / name / 'manifest.bin' for name in selected]
@@ -123,7 +125,7 @@ def main():
         parser.error('All selected policies must share the same complete explicit owner anchor')
     manifests = []
     expected = {}
-    for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS')):
+    for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS'), ('App', 'UNIXNU_ROOT_APP')):
         digest, identity = os.environ.get(prefix + '_SHA256'), os.environ.get(prefix + '_UUID')
         if name in selected and not (digest and identity):
             parser.error(f'the OS profile has no [root] {name.lower()}_image_sha256 and {name.lower()}_volume_uuid')
@@ -187,6 +189,15 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
                 '-I', str(ROOT / 'drivers/VirtioMmioBlock'), '-I', str(tree / '.cache/xnu-work/osfmk')]
     flags = ['-DNATIVE_UFS_SOURCE_API=1', '-DNATIVE_VERIFIED_BLOCK=1',
              '-DNATIVE_VERIFIED_BLOCK_MULTI_POLICY=1', '-DNATIVE_VERIFIED_POLICY_HANDOFF=1']
+    if os.environ.get('UNIXNU_XNU_TARGET') == 'macosx':
+        # The kernel keeps the iOS target triple, so TargetConditionals gives TARGET_OS_OSX 0. The macOS
+        # IOStorageFamily has the TARGET_OS_OSX members (doLockUnlockMedia, reportLockability,
+        # reportPollRequirements and the IOStorage.h fields); without them every later IOBlockStorageDevice
+        # vtable slot sits 3 slots early and the original IOBlockStorageDriver fails PAC on its calls.
+        osx = out / 'macos-target.h'
+        osx.write_text('/* Generated: the macOS IOStorageFamily ABI on the iOS-triple kernel. */\n'
+                       '#include <TargetConditionals.h>\n#undef TARGET_OS_OSX\n#define TARGET_OS_OSX 1\n')
+        flags += ['-include', str(osx)]
     # The RAM disk carries the Data seed; like NativeUfs its class registers with the source storage classes.
     sources = [base, device / 'drivers/ShengUfs/NativeUfs.cpp', ROOT / 'drivers/RamBlock/NativeRamBlock.cpp',
                device_source('SourceStorage.cpp'), device_source('SourceRootPolicies.cpp'),
@@ -199,10 +210,10 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         flags.append('-DNATIVE_BOOT_PROCESS_CAPTURE=1')
         sources += [device_source(name) for name in
                     ('BootProcessProbe.c', 'BootUiTraceProbe.c', 'BootProcessWorker.c')]
-        # The launchd job policy (sheng-disable-watchdogd, sheng-lite, sheng-disable-jobs, sheng-setup) that BootProgress carries on
+        # The launchd job policy (disable-watchdogd, lite, disable-jobs, setup) that BootProgress carries on
         # iPadOS 17; the kernel runs it after the Data mount.
         sources.append(device_source('BootWatchdogPolicy.c'))
-        # The diagnostic file export (sheng-diag-export): the unified log, crash reports and a screenshot, read through the VFS.
+        # The diagnostic file export (diag-export): the unified log, crash reports and a screenshot, read through the VFS.
         sources.append(device_source('BootDiagExport.c'))
         sources.append(device_source('WifiFirmware.c'))
         sources.append(device_source('BluetoothFirmware.c'))

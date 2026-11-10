@@ -304,5 +304,5 @@ The QEMU generator is the smallest complete example. The device page in [Devices
 ## Next steps
 
 - [Payload](/concepts/payload)
-- [Device tree matching](/drivers/device-tree-matching)
+- [Provider matching](/porting/driver-development#matching)
 - [Bring-up order](/porting/bring-up)

@@ -141,7 +141,7 @@ def main():
     for field in ('image_sha256','candidate_sha256','embedded_kernel_sha256'):
         require(package[field] == release[field], 'Final-container identity mismatch: '+field)
     require(package['patch_reproduction'] == 'byte-for-byte match' and package['owned_memory'] == '0x40000000', 'Wrong packaged kernel/window')
-    require(package['boot_args'] == ['-v','serial=3','debug=0x14e','kt_fixed_zones=120','sheng-pmgr=2','native-ufs-root=1','native-ufs-diagnostics=1'],
+    require(package['boot_args'] == ['-v','serial=3','debug=0x14e','kt_fixed_zones=120','pmgr=2','native-ufs-root=1','native-ufs-diagnostics=1'],
             'Unexpected probe/reset/security arguments')
     log_pass('publication/audit-controls.log', 'PASS: 15 negative packaging controls')
     gates.append('actual Android/FAT/kernel/firmware/ADT/root UUID/Data consistency and refusal controls')

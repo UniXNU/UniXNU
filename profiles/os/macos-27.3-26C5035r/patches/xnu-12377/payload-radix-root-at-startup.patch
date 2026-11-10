@@ -1,0 +1,44 @@
+The page radix root is made during startup.
+
+Pages before the page array (the loaded image and the boot allocations behind it) are found through a radix tree whose
+root is read-only once the kernel is locked down. ml_static_mfree() of such a page after lockdown, as when boot payload
+memory is returned once it is installed (boot-payload-release=1), made the root then and the write to the read-only
+variable panicked at boot. The root is now made at the end of the zone allocator's startup whenever such pages exist.
+
+Has not run on hardware.
+--- a/osfmk/vm/vm_resident.c
++++ b/osfmk/vm/vm_resident.c
+@@ -3008,6 +3008,24 @@
+ 
+ 	*levelp = level;
+ 	return root;
++}
++
++static vm_page_radix_node_t vm_pages_radix_load_root(uint32_t *level);
++
++/*
++ * The root is read-only once the kernel is locked down, so it is made during startup whenever pages before the page array exist
++ * (the loaded image and the boot allocations behind it): ml_static_mfree() of such a page after lockdown, for example of boot
++ * payload memory returned once it is installed, inserts it here, and making the root then wrote a read-only variable.
++ */
++__startup_func
++static void
++vm_pages_radix_startup(void)
++{
++	uint32_t level;
++
++	if (vm_pages_first_pnum > pmap_first_pnum && vm_pages_radix_load_root(&level) == NULL) {
++		(void)vm_pages_radix_init_root(&level);
++	}
+ }
+ 
+ static vm_page_radix_node_t
+@@ -3102,6 +3120,8 @@
+ SYSCTL_TEST_REGISTER(vm_page_radix_verify, vm_page_radix_verify_test);
+ 
+ #endif /* DEBUG || DEVELOPMENT */
++
++STARTUP(ZALLOC, STARTUP_RANK_LAST, vm_pages_radix_startup);
+ 
+ __attribute__((noinline))
+ static void

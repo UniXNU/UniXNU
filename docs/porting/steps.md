@@ -44,7 +44,8 @@ dependencies, then pin the source in the device configuration.
 A new OS profile needs the [XNU and patch inputs](/xnu/source-and-patches) and
 [prelink ABI work](/concepts/prelink) before hardware drivers can be qualified.
 An arm64e OS such as iOS or iPadOS 27 applies only to supported devices; see
-[arm64e OS profiles](/porting/arm64e).
+[arm64e OS profiles](/porting/arm64e). macOS uses the arm64e profile
+`macos-27.3-26C5035r`; read [macOS profile](/porting/macos) beside each step below.
 
 **Result:** selected repositories and exact source revisions, with unresolved
 hardware or ABI work recorded.
@@ -83,6 +84,9 @@ Complete these files using the [device repository reference](/porting/device-rep
 
 Arrays replace inherited arrays. Keep the complete required component,
 archive, configuration-fragment and patch-series lists in each override.
+A board that serves a second OS profile puts that profile's values under
+`[os_overrides."<profile>"]` and its defconfig in `[package.defconfig]`, as the
+[macOS values](/porting/macos#device) show.
 
 **Result:** a device repository whose source pins and hardware values are explicit.
 
@@ -95,7 +99,8 @@ archive, configuration-fragment and patch-series lists in each override.
 ./unixnu tree
 ```
 
-Inspect the selected profiles, component sources, overrides and patch order in
+`--os VERSION` selects another profile for one command, for example
+`--os macos-27`. Inspect the selected profiles, component sources, overrides and patch order in
 `status`. The assembled sources appear under
 `out/<device>/<os_profile>/<config>/tree/`; the device's `package/` appears there
 as `kits/<board.kit>`. Run component scripts from this assembled tree when their
@@ -128,6 +133,7 @@ Work through [driver adaptation](/porting/drivers): platform and memory,
 storage, display and brightness, input, GPU, Wi-Fi, Bluetooth, USB, then DSP, audio and power.
 Each guide identifies source files, board inputs, build integration and expected
 observations. Select only implementations whose required inputs are satisfied.
+macOS adds the [macOS adaptations](/porting/macos#drivers) to the same sequence.
 
 **Result:** each selected capability has its own configuration and verification
 entry. A component selected in TOML still needs its archive recipe and board hooks.
@@ -138,6 +144,8 @@ Save the paths from [requirements](/guide/requirements) in
 [local build configuration](/reference/configuration#local-build-inputs).
 Follow [Building](/building) in order: kernel, package, firmware, payload,
 userdata when required, then boot image. Check each output before proceeding.
+A macOS image takes `--os macos-27` on every command and needs its
+[Data seed](/porting/macos#data-seed) first.
 For a separate UniXNU partition, follow the [partition procedure](/porting/dual-system-partition) before installing the image.
 
 Follow [bring-up](/porting/bring-up) for firmware, menu, loader, kernel and root
@@ -175,7 +183,7 @@ Use these references for the step you are working on:
 | Topic | Documentation |
 | --- | --- |
 | Boot process and image inputs | [Boot chain](/concepts/boot-chain), [prelink](/concepts/prelink), [payload](/concepts/payload), [userdata layout](/concepts/userdata), [integrity and boot policy](/concepts/security) |
-| Component implementation and development | [Driver layers](/drivers/overview), [driver repositories and component pages](/drivers/repositories) |
+| Component selection and development | [Component catalog](/reference/components), [develop a driver](/porting/driver-development) |
 | Kernel changes | [Source and patches](/xnu/source-and-patches), [patch reference](/xnu/patch-reference), [4 KiB page tables](/xnu/four-k-page-tables) |
 | Build and boot configuration | [Command line](/reference/cli), [device configuration](/reference/configuration), [boot configuration](/reference/boot-configuration), [output layout](/reference/output-layout) |
 | Host verification | [QEMU workflow](/reference/qemu) |

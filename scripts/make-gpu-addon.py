@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pack the owner-built Adreno Metal plugin into a GPU addon file for the boot payload.
 
-  make-gpu-addon.py [--publish] [--no-daemon] [--wallpaper DIR] [--wallpaper-floating DIR] [--prime-list FILE] [--pipeline-pack FILE] [--cache-export] OUTPUT
+  make-gpu-addon.py [--publish] [--no-daemon] [--prefix addons|GPUBundles] [--wallpaper DIR] [--wallpaper-floating DIR] [--prime-list FILE] [--pipeline-pack FILE] [--cache-export] OUTPUT
 
 The files are the ones add-gpu-plugin-data.py stages into a Data seed, with the same paths below /private/var/ngpu and the same modes:
 addons/NativeAdrenoMetal.bundle/*, addons/NativeAdrenoMetal.publish (--publish),
@@ -10,7 +10,7 @@ kernel mounts over the default wallpaper's layered animation; --wallpaper-floati
 wallpaper's floating layer (iPadOS 27). --prime-list adds FILE (the absolute paths of the OS image's .metallib
 files, one per line) as addons/NativeAdrenoMetal.primelist, the libraries the render server compiles ahead (PrimeShaders.h). The payload carries the file next to the kernel (unixnu build payload --gpu-addon), the loader
 hands it to the kernel as /chosen/memory-map/GpuAddon, and the kernel writes every file whose content or mode differs into the mounted
-Data volume before its addon mounts (sheng-gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
+Data volume before its addon mounts (gpu-addon=1). The Data seed then no longer changes with the plugin, so its persistent store
 (whose identity is the seed's content) survives a plugin rebuild. The kernel creates missing directories.
 
 The data of every file is zlib-compressed: the payload FAT (the boot image's ramdisk) has to stay at 192 MiB, which the tablet's boot
@@ -60,6 +60,15 @@ def main():
         lines = prime_list.read_text().split()
         if not lines or any(not line.startswith('/') or not line.endswith('.metallib') for line in lines):
             sys.exit('--prime-list takes a file of absolute .metallib paths')
+    # --prefix DIR: the directory below the install root the plugin files go to (addons/ on iPadOS, below /private/var/ngpu;
+    # GPUBundles/ on macOS, which the kernel writes to /Library/GPUBundles and protects for IOGPU's trust check).
+    prefix = 'addons'
+    if '--prefix' in args:
+        at = args.index('--prefix')
+        prefix = args[at + 1]
+        del args[at:at + 2]
+        if prefix not in ('addons', 'GPUBundles'):
+            sys.exit('--prefix takes addons or GPUBundles')
     cache_export = '--cache-export' in args
     if cache_export:
         args.remove('--cache-export')
@@ -75,20 +84,21 @@ def main():
     output = Path(args[0]).resolve()
     if output.exists():
         sys.exit('Refuse to overwrite ' + str(output))
-    if not (BUNDLE / 'NativeAdrenoMetal').is_file():
+    # iOS keeps a flat bundle; macOS keeps the executable in Contents/MacOS. The addon carries either layout as built.
+    if not (BUNDLE / 'NativeAdrenoMetal').is_file() and not (BUNDLE / 'Contents/MacOS/NativeAdrenoMetal').is_file():
         sys.exit('Build the plugin first: python3 scripts/build-adreno-metal-plugin.py')
     files = []
     for path in sorted(p for p in BUNDLE.rglob('*') if p.is_file()):
         mode = 0o755 if path.name in ('NativeAdrenoMetal', 'libvulkan_freedreno.dylib') else 0o644
-        files.append(('addons/NativeAdrenoMetal.bundle/' + path.relative_to(BUNDLE).as_posix(), mode, path.read_bytes()))
+        files.append((f'{prefix}/NativeAdrenoMetal.bundle/' + path.relative_to(BUNDLE).as_posix(), mode, path.read_bytes()))
     if publish:
-        files.append(('addons/NativeAdrenoMetal.publish', 0o644, b'1\n'))
+        files.append((f'{prefix}/NativeAdrenoMetal.publish', 0o644, b'1\n'))
     if prime_list:
-        files.append(('addons/NativeAdrenoMetal.primelist', 0o644, prime_list.read_bytes()))
+        files.append((f'{prefix}/NativeAdrenoMetal.primelist', 0o644, prime_list.read_bytes()))
     if cache_export:   # the plugin sends its cache directory to the UFS log (CacheExport.h)
-        files.append(('addons/NativeAdrenoMetal.cacheexport', 0o644, b'1\n'))
+        files.append((f'{prefix}/NativeAdrenoMetal.cacheexport', 0o644, b'1\n'))
     if pipeline_pack:
-        files.append(('addons/NativeAdrenoMetal.m2vpack', 0o644, pipeline_pack.read_bytes()))
+        files.append((f'{prefix}/NativeAdrenoMetal.m2vpack', 0o644, pipeline_pack.read_bytes()))
     # --no-daemon: only the plugin (iPadOS 27 runs no probe daemon and keeps its launchd jobs).
     if not no_daemon:
         files.append(('bin/adrenoprobed', 0o755, (PLUGIN / 'adrenoprobed').read_bytes()))
