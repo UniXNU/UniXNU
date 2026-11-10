@@ -2,6 +2,20 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 17:22: 0263f THE MODEM ANNOUNCES ITS QMI SERVICES: QRTR v2 HELLO answered, 63 services on nodes 2 / 3
+  incl. DMS, NAS, UIM, WDS, WDA, WMS, VOICE, PBM, LOC, IMSA** (kernel ec6af6b = patch 0263, image
+  **`shim/out/umi-0263f-x55qrtr.img`**, 0262's line with `sweetmdm=7`; booted 17:19; log: scratchpad `umi-0263f.log`).
+  - As 0263e up to IPCR (Sahara 5.9 s, AMSS on the same link, LOOPBACK echoed), then: "the modem speaks v2 headers",
+    HELLO from node 2 answered in v2; NEW_SERVER for 34 services in the first seconds (node 2: SSCTL 0x2b v2 inst 16,
+    0x138b, 0x0e, 0x0f, 0x31, 0x14; node 3: SERVREG_NOTIF 0x42 inst 165, 0x22, 0xffe4, 0x24, 0x0f, 0x31, 0x11, 0x15, 0x16,
+    TS 0x17, TMD 0x18 ...; announced twice), then **about 20-30 s after mission mode the QMI services on node 3**:
+    0x55, 0x4c, 0xe4, 0x37, 0x32, **PBM 0x0c, VOICE 0x09 (v2), NAS 0x03, 0x0a (v2), IMSA 0x2f, UIM 0x0b**, 0x19,
+    **WDS 0x01**, 0x04, **WDA 0x1a**, 0x08, 0x4d, **WMS 0x05**, 0x2a, **DMS 0x02**, 0x30, 0x44, 0x49, 0x4e, 0x1d, 0x07,
+    0x4b, 0x4a, **LOC 0x10 (v2)** - 63 in all. No DATA packets and no NEW_LOOKUP to us in 30 s (so no TFTP request
+    seen yet). MDM2AP status 1, errfatal 0, MHI M0 for the whole run; stage result 0.
+  - Next: QMI clients over QRTR (a port of ours on node 1): DMS (revision / IMEI read / operating mode), UIM (card
+    status), NAS (serving system / signal); watch for the TFTP lookup (service 0x1000) and serve it if it comes; keep
+    the modem service running past the 30 s window (a kernel thread), then something CommCenter can use.
 - **2026-11-09 23:25: 0263 THE X55 IN MISSION MODE: AMSS on the same link, LOOPBACK echoed, QRTR packets from the
   modem** (patch `xnu/patches/0263-umi-x55-mission-mode.patch`, kernel ec6af6b, built without the adreno / wlan WIP;
   booted as 0263e = **`shim/out/umi-0263e-x55mission.img`** (0262's line with `sweetmdm=7`), 23:23, log: session
