@@ -2,6 +2,17 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 19:20: 0271 SIM: the modem sees NO CARD in either physical slot** (patch
+  `xnu/patches/0271-umi-x55-uim-slots.patch`, image **`shim/out/umi-0271-x55sim.img`** = 0270's line; booted ~19:15;
+  log: scratchpad `umi-0271.log`; user: a SIM is in the tray).
+  - UIM get slot status (0x47): **2 physical slots, both card 1 "ABSENT", slot ACTIVE, logical slots 1 / 2, ICCID
+    length 0**. Event registration (0x2e, card status) ok; power up (0x31) slot 1 and slot 2 both "ok"; card status
+    afterwards and every 30 s: both slots "error 3 (no ATR)", 0 applications. Online / UMTS / MCC 228 as in 0270.
+  - The SM8250's live device tree has nothing for the SIM (no UIM / card-detect GPIOs on the AP side): detection is
+    the X55's own (its UIM interfaces, hotswap / card-detect configuration in its NV / MCFG hardware config).
+  - Open questions: did this SIM work in this phone under Android recently, and in which tray position; the MCFG
+    hardware config never finishes its refresh here (stored digest stays old) - the UIM hardware settings (hotswap
+    polarity, slot config) may live in that config; `sweetmdmslot=N` (UIM switch slot, opt-in) is built but unused.
 - **2026-11-10 19:05: 0270 THE X55 STAYS ONLINE AND THE RADIO SEES THE NETWORK (UMTS, MCC 228 MNC 03, -88 dBm);
   not registered: the SIM is still not powered** (patch `xnu/patches/0270-umi-x55-mode-steering.patch`, image
   **`shim/out/umi-0270-x55online.img`** = 0265b's line + `sweetmdmonline=1`; booted ~19:00; log: scratchpad
