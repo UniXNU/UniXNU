@@ -174,7 +174,7 @@ reference Wi-Fi supplicant runs with `-q -s`.
 **Result:** one reader environment, one matching decoder, an identified storage
 range and a tested route back to bootloader or recovery.
 
-For the reference iOS 27 native source path, enable `sheng-log=1 boot-ui-trace=1`
+For the reference iOS 27 native source path, enable `log=1 boot-ui-trace=1`
 when diagnosing a user-space stall. The source storage archive includes
 BootProcessWorker.c, which captures process stacks separately from the log
 writer so a user-page fault cannot stop log persistence. Add

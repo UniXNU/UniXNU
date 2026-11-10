@@ -54,7 +54,7 @@ The Novatek processing core uses a 40 × 60 matrix. Verify geometry and bounds
 when adapting its firmware or processing core. Firmware extraction is owned by
 the device's `scripts/gen-touch-firmware.py` and proprietary-file inventory.
 
-The reference probe arguments `sheng-touch=1`, `2`, `3` and `4` select resource inspection, clocks/pins,
+The reference probe arguments `touch=1`, `2`, `3` and `4` select resource inspection, clocks/pins,
 controller identification, then firmware/scanning. Use those stages only after
 adapting the hardware values consumed by that stage.
 
@@ -71,7 +71,7 @@ logical coordinate ranges and contact limits to the sensor.
 
 Select the sensor, transport and HID components in the complete component list.
 The reference display recipe links the sensor and bus objects; its HID recipe binds
-the OS interface. `sheng-touch-hid=1` enables its touch publication path.
+the OS interface. `touch-hid=1` enables its touch publication path.
 From the assembled target tree, inspect their integration:
 
 ```sh
@@ -92,7 +92,7 @@ acknowledgement. Access only the PMIC peripherals owned by the selected executio
 environment. Adapt `BootResetCore.h` helpers where the SPMI controller differs.
 Connect press/release state to the HID consumer report. The reference uses report 2 bits
 for Power, Volume Increment and Volume Decrement and enables this with
-`sheng-buttons=1`.
+`buttons=1`.
 
 **Expected result:** every press and release produces the expected report,
 including held and simultaneous buttons, with bounded interrupt activity.
@@ -120,7 +120,7 @@ palm is the last child of a frame.
 
 The sheng reference loads the WN8030 RAM image through its boot ROM, reads one
 68-byte frame per interrupt and gates input with the hall sensors.
-`sheng-keyboard=1` enables it.
+`keyboard=1` enables it.
 
 **Expected result:** typing, Caps Lock, pointer and scroll gestures work; folding
 or closing the cover disables input; detaching removes the device.

@@ -87,7 +87,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 调度与内存复用 {#scheduling}
 
-参考实现用 `sheng-gpu-preempt=2` 启用模式 2。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
+参考实现用 `gpu-preempt=2` 启用模式 2。高、普通偏高、实时请求进入 ring 0；普通、低、后台和未指定请求进入 ring 1。任务的 GPU role 决定使用前台还是后台请求。队列在优先级变化时保持 FIFO；抢占保存 GMEM 并恢复各环实际执行过的页表。详见 [Adreno740 调度](/zh/drivers/adreno740#调度)。
 
 运行时调度与完成线程在 iOS、macOS 上都使用交互 QoS。渲染线程采用固定调度策略时，编码线程继承它的策略与优先级。
 
@@ -95,11 +95,11 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 8 位 BGRA 帧缓冲的渲染模式 {#render-mode}
 
-`sheng-fb-bgra=1` 默认设置 `TU_DEBUG=sysmem,nocb`。带有尚未分配 backing 的 lazy transient 附件时，pass 在满足分块渲染条件后使用 GMEM；其余 pass 保持系统内存策略。`turnip-transient-attachments-in-gmem.patch` 在 SYSMEM 覆盖前作出此选择，让 memoryless 附件留在 tile 内存。
+`fb-bgra=1` 默认设置 `TU_DEBUG=sysmem,nocb`。带有尚未分配 backing 的 lazy transient 附件时，pass 在满足分块渲染条件后使用 GMEM；其余 pass 保持系统内存策略。`turnip-transient-attachments-in-gmem.patch` 在 SYSMEM 覆盖前作出此选择，让 memoryless 附件留在 tile 内存。
 
-`turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`sheng-tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
+`turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
 
-`sheng-metal-flow=1` 打开 metal2vulkan 的 lowering 线程、commit 直接提交和管线预热，用于测试，默认关闭。详见 [AdrenoMetal](/zh/drivers/adreno-metal)。
+`metal-flow=1` 打开 metal2vulkan 的 lowering 线程、commit 直接提交和管线预热，用于测试，默认关闭。详见 [AdrenoMetal](/zh/drivers/adreno-metal)。
 
 Metal 客户端默认使用单采样。`NATIVE_METAL_SINGLE_SAMPLE=0` 保留请求的采样数；纹理类型、pipeline 采样数和 resolve 处理遵循该策略。
 
@@ -137,7 +137,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（参考实现使用 `sheng-gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
+通过 `--gpu-addon` 与 `--owner-trust-cache` 将 addon 和配套 owner trust bundle 交给 payload，并开启板级 addon 加载器（参考实现使用 `gpu-addon=1`）。保留已有 Data seed，让持久数据与缓存沿用原有身份。详见[打包流程](/zh/porting/packaging)。运行时插件名为 `NativeAdrenoMetal`。
 
 核对所选 OS profile 的 sandbox、user-client 和 trust-cache 集成。
 Metal 桥接层从不返回 nil encoder：无法编码的 pass 会得到一个命令缓冲区被拒绝的

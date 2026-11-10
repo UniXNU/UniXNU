@@ -77,7 +77,7 @@ PHY、复位、时钟和电源序列。
   参见 `RootLayout.h`。
 - 根卷读取、持久 Data 写入和复位处理分别定义完成条件。每次写入验证记录分配范围和恢复方法。
 - 接管 apps SMMU 的驱动也负责其他设备需要的 stage 1 窗口。ShengUfs 为显示 bank
-  （`sheng-dpu-scanout`）和 WiFi 端点（`sheng-wifi=2` 或更大）各建立一个，默认都关闭。
+  （`dpu-scanout`）和 WiFi 端点（`wifi=2` 或更大）各建立一个，默认都关闭。
   音频流保持直通：给它们使用转换 context 会让参考板型复位。
 - 请求列表项为 32 字节，两项共用一条 64 字节缓存行。在非一致性的 stream 上，
   清理一项可能把旧副本写回，覆盖控制器为相邻项写入的完成状态。请求列表应放在
@@ -144,7 +144,7 @@ python3 scripts/porting-record.py check --device /path/to/device
 | 一侧 | 工具 | 输出 |
 | --- | --- | --- |
 | Linux | `scripts/linux-ufsbench.py` 启动只读 Linux 读取镜像，以 O_DIRECT 运行 `package/linux-log/ufsbench.c`，然后回到 fastboot | `bench.txt`，以及内核的 UFS 链路和队列信息 |
-| XNU | `sheng-ufs-bench=1` 在启动继续之前于内核中运行同样的测试，核对零拷贝读取与数据区路径，然后重启回 fastboot | UFS 日志消息缓冲区中的 `ufsbench` 行 |
+| XNU | `ufs-bench=1` 在启动继续之前于内核中运行同样的测试，核对零拷贝读取与数据区路径，然后重启回 fastboot | UFS 日志消息缓冲区中的 `ufsbench` 行 |
 
 两侧都在刷入的根镜像范围内，按 1、8、32 队列深度随机读取 4 KiB、16 KiB、
 128 KiB 和 1 MiB，然后顺序读取。每侧至少运行三次，比较平均值：

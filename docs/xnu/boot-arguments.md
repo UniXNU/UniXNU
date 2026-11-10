@@ -54,33 +54,33 @@ Use `amfi_get_out_of_my_way=1` only in a diagnostic boot. It changes the securit
 
 | Argument | Purpose |
 | --- | --- |
-| `sheng-platform-stage=<n>` | Stops the platform expert at a fixed stage |
-| `sheng-pmgr=<n>` | Selects the board PMGR integration |
+| `platform-stage=<n>` | Stops the platform expert at a fixed stage |
+| `pmgr=<n>` | Selects the board PMGR integration |
 | `native-ufs-root=1` | Uses the native UFS root path |
 | `native-ufs-stats-delay=<n>` | Delays the UFS statistics read |
 | `armcpu-diagnostics=1` | Prints the CPU and interrupt state |
 | `armcpu-spi-ipi=1` | Uses the SPI path for inter-processor interrupts |
-| `sheng-smp=1` | Starts the secondary CPUs |
-| `sheng-cpufreq=<n>` | Selects the CPU frequency path |
-| `sheng-touch=<n>` | Runs the touch probe stage |
-| `sheng-touch-hz=<n>` | Selects the touch SPI clock |
-| `sheng-touch-mode=<n>` | Forces the touch SPI mode |
-| `sheng-touch-hid=1` | Publishes touch contacts to HID |
-| `sheng-aks=1` | Enables the AKS path |
-| `sheng-aks-sls=<n>` | Selects the reported lock state; 3 means no passcode |
-| `sheng-usb=<n>` | Runs QcomDwc3; 2 adds register sampling, 3 also cycles the bus once |
-| `sheng-usb-host=<s>` | Forces USB host mode after a delay |
-| `sheng-usb-back=<s>` | Returns to the cable's role after this time in forced host mode |
-| `sheng-gpu-power=<n>` | Selects the GPU power sequence |
-| `sheng-gpu-metal=1` | Enables the Metal path |
-| `sheng-gpu-addon=1` | Mounts the GPU addon content |
-| `sheng-data-persist=<n>` | 1 proves the Data store window read-only, 2 opens it for writes |
-| `sheng-data-reset=<n>` | 1 discards the Data overlay, 2 also asks for Setup |
-| `sheng-log-reserve=<mib>` | End-of-userdata reserve for the diagnostic log and export region, default 1024 |
-| `sheng-data-fua=1` | Runs the Data store write through (every write with FUA) instead of write back |
-| `sheng-ufs-bench=1` | Runs the UFS read benchmark before the boot goes on, logs it and restarts into fastboot |
-| `sheng-disable-watchdogd=1` | Stops the watchdog daemon |
-| `sheng-disable-jobs=<list>` | Skips the named launch jobs |
+| `smp=1` | Starts the secondary CPUs |
+| `cpufreq=<n>` | Selects the CPU frequency path |
+| `touch=<n>` | Runs the touch probe stage |
+| `touch-hz=<n>` | Selects the touch SPI clock |
+| `touch-mode=<n>` | Forces the touch SPI mode |
+| `touch-hid=1` | Publishes touch contacts to HID |
+| `aks=1` | Enables the AKS path |
+| `aks-sls=<n>` | Selects the reported lock state; 3 means no passcode |
+| `usb=<n>` | Runs QcomDwc3; 2 adds register sampling, 3 also cycles the bus once |
+| `usb-host=<s>` | Forces USB host mode after a delay |
+| `usb-back=<s>` | Returns to the cable's role after this time in forced host mode |
+| `gpu-power=<n>` | Selects the GPU power sequence |
+| `gpu-metal=1` | Enables the Metal path |
+| `gpu-addon=1` | Mounts the GPU addon content |
+| `data-persist=<n>` | 1 proves the Data store window read-only, 2 opens it for writes |
+| `data-reset=<n>` | 1 discards the Data overlay, 2 also asks for Setup |
+| `log-reserve=<mib>` | End-of-userdata reserve for the diagnostic log and export region, default 1024 |
+| `data-fua=1` | Runs the Data store write through (every write with FUA) instead of write back |
+| `ufs-bench=1` | Runs the UFS read benchmark before the boot goes on, logs it and restarts into fastboot |
+| `disable-watchdogd=1` | Stops the watchdog daemon |
+| `disable-jobs=<list>` | Skips the named launch jobs |
 | `offline-legacy-*=1` | Enables the legacy display and input probes |
 | `offline-owner-root-check=1` | Starts the verified root check |
 | `offline-owner-root-audit=1` | Enables the root binding audit |
@@ -112,7 +112,7 @@ if (PE_parse_boot_argn("my-driver-stage", &stage, sizeof(stage))) {
 | Early kernel output | `-v serial=3 debug=0x14e` |
 | Kext load detail | `kextlog=0xfff` |
 | Boot progress | `boot-progress=2` |
-| Platform stop | `sheng-platform-stage=<n>` |
+| Platform stop | `platform-stage=<n>` |
 | Storage detail | `native-ufs-root=1 native-ufs-stats-delay=30` |
 | Display detail | `offline-legacy-gop=1 offline-legacy-phase=<n>` |
 | Code signing detail | `cs_debug=<mask>` |

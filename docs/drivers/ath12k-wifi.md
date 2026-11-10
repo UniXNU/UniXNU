@@ -61,8 +61,8 @@ Changes of at least 3 dB publish link updates. SNR is floored at zero.
 
 | Setting | Current behavior |
 | --- | --- |
-| `sheng-wifi=5` | Start the mainline Wi-Fi stack |
-| `sheng-wifi-aj=0` | Let Settings/wifid select networks |
+| `wifi=5` | Start the mainline Wi-Fi stack |
+| `wifi-aj=0` | Let Settings/wifid select networks |
 | `log-wifi=1` | Enable Wi-Fi diagnostics |
 | `log-gpu=0 log-display=0` | Skip GPU/display diagnostic collection |
 | Automatic reset | Disabled in the current temporary image |

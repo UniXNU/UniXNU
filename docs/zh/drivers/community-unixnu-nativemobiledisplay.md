@@ -8,7 +8,7 @@
 
 ## 状态
 
-CPU 和 GPU scanout 路径工作。GOP scanout 没有 vblank 中断；`sheng-vsync` 提供定时器。
+CPU 和 GPU scanout 路径工作。GOP scanout 没有 vblank 中断；`vsync` 提供定时器。
 
 ## 维护
 

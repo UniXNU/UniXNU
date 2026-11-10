@@ -57,8 +57,8 @@ ShengBacklight 把 sheng 面板的两颗 KTZ8866 背光控制器接入 CoreBrigh
 
 | 启动参数 | 作用 |
 | --- | --- |
-| `sheng-backlight=1` | 启动驱动 |
-| `sheng-backlight-control=0` | 不发布 `backlight-control`，也不返回上述 metaclass |
+| `backlight=1` | 启动驱动 |
+| `backlight-control=0` | 不发布 `backlight-control`，也不返回上述 metaclass |
 | `log-display=1` | 在启动日志中加入 `L` 行 |
 
 ## 验证

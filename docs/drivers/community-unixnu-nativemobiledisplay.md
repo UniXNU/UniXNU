@@ -8,7 +8,7 @@ CPU software display, framebuffer copying and presentation for the Samsung Galax
 
 ## State
 
-The CPU and GPU scanout paths work. The GOP scanout has no vblank interrupt; `sheng-vsync` supplies a timer.
+The CPU and GPU scanout paths work. The GOP scanout has no vblank interrupt; `vsync` supplies a timer.
 
 ## Maintenance
 

@@ -146,7 +146,7 @@ boot-progress=2
 给镜像加标签，拍照后可以确认构建：
 
 ```
-sheng-build-tag=ks-001
+build-tag=ks-001
 ```
 
 标题栏会以 `[ks-001]` 开头。
@@ -306,7 +306,7 @@ trace 每 8 秒轮换一页。间隔几秒拍三到四张照片，覆盖全部�
 
 诊断页按拍照场景设计。建议流程：
 
-1. 把 `sheng-build-tag` 设为简短的镜像标签。
+1. 把 `build-tag` 设为简短的镜像标签。
 2. 冻结页面用 `boot-progress=1`，实时页面用 `boot-progress=2`。
 3. 用户态会清屏时设置 `boot-diag-resume`。
 4. 把设备放在支架上，相机与面板平行。
@@ -354,10 +354,10 @@ python3 scripts/qemu-entry/gdb-stop.py --help
 | `kextlog=0xfff` | kext 日志 |
 | `boot-progress=1` | 诊断页，30 秒停滞后冻结 |
 | `boot-progress=2` | 诊断页连续运行 |
-| `sheng-build-tag=<tag>` | 标题栏镜像标签 |
+| `build-tag=<tag>` | 标题栏镜像标签 |
 | `boot-diag-resume=<seconds>` | OS 停止 scanout 后收回面板 |
-| `sheng-platform-stage=<n>` | 在平台专家阶段停住 |
-| `sheng-touch=<n>` | 触控探针阶段 |
+| `platform-stage=<n>` | 在平台专家阶段停住 |
+| `touch=<n>` | 触控探针阶段 |
 | `offline-legacy-phase=<n>` | 显示探针阶段 |
 | `-no_slto_panic` | 关闭 SLTO panic |
 | `cs_debug=<mask>` | 代码签名输出 |

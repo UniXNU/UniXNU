@@ -101,8 +101,8 @@ implemented and recorded.
   `PA_PWRMode`) before changing it. The reference firmware leaves HS-G5 Rate A
   on two lanes in FAST mode.
 - The driver that takes over the apps SMMU also owns any stage 1 window another
-  device needs. ShengUfs sets one up for the display bank (`sheng-dpu-scanout`)
-  and one for the WiFi endpoint (`sheng-wifi=2` or more); both are off by default.
+  device needs. ShengUfs sets one up for the display bank (`dpu-scanout`)
+  and one for the WiFi endpoint (`wifi=2` or more); both are off by default.
   Audio streams stay in pass-through: a translating context resets the reference board.
 
 The [reference storage record](/devices/sheng#storage) supplies board values,
@@ -164,7 +164,7 @@ LBAs and the same test sequence. The reference board provides both sides:
 | Side | Tool | Output |
 | --- | --- | --- |
 | Linux | `scripts/linux-ufsbench.py` boots the read-only Linux reader, runs `package/linux-log/ufsbench.c` with O_DIRECT and returns to fastboot | `bench.txt` and the kernel's UFS link and queue facts |
-| XNU | `sheng-ufs-bench=1` runs the same tests in the kernel before the boot goes on, checks zero-copy reads against the data-area path and restarts into fastboot | `ufsbench` lines in the UFS log's message buffer |
+| XNU | `ufs-bench=1` runs the same tests in the kernel before the boot goes on, checks zero-copy reads against the data-area path and restarts into fastboot | `ufsbench` lines in the UFS log's message buffer |
 
 Each side reads 4 KiB, 16 KiB, 128 KiB and 1 MiB at random at queue depth 1, 8
 and 32, then sequentially, inside the flashed root image. Run each side at least

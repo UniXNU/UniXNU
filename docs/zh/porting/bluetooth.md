@@ -115,7 +115,7 @@ python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
-在 UniXNU 仓库中，确认板级启动参数含 `sheng-bluetooth=1` 和 `log-bluetooth=2`：
+在 UniXNU 仓库中，确认板级启动参数含 `bluetooth=1` 和 `log-bluetooth=2`：
 
 ```sh
 ./unixnu build kernel payload -D ../UniXNU-<device> --os <profile>

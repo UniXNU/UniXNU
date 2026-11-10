@@ -110,7 +110,7 @@ Linux 提供协议和流生命周期参考。使用选定 XNU 的接口实现其
 | 格式 | 单声道，48 kHz |
 | iOS | HAL 插件的输入端口；iOS 只在 Thunderbolt 传输类型下接受它 |
 
-用 `sheng-audio=4` 检查采集，它在启动时读取两秒：`[mic]` 和 `[mic capture]` 日志行
+用 `audio=4` 检查采集，它在启动时读取两秒：`[mic]` 和 `[mic capture]` 日志行
 给出返回的周期、字节数、非零样本比例和峰值。随后在应用中录音并读取 `[audio-io]`。
 
 ## 4. 实现电池状态上报 {#battery}
@@ -158,9 +158,9 @@ SM8550 上的调频输入：
 
 - CPU：每 16 ms 读取调度器记录的各 CPU 空闲时间。频域跟随其中最忙的 CPU，留 1.25 倍余量，连续四个较闲的窗口后才降频。
 - GPU：读取 GMU XO 忙碌计数器，按让 GPU 约一半时间忙碌的档位通过 HFI 投票，同时投该档位的带宽。
-- 触摸：收到触摸报告后，P 频域和 GPU 保持最高档，直到最后一次报告后 1 s（`sheng-cpufreq-boost-ms`、`sheng-gpu-dcvs-boost-ms`）。
+- 触摸：收到触摸报告后，P 频域和 GPU 保持最高档，直到最后一次报告后 1 s（`cpufreq-boost-ms`、`gpu-dcvs-boost-ms`）。
 - 帧：最近 4 个窗口中有 2 个有 GPU 提交时，所有 CPU 频域在 300 ms 内不低于各自最高档的 60%。GPU 从空闲降频后恢复工作时，50 ms 内以当前频率的两倍运行，至少 578 MHz。
-- fence 等待：等待者睡眠到 fence 中断为止，最长 1 ms（`sheng-gpu-pause-us`），不再轮询。
+- fence 等待：等待者睡眠到 fence 中断为止，最长 1 ms（`gpu-pause-us`），不再轮询。
 
 **结果：** 频率请求和电源转换产生可观察效果，并保持依赖设备正常运行。
 

@@ -67,7 +67,7 @@ The writable Data volume is separate from the userdata image. It comes from the 
 
 The kernel accepts a Data disk of up to 1 TiB. Above 2 GiB the typed block provider keeps only the seed's nonzero pages, so memory use follows the content rather than the disk size. The seed identity hashes the size and the nonzero pages with their index.
 
-The persistent store serves the disk from a window at the end of the userdata partition. Writes use forced unit access, so a page is on the medium when its command completes. The store stays clear of the root image and the log reserve. `sheng-log-reserve=<MiB>` sets that reserve, 1024 MiB by default. `sheng-data-persist=1` proves the window read-only, and `sheng-data-persist=2` opens it for writes.
+The persistent store serves the disk from a window at the end of the userdata partition. Writes use forced unit access, so a page is on the medium when its command completes. The store stays clear of the root image and the log reserve. `log-reserve=<MiB>` sets that reserve, 1024 MiB by default. `data-persist=1` proves the window read-only, and `data-persist=2` opens it for writes.
 
 `scripts/seed-data-grow.py` grows the APFS container of a packed seed to a chosen size or to the tablet's userdata partition. The output keeps only the nonzero pages and the volume UUID. A different size starts the Data volume over. The kernel refuses a seed whose store window does not fit the real partition.
 

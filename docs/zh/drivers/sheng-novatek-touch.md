@@ -90,7 +90,7 @@ struct nvt_bus {
 
 ## 探针阶段
 
-探针默认关闭。启动参数 `sheng-touch=<n>` 选择阶段：
+探针默认关闭。启动参数 `touch=<n>` 选择阶段：
 
 | 阶段 | 工作 |
 | --- | --- |
@@ -131,7 +131,7 @@ volatile int native_touch_ids[NVT_SLOTS];
 
 写入方在更新前后递增序列号，读取方据此检测撕裂快照。`ShengHidInput` 读取快照并发出 digitizer 报告。
 
-在 sheng 上同时开启诊断导出和 `sheng-tlog=1`，可获取 `kernel.touchpath.bin`。
+在 sheng 上同时开启诊断导出和 `tlog=1`，可获取 `kernel.touchpath.bin`。
 在设备仓库运行 `python3 scripts/decode-sheng-touchpath.py kernel.touchpath.bin --jsonl paths.jsonl` 解码。
 每条记录给出一根手指相对首次观测质心的原始及滤波位移，单位为 0.1 个面板像素，并记录短暂丢点、抬指、边缘标记及 HID 提交结果。
 三个时间戳分别对应读帧前最近一次触控中断、SPI 读帧完成、发布触点集合返回，均可与 `kernel.rings.txt` 的翻帧时间对齐。

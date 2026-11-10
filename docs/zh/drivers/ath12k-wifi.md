@@ -59,8 +59,8 @@ RSSI 来自关联 BSS，并每秒从 peer 缓存更新一次；变化至少 3 dB
 
 | 设置 | 当前行为 |
 | --- | --- |
-| `sheng-wifi=5` | 启动主线 Wi-Fi 栈 |
-| `sheng-wifi-aj=0` | 由设置页面和 wifid 选择网络 |
+| `wifi=5` | 启动主线 Wi-Fi 栈 |
+| `wifi-aj=0` | 由设置页面和 wifid 选择网络 |
 | `log-wifi=1` | 开启 Wi-Fi 诊断 |
 | `log-gpu=0 log-display=0` | 跳过 GPU 和显示诊断采集 |
 | 自动重启 | 当前临时启动镜像已关闭 |

@@ -90,7 +90,7 @@ The clock helpers are pure functions. `tb_choose_clock` selects the DFS level an
 
 ## Probe stages
 
-The probe is off by default. The boot argument `sheng-touch=<n>` selects a stage:
+The probe is off by default. The boot argument `touch=<n>` selects a stage:
 
 | Stage | Work |
 | --- | --- |
@@ -131,7 +131,7 @@ volatile int native_touch_ids[NVT_SLOTS];
 
 The writer increments the sequence before and after the update, so the reader detects a torn snapshot. `ShengHidInput` reads the snapshot and emits digitizer reports.
 
-On sheng, enable `sheng-tlog=1` with diagnostic export to capture `kernel.touchpath.bin`.
+On sheng, enable `tlog=1` with diagnostic export to capture `kernel.touchpath.bin`.
 Run `python3 scripts/decode-sheng-touchpath.py kernel.touchpath.bin --jsonl paths.jsonl` from the device repository.
 Each row follows a physical contact from its first observed centroid in units of 0.1 panel pixel.
 It includes raw and filtered displacement, holds, release, edge classification and the HID submission result.

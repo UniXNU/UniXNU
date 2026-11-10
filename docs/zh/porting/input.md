@@ -46,7 +46,7 @@
 Novatek 处理核心使用 40 × 60 矩阵。修改固件或处理核心时核对几何尺寸和边界。
 固件提取由设备的 `scripts/gen-touch-firmware.py` 与私有文件清单管理。
 
-参考探针参数 `sheng-touch=1`、`2`、`3`、`4` 分别选择资源检查、时钟/引脚、控制器识别和固件/扫描。
+参考探针参数 `touch=1`、`2`、`3`、`4` 分别选择资源检查、时钟/引脚、控制器识别和固件/扫描。
 先适配该阶段使用的硬件参数，再启用相应阶段。
 
 **预期结果：** 得到显示坐标系中的一致接触帧，包含抬起事件。
@@ -59,7 +59,7 @@ HID 层通过序列计数器读取 `native_touch_*`；替换生产方时保留�
 按传感器适配报告描述符、逻辑坐标范围和接触数量上限。
 
 在完整组件列表选择传感器、传输和 HID 组件。参考显示配方链接传感器与总线对象，
-HID 配方绑定 OS 接口；`sheng-touch-hid=1` 启用触控发布路径。在目标构建树检查：
+HID 配方绑定 OS 接口；`touch-hid=1` 启用触控发布路径。在目标构建树检查：
 
 ```sh
 rg -n 'TouchProbe|GeniSpi|NvtProtocol|NvtTouchCore|NvtFirmware' scripts/build-gop-legacy-display.py
@@ -75,7 +75,7 @@ rg -n 'native_touch_|ReportDescriptor' drivers/ShengHidInput/NativeHidInput.cpp
 映射目标 GPIO 或 PMIC 输入、极性、所有权、中断路由和应答操作。
 仅访问当前执行环境拥有的 PMIC 外设。SPMI 控制器变化时适配 `BootResetCore.h` 辅助接口。
 将按下/释放状态接入 HID consumer 报告。参考实现使用 report 2 的 Power、Volume Increment
-和 Volume Decrement 位，参数 `sheng-buttons=1` 启用该路径。
+和 Volume Decrement 位，参数 `buttons=1` 启用该路径。
 
 **预期结果：** 每次按下和释放产生正确报告，包括长按和同时按键，中断活动保持有界。
 
@@ -96,7 +96,7 @@ Keyboard Power（键盘页，usage 0x66）同时作为输入和特性元素时�
 该手掌是一帧最后一个子事件时，过滤器会使 backboardd 中止。
 
 sheng 参考实现通过 boot ROM 加载 WN8030 RAM 固件，每次中断读取一帧 68 字节，
-并用霍尔传感器门控输入。参数 `sheng-keyboard=1` 启用该路径。
+并用霍尔传感器门控输入。参数 `keyboard=1` 启用该路径。
 
 **预期结果：** 打字、Caps Lock、指针与滚动手势正常；翻到背面或合上时输入关闭；拔下后设备移除。
 

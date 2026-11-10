@@ -44,7 +44,7 @@ The reference stores these as C++ constants and tables in the board package.
 6. Attach MSI and confirm delivery before relying on interrupt-driven progress.
 
 **Expected result:** the correct endpoint, readable BAR, usable DMA and delivered
-interrupts. The reference probe uses `sheng-wifi` to select stages; stage 1 inspects
+interrupts. The reference probe uses `wifi` to select stages; stage 1 inspects
 handoff state, stage 2 starts the link and stage 4 inspects the endpoint.
 The current endpoint path enters the reusable stack at stage 5 or higher; that
 stack performs its MHI and firmware startup. Read the stage's
@@ -102,7 +102,7 @@ reconnect behavior and sustained traffic separately in the network record.
 ## WCN7850 reference {#sheng}
 
 The reference joins WPA2-Personal networks, gets an address by DHCP and loads web pages.
-`sheng-wifi=5` starts Wi-Fi; `sheng-wifi-aj=0` leaves the join to Settings.
+`wifi=5` starts Wi-Fi; `wifi-aj=0` leaves the join to Settings.
 
 | Area | Finding |
 | --- | --- |

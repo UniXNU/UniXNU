@@ -49,9 +49,9 @@ candidate and audit inputs listed in [build inputs](/porting/migration#build-inp
    presentation. Confirm that a known frame reaches the display.
 4. Check swap completion and IOSurface lifetime before enabling
    [GPU presentation](/porting/gpu).
-5. Adapt timing reads to the target display controller. The reference probe, `sheng-dpu=1`,
+5. Adapt timing reads to the target display controller. The reference probe, `dpu=1`,
    samples the SM8550 DPU and dual-DSI counters through `DisplayTimingProbe.cpp`.
-   Set refresh policy from the observed panel mode. The reference requests 120 Hz with `sheng-vsync=120`.
+   Set refresh policy from the observed panel mode. The reference requests 120 Hz with `vsync=120`.
 
 For the `NativeGOPWire.h` path, query mode/geometry first and validate each
 present buffer's size and stride. In GPU handoff, track the pending frame by
@@ -77,14 +77,14 @@ The reference `DisplayTimingProbe.cpp` exposes these stages:
 
 | Argument | Reads |
 | --- | --- |
-| `sheng-dpu=2` | VIG 0 and 1 source, size, format and fetch settings; CTL 0 state; the tear check of both interfaces; the display streams in the apps SMMU |
-| `sheng-dpu=3` | Also rewrites each pipe's current address and times the CTL flush latch |
+| `dpu=2` | VIG 0 and 1 source, size, format and fetch settings; CTL 0 state; the tear check of both interfaces; the display streams in the apps SMMU |
+| `dpu=3` | Also rewrites each pipe's current address and times the CTL flush latch |
 
 In this reference, both VIG pipes fetch one 32-bit physical address, the right pipe from
 its own source x, and a flush latches within 5.4 ms without a start because the
 panel refreshes by itself. The display context bank starts with translation off.
 
-Direct scanout (`sheng-dpu-scanout=2`) is experimental and off by default: it
+Direct scanout (`dpu-scanout=2`) is experimental and off by default: it
 gives the display bank a stage 1 window (ShengUfs) and points the pipes at the
 compositor's surfaces. Any failure falls back to the GPU copy.
 
@@ -126,7 +126,7 @@ behind the OS-facing brightness service.
    `brightness-nits`, and drops every request on a board that reports a virtual
    platform. [ShengBacklight](/drivers/sheng-backlight) lists each one.
 5. Build the service and its registration wrapper. The reference display recipe does
-   both; `sheng-backlight=1` enables its probe.
+   both; `backlight=1` enables its probe.
 
 From the resolved target tree, locate these integration points:
 
