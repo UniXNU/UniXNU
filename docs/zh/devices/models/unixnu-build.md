@@ -4,4 +4,4 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [iskssksjjsjjzjs/unixnu-build](https://github.com/iskssksjjsjjzjs/unixnu-build) | [unixnu-build](/zh/devices/unixnu-build) | 设备说明 | build tree |
+| [iskssksjjsjjzjs/unixnu-build](https://github.com/iskssksjjsjjzjs/unixnu-build) | [构建配置（设备未注明）](/zh/devices/unixnu-build) | 设备说明 | build tree |

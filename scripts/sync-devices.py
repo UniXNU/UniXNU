@@ -336,6 +336,7 @@ def render_site(registry, local=None):
 
 def render_catalog(registry, tools):
     official, groups = [], {}
+    entries_by_name = {entry['name']: entry for entry in registry['device']}
     for entry in registry['device']:
         if entry['repository'].lower() == 'unixnu/unixnu-sheng':
             official.append(entry)
@@ -383,12 +384,17 @@ def render_catalog(registry, tools):
             lines.append(f'| [{title}]({prefix}/devices/{name}) | sheng | '
                          f'{tools.markdown_text(entry.get("soc", ""))} | [{repo}](https://github.com/{repo}) |')
         lines += ['', '## ' + ('社区设备' if zh else 'Community devices'), '',
-                  '| ' + ('机型代号 | SoC | 来源数量' if zh else 'Codename | SoC | Sources') + ' |',
-                  '| --- | --- | --- |']
+                  '| ' + ('设备 | 机型代号 | SoC | 来源数量' if zh else 'Device | Codename | SoC | Sources') + ' |',
+                  '| --- | --- | --- | --- |']
         for board, entries in groups.items():
+            primary = entries_by_name.get(board, entries[0])
+            owner = primary['repository'].split('/')[0]
+            title = primary['title_zh' if zh else 'title'].removesuffix(f' ({owner})')
+            title = title.removesuffix(f' ({board})').removesuffix(f'（{board}）')
+            title = tools.markdown_text(title.replace('·', ' / ').replace('•', ' / '))
             socs = ', '.join(sorted({entry['soc'] for entry in entries if entry.get('soc')}))
             label = ('sheng（社区）' if zh else 'sheng (community)') if board == 'sheng' else board
-            lines.append(f'| [{label}]({prefix}/devices/models/{board}) | '
+            lines.append(f'| [{title}]({prefix}/devices/models/{board}) | {label} | '
                          f'{tools.markdown_text(socs)} | {len(entries)} |')
             page = ['# ' + label, '',
                     ('查看各仓库的设备说明与适配记录。'
