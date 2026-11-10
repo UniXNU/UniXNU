@@ -90,7 +90,10 @@ subprocess.run([*(['xcrun', 'clang++'] + base[2:]), '-std=c++17', '-fobjc-arc', 
                 '-I', ROOT / 'drivers/Adreno740', '-I', ROOT / 'kits/AdrenoPM4', '-I', VULKAN_INCLUDE, '-I', ROOT / 'build/turnip-smoke',
                 '-x', 'objective-c++', ROOT / 'drivers/AdrenoMetal/NativeAdrenoMetalPlugin.mm',
                 ROOT / 'drivers/AdrenoMetal/NativeBridgeMetalFrontend.mm', '-x', 'none', pm4, BRIDGE,
-                *link_extra, '-Wl,-dead_strip', *prime_section, '-lobjc', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'IOSurface', '-o', exe],
+                *link_extra, '-Wl,-dead_strip', *prime_section, '-lobjc', '-framework', 'Foundation', '-framework', 'Metal', '-framework', 'IOSurface',
+                # macOS: the device class subclasses IOGPU's IOGPUMetalDevice (the SDK's private IOGPU.tbd exports it) and the
+                # IOGPU adapter (IOGPUMetalDeviceShim.h) keeps the accelerator port with IOKit.
+                *(['-F', f'{sdk}/System/Library/PrivateFrameworks', '-framework', 'IOGPU', '-framework', 'IOKit'] if MACOS else []), '-o', exe],
                check=True)
 if IOS27:
     subprocess.run(['python3', ROOT / 'scripts/rust-pac-rewrite.py', exe, OUT / 'NativeAdrenoMetal.map', 'libadreno_metal_bridge_pac.a'],
