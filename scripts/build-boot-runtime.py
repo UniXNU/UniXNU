@@ -308,7 +308,8 @@ def main():
             wifi_report = json.loads((wifi / 'report.json').read_text())
             if wifi_report.get('firmware_prefix'):
                 extra += [wifi_report['firmware_prefix'], wifi / 'firmware']
-            if request.get('wifi_launchd_cache') or bluetooth_report is not None:
+            # A Bluetooth runtime without job overrides (macOS: the system's own jobs start it) needs no merged cache.
+            if request.get('wifi_launchd_cache') or (bluetooth_report is not None and bluetooth_report.get('launchd_job_overrides')):
                 cache_work = work / 'launchd-cache'
                 cache_work.mkdir()
                 with os_mount(request['os_image'], cache_work) as mount:
@@ -324,7 +325,7 @@ def main():
             addon = out / 'wifi-addon.bin'
             candidate.replace(addon)
             (out / 'wifi-service.json').write_bytes((wifi / 'report.json').read_bytes())
-        elif bluetooth_report is not None:
+        elif bluetooth_report is not None and bluetooth_report.get('launchd_job_overrides'):
             daemons = work / 'empty-daemons'
             daemons.mkdir()
             cache_work = work / 'bluetooth-cache'
