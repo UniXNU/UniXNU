@@ -126,9 +126,9 @@
   * BLE devices (watch, tracker, keyboard) and a second device paired at the same time
 * **CPU frequency scaling, next steps**: memory bus (DDR) voting with the load (apollo's 0153 `sweet_rpmh_ddr_set`); a CPU budget for runaway background processes (apollo's 0160); an idle-temperature comparison against the bootloader's clocks (`sweetcpufreq=0`)
 * **Cellular**: the Mi 10's modem is an external Snapdragon X55 on PCIe2. Kernel 0260 powers it (PMX55 warm reset)
-  and the link comes up (gen 3 x2, 17cb:0306); kernel 0261 loads sbl1 over BHI; kernel 0262 serves the other 12 images over MHI / Sahara (94 MB in 6.7 s); kernel 0263 takes it in mission mode: LOOPBACK echoes and the modem announces 63 QMI services over QRTR; kernel 0264 reads DMS / UIM / NAS; kernel 0265 serves its TFTP file requests and 0266 restarts it on request; each run it goes online, then \"shutting down\" for a reason not found yet (the SIM is not powered); kernel 0259's `AppleBaseband` stub keeps
-  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: the modem's own failure text (SFR,
-  DIAG), what host service it waits for; then SIM / registration, then a bridge to CommCenter
+  and the link comes up (gen 3 x2, 17cb:0306); kernel 0261 loads sbl1 over BHI; kernel 0262 serves the other 12 images over MHI / Sahara (94 MB in 6.7 s); kernel 0263 takes it in mission mode: LOOPBACK echoes and the modem announces 63 QMI services over QRTR; kernel 0264 reads DMS / UIM / NAS; kernel 0265 serves its TFTP file requests and 0266 restarts it on request; each run it goes online, then \"shutting down\": kernel 0267's SFR / DIAG show it waits to sync its EFS to the host over Sahara and asserts after ~90 s (the SIM is not powered); kernel 0259's `AppleBaseband` stub keeps
+  CommCenter from crash-looping but iOS shows "Cellular issue detected". Next: receive its EFS sync (Sahara on the
+  EFS channels), then SIM / registration, then a bridge to CommCenter
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
   put `CoreLocationMigrator` back, check `fairplaydeviceidentityd`, and make it part of the image build

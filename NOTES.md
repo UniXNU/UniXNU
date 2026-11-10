@@ -2,6 +2,25 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 18:25: 0267 THE MODEM SAYS WHY: SFR "ssr:AP:remotefs_sahara.c:850: Assertion
+  remotefs_sahara_info.sahara_status == SAHARA_END_OF_IMG_TRANSFER fail"** (patch
+  `xnu/patches/0267-umi-x55-sfr-diag.patch`, image **`shim/out/umi-0267-x55diag.img`** = 0265b's line; booted
+  ~18:15; log: scratchpad `umi-0267.log`).
+  - SFR: MHI command 73 (SFR_CFG) with a 4 KiB buffer at pool + 0x239000: completion 1. DIAG on MHI 4 / 5: HDLC
+    (CRC-16/CCITT), VERNO (answered `13 00`: unsupported) and EXT_MSG_CONFIG "set all real-time masks" 0x1c
+    (answered `7d 05 01 00 1c ...`: taken); 1331 F3 messages (0x79) + QSR hashed packets (0x92 / 0x99, no text).
+    F3 sources: almost all `tftp_msg_modem.c` (its TFTP client: "conn opened ... [sid = 4096, iid = 3]", RRQ stats,
+    "Recd error-pkt. Code = 1, File not found" for the other platforms' mcfg_hw files), `uim_powerup_logging.c`
+    (UIM_PUP_MSG power-up logs for both slots, p1 = 1 / 2, repeating the same tag sequence: the SIM power-up retries),
+    VAdcLog (PA_THERM1 52 C), wms, diagcomm.
+  - Timeline: ONLINE; mcfg flow (mcfg.tmp created, read, **unlinked** - 0267 deletes it properly now); **"shutting
+    down" ~10 s later** (SFR still empty); ~90 s after that the modem is gone (MHI reads all ones, MDM2AP 0) and the
+    SFR holds the remotefs_sahara assertion. So during "shutting down" the modem tries to **sync its EFS to the host
+    over Sahara (remote EFS, the RMTEFS build)**, waits ~90 s, asserts.
+  - Next: serve that sync. Likely on the "EFS" MHI channels 10 / 11 of the device tree (ee AMSS): a Sahara server
+    that takes what the modem sends (its EFS images) into RAM and answers; then serve those images instead of the
+    mdm1m9kefs partitions on the next Sahara boot (still never written to the phone without the user's OK). Also the
+    UIM power-up loop (SIM in the tray per the user).
 - **2026-11-10 18:12: 0266 MODEM RESTARTS WORK, but "shutting down" comes back every run; mcfg.tmp is only a lock**
   (patch `xnu/patches/0266-umi-x55-ramstore-restart.patch`, image **`shim/out/umi-0266-x55restart.img`** = 0265b's line;
   booted ~18:04; log: scratchpad `umi-0266.log`).
