@@ -2,6 +2,29 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 17:58: 0265 TFTP SERVER FOR THE X55 WORKS; the modem goes ONLINE, writes /readwrite/mcfg.tmp, then
+  stays "shutting down"** (patch `xnu/patches/0265-umi-x55-tftp-server.patch`, kernel 42c9f12, built without the adreno
+  / wlan WIP; image **`shim/out/umi-0265b-x55tftp.img`** = 0262's line with `sweetmdm=8`; booted ~17:55; log:
+  scratchpad `umi-0265b.log`; 0265 without the "b" dropped v2 packets under 32 bytes, so every transfer failed).
+  - TFTP over QRTR: service 0x1000 announced to node 2 right after its HELLO (instance words 0x001..0x401 and 0..5, as
+    found by the OnePlus 8 Pro port), our port 0x4002; RRQ / WRQ with blksize (7680 asked), tsize, timeoutms, wsize
+    (we answer 1), rsize / seek; `/readonly/firmware/...` -> the FAT modem partition through sweet_fat_pread; writes
+    acknowledged and DISCARDED (nothing stored).
+  - What the modem's file client (node 3) did: WRITE `/readwrite/server_check.txt` (5 bytes); READ
+    `/readwrite/ota_firewall/ruleset` (not found); READ `modem_pr/so/514_0_0.mbn` in pieces (seek / rsize);
+    `modem_pr/mcfg/configs/mcfg_hw/mbn_hw.dig`, `mcfg_sw/mbn_sw.dig`, `mcfg_hw/oem_hw.txt`, then it probes
+    `mcfg_hw/generic/common/<platform>/<FUSION|STANDALONE>/LA/<SS|DSDS|SS_CDMALess|DSDS_CDMALess>/mcfg_hw.mbn` for
+    SDX55 (found, read), Lahaina / Chitwan / Bitra (not on this partition: fine); READ `/readwrite/mcfg.tmp` (not
+    found), then **WRITE `/readwrite/mcfg.tmp` (1 byte)**. Probe reads with only tsize end with the client's error 9
+    (normal: it wanted the size). 322 QRTR data packets, no errors on our side.
+  - QMI: **DMS operating mode 0 ONLINE at first**, then, right after the mcfg.tmp write, **5 "shutting down"** for the
+    rest of the 90 s; **NAS now "searching"** (cs / ps attach 2, one radio, "none"); UIM still both slots "error, no
+    ATR". No offline-reason TLV in the answers. MDM2AP stayed 1, MHI M0.
+  - Reading (a guess): the modem selected its hardware MBN, recorded that in `/readwrite/mcfg.tmp` and asks for a
+    restart to apply it (the usual MCFG flow); with our writes thrown away and nobody restarting it, it stays
+    "shutting down". Next: a RAM store for `/readwrite` (kept across modem restarts within one phone boot; never
+    written to the phone), and a modem restart when DMS says "shutting down" (PMX55 warm reset, BHI, Sahara,
+    mission again), then UIM / NAS again.
 - **2026-11-10 17:35: 0264 QMI ANSWERS FROM THE X55: revision read; the modem puts itself OFFLINE; SIM slots
   "error, no ATR"** (patch `xnu/patches/0264-umi-x55-qmi-clients.patch`, kernel 15ca229, built without the adreno /
   wlan WIP; image **`shim/out/umi-0264-x55qmi.img`** = 0262's line with `sweetmdm=8`; booted 17:32; log: scratchpad

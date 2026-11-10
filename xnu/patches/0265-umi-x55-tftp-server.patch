@@ -1,0 +1,332 @@
+From 42c9f12e020504bc7f2052bab2e8512884ea248d Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 17:58:38 +0100
+Subject: [PATCH] umi: X55 TFTP server over QRTR (service 0x1000: reads from
+ the FAT modem partition, writes discarded), DMS offline reason, v2 packets
+ under 32 bytes (0265)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 263 +++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 261 insertions(+), 2 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 28e74b1..127bdf4 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -32,6 +32,8 @@
+  *               (the IMEI is not logged, only its length), UIM card status, NAS serving system + signal strength
+  *               (again every 10 s). sweetmdmonline=1 also asks DMS for operating mode online (the radio transmits
+  *               and registers with the SIM's network); default off. sweetmdmqrtr defaults to 90 s here.
++ *               Also a TFTP server for the modem (QRTR service 0x1000, port 0x4002): reads from the FAT modem
++ *               partition, writes acknowledged and discarded; DMS's offline reason is logged.
+  * PCIe sequence as sweet_pcie.c (PCIe0, QCA6390) with the PCIe2 registers (Linux gcc-sm8250.c).
+  * Built inside sweet_spmi.c (the local build cannot add source files).
+  */
+@@ -1138,12 +1140,250 @@ mx_qmi_name(uint32_t svc)
+ 
+ static void mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len);
+ #define MX_QMI_PORT     0x4001u
++/* ---- TFTP server for the modem over QRTR (service 4096, as Android's tftp_server / Linux tqftpserv) ----
++ * The modem's remote file system client reads "/readonly/firmware/image/..." (the FAT modem partition) and writes
++ * its EFS files through it. Reads: from the FAT, read only. Writes: acknowledged and thrown away (nothing of the
++ * phone's storage is written), logged. RFC 1350 + RFC 2347 / 2348 / 2349 options (blksize, tsize, timeout) and
++ * Qualcomm's rsize / seek / wsize. Service announcement and path mapping as found by the OnePlus 8 Pro port. */
++
++#define MX_TFTP_PORT    0x4002u
++#define MX_TFTP_SERVICE 0x1000u
++
++static struct {
++	bool used, writing;
++	uint32_t node, port;
++	uint32_t block, blksize, base, size, written;
++	char dir[96], name[64];
++} mt[8];
++static unsigned mt_logged;
++
++static void
++mt_reply(uint32_t node, uint32_t port, const uint8_t *p, uint32_t n)
++{
++	uint8_t *b = (uint8_t *)(mx.mem + MH_TXBUF);
++	uint32_t hl;
++	if (mq.v2) {
++		struct mx_qhdr2 h = { 3, 1, 0, 0, n, (uint16_t)MX_QNODE, (uint16_t)MX_TFTP_PORT, (uint16_t)node, (uint16_t)port };
++		memcpy(b, &h, sizeof(h));
++		hl = sizeof(h);
++	} else {
++		uint32_t h[8] = { 1, 1, MX_QNODE, MX_TFTP_PORT, 0, n, node, port };
++		memcpy(b, h, sizeof(h));
++		hl = sizeof(h);
++	}
++	memmove(b + hl, p, n);
++	(void)mx_send((hl + n + 3) & ~3u);
++}
++
++static void
++mt_error(uint32_t node, uint32_t port, uint16_t code, const char *text)
++{
++	uint8_t e[64];
++	size_t tl = strlen(text);
++	e[0] = 0;
++	e[1] = 5;
++	e[2] = (uint8_t)(code >> 8);
++	e[3] = (uint8_t)code;
++	memcpy(e + 4, text, MIN(tl, sizeof(e) - 5));
++	e[4 + MIN(tl, sizeof(e) - 5)] = 0;
++	mt_reply(node, port, e, (uint32_t)(5 + MIN(tl, sizeof(e) - 5)));
++}
++
++/* Data block `block` of session s (built straight in the TX buffer after the QRTR header room). */
++static void
++mt_data(unsigned s)
++{
++	static uint8_t blk[4 + 8192];
++	uint32_t off = (mt[s].block - 1) * mt[s].blksize, n = 0;
++	if (off < mt[s].size) {
++		n = MIN(mt[s].size - off, mt[s].blksize);
++		uint32_t fsz = 0;
++		if (sweet_fat_pread("modem", mt[s].dir, mt[s].name, mt[s].base + off, blk + 4, n, &fsz) != 0) {
++			mt_error(mt[s].node, mt[s].port, 2, "read failed");
++			mt[s].used = false;
++			return;
++		}
++	}
++	blk[0] = 0;
++	blk[1] = 3;
++	blk[2] = (uint8_t)(mt[s].block >> 8);
++	blk[3] = (uint8_t)mt[s].block;
++	mt_reply(mt[s].node, mt[s].port, blk, 4 + n);
++}
++
++static void
++mt_rx(uint32_t node, uint32_t port, const uint8_t *p, uint32_t len)
++{
++	if (len < 2) {
++		return;
++	}
++	unsigned op = (unsigned)(p[0] << 8 | p[1]);
++	unsigned s;
++	for (s = 0; s < 8 && !(mt[s].used && mt[s].node == node && mt[s].port == port); ++s) {
++	}
++	if (op == 1 || op == 2) {
++		/* request: path \0 mode \0 { option \0 value \0 } */
++		char path[160] = { 0 };
++		uint32_t o = 2, k = 0;
++		while (o < len && p[o] && k < sizeof(path) - 1) {
++			path[k++] = (char)p[o++];
++		}
++		o++;
++		while (o < len && p[o]) {        /* mode */
++			o++;
++		}
++		o++;
++		uint32_t blksize = 512, seek = 0, rsize = ~0u;
++		bool oack = false, tsize_asked = false, wsize_asked = false;
++		char opts[96] = { 0 };
++		size_t ol = 0;
++		while (o < len) {
++			const char *on = (const char *)p + o;
++			size_t onl = strnlen(on, len - o);
++			o += (uint32_t)onl + 1;
++			if (o >= len) {
++				break;
++			}
++			const char *ov = (const char *)p + o;
++			size_t ovl = strnlen(ov, len - o);
++			o += (uint32_t)ovl + 1;
++			uint32_t v = 0;
++			for (size_t i = 0; i < ovl && ov[i] >= '0' && ov[i] <= '9'; ++i) {
++				v = v * 10 + (uint32_t)(ov[i] - '0');
++			}
++			ol += (size_t)snprintf(opts + ol, sizeof(opts) - MIN(ol, sizeof(opts)), "%.*s=%u ", (int)onl, on, v);
++			if (onl == 7 && strncmp(on, "blksize", 7) == 0) {
++				blksize = MIN(MAX(v, 8u), 7680u);
++				oack = true;
++			} else if (onl == 5 && strncmp(on, "tsize", 5) == 0) {
++				tsize_asked = oack = true;
++			} else if (onl == 5 && strncmp(on, "rsize", 5) == 0) {
++				rsize = v;
++			} else if (onl == 4 && strncmp(on, "seek", 4) == 0) {
++				seek = v;
++			} else if (onl == 5 && strncmp(on, "wsize", 5) == 0) {
++				wsize_asked = oack = true;
++			} else if (onl == 7 && strncmp(on, "timeout", 7) == 0) {
++				oack = true;
++			}
++		}
++		if (mt_logged++ < 80) {
++			printf("SWEET MDM: TFTP %s \"%s\" from %u:%#x %s\n", op == 1 ? "read" : "WRITE", path, node, port, opts);
++		}
++		if (s == 8) {
++			for (s = 0; s < 8 && mt[s].used; ++s) {
++			}
++			if (s == 8) {
++				s = 0;
++			}
++		}
++		bzero(&mt[s], sizeof(mt[s]));
++		mt[s].node = node;
++		mt[s].port = port;
++		mt[s].blksize = blksize;
++		mt[s].writing = op == 2;
++		uint32_t fsz = 0;
++		if (op == 1) {
++			const char *rest = NULL;
++			if (strncmp(path, "/readonly/firmware/", 19) == 0) {
++				rest = path + 19;
++			} else if (strncmp(path, "/readonly/", 10) == 0) {
++				rest = path + 10;
++			}
++			const char *slash = rest ? strrchr(rest, '/') : NULL;
++			if (rest != NULL) {
++				size_t dl = slash ? (size_t)(slash - rest) : 0;
++				memcpy(mt[s].dir, rest, MIN(dl, sizeof(mt[s].dir) - 1));
++				strlcpy(mt[s].name, slash ? slash + 1 : rest, sizeof(mt[s].name));
++			}
++			uint8_t probe[4];
++			if (rest == NULL || sweet_fat_pread("modem", mt[s].dir, mt[s].name, 0, probe, 0, &fsz) != 0) {
++				if (mt_logged < 80) {
++					printf("SWEET MDM: TFTP \"%s\": not found\n", path);
++				}
++				mt_error(node, port, 1, "File not found");
++				return;
++			}
++			seek = MIN(seek, fsz);
++			mt[s].base = seek;
++			mt[s].size = MIN(fsz - seek, rsize);
++		}
++		mt[s].used = true;
++		if (oack) {
++			uint8_t a[96];
++			uint32_t n = 2;
++			a[0] = 0;
++			a[1] = 6;
++			n += (uint32_t)snprintf((char *)a + n, sizeof(a) - n, "blksize%c%u%c", 0, blksize, 0);
++			if (wsize_asked) {
++				n += (uint32_t)snprintf((char *)a + n, sizeof(a) - n, "wsize%c1%c", 0, 0);
++			}
++			if (tsize_asked && op == 1) {
++				n += (uint32_t)snprintf((char *)a + n, sizeof(a) - n, "tsize%c%u%c", 0, mt[s].size, 0);
++			}
++			mt_reply(node, port, a, n);
++		} else if (op == 1) {
++			mt[s].block = 1;
++			mt_data(s);
++		} else {
++			uint8_t a[4] = { 0, 4, 0, 0 };
++			mt_reply(node, port, a, 4);
++		}
++		return;
++	}
++	if (s == 8) {
++		if (op == 3 || op == 4) {
++			mt_error(node, port, 5, "Unknown transfer ID");
++		}
++		return;
++	}
++	if (op == 4 && !mt[s].writing && len >= 4) {
++		uint32_t acked = (uint32_t)(p[2] << 8 | p[3]);
++		if (acked != mt[s].block) {
++			return;
++		}
++		if (acked != 0 && acked * mt[s].blksize > mt[s].size) {
++			mt[s].used = false;                     /* the short last block was acknowledged */
++			return;
++		}
++		mt[s].block = acked + 1;
++		mt_data(s);
++	} else if (op == 3 && mt[s].writing && len >= 4) {
++		uint8_t a[4] = { 0, 4, p[2], p[3] };
++		mt[s].written += len - 4;
++		mt_reply(node, port, a, 4);
++		if (len - 4 < mt[s].blksize) {
++			if (mt_logged++ < 80) {
++				printf("SWEET MDM: TFTP write done: %u bytes (discarded)\n", mt[s].written);
++			}
++			mt[s].used = false;
++		}
++	} else if (op == 5) {
++		if (mt_logged++ < 80) {
++			printf("SWEET MDM: TFTP: the client ended a transfer (error %u)\n", len >= 4 ? (unsigned)(p[2] << 8 | p[3]) : 0);
++		}
++		mt[s].used = false;
++	}
++}
++
++/* NEW_SERVER for the TFTP service to the modem's node, under the instance words the client may look for. */
++static void
++mt_announce(uint32_t node)
++{
++	for (uint32_t i = 0; i < 11; ++i) {
++		uint32_t inst = i < 5 ? 1u | i << 8 : i - 5;
++		mx_qctrl(4, node, MX_TFTP_SERVICE, inst, MX_QNODE, MX_TFTP_PORT);
++	}
++	printf("SWEET MDM: TFTP service 0x1000 announced to node %u\n", node);
++}
++
+ 
+ static void
+ mx_qrx(const uint8_t *p, uint32_t len)
+ {
+ 	struct mx_qhdr h;
+-	if (len < sizeof(h)) {
++	/* v2 headers are 16 bytes: a TFTP ACK is 20 in all (0265 dropped them as "short" against the 32-byte v1 size) */
++	if (len < 16 || ((p[0] & 0xff) != 3 && len < sizeof(h))) {
+ 		printf("SWEET MDM: QRTR: short packet, %u bytes\n", len);
+ 		return;
+ 	}
+@@ -1180,6 +1420,9 @@ mx_qrx(const uint8_t *p, uint32_t len)
+ 		mq.node = h.src_node;
+ 		printf("SWEET MDM: QRTR HELLO from node %u: answered\n", h.src_node);
+ 		mx_qctrl(2, h.src_node, 0, 0, 0, 0);
++		if (md.stage >= 8) {
++			mt_announce(h.src_node);
++		}
+ 		break;
+ 	case 4:         /* NEW_SERVER: service, instance (version | instance << 8), node, port */
+ 		mq.servers++;
+@@ -1196,10 +1439,13 @@ mx_qrx(const uint8_t *p, uint32_t len)
+ 	case 10:        /* NEW_LOOKUP: a client looks for a service (the modem's TFTP client wants ours, 0x1000) */
+ 		printf("SWEET MDM: QRTR NEW_LOOKUP from node %u port %#x: service %#x %s instance %#x\n", h.src_node, h.src_port,
+ 		    c[1], mx_qmi_name(c[1]), c[2]);
++		if (md.stage >= 8 && (c[1] == 0 || c[1] == MX_TFTP_SERVICE)) {
++			mt_announce(h.src_node);
++		}
+ 		break;
+ 	case 1:         /* DATA */
+ 		mq.data++;
+-		if (mq.data <= 20) {
++		if (mq.data <= 20 && h.dst_port != MX_TFTP_PORT) {
+ 			printf("SWEET MDM: QRTR DATA %u bytes from %u:%#x to port %#x%s\n", h.size, h.src_node, h.src_port, h.dst_port,
+ 			    h.confirm_rx ? " (confirm)" : "");
+ 		}
+@@ -1210,6 +1456,8 @@ mx_qrx(const uint8_t *p, uint32_t len)
+ 		}
+ 		if (h.dst_port == MX_QMI_PORT && h.size <= len - hl) {
+ 			mx_qmi_rx(h.src_node, h.src_port, p + hl, h.size);
++		} else if (h.dst_port == MX_TFTP_PORT && h.size <= len - hl) {
++			mt_rx(h.src_node, h.src_port, p + hl, h.size);
+ 		}
+ 		break;
+ 	default:
+@@ -1320,6 +1568,17 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 		printf("SWEET MDM: DMS revision: %.*s\n", (int)MIN(tl, (uint16_t)120), (const char *)v);
+ 	} else if (svc == 0x02 && msg == 0x2d && (v = mx_tlv(m, len, 0x01, &tl)) != NULL && tl >= 1) {
+ 		printf("SWEET MDM: DMS operating mode: %u (%s)\n", v[0], mx_opmode(v[0]));
++		const uint8_t *w;
++		if ((w = mx_tlv(m, len, 0x10, &tl)) != NULL && tl >= 2) {
++			unsigned rsn = w[0] | w[1] << 8;
++			printf("SWEET MDM: DMS offline reason %#x:%s%s%s%s%s%s%s%s\n", rsn, rsn & 1 ? " host-image-misconfig" : "",
++			    rsn & 2 ? " PRI-image-misconfig" : "", rsn & 4 ? " PRI-version-incompatible" : "",
++			    rsn & 8 ? " device-memory-full" : "", rsn & 0x10 ? " ?0x10" : "", rsn & 0x20 ? " ?0x20" : "",
++			    rsn & 0x40 ? " ?0x40" : "", rsn & 0x80 ? " ?0x80" : "");
++		}
++		if ((w = mx_tlv(m, len, 0x11, &tl)) != NULL && tl >= 1) {
++			printf("SWEET MDM: DMS hardware restricted mode: %u\n", w[0]);
++		}
+ 	} else if (svc == 0x02 && msg == 0x25) {
+ 		for (uint8_t t = 0x10; t <= 0x13; ++t) {
+ 			if ((v = mx_tlv(m, len, t, &tl)) != NULL) {
+-- 
+2.54.0 (Apple Git-157)
+
