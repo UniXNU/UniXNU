@@ -565,6 +565,30 @@ xpc_short(xpc_object_t o)
 	return s.length > 300 ? [s substringToIndex:300] : s;
 }
 
+/* typed answers for the old _CTServerConnection property getters (kPacketGetProperty, kRegistrationGetProperty);
+ * types from CoreTelephony's readers (bool: dyn_cast_or_default(obj, bool), string: copied to a CFString) */
+static xpc_object_t
+plain_property(const char *key)
+{
+	if (strcmp(key, "kCellularDataHideRatIndicator") == 0 || strcmp(key, "kCellularDataHideIndicator") == 0 ||
+	    strcmp(key, "kRegistrationEmergencyCallBackMode") == 0) {
+		return xpc_bool_create(false);
+	}
+	if (strcmp(key, "kRegistrationIsInHomeCountry") == 0) {
+		return xpc_bool_create(true);
+	}
+	if (strcmp(key, "kRegistrationIsDataAttached") == 0) {
+		return xpc_bool_create(registered());
+	}
+	if (registered() && strcmp(key, "kRegistrationMCC") == 0) {
+		return xpc_string_create([[NSString stringWithFormat:@"%ld", cell_num(@"mcc")] UTF8String]);
+	}
+	if (registered() && strcmp(key, "kRegistrationOperatorName") == 0) {
+		return xpc_string_create([operator_name() UTF8String]);
+	}
+	return NULL;
+}
+
 static void
 plain_listen(const char *service)
 {
@@ -589,10 +613,13 @@ plain_listen(const char *service)
 			}
 			xpc_object_t reply = xpc_dictionary_create_reply(msg);
 			if (reply != NULL) {
-				/* echo: the request's keys and placeholder values back */
+				/* echo: the request's keys and placeholder values back; property keys with a known type get a real
+				 * value (a null makes CoreTelephony fall back to its default, which for the hide-indicator keys is
+				 * "hide": SpringBoard then takes the line for a bootstrap one and shows SOS) */
 				xpc_dictionary_apply(msg, ^bool(const char *key, xpc_object_t value) {
 					if (strcmp(key, "kRequest") != 0) {
-						xpc_dictionary_set_value(reply, key, value);
+						xpc_object_t v = plain_property(key);
+						xpc_dictionary_set_value(reply, key, v != NULL ? v : value);
 					}
 					return true;
 				});
@@ -621,6 +648,24 @@ main(void)
 			log_flush();
 			sleep(6);
 			return 1;
+		}
+
+		/* what MobileGestalt answers for the cellular capabilities (SpringBoard's status bar uses them) */
+		dlopen("/usr/lib/libMobileGestalt.dylib", RTLD_NOW);
+		CFTypeRef (*mg_copy)(CFStringRef, CFDictionaryRef) = dlsym(RTLD_DEFAULT, "MGCopyAnswer");
+		static const char *const mg_keys[] = {
+			"contains-cellular-radio", "cellular-telephony-capability", "telephony", "HasBaseband",
+			"cellular-data", "BasebandChipset", "DeviceSupportsSOS", "sms", "BasebandClass",
+		};
+		/* MGCopyAnswer only: MGGetBoolAnswer aborts the process for a key whose answer is not a boolean */
+		for (unsigned i = 0; mg_copy != NULL && i < sizeof(mg_keys) / sizeof(mg_keys[0]); ++i) {
+			CFStringRef k = CFStringCreateWithCString(NULL, mg_keys[i], kCFStringEncodingUTF8);
+			CFTypeRef v = mg_copy(k, NULL);
+			say(@"MG %s: %@", mg_keys[i], (__bridge id)v);
+			if (v != NULL) {
+				CFRelease(v);
+			}
+			CFRelease(k);
 		}
 
 		dlopen("/System/Library/Frameworks/CoreTelephony.framework/CoreTelephony", RTLD_NOW);
