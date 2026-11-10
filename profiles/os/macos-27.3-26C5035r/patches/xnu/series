@@ -19,3 +19,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-read-only-system-volume.patch
 ../xnu-12377/macos-rw-held-report.patch
 ../xnu-12377/macos-end-rename-swap.patch
+../xnu-12377/macos-service-port-derive-check.patch
