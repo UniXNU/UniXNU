@@ -1,0 +1,77 @@
+The name of a file's vnode for a diagnostic that can neither block nor take a lock.
+
+The boot log's scan of threads that sit in a paging wait (UniXNU-sheng package/BootUiTraceProbe.c) reads the VM object such
+a thread waits for while it holds the thread's lock, and names the object's file. The vnode pager gives the vnode, but only
+BSD code sees the vnode's fields, and the existing name calls take the name cache lock and a name reference.
+vnode_pager_peek_name copies the name through ml_nofault_copy: no lock, no reference, and a vnode or name freed and
+unmapped under the reader ends the copy instead of faulting. The result may be stale or cut short and is only fit to
+print. VNODE_PAGER_PEEK_NAME in vm_protos_internal.h tells the scan that the kernel has it; without this patch the scan
+prints the vnode's address instead.
+
+No behaviour changes: nothing in the kernel calls the function.
+--- a/bsd/vm/vnode_pager.c
++++ b/bsd/vm/vnode_pager.c
+@@ -76,6 +76,7 @@
+ #include <nfs/nfs.h>
+ 
+ #include <vm/vm_protos_internal.h>
++#include <machine/machine_routines.h>
+ 
+ #include <sys/kdebug.h>
+ #include <sys/kdebug_triage.h>
+@@ -197,6 +198,36 @@
+ 	return KERN_SUCCESS;
+ }
+ 
++/*
++ * The name of a vnode for a diagnostic that can neither block nor take a lock: the boot log's scan of threads that sit in a
++ * paging wait, which names the file whose VM object such a thread waits for, runs with a thread lock held. The name pointer
++ * and its bytes are read through ml_nofault_copy, without the name cache lock and without a reference on the vnode, so a
++ * vnode or a name that is freed and unmapped under the reader ends the copy, it cannot fault. The result may be stale or cut
++ * short and is only fit to print. Returns the length of the name copied, 0 when there is none.
++ */
++vm_size_t
++vnode_pager_peek_name(
++	struct vnode    *vp,
++	char            *name,
++	vm_size_t       size)
++{
++	const char *v_name = NULL;
++	vm_size_t copied;
++
++	if (name == NULL || size == 0) {
++		return 0;
++	}
++	name[0] = '\0';
++	if (vp == NULL ||
++	    ml_nofault_copy((vm_offset_t)&vp->v_name, (vm_offset_t)&v_name, sizeof(v_name)) != sizeof(v_name) ||
++	    v_name == NULL) {
++		return 0;
++	}
++	copied = ml_nofault_copy((vm_offset_t)v_name, (vm_offset_t)name, size - 1);
++	name[copied] = '\0';
++	return strlen(name);
++}
++
+ kern_return_t
+ vnode_pager_get_mtime(
+ 	struct vnode    *vp,
+--- a/osfmk/vm/vm_protos_internal.h
++++ b/osfmk/vm/vm_protos_internal.h
+@@ -193,6 +193,16 @@
+ extern struct vnode *vnode_pager_lookup_vnode(
+ 	memory_object_t);
+ 
++/*
++ * The vnode's name for a diagnostic that can neither block nor take a lock (bsd/vm/vnode_pager.c).
++ * VNODE_PAGER_PEEK_NAME tells such a diagnostic, built outside this tree, that the kernel has it.
++ */
++#define VNODE_PAGER_PEEK_NAME 1
++extern vm_size_t vnode_pager_peek_name(
++	struct vnode    *vp,
++	char            *name,
++	vm_size_t       size);
++
+ extern bool memory_object_is_vnode_pager(memory_object_t mem_obj);
+ 
+ struct vm_map_entry;

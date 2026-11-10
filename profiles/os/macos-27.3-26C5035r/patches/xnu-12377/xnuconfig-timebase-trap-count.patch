@@ -1,0 +1,82 @@
+A count of the user timebase traps.
+
+The macOS boot arguments carry timebase-hz=24000000: the kernel scales the 19.2 MHz counter to the 24 MHz timebase
+that Apple's userspace is built for, and user_timebase_type() then answers USER_TIMEBASE_NONE, so no process reads
+the counter itself. Every mach_absolute_time and mach_continuous_time call of every process is a trap into the
+kernel (MACH_ARM_TRAP_ABSTIME, MACH_ARM_TRAP_CONTTIME). iPadOS on this board boots without the argument and reads
+the counter in user mode. How many traps a macOS desktop makes, and so what the argument costs, is not measured:
+the one trace of it is a WindowServer sample whose only running leaf with five or more samples is
+mach_absolute_time_kernel. This counts the traps per CPU (one cache line each) and changes no behaviour;
+`sysctl machdep.timebase_traps` reports the sum since boot.
+diff --git a/bsd/dev/arm64/sysctl.c b/bsd/dev/arm64/sysctl.c
+--- a/bsd/dev/arm64/sysctl.c
++++ b/bsd/dev/arm64/sysctl.c
+@@ -109,7 +109,23 @@
+     CTLFLAG_RD | CTLTYPE_QUAD | CTLFLAG_LOCKED,
+     0, 0, sysctl_wake_conttime, "I",
+     "Continuous Time at the last wakeup");
++
++/* The user timebase traps of all CPUs (sleh.c): with a scaled timebase every user read of the time is one. */
++extern uint64_t native_timebase_trap_total(void);
++
++static int
++sysctl_timebase_traps SYSCTL_HANDLER_ARGS
++{
++#pragma unused(arg1, arg2, oidp)
++	uint64_t return_value = native_timebase_trap_total();
++	return SYSCTL_OUT(req, &return_value, sizeof(return_value));
++}
+ 
++SYSCTL_PROC(_machdep, OID_AUTO, timebase_traps,
++    CTLFLAG_RD | CTLTYPE_QUAD | CTLFLAG_LOCKED,
++    0, 0, sysctl_timebase_traps, "Q",
++    "User timebase traps since boot");
++
+ #if defined(HAS_IPI)
+ static int
+ cpu_signal_deferred_timer(__unused struct sysctl_oid *oidp, __unused void *arg1, __unused int arg2, struct sysctl_req *req)
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -2797,11 +2797,33 @@
+ 	}
+ }
+ 
++/*
++ * The timebase traps, by CPU. With a scaled timebase (the timebase-hz boot argument) userspace cannot read the
++ * counter itself (user_timebase_type), so every mach_absolute_time and mach_continuous_time call of every process
++ * is one of these traps. The count says what that costs; sysctl machdep.timebase_traps reports the sum.
++ */
++static struct {
++	uint64_t count;
++} __attribute__((aligned(128))) native_timebase_traps[MAX_CPUS];
++
++uint64_t native_timebase_trap_total(void);
++uint64_t
++native_timebase_trap_total(void)
++{
++	uint64_t total = 0;
++
++	for (unsigned int cpu = 0; cpu < MAX_CPUS; cpu++) {
++		total += os_atomic_load(&native_timebase_traps[cpu].count, relaxed);
++	}
++	return total;
++}
++
+ static void
+ handle_mach_absolute_time_trap(arm_saved_state_t *state)
+ {
+ 	uint64_t now = mach_absolute_time();
+ 	saved_state64(state)->x[0] = now;
++	os_atomic_inc(&native_timebase_traps[cpu_number()].count, relaxed);
+ }
+ 
+ static void
+@@ -2809,6 +2831,7 @@
+ {
+ 	uint64_t now = mach_continuous_time();
+ 	saved_state64(state)->x[0] = now;
++	os_atomic_inc(&native_timebase_traps[cpu_number()].count, relaxed);
+ }
+ 
+ 

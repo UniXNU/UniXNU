@@ -109,6 +109,10 @@ if (code_dir / 'NativeAdrenoMetal.dSYM').exists():
 turnip_lib = code_dir / 'libvulkan_freedreno.dylib'
 shutil.copyfile(TURNIP, turnip_lib)
 subprocess.run(['strip', '-x', turnip_lib], check=True)
+# Mesa's entry point tables name every Vulkan entry point through weak declarations; the ones Turnip leaves out are weak imports
+# looked up in the flat namespace, which dyld searches every loaded image for in each process that opens a device. Bound to the
+# library itself they stay NULL without the search.
+subprocess.run([sys.executable, ROOT / 'scripts/macho-self-bind-weak-imports.py', turnip_lib], check=True)
 subprocess.run(['codesign', '--force', '--sign', '-', '--pagesize', '4096', '--identifier', 'org.blu-sharky.turnip', turnip_lib], check=True)
 turnip_detail = subprocess.run(['codesign', '--display', '--verbose=4', turnip_lib], capture_output=True, text=True, check=True).stderr
 turnip_cdhash = re.search(r'^CDHash=([a-f0-9]{40})$', turnip_detail, re.M)[1]

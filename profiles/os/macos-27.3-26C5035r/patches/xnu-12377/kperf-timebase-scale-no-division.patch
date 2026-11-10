@@ -1,0 +1,120 @@
+The scaled timebase without divisions.
+
+With timebase-hz the timebase is the architected counter times num/den (24 MHz over the 19.2 MHz counter: 5/4).
+timebase_from_counter serves every kernel timestamp (ml_get_timebase, ml_get_speculative_timebase, ml_get_hwclock, and
+through them mach_absolute_time, the user timebase trap, the time accounting of every kernel entry and exit); in its
+plain form it divides twice by the run-time den. ml_set_decrementer divides by the run-time num for every timer it
+programs.
+
+pe_identify_machine.c stores log2(den) when den is a power of two, and ceil(2^64 / num). The scaled read then uses a
+shift and a mask in place of the divisions by den; another den keeps the divisions. The decrementer conversion takes
+the high half of a 64x64 multiplication: its dividend is below 2^48 (a 32-bit decrementer value times den, plus num,
+both at most 0xffff), and below 2^64 / num that product is the exact quotient. The results are the same bit for bit,
+and a kernel without timebase-hz (num == den) takes the same instructions as before.
+
+Host test (the functions are cut from these sources and compiled) against the plain expressions: for 5/4 every 32-bit
+decrementer value and the counter values within 70000 of every power of two, of the 64-bit wrap and of the points
+where the product wraps, plus 16 million random ones; for 965 other num/den pairs (every power of two den, dens that
+are not, nums up to 65535) the edges and random values; for every num up to 65535 the largest and smallest dividends
+the kernel can form; and every decrementer value for five more pairs. 26.4 billion comparisons, no difference. Not
+run on hardware.
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2475,8 +2475,15 @@
+  * The timebase is the architected counter scaled by num/den (pe_identify_machine.c, timebase-hz): 24 MHz over a
+  * 19.2 MHz counter is 5/4. Every kernel read of the counter goes through timebase_from_counter, a decrementer value is converted
+  * back to counter ticks, and userspace takes the timebase through the mach_absolute_time trap (user_timebase_type).
++ *
++ * Both conversions run on hot paths (every timestamp, every timer programmed), so pe_identify_machine.c also stores what
++ * replaces their divisions with the same results: the shift for a den that is a power of two (TIMEBASE_SCALE_NO_SHIFT
++ * otherwise), and ceil(2^64 / num) for the division by num of the decrementer conversion (0 when num is 1).
+  */
++#define TIMEBASE_SCALE_NO_SHIFT 64
+ uint32_t ml_timebase_scale_num = 1, ml_timebase_scale_den = 1;
++uint32_t ml_timebase_scale_den_shift = 0;
++uint64_t ml_timebase_scale_num_inverse = 0;
+ 
+ static inline bool
+ timebase_scaled(void)
+@@ -2484,15 +2491,39 @@
+ 	return ml_timebase_scale_num != ml_timebase_scale_den;
+ }
+ 
++/* floor(counter * num / den) without overflow of the product: num and den are below 2^16. */
+ static inline uint64_t
+ timebase_from_counter(uint64_t counter)
+ {
+ 	const uint64_t num = ml_timebase_scale_num, den = ml_timebase_scale_den;
++	const uint32_t shift = ml_timebase_scale_den_shift;
+ 
+ 	if (__probable(num == den)) {
+ 		return counter;
+ 	}
++	if (__probable(shift != TIMEBASE_SCALE_NO_SHIFT)) {
++		/* den is 1 << shift: the quotient is a shift and the remainder a mask. */
++		return (counter >> shift) * num + (((counter & (den - 1)) * num) >> shift);
++	}
+ 	return counter / den * num + counter % den * num / den;
++}
++
++/*
++ * A decrementer value in timebase ticks as counter ticks, rounded up: the timer fires at the deadline or just after it,
++ * never before. The dividend is below 2^48 (a 32-bit value times den, plus num), and for a dividend below 2^64 / num the
++ * high half of its product with ceil(2^64 / num) is the exact quotient.
++ */
++static inline uint64_t
++timebase_decrementer_to_counter(uint32_t dec_value)
++{
++	const uint64_t num = ml_timebase_scale_num, den = ml_timebase_scale_den;
++	const uint64_t inverse = ml_timebase_scale_num_inverse;
++	const uint64_t ticks = (uint64_t)dec_value * den + num - 1;
++
++	if (__probable(inverse != 0)) {
++		return (uint64_t)(((__uint128_t)ticks * inverse) >> 64);
++	}
++	return ticks / num;
+ }
+ 
+ /*
+@@ -2508,8 +2539,7 @@
+ 	cdp->cpu_decrementer = dec_value;
+ 
+ 	if (timebase_scaled()) {
+-		/* Counter ticks, rounded up: the timer fires at the deadline or just after it, never before. */
+-		counter_value = (counter_value * ml_timebase_scale_den + ml_timebase_scale_num - 1) / ml_timebase_scale_num;
++		counter_value = timebase_decrementer_to_counter(dec_value);
+ 		if (counter_value > 0x7fffffff) {
+ 			counter_value = 0x7fffffff;
+ 		}
+diff --git a/pexpert/arm/pe_identify_machine.c b/pexpert/arm/pe_identify_machine.c
+--- a/pexpert/arm/pe_identify_machine.c
++++ b/pexpert/arm/pe_identify_machine.c
+@@ -40,6 +40,8 @@
+  * counter read by target/hardware (machine_routines.c), converts decrementer values back, and reports the target frequency here.
+  */
+ extern uint32_t ml_timebase_scale_num, ml_timebase_scale_den;
++extern uint32_t ml_timebase_scale_den_shift;            /* log2(den), or 64 when den is not a power of two */
++extern uint64_t ml_timebase_scale_num_inverse;          /* ceil(2^64 / num), or 0 when num is 1 */
+ static void
+ native_virtual_timebase(void)
+ {
+@@ -59,8 +61,16 @@
+ 	if (target / a > 0xffff || hardware / a > 0xffff) {
+ 		return;
+ 	}
+-	ml_timebase_scale_num = (uint32_t)(target / a);
+-	ml_timebase_scale_den = (uint32_t)(hardware / a);
++	/*
++	 * What the scaled read and the decrementer conversion use in place of their divisions (machine_routines.c), stored
++	 * before the scale itself: num and den differ from here on, and every read after that takes the scaled path.
++	 */
++	const uint32_t num = (uint32_t)(target / a), den = (uint32_t)(hardware / a);
++
++	ml_timebase_scale_den_shift = (den & (den - 1)) == 0 ? (uint32_t)__builtin_ctz(den) : 64;
++	ml_timebase_scale_num_inverse = num > 1 ? UINT64_MAX / num + 1 : 0;
++	ml_timebase_scale_num = num;
++	ml_timebase_scale_den = den;
+ 	gPEClockFrequencyInfo.timebase_frequency_hz = target;
+ }
+ 

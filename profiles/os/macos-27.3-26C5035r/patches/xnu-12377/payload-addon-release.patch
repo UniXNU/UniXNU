@@ -1,0 +1,161 @@
+The addon's boot memory goes back to the VM after its files are on the Data volume (boot-payload-release=1).
+
+The addon (/chosen/memory-map/GpuAddon) lies in the loader's image behind the kernel collection and stays wired for
+the session, although native_gpu_addon_install, which writes its files to the Data volume, is its only reader. With
+the boot argument boot-payload-release=1 the macOS Data set-up returns its whole pages once both callers of the
+install have run and every file was written or found equal: IODTFreeLoaderInfo, the routine XNU uses for loader
+memory, frees them with ml_static_mfree and removes the range from the registry's /chosen/memory-map, where the
+block driver's native_ram_block_gpu_addon looks it up, so a later reader finds no addon instead of freed memory.
+Without the argument nothing changes.
+
+ml_static_mfree() and ml_static_protect() refuse an address below the physical aperture. Without a monitor and
+without ARM_LARGE_MEMORY the image tail (end of the collection to boot_args.topOfKernelData) has no alias in the
+aperture: phystokv() of its pages is their address in the static region, which arm_vm_physmap_init() maps read-write
+and never executable. Both routines now take a range that lies wholly inside the tail by that address; a page given
+to the VM keeps it as its kernel address, which is what ml_static_mfree() does with memory of the loaded image on a
+kernel whose aperture lies below the static region. Requests for the collection's own segments are dropped as
+before: their static mappings are not those of free memory. ml_static_mfree_prepare() lets a caller that knows a
+range only from the loader ask first, so a range the routine would not take is kept instead of causing a panic.
+
+Applies on top of payload-boot-memory-report.patch. Not run on hardware.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index af3fdca..8b6f47d 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9528,6 +9528,47 @@ native_owner_macos_boot_shims(proc_t p, user_addr_t scratch)
+ 	printf("owner Data: apfs_boot_util shim stage %d, status %d\n", native_owner_boot_shim_stage, native_owner_boot_shim_status);
+ }
+ 
++/*
++ * boot-payload-release=1: the addon's memory goes back to the VM. The addon is boot memory of the loader's image
++ * (/chosen/memory-map/GpuAddon, 22 MiB with a Metal plugin), wired for the session. native_gpu_addon_install is its
++ * only reader and both of its callers have run when this is called, so its whole pages are returned the way XNU
++ * returns loader memory: IODTFreeLoaderInfo frees them with ml_static_mfree and removes the range from the
++ * registry's /chosen/memory-map, where native_ram_block_gpu_addon looks it up; a later reader finds no addon, never
++ * freed memory. The range is the one that passed that function's bounds when the install read it. It is kept unless
++ * every file of the addon was written to the Data volume, or found equal there, in this boot.
++ * Status for the boot log: the pages returned, 0 not asked, -1 no addon installed, -2 a file failed or was skipped,
++ * -3 no range in the registry, -4 a range ml_static_mfree does not take.
++ */
++volatile int native_gpu_addon_released = 0;
++extern int IODTGetLoaderInfo(const char *key, void **infoAddr, int *infoSize);
++extern void IODTFreeLoaderInfo(const char *key, void *infoAddr, int infoSize);
++extern bool ml_static_mfree_prepare(vm_offset_t vaddr, vm_size_t size);
++
++static void
++native_gpu_addon_release(void)
++{
++	uint32_t enabled = 0;
++	void *address = NULL;
++	int size = 0;
++
++	if (!PE_parse_boot_argn("boot-payload-release", &enabled, sizeof(enabled)) || enabled != 1) {
++		return;
++	}
++	if (native_gpu_addon_files <= 0) {
++		native_gpu_addon_released = -1;
++	} else if (native_gpu_addon_failed || native_gpu_addon_written + native_gpu_addon_same < native_gpu_addon_files) {
++		native_gpu_addon_released = -2;
++	} else if (IODTGetLoaderInfo("GpuAddon", &address, &size) != 0 || size < (int)PAGE_SIZE) {
++		native_gpu_addon_released = -3;
++	} else if (!ml_static_mfree_prepare(ml_static_ptovirt((vm_offset_t)address), (vm_size_t)size)) {
++		native_gpu_addon_released = -4;
++	} else {
++		IODTFreeLoaderInfo("GpuAddon", address, size);
++		native_gpu_addon_released = (int)atop_64(trunc_page_64((uint64_t)size));
++	}
++	printf("owner Data: GPU addon memory release %d\n", native_gpu_addon_released);
++}
++
+ static int
+ native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
+ {
+@@ -9600,6 +9641,7 @@ native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
+ 	if (!error) native_owner_macos_gpu_addon(p, scratch);
+ 	if (!error) native_owner_macos_addon_sbin(p, scratch);
+ 	if (!error) native_owner_macos_boot_shims(p, scratch);
++	if (!error) native_gpu_addon_release();
+ done:
+ 	if (data_root) vnode_put(data_root);
+ 	native_owner_data_status = error;
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+index 48e9ae6..1cacea2 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -1955,6 +1955,32 @@ ml_static_unslide(
+ 
+ extern tt_entry_t *arm_kva_to_tte(vm_offset_t va);
+ 
++/*
++ * The image tail: what the loader placed behind the kernel collection, up to
++ * boot_args.topOfKernelData (the boot arguments, the device tree and the
++ * ranges of /chosen/memory-map). Without a monitor and without
++ * ARM_LARGE_MEMORY the physical aperture has no alias of it: phystokv() of a
++ * tail page is its address in the static region, which
++ * arm_vm_physmap_init() maps read-write and never executable, as it maps the
++ * aperture. ml_static_protect() and ml_static_mfree() take a range of the
++ * tail by that address, so a page given to the VM keeps it as its kernel
++ * address. This is what ml_static_mfree() does with memory of the loaded
++ * image on a kernel whose aperture lies below the static region
++ * (ARM_LARGE_MEMORY without a monitor).
++ */
++static bool
++ml_static_in_image_tail(vm_offset_t vaddr, vm_size_t size)
++{
++#if !XNU_MONITOR && !defined(CONFIG_SPTM) && !defined(ARM_LARGE_MEMORY)
++	const vm_offset_t tail_end = (vm_offset_t)(first_avail_phys - gPhysBase) + gVirtBase;
++
++	return vaddr >= end_kern && vaddr < tail_end && size <= tail_end - vaddr;
++#else
++#pragma unused(vaddr, size)
++	return false;
++#endif
++}
++
+ kern_return_t
+ ml_static_protect(
+ 	vm_offset_t vaddr, /* kernel virtual address */
+@@ -1983,7 +2009,7 @@ ml_static_protect(
+ 	ppnum_t       ppn;
+ 	kern_return_t result = KERN_SUCCESS;
+ 
+-	if (vaddr < physmap_base) {
++	if (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size)) {
+ 		panic("ml_static_protect(): %p < %p", (void *) vaddr, (void *) physmap_base);
+ 		return KERN_FAILURE;
+ 	}
+@@ -2166,6 +2192,24 @@ uint64_t ml_static_mfree_pages;
+ uint64_t ml_static_mfree_dropped_calls;
+ uint64_t ml_static_mfree_dropped_bytes;
+ 
++/*
++ * Whether ml_static_mfree() will give [vaddr, vaddr + size) to the VM without
++ * a panic: the address is one it takes, and every mapped page of the range
++ * accepts the protections of free memory, which this call applies. A caller
++ * that knows a range only from the loader asks first.
++ */
++bool ml_static_mfree_prepare(vm_offset_t vaddr, vm_size_t size);
++
++bool
++ml_static_mfree_prepare(vm_offset_t vaddr, vm_size_t size)
++{
++	if ((vaddr & PAGE_MASK) != 0 || size < PAGE_SIZE ||
++	    (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size))) {
++		return false;
++	}
++	return ml_static_protect(vaddr, trunc_page(size), VM_PROT_READ | VM_PROT_WRITE) == KERN_SUCCESS;
++}
++
+ /*
+  *	Routine:        ml_static_mfree
+  *	Function:
+@@ -2183,7 +2227,7 @@ ml_static_mfree(
+ 
+ 
+ 	/* It is acceptable (if bad) to fail to free. */
+-	if (vaddr < physmap_base) {
++	if (vaddr < physmap_base && !ml_static_in_image_tail(vaddr, size)) {
+ 		os_atomic_inc(&ml_static_mfree_dropped_calls, relaxed);
+ 		os_atomic_add(&ml_static_mfree_dropped_bytes, (uint64_t)size, relaxed);
+ 		return;

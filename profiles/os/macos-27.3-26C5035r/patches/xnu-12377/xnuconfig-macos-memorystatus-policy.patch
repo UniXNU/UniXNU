@@ -1,0 +1,83 @@
+The memorystatus kills of the jetsam configuration that a macOS userspace is not written for.
+
+This kernel serves macOS with the board's embedded memory options (CONFIG_JETSAM), which Apple's macOS kernels
+do not have. Two of the jetsam kills have no counterpart in Apple's macOS policy (memorystatus_pick_action
+without CONFIG_JETSAM) and worked against the system on sheng (five boots of five to seven minutes each, counted
+from the kernel log):
+- Highwater kills, 196. With the available pages below the soft threshold (15/4 of 4 % of memory: 730 MB of the
+  4864 MiB window) every process above its soft limit is killed. macOS sets soft limits as diagnostic marks: its
+  kernel sends one EXC_RESOURCE report and lets the process run. The killed jobs are relaunched at once and grow
+  past the mark again: iconservicesagent (450 MB) 62 times and
+  com.apple.dock.extra (15 MB) 113 times, 158 of the kills with a full corpse for the crash reporter.
+- Compressor thrashing kills, 5. They take the first process of the idle band, which under macOS is a clean
+  daemon of about 1 MB (amfid twice, keybagd). Apple's arm64 macOS kernel runs no thrashing detection and swaps.
+On XNU_TARGET_OS_OSX neither kill is taken and a soft limit crossing no longer marks a highwater candidate (the
+flag would wake the jetsam thread at every page count update). Fatal limits, idle exits and the kills for page
+shortage, compressor space and zone map exhaustion stay. iPadOS is not affected.
+diff --git a/bsd/kern/kern_memorystatus.c b/bsd/kern/kern_memorystatus.c
+--- a/bsd/kern/kern_memorystatus.c
++++ b/bsd/kern/kern_memorystatus.c
+@@ -5163,12 +5163,19 @@
+ 			memorystatus_log_error("task_exceeded_footprint: failed to kill the current task (exiting?).\n");
+ 		}
+ 	} else {
++#if !XNU_TARGET_OS_OSX
+ 		/*
+ 		 * HWM offender exists. Done without locks or synchronization.
+ 		 * See comment near its declaration for more details.
+ 		 */
+ 		os_atomic_store(&memorystatus_hwm_candidates, true, release);
+ 		_memstat_consider_waking_jetsam_thread();
++#endif /* !XNU_TARGET_OS_OSX */
++		/*
++		 * A macOS userspace has no highwater kill (memorystatus_pick_action), so a soft limit crossing
++		 * leaves no candidate: a set flag would wake the jetsam thread at every page count update below
++		 * the soft threshold with nothing for it to do.
++		 */
+ 
+ #if VM_PRESSURE_EVENTS
+ 		/*
+diff --git a/bsd/kern/kern_memorystatus_policy.c b/bsd/kern/kern_memorystatus_policy.c
+--- a/bsd/kern/kern_memorystatus_policy.c
++++ b/bsd/kern/kern_memorystatus_policy.c
+@@ -88,7 +88,17 @@
+ 		&status->msh_available_pages_below_idle,
+ 		&status->msh_available_pages_below_critical,
+ 		&status->msh_available_pages_below_reaper);
++#if XNU_TARGET_OS_OSX
++	/*
++	 * A macOS userspace on the jetsam configuration. Apple's arm64 macOS kernel runs no thrashing detection
++	 * (compressor_needs_to_swap) and its policy below has no thrashing kill: the compressor swaps instead. A
++	 * thrashing kill takes the first process of the idle band, which under macOS is a small clean daemon
++	 * (amfid, keybagd: about 1 MB each), so it relieves nothing. Compressor and swap exhaustion still kill.
++	 */
++	status->msh_compressor_is_thrashing = false;
++#else /* XNU_TARGET_OS_OSX */
+ 	status->msh_compressor_is_thrashing = !memorystatus_swap_all_apps && vm_compressor_is_thrashing();
++#endif /* XNU_TARGET_OS_OSX */
+ #if CONFIG_PHANTOM_CACHE
+ 	status->msh_phantom_cache_pressure = os_atomic_load(&memorystatus_phantom_cache_pressure, relaxed);
+ #else
+@@ -361,10 +371,22 @@
+ 			return MEMORYSTATUS_KILL_TOP_PROCESS;
+ 		}
+ 
++#if XNU_TARGET_OS_OSX
++		/*
++		 * A macOS userspace on the jetsam configuration. macOS sets soft (non-fatal) limits as diagnostic
++		 * marks: Apple's macOS kernel answers a crossing with one EXC_RESOURCE report and never kills for
++		 * it ("no early highwatermark killing" in the branch without CONFIG_JETSAM below). Killing here
++		 * restarts the same job, which grows past its mark again: iconservicesagent (soft limit 450 MB) and
++		 * com.apple.dock.extra (15 MB) were killed and relaunched every few seconds. Fatal limits still kill
++		 * at the crossing (memorystatus_on_ledger_footprint_exceeded).
++		 */
++		(void) highwater_remaining;
++#else /* XNU_TARGET_OS_OSX */
+ 		if (highwater_remaining) {
+ 			*kill_cause = kMemorystatusKilledHiwat;
+ 			return MEMORYSTATUS_KILL_HIWATER;
+ 		}
++#endif /* XNU_TARGET_OS_OSX */
+ 	}
+ 
+ 	if (status.msh_available_pages_below_idle &&

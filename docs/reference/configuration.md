@@ -185,6 +185,8 @@ Types are `s` for string, `x` for hex cells, `i` for decimal cells, `u` for unsi
 | `tool` | string | ADT generator path |
 | `chip_id` | string | Chip ID for the ADT |
 | `owned_memory_size` | string | Contiguous window request |
+| `owned_memory_excluded_ranges` | integer | Size of the excluded-range table; the window may then span more than one run of free memory. Only for an OS profile whose XNU reads the table |
+| `loader_inputs` | boolean | Reserve the records in which DarwinBoot reports where the payload RAM disk and the initrd buffer lie |
 | `root_match_volume_uuid` | string | Root volume UUID |
 | `cpu_regs` | string | CPU MPIDR values, comma separated |
 | `psci_method` | string | `smc` or `hvc` |

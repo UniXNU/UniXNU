@@ -1,0 +1,207 @@
+Union mounts: the walk to the directory below under one lock, and counters for what the layers cost.
+
+The owner layout mounts the SystemOS volume over the root volume at "/" as a union, and the addon's lib and sbin over /usr/lib
+and /usr/sbin. A name the upper layer lacks is looked up again in the directory below (unionlookup in lookup). Below a mount's
+root, lookup_traverse_union rebuilds the upper directory's path and looks it up from the covered vnode with a namei of its own,
+on every such lookup: the result is not kept. On macOS the SystemOS volume holds /System/Library/Frameworks,
+PrivateFrameworks, CoreServices, Extensions and /usr/lib with a few entries each (8 of 342 frameworks, 26 of 2515 private
+frameworks), so every lookup of a path into any other framework or system library takes this way, where a plain volume
+resolves a cached path in one pass over the name cache.
+
+lookup_traverse_union took a reference on each directory name of the chain (vnode_getname, vnode_putname: the name cache lock
+plus two searches of the name string table under its locks per directory) and read v_parent between them with nothing held.
+The walk now holds the name cache lock shared for its whole length, as build_path does, and copies the names in place.
+
+How often the layers are crossed is not known from any run. The patch counts it: sysctl vfs.union_below_root, union_below_path,
+union_below_absent, and with the diag boot argument vfs.union_below_ns, the time from the lookup the upper layer failed to the
+directory below. The counters change no result.
+
+--- a/bsd/vfs/vfs_lookup.c
++++ b/bsd/vfs/vfs_lookup.c
+@@ -96,6 +96,12 @@
+ #include <os/atomic_private.h>
+ 
+ #include <sys/paths.h>
++#if CONFIG_UNION_MOUNTS
++#include <sys/sysctl.h>
++#include <kern/clock.h>
++#include <kern/counter.h>
++#include <kern/startup.h>
++#endif /* CONFIG_UNION_MOUNTS */
+ 
+ #if NAMEDRSRCFORK
+ #include <sys/xattr.h>
+@@ -1426,6 +1432,40 @@
+ out:
+ 	return error;
+ }
++
++#if CONFIG_UNION_MOUNTS
++/*
++ * What union mounts add to path lookups and directory reads, summed over the CPUs (sysctl vfs.union_below_*).
++ *
++ * A name the upper layer of a union mount lacks is looked up again in the directory below it (unionlookup in lookup),
++ * and a directory read continues there. At the mount's root that directory is the covered vnode. Below the root,
++ * lookup_traverse_union rebuilds the directory's path and looks it up from the covered vnode, a second namei, and
++ * the answer is not kept: the next name the upper layer lacks in that directory walks the path again. A plain volume
++ * resolves a cached path in one pass over the name cache, without a call into the file system.
++ *   root    continued from the root of a union mount
++ *   path    continued from a directory below the root: one more path lookup each
++ *   absent  of those, the ones that found no directory below
++ *   ns      with the diag boot argument: nanoseconds from the start of the lookup the upper layer failed to the
++ *           directory below being in hand, summed over the lookups that continued below. The lookup in the
++ *           directory below and its authorization follow and are not part of it.
++ * Counting changes no result.
++ */
++SCALABLE_COUNTER_DEFINE(native_union_below_root);
++SCALABLE_COUNTER_DEFINE(native_union_below_path);
++SCALABLE_COUNTER_DEFINE(native_union_below_absent);
++SCALABLE_COUNTER_DEFINE(native_union_below_ns);
++static TUNABLE(uint32_t, native_union_below_timed, "diag", 0);
++
++SYSCTL_SCALABLE_COUNTER(_vfs, union_below_root, native_union_below_root,
++    "Lookups and directory reads continued below the root of a union mount");
++SYSCTL_SCALABLE_COUNTER(_vfs, union_below_path, native_union_below_path,
++    "Lookups and directory reads continued below a directory of a union mount");
++SYSCTL_SCALABLE_COUNTER(_vfs, union_below_absent, native_union_below_absent,
++    "Continuations below a directory of a union mount that found no directory");
++SYSCTL_SCALABLE_COUNTER(_vfs, union_below_ns, native_union_below_ns,
++    "Nanoseconds from a lookup the upper union layer failed to the directory below (diag boot argument)");
++#endif /* CONFIG_UNION_MOUNTS */
++
+ /*
+  * Search a pathname.
+  * This is a very central and rather complicated routine.
+@@ -1500,6 +1540,9 @@
+ 	vnode_t last_dp = NULLVP;
+ 	int keep_going;
+ 	int atroot;
++#if CONFIG_UNION_MOUNTS
++	uint64_t union_started = 0;     /* diag: when the lookup in a union mount's directory began */
++#endif /* CONFIG_UNION_MOUNTS */
+ 
+ 	/*
+ 	 * Setup: break out flag bits into variables.
+@@ -1711,6 +1754,7 @@
+ 	 */
+ #if CONFIG_UNION_MOUNTS
+ unionlookup:
++	union_started = 0;
+ #endif /* CONFIG_UNION_MOUNTS */
+ 	ndp->ni_vp = NULLVP;
+ 
+@@ -1772,6 +1816,16 @@
+ 	 * through the v_parent chain (preventing you from getting /tmp/b back). It would
+ 	 * not fix whether or not you should or should not get /tmp/a vs. /foo/b.
+ 	 */
++
++#if CONFIG_UNION_MOUNTS
++	if (__improbable(native_union_below_timed != 0)) {
++		mount_t union_mp = dp->v_mount;
++
++		if (union_mp != NULL && (union_mp->mnt_flag & MNT_UNION)) {
++			union_started = mach_absolute_time();
++		}
++	}
++#endif /* CONFIG_UNION_MOUNTS */
+ 
+ 	error = VNOP_LOOKUP(dp, &ndp->ni_vp, cnp, ctx);
+ 
+@@ -1800,6 +1854,12 @@
+ 				error = ENOENT;
+ 			}
+ 			vnode_put(tdp);
++			if (union_started != 0) {
++				uint64_t union_ns = 0;
++
++				absolutetime_to_nanoseconds(mach_absolute_time() - union_started, &union_ns);
++				counter_add(&native_union_below_ns, union_ns);
++			}
+ 			if (error) {
+ 				dp = NULLVP;
+ 				goto bad;
+@@ -1925,7 +1985,7 @@
+ lookup_traverse_union(vnode_t dvp, vnode_t *new_dvp, vfs_context_t ctx)
+ {
+ 	char *path = NULL, *pp;
+-	const char *name, *np;
++	const char *name;
+ 	size_t len;
+ 	int error = 0;
+ 	struct nameidata nd;
+@@ -1934,6 +1994,7 @@
+ 	*new_dvp = NULL;
+ 
+ 	if (vp && vp->v_flag & VROOT) {
++		counter_inc(&native_union_below_root);
+ 		*new_dvp = vp->v_mount->mnt_vnodecovered;
+ 		if (vnode_getwithref(*new_dvp)) {
+ 			return ENOENT;
+@@ -1941,38 +2002,48 @@
+ 		return 0;
+ 	}
+ 
++	counter_inc(&native_union_below_path);
+ 	path = namei_alloc(MAXPATHLEN);
+ 
+ 	/*
+ 	 * Walk back up to the mountpoint following the
+ 	 * v_parent chain and build a slash-separated path.
+ 	 * Then lookup that path starting with the covered vnode.
++	 *
++	 * The name cache lock, held shared, keeps the v_parent chain and each v_name as they are for the whole walk, as
++	 * in build_path, so the names are copied in place. Taking a reference on each name (vnode_getname and
++	 * vnode_putname) searches the name string table twice per directory under its locks, and leaves the chain
++	 * unprotected between the steps. Nothing in the walk blocks.
+ 	 */
+ 	pp = path + (MAXPATHLEN - 1);
+ 	*pp = '\0';
+ 
++	name_cache_lock_shared();
+ 	while (1) {
+-		name = vnode_getname(vp);
++		name = vp->v_name;
+ 		if (name == NULL) {
+-			printf("lookup_traverse_union: null parent name: .%s\n", pp);
+ 			error = ENOENT;
+-			goto done;
++			break;
+ 		}
+ 		len = strlen(name);
+ 		if ((len + 1) > (size_t)(pp - path)) {          // Enough space for this name ?
+ 			error = ENAMETOOLONG;
+-			vnode_putname(name);
+-			goto done;
++			break;
+ 		}
+-		for (np = name + len; len > 0; len--) { // Copy name backwards
+-			*--pp = *--np;
+-		}
+-		vnode_putname(name);
++		pp -= len;
++		memcpy(pp, name, len);
+ 		vp = vp->v_parent;
+ 		if (vp == NULLVP || vp->v_flag & VROOT) {
+ 			break;
+ 		}
+ 		*--pp = '/';
++	}
++	name_cache_unlock();
++	if (error) {
++		if (error == ENOENT) {
++			printf("lookup_traverse_union: null parent name: .%s\n", pp);
++		}
++		goto done;
+ 	}
+ 
+ 	/* Evaluate the path in the underlying mount */
+@@ -1993,6 +2064,9 @@
+ 	}
+ 	nameidone(&nd);
+ done:
++	if (error) {
++		counter_inc(&native_union_below_absent);
++	}
+ 	if (path) {
+ 		namei_free(path, MAXPATHLEN);
+ 	}
