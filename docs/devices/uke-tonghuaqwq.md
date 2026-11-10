@@ -6,7 +6,7 @@
 
 Xiaomi Pad 7 \(SM7675/cliffs\) port: format-2 repository migration verified by from-scratch kernel builds; the shared patch set is fully upstream-aligned \(73 patches, four-layer chain\); the bring-up runs through GPU mode 9, a real on-screen UI and touch scanning, with host-only migration verification on 2026-10-28.
 
-Source record: [porting.toml](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/porting.toml), `3ae7d90a8e524d8c0888e90343a99a98d953b388`.
+Source record: [porting.toml](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/porting.toml), `dbd3526be5a7032e52392275864c2855f983d9de`.
 
 This page is generated from the device record.
 
@@ -73,9 +73,9 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`.
 
 ### Evidence
 
-- `host`: [schema\_version 2 resolves with 23 component specs, 37 modules and a 68-entry patch order](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
+- `host`: [schema\_version 2 resolves with 23 component specs, 37 modules and a 68-entry patch order](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
   Command: <code>./unixnu status --json -D ../UniXNU-uke-format2</code>. Revision: `23c2926941405e7df8097a6bca6ee8348a39c787`.
-- `source`: [the validated patch set in application order, shared entries prefixed arch:](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/patches/xnu/series)
+- `source`: [the validated patch set in application order, shared entries prefixed arch:](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/patches/xnu/series)
 
 ## Firmware and boot {#firmware}
 
@@ -116,9 +116,9 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [the firmware menu and the uke boot entry run on hardware through the bring-up images](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/PROGRESS.md)
+- `device`: [the firmware menu and the uke boot entry run on hardware through the bring-up images](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/PROGRESS.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
-- `host`: [SILICIUM\_UEFI.fd builds 3,145,728 bytes with the board defines](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
+- `host`: [SILICIUM\_UEFI.fd builds 3,145,728 bytes with the board defines](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
   Command: <code>./unixnu build firmware --skip-preflight --uefi ../uefi-uke -D ../UniXNU-uke-format2</code>. Revision: `4f4bf7e1f4ad56743562777becd7ac7d6714216c`.
 
 ## CPU and interrupts {#cpu}
@@ -159,7 +159,7 @@ Components: `ArmCpu`, `ArmDTPlatform`, `ArmVirtPlatform`.
 
 ### Evidence
 
-- `device`: [SMP boots with the SPI-IPI path; single-CPU profile stable past t=877s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/PROGRESS.md)
+- `device`: [SMP boots with the SPI-IPI path; single-CPU profile stable past t=877s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/PROGRESS.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
 
 ## Memory and DMA {#memory}
@@ -201,9 +201,9 @@ Components: `RamBlock`.
 
 ### Evidence
 
-- `device`: [UKE MEM \~1.11M 4K pages with free \~645 MiB; no jetsam past t=538s where earlier runs died at \~500s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/PROGRESS.md)
+- `device`: [UKE MEM \~1.11M 4K pages with free \~645 MiB; no jetsam past t=538s where earlier runs died at \~500s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/PROGRESS.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
-- `host`: [the generated ADT matches the make-uke-adt.py baseline: identical chosen, cpus, defaults, pram and gmu-memory](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
+- `host`: [the generated ADT matches the make-uke-adt.py baseline: identical chosen, cpus, defaults, pram and gmu-memory](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
   Command: <code>python3 scripts/make-uke-adt.py (baseline diff)</code>. Revision: `23c2926941405e7df8097a6bca6ee8348a39c787`.
 
 ## Storage and root {#storage}
@@ -245,7 +245,7 @@ Components: `ShengUfs`, `RamBlock`, `VirtioMmioBlock`, `VirtioMmioConsole`, `Ver
 
 ### Evidence
 
-- `device`: [UFS root boots and the owner Data volume mounts on hardware](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/PROGRESS.md)
+- `device`: [UFS root boots and the owner Data volume mounts on hardware](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/PROGRESS.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
 
 ## Display {#display}
@@ -323,21 +323,21 @@ Components: `GopFramebuffer`, `NativeUfs`.
 
 ### Evidence
 
-- `device`: [real UI on screen: white lock screen, home indicator and the swipe prompt; then v3 presents only resolved overlay surfaces](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/GPU-PORT.md)
+- `device`: [real UI on screen: white lock screen, home indicator and the swipe prompt; then v3 presents only resolved overlay surfaces](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/GPU-PORT.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
-- `device`: [the verified gpu-framepresent v2/v3 argument set \(recorded from uke-port/releases/2026-10-24-gpu-framepresent-v3/README.md\), now restored in board.toml](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/GPU-PORT.md)
+- `device`: [the verified gpu-framepresent v2/v3 argument set \(recorded from uke-port/releases/2026-10-24-gpu-framepresent-v3/README.md\), now restored in board.toml](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/GPU-PORT.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `ad87339f293a0e55c4a5be25188bdfca8ecea700`.
-- `source`: [kernel\_args carry that set; the joined boot-args string is 881 bytes, under the 1000-byte limit](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
-- `source`: [A1/A2 register map: DTS block offsets, MDP-relative anchors, SSPP/CTL/INTF/PP/LM registers, dispcc/GCC clocks, GDSC, apps\_smmu SIDs, stock init sequence with source lines](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/dts-reference/mdss-cliffs-map.md)
-- `source`: [M1 gate: DTS anchors, stock register defines, NativeUfs window symbols and the built DpuProbe.o all pass \(source-only and archive checks\); a deliberately wrong kVig constant turns it red](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/scripts/check-dpu-probe-host.py)
-- `source`: [A3/C1/B2/C2/C3 implementation and the test ladder; boot identical to framepresent4](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/DPU-PORT.md)
-- `device`: [M1 PASS: UKE DPU probe=1 snapshot shows GOP e3940000 3200x2136, VIG0/VIG1 1600x2136, 120 Hz, display SMMU bank 2 CBAR type 1 / SCTLR 0xe0](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/DPU-PORT.md)
+- `source`: [kernel\_args carry that set; the joined boot-args string is 881 bytes, under the 1000-byte limit](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
+- `source`: [A1/A2 register map: DTS block offsets, MDP-relative anchors, SSPP/CTL/INTF/PP/LM registers, dispcc/GCC clocks, GDSC, apps\_smmu SIDs, stock init sequence with source lines](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/dts-reference/mdss-cliffs-map.md)
+- `source`: [M1 gate: DTS anchors, stock register defines, NativeUfs window symbols and the built DpuProbe.o all pass \(source-only and archive checks\); a deliberately wrong kVig constant turns it red](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/scripts/check-dpu-probe-host.py)
+- `source`: [A3/C1/B2/C2/C3 implementation and the test ladder; boot identical to framepresent4](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/DPU-PORT.md)
+- `device`: [M1 PASS: UKE DPU probe=1 snapshot shows GOP e3940000 3200x2136, VIG0/VIG1 1600x2136, 120 Hz, display SMMU bank 2 CBAR type 1 / SCTLR 0xe0](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/DPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_dpu_a3.img</code>. Revision: `3c65101d7ce614a3c2520c4fb5c2b5ac2dd42657`.
-- `device`: [M2/C3 PASS: redirecting VIG0/VIG1 to gop+0x800000 \(1600x1068, stride 0x3200\) drew red/green/blue/checker correctly for 2 s each, src0 readback e4140000, auto-restore; low-DRAM e5400000 shows gray \(outside the display-readable GOP range\)](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/DPU-PORT.md)
+- `device`: [M2/C3 PASS: redirecting VIG0/VIG1 to gop+0x800000 \(1600x1068, stride 0x3200\) drew red/green/blue/checker correctly for 2 s each, src0 readback e4140000, auto-restore; low-DRAM e5400000 shows gray \(outside the display-readable GOP range\)](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/DPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_dpu_c3c.img</code>. Revision: `3c65101d7ce614a3c2520c4fb5c2b5ac2dd42657`.
-- `device`: [B2 PASS: stage-1 window state=80000002 on bank 2; test=3 mapped a 27.3 MB BGRA buffer at IOVA 0x10000000 and the DPU scanned it \(latch 1196 us\); fix was Linux arm-smmu SCTLR 0x10e7 / TCR 0x803519 / TCR2 0x38015 with a 4xL2 2MB-block table; the S2CR bypass experiment b2v4 crashed and was reverted](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/DPU-PORT.md)
+- `device`: [B2 PASS: stage-1 window state=80000002 on bank 2; test=3 mapped a 27.3 MB BGRA buffer at IOVA 0x10000000 and the DPU scanned it \(latch 1196 us\); fix was Linux arm-smmu SCTLR 0x10e7 / TCR 0x803519 / TCR2 0x38015 with a 4xL2 2MB-block table; the S2CR bypass experiment b2v4 crashed and was reverted](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/DPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_dpu_b2v8.img</code>. Revision: `3c65101d7ce614a3c2520c4fb5c2b5ac2dd42657`.
-- `device`: [D1b PASS: presentBase maps each BGRA IOSurface into a stage-1 window slot and flips VIG0/VIG1 with no CPU copy; user reports clearly smoother \~10 fps and mostly correct output, with artifacts in some scenes \(suspect GPU in-flight surface reuse; next: fence or one-swap delay\)](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/DPU-PORT.md)
+- `device`: [D1b PASS: presentBase maps each BGRA IOSurface into a stage-1 window slot and flips VIG0/VIG1 with no CPU copy; user reports clearly smoother \~10 fps and mostly correct output, with artifacts in some scenes \(suspect GPU in-flight surface reuse; next: fence or one-swap delay\)](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/DPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_dpu_d1b.img</code>. Revision: `3c65101d7ce614a3c2520c4fb5c2b5ac2dd42657`.
 
 ## Input {#input}
@@ -379,7 +379,7 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Evidence
 
-- `device`: [UKE TCH: scanning v11 pid5993 60x40 with hb/drv/rpt counters advancing](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/TOUCH-PORT.md)
+- `device`: [UKE TCH: scanning v11 pid5993 60x40 with hb/drv/rpt counters advancing](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/TOUCH-PORT.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
 
 ## GPU {#gpu}
@@ -421,9 +421,9 @@ Components: `Adreno740`, `AdrenoMetal`, `AdrenoFirmware`, `AdrenoPM4`, `ArmSmmu4
 
 ### Evidence
 
-- `device`: [mode 9 passes with the kernel Metal publish \(M ... s5/0 r1\) and the user stream heartbeat F0 r3b/3b G0 q3 u0](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/GPU-PORT.md)
+- `device`: [mode 9 passes with the kernel Metal publish \(M ... s5/0 r1\) and the user stream heartbeat F0 r3b/3b G0 q3 u0](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/GPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_gpu_m9l.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
-- `host`: [the gen71100 firmware triplet hashes match the board pins](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/proprietary-files.txt)
+- `host`: [the gen71100 firmware triplet hashes match the board pins](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/proprietary-files.txt)
   Command: <code>sha256sum .cache/firmware/uke-gpu/*</code>. Revision: `23c2926941405e7df8097a6bca6ee8348a39c787`.
 
 ## Network {#network}
@@ -537,7 +537,7 @@ Components: `Adreno740`, `AppleKeyStoreState`.
 
 ### Evidence
 
-- `device`: [mode 8 passes: GX off/on with the perf vote and the H0.. heartbeat every 2 s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/GPU-PORT.md)
+- `device`: [mode 8 passes: GX off/on with the perf vote and the H0.. heartbeat every 2 s](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/GPU-PORT.md)
   Command: <code>fastboot boot vendor_boot_uke_gpu_m8.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
 
 ## Image assembly {#packaging}
@@ -580,9 +580,9 @@ Components: `DarwinBoot`, `XnuPrelink`, `VerifiedRoot`.
 
 ### Evidence
 
-- `host`: [payload.img 80 MiB with the UKEESP volume and boot.img 1,515,520 bytes over the stock vendor\_boot DTB](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
+- `host`: [payload.img 80 MiB with the UKEESP volume and boot.img 1,515,520 bytes over the stock vendor\_boot DTB](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
   Command: <code>./unixnu build payload &amp;&amp; ./unixnu bootimg --uefi ../uefi-uke --dtb ../uke-port/data/vendor_boot.dtb --ramdisk none</code>. Revision: `4f4bf7e1f4ad56743562777becd7ac7d6714216c`.
-- `device`: [the fmt2 test image booted to userland on hardware with the recovered platform seed and the Data seed handoff](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/GPU-PORT.md)
+- `device`: [the fmt2 test image booted to userland on hardware with the recovered platform seed and the Data seed handoff](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/GPU-PORT.md)
   Command: <code>fastboot flash boot_a vendor_boot_a &amp;&amp; fastboot set_active a &amp;&amp; fastboot reboot</code>. Revision: `bdb1af9a7100367cde283ff5408681de8fbbcfe3`.
 
 ## Diagnostics {#diagnostics}
@@ -624,9 +624,9 @@ Components: `AppleKeyStoreState`, `XnuPrelink`.
 
 ### Evidence
 
-- `device`: [the panic screen and last-panic line read back from the reserved pram log on hardware](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/docs/RECOVERY-LOG.md)
+- `device`: [the panic screen and last-panic line read back from the reserved pram log on hardware](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/docs/RECOVERY-LOG.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `c77d613dc91fb54479242aa5d5902c48662b80d7`.
-- `host`: [kernel, payload and boot images build end to end at the format-2 output path](https://github.com/TongHuaQWQ/UniXNU-uke/blob/3ae7d90a8e524d8c0888e90343a99a98d953b388/board.toml)
+- `host`: [kernel, payload and boot images build end to end at the format-2 output path](https://github.com/TongHuaQWQ/UniXNU-uke/blob/dbd3526be5a7032e52392275864c2855f983d9de/board.toml)
   Command: <code>./unixnu build kernel &amp;&amp; ./unixnu build payload &amp;&amp; ./unixnu bootimg</code>. Revision: `4f4bf7e1f4ad56743562777becd7ac7d6714216c`.
 
 </div>

@@ -6,7 +6,7 @@
 
 OnePlus Ace 3 PJE110 \(aston\), SM8550, iPadOS 27.0.1 \(24A446\). CPU and persistent Data fixes are source changes awaiting device verification. Inherited sheng observations are reference-board evidence only.
 
-Source record: [porting.toml](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/porting.toml), `fffa825d2307a0aad75e415558fc565e1ef1554f`.
+Source record: [porting.toml](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/porting.toml), `27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67`.
 
 This page is generated from the device record.
 
@@ -65,16 +65,16 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
-- `source`: [The sheng-lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the sheng-lite=1 jobs.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/scripts/check-boot-watchdog-policy.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
+- `source`: [The sheng-lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the sheng-lite=1 jobs.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/scripts/check-boot-watchdog-policy.py)
 - `device`: [Reference sheng observation, not aston verification: Boot 50d4021e7 with sheng-lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch4.img</code>. Revision: `fe636ce2c24b5f5ef406e2dc70504d2573f00092`.
-- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 - `device`: [Reference sheng observation, not aston verification: On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4.img</code>. Revision: `1c0d9770f6b3cf8de565ba793146c8d5427b979f`.
 - `device`: [Reference sheng observation, not aston verification: On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4-lock-fix.img</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -128,7 +128,7 @@ Components: `ShengPreflight`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/proprietary-files.txt)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/proprietary-files.txt)
 - `source`: [Shared FDT initrd block-device publication; board memory policy remains in uefi-sheng.](https://github.com/UniXNU/UniXNU/blob/8d157ee18ae9c4d518aba28cb3040a84e860dcd1/package/UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.c)
 - `host`: [Reference sheng observation, not aston verification: 2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados26-boot-build.json)
   Command: <code>shasum -a 256 ../UniXNU/out/sheng/ipados-26.5.2-23F84/sheng_ipados26/boot/boot.img</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
@@ -175,8 +175,8 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 - `source`: [Implementation and configuration described in this section](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/dts/sheng.dts)
 - `device`: [Reference sheng observation, not aston verification: Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch3.img</code>. Revision: `948a8b8696e56c0ab74a4a1ee22753744ea462e3`.
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/patches/xnu-12377/aston-edge-policy.patch)
-- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/reports/cpu-storage-fix.md)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/patches/xnu-12377/aston-edge-policy.patch)
+- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/reports/cpu-storage-fix.md)
   Command: <code>python scripts/check-aston-cpu-storage.py --xnu .cache/xnu-verify --ramblock .cache/RamBlock --cc .cache/toolchain/ziglang/zig.exe cc</code>. Revision: `c72ab4e2aa75727569162823cac20100b4c36703`.
 
 ## Memory and DMA {#memory}
@@ -271,8 +271,8 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 - `source`: [Implementation and configuration described in this section](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp)
 - `host`: [Reference sheng observation, not aston verification: Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/scripts/patches/ramblock-publish-after-store.patch)
-- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/reports/cpu-storage-fix.md)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/scripts/patches/ramblock-publish-after-store.patch)
+- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/reports/cpu-storage-fix.md)
   Command: <code>python scripts/check-aston-cpu-storage.py --xnu .cache/xnu-verify --ramblock .cache/RamBlock --cc .cache/toolchain/ziglang/zig.exe cc</code>. Revision: `c72ab4e2aa75727569162823cac20100b4c36703`.
 
 ## Display {#display}
@@ -333,8 +333,8 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/LegacyDisplayProbe.cpp)
-- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/LegacyDisplayProbe.cpp)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/LegacyDisplayProbe.cpp)
+- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/LegacyDisplayProbe.cpp)
 
 ## Input {#input}
 
@@ -383,10 +383,10 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Evidence
 
-- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/BootDiagExport.c)
+- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/BootDiagExport.c)
 - `host`: [Reference sheng observation, not aston verification: Host replays cover adjacent-key taps, bottom-edge tip-down coordinates and four- and five-finger pinches with stable IDs.](https://github.com/UniXNU/ShengNovatekTouch/blob/3b44b1b7603eaadae942ea44ddc51bdcc48ad060/Test/touch-core.c)
   Command: <code>python3 scripts/check-touch-host.py</code>. Revision: `3b44b1b7603eaadae942ea44ddc51bdcc48ad060`.
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/TouchBoard.h)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/TouchBoard.h)
 - `host`: [Reference sheng observation, not aston verification: Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
 - `device`: [Reference sheng observation, not aston verification: Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/package/TouchProbe.cpp)
@@ -521,7 +521,7 @@ Components: `QcaBluetooth`.
   Command: <code>python3 scripts/check-wcn-power.py</code>. Revision: `bea420e4520654670b95549fb4d3ecb6511ae8e1`.
 - `host`: [Reference sheng observation, not aston verification: WifiProbe, BluetoothProbe, ArmCpu, touch, audio and boot-log sources compile using the selected iPadOS 27 arm64e kernel commands. The Bluetooth builder compiles eight protocol and SM8550 objects.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-bluetooth-board.py)
   Command: <code>python3 scripts/check-bluetooth-board.py ASSEMBLED_TREE --extra-source ../UniXNU/drivers/ArmCpu/ArmCpu.cpp --extra-source package/TouchProbe.cpp --extra-source package/AudioProbe.cpp --extra-source package/BootLog.c</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/BluetoothFirmware.h)
+- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/BluetoothFirmware.h)
 - `host`: [Reference sheng observation, not aston verification: ASan/UBSan register models pass exact rate ratios, DFS handoff, native DMA page translation, ASID conflicts, bounded timeouts and preserved storage/touch routes.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-bluetooth-platform.py)
   Command: <code>python3 scripts/check-bluetooth-platform.py</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
 - `host`: [Reference sheng observation, not aston verification: Production GIC/GCC code passes ASan/UBSan for shared level IRQs, edge/exclusive checks, direct dispatch, masking, concurrent registration and shared clock lifetime.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-bluetooth-shared.py)
@@ -653,7 +653,7 @@ Components: `Ath12kWifi`.
   Command: <code>python3 scripts/check-wifi-association.py</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
 - `device`: [Reference sheng observation, not aston verification: Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-wifi-association.md)
   Command: <code>fastboot boot build/wifi-mainline/fix9/boot.img</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
-- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/scripts/check-wifi-launchd.py)
+- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/scripts/check-wifi-launchd.py)
 
 ## Audio {#audio}
 
@@ -714,7 +714,7 @@ Components: `Ath12kWifi`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/AudioProbe.cpp)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/AudioProbe.cpp)
 - `host`: [Reference sheng observation, not aston verification: PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py; python3 scripts/check-cs35l43-host.py; python3 scripts/check-geni-i2c-host.py</code>. Revision: `9e9971883be72b2fd76b8fb552367a9e4940aa63`.
 - `device`: [Reference sheng observation, not aston verification: Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/read-sheng-log.py)
@@ -761,15 +761,15 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/ShengBattery.cpp)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/ShengBattery.cpp)
 - `host`: [Reference sheng observation, not aston verification: PASS battery manager: 4074 checks](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-battery-host.py)
   Command: <code>python3 scripts/check-battery-host.py</code>. Revision: `8719a19294bc79eed72366a19070acfd8e131737`.
 - `device`: [Reference sheng observation, not aston verification: PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `8f5d921d7a3b71a20a97f551cad546dc8e2f3700`.
 - `device`: [Reference sheng observation, not aston verification: CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img (sheng-cpufreq=4 sheng-gpu-dcvs=1); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `a338c71a6f83809c84686b4996478f1c4cd3f3ab`.
-- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/GpuPowerProbe.cpp)
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/GpuPowerProbe.cpp)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 
 ## Image assembly {#packaging}
 
@@ -796,6 +796,8 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 - Existing Data seed identity is preserved; a normal rebuild must not request init\_data or choose an erase action.
 - XnuPrelink keeps retained kexts at their collection addresses, so each native segment must fit before the first retained kext segment of its root. The iPhone17,2 24A446 collection, with this board's roots, leaves 11872 KiB for \_\_TEXT\_EXEC and \_\_KLD, 1165 KiB for \_\_DATA\_CONST and \_\_LASTDATA\_CONST \(to AppleARMPlatform\), and 1872 KiB for \_\_DATA \(to Libm, which IOAVFamily needs\). The iPad17,3 collection leaves 11968, 1571 and 1952 KiB.
 - The iPadOS build b5bb234 needs 11888, 1392 and 1920 KiB there. The iOS build leaves out the WiFi stack \(893 KiB code, 75 KiB data\), the embedded GPU firmware \(151 KiB of constants, ASTON\_GPU\_FIRMWARE=1 restores it\) and the sparse IOUserServer dispatch table \(160 KiB of constants\). An offline run of XnuPrelink's Layout with those sizes leaves 864, 93 and 16 KiB.
+- CI 42832522940's native kernel needed 1904 KiB of \_\_DATA: BootLog's weak WiFi rings \(native\_wifi\_text, \_note, \_pmic, \_dump\) still got zero defaults of their declared sizes \(72 KiB\) from the source storage build. package/WifiAbsent.c defines them with one element; a ld64.lld check shows the strong definitions drop the weak ones. Recomputed with section alignments, \_\_DATA is 1840 KiB of 1872.
+- Prelink of that kernel against the iPhone17,2 kernelcache, run offline with emit\_prelink.py: without reviewed pins 206 kext calls bind to the unmapped-call stub and 30 kext pointers stay unmapped. With UniXNU-ishtar's ported iPad17,3 pins, 23 and 25 remain. scripts/derive-fileset-pins.py adds 11 function and 9 data pins \(e.g. task\_is\_privileged, csm\_resolve\_os\_entitlements\_from\_proc, IOService::Start\_Invoke, OSObject::metaClass, gIOParentMatchKey\). It reads each unmapped target's kext slots at the same place in the iPad17,3 collection and takes the iPad pairing. With scripts/fileset-24A446-d94ap-symbols.json, 10 stubbed calls and 2 unmapped pointers remain. Each of those is unpaired on iPad17,3 too, where the b5bb234 build left 19 and 2 and booted.
 
 ### Completion criteria
 
@@ -811,18 +813,18 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/patches/xnu/series)
-- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/patches/xnu/series)
+- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 - `source`: [Historical working-tree observation: sheng b714917c, iPadOS 27.0.1 24A446, boot-prelink-fixed.img: instruction fetch abort at 0xfffffff00dbb4c74 with LR 0xfffffff00b5a3340 in native\_legacy\_display\_allocate. Corecrypto and SourceStorage initialization had completed.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-startup-repair-2026-11-02.md)
 - `source`: [Historical working-tree observation: 62 prelink regressions pass. The packed kernel has 266 fixed original-function branches \(205 mobile graphics, 51 HID, eight IOSurface, two GPU\), preserved absolute GOT values and no additional native external branch instructions. This is host evidence, not a desktop boot result.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-startup-repair-2026-11-02.md)
 - `source`: [Historical working-tree observation: sheng b714917c, 24A446: NativeLegacyDisplay and NativeHidInput initialized, APFS mounted the root OS and SystemCryptex, then load\_init\_program stopped with offline scratch Data mount failed: 2. The payload lacked initrd and PackedRAMDisk.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-startup-repair-2026-11-02.md)
 - `source`: [Historical working-tree observation: Recovered runtime inputs match boot-framepath.img: seed 1bde7901df3acd0e8a14cd89928bedc12c07ef2128c6bce18ffccf3611a666a3 equals the existing data-seed-215g-skipca/data.dbr. The payload includes the original owner trust cache and GPU addon, required ADT placeholders and 870-byte normal arguments without autoreset or data-reset. Checks cover 266 branches, five absolute data symbols and 189 vnode descriptor pointer sites. Local inputs are stored in the ignored UniXNU unixnu.local.toml.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-startup-repair-2026-11-02.md)
 - `source`: [Historical working-tree observation: The repaired v4 kernel and restored runtime inputs ran to the 120-second auto-reset deadline: log state 2, 61 rounds, zero write errors and no panic. SpringBoard PID 30, backboardd PID 61 and wifid PID 49 are present. The diagnostic image differs from the normal payload only by sheng-autoreset=120. Visual presentation was not verified. Two unresolved data imports and 24 trap references remain outside this boot qualification.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
-- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/.github/workflows/package.yml)
-- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
+- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/.github/workflows/package.yml)
+- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 - `source`: [Global AppSync scope, on-device signature repair, dynamic kernel trust, native ABI observations and successful host/kernel/payload/boot-image builds with the concurrent backlight sources. Original Data is preserved. The combined image was accepted by fastboot boot on b714917c; desktop and application behavior remain to be observed.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/reports/ipados27-appsync.md)
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 
 ## Diagnostics {#diagnostics}
 
@@ -864,15 +866,15 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/scripts/read-sheng-log.py)
-- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/package/BootUiTraceProbe.c)
+- `source`: [Implementation and configuration described in this section](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/scripts/read-sheng-log.py)
+- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/package/BootUiTraceProbe.c)
 - `host`: [Reference sheng observation, not aston verification: The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH\_WAIT \| TH\_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address.](https://github.com/UniXNU/UniXNU-sheng/blob/689400177f93219a38bd7cf5ae2e9f5782adc594/scripts/check-boot-ui-trace.py)
   Command: <code>python3 scripts/check-boot-ui-trace.py</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
-- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/scripts/sheng-springboard-profile.py)
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/patches/xnu-12377/aston-data-diagnostics.patch)
-- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/reports/cpu-storage-fix.md)
+- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/scripts/sheng-springboard-profile.py)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/patches/xnu-12377/aston-data-diagnostics.patch)
+- `host`: [Windows native policy, publication and capacity fixtures passed. API stand-ins do not qualify XNU, APFS or phone hardware; area remains implemented.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/reports/cpu-storage-fix.md)
   Command: <code>python scripts/check-aston-cpu-storage.py --xnu .cache/xnu-verify --ramblock .cache/RamBlock --cc .cache/toolchain/ziglang/zig.exe cc</code>. Revision: `c72ab4e2aa75727569162823cac20100b4c36703`.
-- `device`: [Boot 5: 240 rounds, 0 write errors; reboot panic vnode\_rele\_ext symbolized against the CI 42596717622 kernel; 152 CrashReporter and 142 DiagnosticReports files read from Data.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/reports/aston-boot5-20261109.md)
+- `device`: [Boot 5: 240 rounds, 0 write errors; reboot panic vnode\_rele\_ext symbolized against the CI 42596717622 kernel; 152 CrashReporter and 142 DiagnosticReports files read from Data.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/reports/aston-boot5-20261109.md)
   Command: <code>python3 scripts/read-sheng-log.py --decode log.bin; python scripts/pull-aston-data.py; python3 scripts/apfs-read.py data.img find .ips</code>. Revision: `1ed895b0299f38274ca15657b9d9eca3c3ad6c39`.
 
 ## arm64e-os {#arm64e-os}
@@ -920,7 +922,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
   Command: <code>./unixnu defconfig sheng_ipados26_defconfig -D ../UniXNU-sheng; ./unixnu kernel -D ../UniXNU-sheng</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
 - `host`: [Reference sheng observation, not aston verification: 298 entries, base 0xfffffe0007004000, 585131 fixups in pointer format 8, 0 symbols in every entry. For the 31 prelink roots \(30 with code, 7 kernel resources\): 1864 kernel targets, 47807 pointer sites, 42027 branch sites.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
   Command: <code>parse LC_FILESET_ENTRY, LC_DYLD_CHAINED_FIXUPS and kext __TEXT_EXEC branches of the decompressed kernelcache</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
-- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/patches/xnu-12377/sheng-main-thread-profile.patch)
-- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/fffa825d2307a0aad75e415558fc565e1ef1554f/board.toml)
+- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/patches/xnu-12377/sheng-main-thread-profile.patch)
+- `source`: [Aston CPU and storage candidate fix; host checks and remaining device checkpoints are described in reports/cpu-storage-fix.md.](https://github.com/MoyuZJ912/UniXNU-aston/blob/27973a724c8faf2f5bbf0bb9e7e29992e8f6ac67/board.toml)
 
 </div>

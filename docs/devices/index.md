@@ -92,7 +92,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [LG G8X ThinQ \(LM-G850, mh2lm\)](/devices/models/mh2lm) | mh2lm | SM8150 | 1 |
 | [Xiaomi Redmi Note 9S / 9 Pro / Note 10 Lite / POCO M2 Pro](/devices/models/miatoll) | miatoll | SM7125 | 1 |
 | [Redmi K80 Pro](/devices/models/miro) | miro | SM8750 | 1 |
-| [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/devices/models/mondrian) | mondrian | SM8475 | 5 |
+| [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/devices/models/mondrian) | mondrian | SM8475 | 6 |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/devices/models/munch) | munch | SM8250 | 3 |
 | [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 2 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/devices/models/myron) | myron | SM8850 | 2 |
@@ -116,13 +116,13 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Sony Xperia 1 II](/devices/models/pdx203) | pdx203 | SM8250 | 2 |
 | [Redmi Turbo 3 / Poco F6](/devices/models/peridot) | peridot | SM8635 | 3 |
 | [OPPO Find X7 Ultra \(PHY120\)](/devices/models/phy120) | phy120 | SM8650 | 1 |
-| [Xiaomi Pad 8 Pro](/devices/models/piano) | piano | SM8750 | 3 |
+| [Xiaomi Pad 8 Pro](/devices/models/piano) | piano | SM8750 | 4 |
 | [Redmi K30 5G](/devices/models/picasso) | picasso | SM7250 | 8 |
 | [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 3 |
 | [OnePlus Ace 3 \(PJE110\)](/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/devices/models/pma120) | pma120 | SM8850 | 1 |
 | [Xiaomi Mi MIX 2S](/devices/models/polaris) | polaris | SDM845 | 4 |
-| [Nothing Phone \(2\)](/devices/models/pong) | pong | SM8250, SM8475 | 5 |
+| [Nothing Phone \(2\)](/devices/models/pong) | pong | SM8250, SM8475 | 6 |
 | [Xiaomi 17 \(pudding, qcom,canoe, SM8850\)](/devices/models/pudding) | pudding | SM8850 | 1 |
 | [Xiaomi Mi 9 Lite](/devices/models/pyxis) | pyxis | SDM710 | 1 |
 | [Galaxy Z Fold3](/devices/models/q2q) | q2q | SM8350 | 1 |
@@ -137,7 +137,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 37 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 39 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |

@@ -6,7 +6,7 @@
 
 Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 855 Plus / SM8150-AC\) with verified SM8150 memory map, Samsung SOFEF03F-M 1080x2400@90Hz GOP framebuffer, Synaptics S3706 touch on QUPv3 SE17 I2C, UFS 3.0, and Adreno 640 v2.
 
-源记录: [porting.toml](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/porting.toml), `8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab`.
+源记录: [porting.toml](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/porting.toml), `64e6a51535cf0391d864fcbe5c29094b7c631514`.
 
 本页按设备记录自动生成。
 
@@ -68,9 +68,9 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Format 2 board manifest configures pclm10, SM8150 SoC source, ipados-17.7.11-21H461 profile, and 11 canonical components.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
-- `source`: [Pins UniXNU-sm8150-common at commit f363dcda920101a99e440ce3e8b68849122a3c0a.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/feeds.toml)
-- `source`: [Defines CONFIG\_BOARD\_PCLM10=y and CONFIG\_SOC\_SM8150=y.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/configs/pclm10_defconfig)
+- `source`: [Format 2 board manifest configures pclm10, SM8150 SoC source, ipados-17.7.11-21H461 profile, and 11 canonical components.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
+- `source`: [Pins UniXNU-sm8150-common at commit f363dcda920101a99e440ce3e8b68849122a3c0a.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/feeds.toml)
+- `source`: [Defines CONFIG\_BOARD\_PCLM10=y and CONFIG\_SOC\_SM8150=y.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/configs/pclm10_defconfig)
 
 ## 固件与启动 {#firmware}
 
@@ -111,9 +111,9 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Firmware build recipe, preflight script, and bootimg DTB path configured.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
-- `source`: [Generates Resources/Configs/pclm10.toml and Platforms/OPPO/pclm10Pkg/ and stages build/pclm10/pclm10.dtb.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/scripts/prepare-pclm10-uefi.py)
-- `source`: [Extracted single-board DTB \(486447 bytes\) for OPPO project 19081 with cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/oppo-pclm10-19081.dtb)
+- `source`: [Firmware build recipe, preflight script, and bootimg DTB path configured.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
+- `source`: [Generates Resources/Configs/pclm10.toml and Platforms/OPPO/pclm10Pkg/ and stages build/pclm10/pclm10.dtb.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/scripts/prepare-pclm10-uefi.py)
+- `source`: [Extracted single-board DTB \(486447 bytes\) for OPPO project 19081 with cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/oppo-pclm10-19081.dtb)
 
 ## CPU 与中断 {#cpu}
 
@@ -153,7 +153,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Declares 8 CPU MPIDR affinities, PSCI smc method, and armcpu-self-ipi=1 boot argument.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
+- `source`: [Declares 8 CPU MPIDR affinities, PSCI smc method, and armcpu-self-ipi=1 boot argument.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
 
 ## 内存与 DMA {#memory}
 
@@ -193,8 +193,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Defines memory@c0000000 and all OPPO project 19081 reserved-memory carveouts.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
-- `source`: [Sets dram\_size = 0x80000000, owned\_memory\_size = 0x40000000, and cont\_splash\_region DTB node.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
+- `source`: [Defines memory@c0000000 and all OPPO project 19081 reserved-memory carveouts.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
+- `source`: [Sets dram\_size = 0x80000000, owned\_memory\_size = 0x40000000, and cont\_splash\_region DTB node.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
 
 ## 存储与根卷 {#storage}
 
@@ -236,7 +236,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Enables &amp;ufs \(0x01d84000\) and &amp;ufs\_smmu \(0x15000000, stream 0x300\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
+- `source`: [Enables &amp;ufs \(0x01d84000\) and &amp;ufs\_smmu \(0x15000000, stream 0x300\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
 
 ## 显示 {#display}
 
@@ -277,7 +277,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Documents framebuffer0@9d000000 \(1080x2400, stride 4320\) and cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
+- `source`: [Documents framebuffer0@9d000000 \(1080x2400, stride 4320\) and cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
 
 ## 输入 {#input}
 
@@ -316,8 +316,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Documents qupv3\_se17\_i2c \(0x00c80000\) and touchscreen@20 \(synaptics,s3706\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
-- `source`: [Lists firmware/tp/19081/19081\_FW\_S3706\_SYNAPTICS.img.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/proprietary-files.txt)
+- `source`: [Documents qupv3\_se17\_i2c \(0x00c80000\) and touchscreen@20 \(synaptics,s3706\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
+- `source`: [Lists firmware/tp/19081/19081\_FW\_S3706\_SYNAPTICS.img.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/proprietary-files.txt)
 
 ## GPU {#gpu}
 
@@ -357,8 +357,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Enables &amp;gpu, &amp;gmu, &amp;gpu\_smmu, &amp;gpucc, &amp;gcc and documents the 0x99515000 GPU ZAP PIL offset.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
-- `source`: [Records Adreno 640 SQE, GMU, and ZAP firmware paths.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/proprietary-files.txt)
+- `source`: [Enables &amp;gpu, &amp;gmu, &amp;gpu\_smmu, &amp;gpucc, &amp;gcc and documents the 0x99515000 GPU ZAP PIL offset.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
+- `source`: [Records Adreno 640 SQE, GMU, and ZAP firmware paths.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/proprietary-files.txt)
 
 ## 网络 {#network}
 
@@ -470,7 +470,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Documents qupv3\_se1\_i2c \(0x00a80000\) battery/fastcg nodes and qupv3\_se7\_i2c \(0x0089c000\) AW8697 haptics.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
+- `source`: [Documents qupv3\_se1\_i2c \(0x00a80000\) battery/fastcg nodes and qupv3\_se7\_i2c \(0x0089c000\) AW8697 haptics.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
 
 ## 镜像组装 {#packaging}
 
@@ -510,8 +510,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Defines \[package\], \[firmware\], \[bootimg\], \[payload\], and \[payload.adt\] sections.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
-- `source`: [Standard Format 2 release entry point invoking unixnu release.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/scripts/package.sh)
+- `source`: [Defines \[package\], \[firmware\], \[bootimg\], \[payload\], and \[payload.adt\] sections.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
+- `source`: [Standard Format 2 release entry point invoking unixnu release.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/scripts/package.sh)
 
 ## 诊断 {#diagnostics}
 
@@ -548,7 +548,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Enables panic\_screen = true and verbose kernel boot arguments \(-v serial=3\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/board.toml)
-- `source`: [Reserves ramoops@17fe00000 \(0x00200000\) matching the UEFI PStore region.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/8e6c5d0bd5f14e67756158ffeb8007c6018ce1ab/dts/pclm10.dts)
+- `source`: [Enables panic\_screen = true and verbose kernel boot arguments \(-v serial=3\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/board.toml)
+- `source`: [Reserves ramoops@17fe00000 \(0x00200000\) matching the UEFI PStore region.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/64e6a51535cf0391d864fcbe5c29094b7c631514/dts/pclm10.dts)
 
 </div>

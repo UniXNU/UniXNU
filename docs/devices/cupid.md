@@ -6,7 +6,7 @@
 
 Xiaomi 12 \(cupid, SM8450\) running iOS 26.5.2 \(23F84, arm64e\) under an iPhone17,2 / D94AP identity. This record separates what is established from host sources from what still needs the phone.
 
-Source record: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/porting.toml), `18515b36a5ce061ba811da268b6bd020bc5cde62`.
+Source record: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/porting.toml), `31369656f56aa1f2b929bce8b39dfda4ccfb1c1b`.
 
 This page is generated from the device record.
 
@@ -51,7 +51,7 @@ This page is generated from the device record.
 
 - The iPhone17,2 26.5.2 kernelcache reports xnu-12377.122.8\~1/RELEASE\_ARM64\_T8140 and has 302 fileset entries; the newest public source is xnu-12377.121.6. Same major/minor, so the iOS 26 profile applies only zzz-boot-progress and not the Darwin 26 syscall/KPI patches that 24A446 needs.
 - An iPhone profile is required for a phone: iPadOS presents iPad product identity, idiom and display assumptions that SpringBoard and UIKit read from /product.
-- The first iOS 26 prelink without a fileset reference left 1668 targets / 18367 sites \(apfs 3757, AppleM2 2706, AppleARMPlatform 1755, ApplePMGR 1443, IOGPUFamily 1427\). With the reference the exact tree left 92 owner-site pairs / 766 sites. The nine reviewed bindings in patches/xnuprelink/fileset-cupid-23F84-symbols.json \(ml\_set\_interrupts\_enabled\_with\_debug plus two PMGR thunks, zfree, uiomove64, zalloc\_ro, task\_deallocate, vnode\_getwithref, and the AppleImage4 security-flag shim\) reduce a local exact-pair run to 72 stubbed targets / 252 sites and 4 missing / 4 before the image4 binding; --allow-missing lets the image build. The first boot panic named AppleImage4 0xabda26c from 0x8d05be8; the shim writes status 2/flags 0. The iPhone 26 native \_\_DATA\_CONST \(0x11c000\) and \_\_LASTDATA\_CONST do not fit before AppleARMPlatform \_\_DATA\_CONST at +0x119f40, so prelink fails with 'Native \_\_DATA\_CONST overlaps a retained segment'. patches/xnu/no-assert-strings.patch keeps MACH\_ASSERT \(the prelinked ipc\_port ABI stays 160\) but no-ops the assert/assertf/assert3 message macros, removing most of the 0x2ef3c \_\_assert section. DTrace and LOCK\_STATS stay enabled: disabling DTrace broke the bsd partial link, and turning MACH\_ASSERT off changed ipc\_port from 160 to 144 bytes. AMFI early init: the 24A446 value 0xfffffff00921000c is the wrapper at AppleMobileFileIntegrity \_\_TEXT\_EXEC+0xe7ec; the same offset lands mid-function in 23F84. The 23F84 wrapper is 0xfffffff008edda30 \(\_\_TEXT\_EXEC+0xdee0\): it calls the original initializer at 0xfffffff008edd2a0 and returns 0.
+- The first iOS 26 prelink without a fileset reference left 1668 targets / 18367 sites \(apfs 3757, AppleM2 2706, AppleARMPlatform 1755, ApplePMGR 1443, IOGPUFamily 1427\). With the reference the exact tree left 92 owner-site pairs / 766 sites. The sixteen reviewed bindings in patches/xnuprelink/fileset-cupid-23F84-symbols.json cover ml\_set\_interrupts, two PMGR thunks, zfree, uiomove64, zalloc\_ro, task\_deallocate, vnode\_getwithref, the AppleImage4 security-flag shim, the lck\_mtx\_gate open/steal/alloc/free family, and the pmap PPL functions. The first boot panic named AppleImage4 0xabda26c; the second was a tail-branch stub from AppleImage4, so fileset-register-report.patch now saves x0-x30 and prints x16/x17 plus data-slot candidates. --allow-missing still writes the candidate; any remaining stub is named exactly by the report. The iPhone 26 native \_\_DATA\_CONST \(0x11c000\) and \_\_LASTDATA\_CONST do not fit before AppleARMPlatform \_\_DATA\_CONST at +0x119f40, so prelink fails with 'Native \_\_DATA\_CONST overlaps a retained segment'. patches/xnu/no-assert-strings.patch keeps MACH\_ASSERT \(the prelinked ipc\_port ABI stays 160\) but no-ops the assert/assertf/assert3 message macros, removing most of the 0x2ef3c \_\_assert section. DTrace and LOCK\_STATS stay enabled: disabling DTrace broke the bsd partial link, and turning MACH\_ASSERT off changed ipc\_port from 160 to 144 bytes. AMFI early init: the 24A446 value 0xfffffff00921000c is the wrapper at AppleMobileFileIntegrity \_\_TEXT\_EXEC+0xe7ec; the same offset lands mid-function in 23F84. The 23F84 wrapper is 0xfffffff008edda30 \(\_\_TEXT\_EXEC+0xdee0\): it calls the original initializer at 0xfffffff008edd2a0 and returns 0.
 - The iPhone 26 fileset has every root of the iPad 26 profile except com.apple.iokit.IOHIDEventDriver; the class itself ships in IOHIDFamily.
 - Arrays replace inherited arrays: board.toml repeats every selected component, configuration fragment and patch series entry.
 - The macOS workflow repairs two stale UniXNU submodule gitlinks before fetch: ArmCpu 2e11cda/16040839 to the existing 93a5030, and AppleKeyStoreState 6ff4f11 \(gone from the remote\) to main 58e5461. The latter blocked build 42779052201 in the resolve step. The macOS workflow builds the EDK II package \(UniXNU.efi\) after the kernel, so a push that changes board.toml, profiles, configs or the workflow itself exercises image assembly without the phone.
@@ -84,12 +84,12 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Format 2 board configuration selecting SM8450, ios-26.5.2-23F84 and the stage-0 component set.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/board.toml)
-- `source`: [iPhone17,2 26.5.2 IPSW pins, arm64e architecture selection, the 23F84 AMFI wrapper 0xfffffff008edda30, the iPhone prelink roots and the pending root images.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/profiles/os/ios-26.5.2-23F84/profile.toml)
-- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/.github/workflows/macos.yml)
-- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `source`: [Format 2 board configuration selecting SM8450, ios-26.5.2-23F84 and the stage-0 component set.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/board.toml)
+- `source`: [iPhone17,2 26.5.2 IPSW pins, arm64e architecture selection, the 23F84 AMFI wrapper 0xfffffff008edda30, the iPhone prelink roots and the pending root images.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/profiles/os/ios-26.5.2-23F84/profile.toml)
+- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/.github/workflows/macos.yml)
+- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'getprop | grep ro.boot'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [First iOS 26 XNU start: fileset stub panic from 0xfffffff008d05be8 \(AppleImage4\). The call site resolves to original 0xfffffff00abda26c, the one-time security-flag initializer; bound to \_unixnu\_apple\_image4\_flags \(status 2, flags 0\).](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/PANIC-2026-11-10-ios26-image4.md)
+- `device`: [First iOS 26 XNU start: fileset stub panic from 0xfffffff008d05be8 \(AppleImage4\). The call site resolves to original 0xfffffff00abda26c, the one-time security-flag initializer; bound to \_unixnu\_apple\_image4\_flags \(status 2, flags 0\).](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/PANIC-2026-11-10-ios26-image4.md)
   Command: <code>fastboot boot %USERPROFILE%\Downloads\cupid-unixnu\boot-v4-ios26.img</code>. Revision: `05539859958a8e2edc690bdda61310578a4220f8`.
 
 ## Firmware and boot {#firmware}
@@ -143,11 +143,11 @@ Components: `DarwinBoot`.
 - `host`: [macOS 26 DEBUG/CLANGPDB build of Platforms/Xiaomi/cupidPkg/cupid.dsc with FD\_BASE=0xa7100000 FD\_SIZE=0x300000 FD\_BLOCKS=768; output uefi-cupid/Build/cupidPkg/DEBUG\_CLANGPDB/FV/SILICIUM\_UEFI.fd. The Gic-Spurious edk2 patch applied.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42371720139)
   Command: <code>./unixnu build firmware -D ../device --uefi ../uefi-cupid</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
 - `source`: [Documents the ingres-derived memory map, the missing stock uefiplat.cfg replacement, and the vendor-hardware import that Binaries/cupid needs.](https://github.com/obaosp/uefi-cupid/blob/bce96f77d07ec90a516432df466b8cd3af7272fc/Platforms/Xiaomi/cupidPkg/README.md)
-- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/first-boot-2026-11-07.md)
+- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/first-boot-2026-11-07.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b83e634bd63489b7c7ff3f976ca732ea80c98c03`.
-- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## CPU and interrupts {#cpu}
@@ -192,11 +192,11 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/dts/cupid.dts)
+- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/dts/cupid.dts)
 - `source`: [Mainline CPU nodes, GIC windows, UFS host and PHY addresses used by dts/sm8450.dtsi.](https://github.com/torvalds/linux/blob/f1586048fb1dabb91c82fbe11557e505587973d3/arch/arm64/boot/dts/qcom/sm8450.dtsi)
-- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'grep -E "Features|CPU part" /proc/cpuinfo'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/pac-trap-2026-11-07.md)
+- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/pac-trap-2026-11-07.md)
   Command: <code>fastboot boot boot-v4-win2g.img</code>. Revision: `d093c5c1292400209634b7b82c78cd39fd9faa98`.
 
 ## Memory and DMA {#memory}
@@ -235,7 +235,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## Storage and root {#storage}
@@ -279,8 +279,8 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/package/Sm8450Ufs/Sm8450UfsRegs.h)
-- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/package/Sm8450Ufs/Sm8450UfsRegs.h)
+- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## Display {#display}
@@ -321,7 +321,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## Input {#input}
@@ -537,8 +537,8 @@ Components: `XnuPrelink`.
 
 ### Development findings
 
-- patches/xnuprelink/fileset-cupid-23F84-symbols.json is a reviewed fixture for the iPhone17,2 26.5.2 kernelcache. It binds nine kernel functions/thunks by string/call evidence \(ml\_set\_interrupts\_enabled\_with\_debug plus two PMGR thunks, zfree, uiomove64, zalloc\_ro, task\_deallocate, vnode\_getwithref, and the AppleImage4 security-flag shim\); the remaining stubs are --allow-missing stubs for the next panic iteration.
-- build-fileset-release-reference.py --tree . --lto is required for iOS 26: the stripped native kernel cannot shape-match the kernel-function imports of the original kexts, so without the symbol-bearing reference prelink left 1668 targets / 18367 sites. The reference cut that to 92 owner-site pairs / 766 sites; the reviewed fixture leaves 76 stubbed targets / 448 sites, and --allow-missing writes the candidate.
+- patches/xnuprelink/fileset-cupid-23F84-symbols.json is a reviewed fixture for the iPhone17,2 26.5.2 kernelcache. It binds sixteen kernel functions/thunks by string/call evidence, including the lck\_mtx\_gate open/steal/alloc/free family and the pmap PPL functions. The first batch paired the lck\_mtx\_gate allocator \(alloc\_init\) with the native destroy, and the native gate check panicked: 'Trying to destroy a gate that was allocated by gate\_alloc\_init; gate\_free should be used'. The corrected deallocator is \_lck\_mtx\_gate\_free. fileset-register-report.patch replaces the simple stub with a register-saving report \(x0-x30, x16/x17, data-slot candidates\) so any remaining stub names its slot instead of relying on the stale tail-branch return address.
+- build-fileset-release-reference.py --tree . --lto is required for iOS 26: the stripped native kernel cannot shape-match the kernel-function imports of the original kexts, so without the symbol-bearing reference prelink left 1668 targets / 18367 sites. The reference cut that to 92 owner-site pairs / 766 sites; the sixteen-binding batch and --allow-missing write the candidate, and the register report names any remaining slot.
 - The iPhone 26 prelink layout leaves only 0x119f40 before AppleARMPlatform \_\_DATA\_CONST; the DEVELOPMENT native \_\_DATA\_CONST plus \_\_LASTDATA\_CONST exceed it. patches/xnu/no-assert-strings.patch removes most of the \_\_assert strings so the native constants fit. MACH\_ASSERT stays defined: the ipc\_port ABI is 160 bytes, and a MACH\_ASSERT=0 build failed the genassym static assertion at 144. DTrace/LOCK\_STATS also stay on.
 - Kernel and package steps do not need the firmware checkout; payload and boot image do because they embed the firmware volume.
 - package/Sm8450Ufs is board-owned host-tested code, not yet part of the kernel archive: ufs-regs compiles Sm8450UfsRegs.h and Sm8450UfsHci.h with c++ -Werror on every change, and the package step continues to build only the EDK II drivers.
@@ -568,7 +568,7 @@ Components: `XnuPrelink`.
   Command: <code>./unixnu build kernel -D ../device &amp;&amp; ./unixnu build package -D ../device</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
 - `host`: [Pre-pivot iOS 27.0.1 build: 70-patch series, XNU 12377.121.6, iPhone17,2 fileset reference and AMFI early init 0xfffffff00921000c. The iOS 26 profile replaces this with the native 23F84 pair.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42369952333)
   Command: <code>./unixnu build kernel -D ../device</code>. Revision: `4cd54a6dbaabfcd53214a522a51f5a04c90d19ec`.
-- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/18515b36a5ce061ba811da268b6bd020bc5cde62/notes/device-2026-11-07.md)
+- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/31369656f56aa1f2b929bce8b39dfda4ccfb1c1b/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 - `host`: [First iOS 26 build: the native kernel and matcher completed \(8571/21033 functions\), then prelink failed with Native \_\_DATA\_CONST overlaps a retained segment: the native \_\_DATA\_CONST is 0x11c000 and com.apple.driver.AppleARMPlatform starts at +0x119f40. This is the tighter iPhone 26 collection layout, not a source mismatch.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42688310664)
   Command: <code>./unixnu build kernel -D ../device</code>. Revision: `39b14e69c6558ebb2d10e6d9559c70d14d0832a9`.
