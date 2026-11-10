@@ -192,6 +192,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Realme 5 Pro](/devices/rmx1971) | SDM710 | 2 | Porting record | [AppleCampus/UniXNU-rmx1971](https://github.com/AppleCampus/UniXNU-rmx1971) |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/devices/rmx3551) | SM8475 | 2 | Porting record | [Axiang-dev/UniXNU-rmx3551](https://github.com/Axiang-dev/UniXNU-rmx3551) |
 | [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/devices/rmx3823) | SM8550 | 2 | Porting record | [Janit8r/UniXNU-rmx3823-new](https://github.com/Janit8r/UniXNU-rmx3823-new) |
+| [realme GT5 240W \(RMX3823, miniyv\): UEFI bring-up, full boot chain over fastboot boot](/devices/rmx3823-miniyv) | SM8550 | 1 | Repository link | [miniyv/simple-RMX3823-UniXNU](https://github.com/miniyv/simple-RMX3823-UniXNU) |
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/ruby) | MT6877 | 2 | Porting record | [lky005/UniXNU-ruby](https://github.com/lky005/UniXNU-ruby) |
 | [Xiaomi MIX Flip \(ruyi\)](/devices/ruyi) | SM8650 | 1 | Device notes | [ArnoDorian123/UniXNU-ruyi](https://github.com/ArnoDorian123/UniXNU-ruyi) |
 | [Xiaomi MIX Flip \(ArnoDorian123\)](/devices/ruyi-arnodorian123) | SM8650 | 1 | Repository link | [ArnoDorian123/UniXNU-ruyi-min](https://github.com/ArnoDorian123/UniXNU-ruyi-min) |

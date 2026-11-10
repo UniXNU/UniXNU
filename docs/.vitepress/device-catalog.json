@@ -930,6 +930,11 @@
     "title_zh": "realme GT5 240W (RMX3823), kalama, 24 GiB, 1240x2772 AMOLED"
   },
   {
+    "name": "rmx3823-miniyv",
+    "title": "realme GT5 240W (RMX3823, miniyv): UEFI bring-up, full boot chain over fastboot boot",
+    "title_zh": "realme GT5 240W（RMX3823，miniyv）：UEFI 移植，fastboot 临时启动全链贯通"
+  },
+  {
     "name": "ruby",
     "title": "Xiaomi Redmi Note 12 Pro 5G (ruby, MediaTek Dimensity 1080 / MT6877)",
     "title_zh": "Xiaomi Redmi Note 12 Pro 5G (ruby, MediaTek Dimensity 1080 / MT6877)"
