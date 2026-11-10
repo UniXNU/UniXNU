@@ -12,3 +12,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-shared-region-size.patch
 ../xnu-12377/macos-verbose-text-console.patch
 ../xnu-12377/macos-user-address-space.patch
+../xnu-12377/macos-union-one-volume.patch
