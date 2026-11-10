@@ -1,0 +1,184 @@
+["os"]
+"name" = "macos-27.3-26C5035r"
+"arch" = "arm64e"
+"darwin" = "25.5.0"
+# No Darwin 26 XNU source is published yet. 26C5035r runs on the xnu-12377 kernel with the Darwin 26
+# system calls, the macOS KPIs and the macOS build target added (patches/xnu/series); move to the
+# Darwin 26 tag when Apple publishes it. Apple's own kernel of this release is xnu-13432.60.57.
+"xnu_version" = "12377.121.6"
+"xnu_revision" = "ac9718fb1af618d5ce8678d0dc6e8a58f252216f"
+# 12377 carries iokit/DriverKit; EXTERNAL_HEADERS/TrustCache comes from the last tag that ships it.
+"driverkit_tag" = "xnu-12377.121.6"
+"trustcache_tag" = "xnu-8796.101.5"
+# The kernel serves macOS userspace: XNU_TARGET_OS_OSX (the padded kext vtables and aligned containers of
+# the macOS kexts) on the same iOS-platform kernel, memory layout and link address as iPadOS; the macOS
+# machine options come from patches/xnu-12377/macos-machine-config.patch.
+"target" = "macosx"
+# The deployment version of that iOS-platform kernel.
+"ios_version" = "27.0"
+"abi" = []
+
+
+["ipsw"]
+"url" = "https://updates.cdn-apple.com/2026FallSeed/53df7654-4865-4259-8dae-30177b76f104/UniversalMac_27.3_26C5035r_Restore.ipsw"
+"product" = "Mac17,11"
+"version" = "27.3"
+"build" = "26C5035r"
+"device_class" = "k114cap"
+"chip_id" = 24656
+"board_id" = 4
+"fetch" = ["KernelCache", "DeviceTree", "StaticTrustCache", "Cryptex1,SystemTrustCache", "Cryptex1,AppTrustCache"]
+
+
+["kernel"]
+
+["kernel"."prelink"]
+"tool" = "kits/XnuPrelink/emit_prelink.py"
+"kernel" = "build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/mach.development.bcm2837.unstripped.noctf"
+# kernelcache.release.mac17j decompressed. mac17j keeps full symbol tables on the kernel and every kext,
+# so the prelink map is built from names; the fileset stays at its linked addresses, there is no slide.
+"kernelcache_sha256" = "d1003b5143ffd88439b4d45b6017f587171cfe6855660bed05370a2ea5db9fe9"
+# The fileset roots of the macOS startup closure (BaseSystem is not part of it; the installed system
+# volume carries everything). The device board adds the USB stack and our own bundles on top.
+"roots" = ["com.apple.AppleFSCompression.AppleFSCompressionTypeZlib", "com.apple.AppleFSCompression.AppleFSCompressionTypeDataless", "com.apple.driver.AppleARMPlatform", "com.apple.driver.AppleARMWatchdogTimer", "com.apple.driver.AppleAudioClockLibs", "com.apple.driver.AppleEffaceableStorage", "com.apple.driver.AppleIISController", "com.apple.driver.AppleM2ScalerCSCDriver", "com.apple.driver.AppleMobileFileIntegrity", "com.apple.driver.ApplePMGR", "com.apple.driver.IODARTFamily", "com.apple.filesystems.apfs", "com.apple.filesystems.hfs.kext", "com.apple.iokit.CoreAnalyticsFamily", "com.apple.iokit.IOAVFamily", "com.apple.iokit.IOAudio2Family", "com.apple.iokit.IOCECFamily", "com.apple.iokit.IOCryptoAcceleratorFamily", "com.apple.iokit.IOGPUFamily", "com.apple.iokit.IOHDCPFamily", "com.apple.iokit.IOMobileGraphicsFamily", "com.apple.iokit.IOReportFamily", "com.apple.iokit.IOSlowAdaptiveClockingFamily", "com.apple.iokit.IOStorageFamily", "com.apple.iokit.IOSurface", "com.apple.kec.Libm", "com.apple.kec.corecrypto", "com.apple.kec.pthread", "com.apple.kext.AppleMatch", "com.apple.kext.CoreTrust", "com.apple.security.AppleImage4", "com.apple.security.sandbox", "com.apple.security.quarantine", "com.apple.AppleSystemPolicy", "com.apple.iokit.IOHIDFamily", "com.apple.iokit.IOTimeSyncFamily", "com.apple.plugin.IOgPTPPlugin", "com.apple.driver.AppleDiskImages2", "com.apple.driver.DiskImages", "com.apple.driver.DiskImages.FileBackingStore", "com.apple.driver.DiskImages.KernelBacked", "com.apple.driver.DiskImages.RAMBackingStore", "com.apple.driver.DiskImages.ReadWriteDiskImage", "com.apple.driver.DiskImages.UDIFDiskImage", "com.apple.driver.AppleMultitouchDriver", "com.apple.iokit.IONetworkingFamily", "com.apple.iokit.IOUSBDeviceFamily", "com.apple.driver.AppleUSBXDCI", "com.apple.driver.AppleUSBDeviceMux", "com.apple.iokit.IOUSBHostFamily", "com.apple.driver.usb.AppleUSBXHCI", "com.apple.driver.usb.AppleUSBHub", "com.apple.driver.usb.AppleUSBHostCompositeDevice", "com.apple.driver.usb.IOUSBHostHIDDevice", "com.apple.iokit.IOUSBMassStorageDriver", "com.apple.iokit.IOSCSIArchitectureModelFamily", "com.apple.iokit.IOSCSIBlockCommandsDevice", "com.apple.iokit.IOBluetoothFamily", "com.apple.iokit.IO80211Family", "com.apple.iokit.EndpointSecurity", "com.apple.driver.AppleHIDKeyboard", "com.apple.driver.AppleTopCaseHIDEventDriver", "com.apple.driver.AppleInputDeviceSupport", "com.apple.iokit.IOGraphicsFamily", "com.apple.driver.AppleFDEKeyStore"]
+
+
+["adt"]
+
+["adt"."root"]
+
+["adt"."root"."string"]
+"model" = "Mac17,11"
+"target-type" = "K114c"
+"target-sub-type" = "K114cAP"
+"compatible" = "K114cAP"
+"manufacturer" = "Apple Inc."
+"secure-root-prefix" = "md"
+
+
+["adt"."chosen"]
+
+["adt"."chosen"."string"]
+"osenvironment" = "main"
+"crypto-hash-method" = "sha2-384"
+"cryptex1-certificate-format" = "x509"
+
+
+["adt"."chosen"."u32"]
+# A Mac reads these two and chip-id over lockdown and looks them up in MobileDevice's device map. No match leaves the device class unknown,
+# which it reports as "a software update is required". The chip-id is the board's [payload.adt] chip_id.
+"board-id" = 4
+"security-domain" = 1
+"certificate-production-status" = 0
+"effective-production-status-ap" = 0
+"certificate-security-mode" = 1
+"effective-security-mode-sep" = 1
+"amfi-only-platform-code" = 1
+
+
+["adt"."product"]
+
+["adt"."product"."string"]
+# The product identity of Mac17,11, from Apple's DeviceTree.k114cap.
+"product-name" = "MacBook Pro (14-inch PROLED XDR Display)"
+"product-description" = "MacBook Pro (14-inch PROLED XDR Display)"
+"fdr-product-type" = "Mac17,11"
+"sub-product-type" = "Mac17,11"
+"unique-model" = "K114cAP"
+"partition-style" = "macOS"
+"compatible-device-fallback" = "Mac17,7"
+"compatible-app-variant" = "MacFamily20,1"
+"app-macho-architecture" = "arm64"
+"artwork-device-idiom" = "mac"
+"artwork-display-gamut" = "Rec2020"
+"ideal-screen-colorspace" = "P3A"
+"artwork-dynamic-displaymode" = "0"
+"framebuffer-identifier" = "0"
+"chrome-identifier" = "0"
+"graphics-featureset-class" = "APPLE10"
+"graphics-featureset-fallbacks" = "APPLE9:APPLE8:APPLE7:APPLE6:APPLE5:APPLE4:APPLE3:APPLE3v1:APPLE2:APPLE1:GLES2,0"
+"mobiledevice-min-ver" = "1857"
+
+
+["adt"."product"."u32"]
+"udid-version" = 2
+"artwork-scale-factor" = 2
+"artwork-device-subtype" = 1986
+"allow-32bit-apps" = 1
+"oled-display" = 1
+"has-round-cornered-mac-display" = 1
+"partially-occluded-display" = 1
+"supports-burnin-mitigation" = 1
+"display-mirroring" = 1
+"sandman-support" = 1
+"lockdown-certtype" = 1
+"has-virtualization" = 1
+"upgradeable-memory" = 0
+"single-stage-boot" = 1
+"dual-iboot-support" = 1
+"atomic-firmware-update-support" = 1
+"ptp-large-files" = 1
+
+
+# Apple sources of the macOS 26.5 release that pairs with xnu-12377.121.6.
+# Public source interfaces; these pins do not qualify the stripped iPadOS family ABI.
+[[source]]
+name = "IOStorageFamily"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/IOStorageFamily.git"
+ref = "IOStorageFamily-337.100.1"
+commit = "7edb88fbae296fb7c8ce2f64e115e116e566d51c"
+
+[[source]]
+name = "IOHIDFamily"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/IOHIDFamily.git"
+ref = "IOHIDFamily-2238.120.5"
+commit = "e31e90a24c27ad6cbe981650d12a1a4124065b03"
+
+[[source]]
+name = "libplatform"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/libplatform.git"
+ref = "libplatform-375.120.2"
+commit = "b7ed7cf5cf7dd12b98672435db2225a860f199d8"
+
+[[source]]
+name = "libdispatch"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/libdispatch.git"
+ref = "libdispatch-1542.100.32"
+commit = "701f4d1a24ae9c6863901bbbb22624b7d1b87321"
+
+[[source]]
+name = "AvailabilityVersions"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/AvailabilityVersions.git"
+ref = "AvailabilityVersions-157.2"
+commit = "149b1777f3e8c2133042d8e188f72e3adf6a7110"
+
+[[source]]
+name = "libpthread"
+kind = "refer"
+git = "https://github.com/apple-oss-distributions/libpthread.git"
+ref = "libpthread-539.100.4"
+commit = "1f4f5265b319111142f1bf3a27d4484ef5a98314"
+
+
+[userdata]
+# Disk images of this OS, in window order; the device sets the partition geometry.
+# The macOS system is one APFS container: the OS window is the whole System volume
+# (Sealed: No, no snapshot), SystemOS carries the cryptex and App the application cryptex.
+windows = [{ name = "OS", component = "OS" }, { name = "SystemOS", component = "Cryptex1,SystemOS", optional = true }, { name = "App", component = "Cryptex1,AppOS", optional = true }]
+
+
+[root]
+# The OS and Cryptex1,SystemOS disk images: APFS volume UUIDs and image digests the root policies sign.
+os_volume_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"
+os_image_sha256 = "40d8282eb8650da9b4d7437a981764c48d47ee4bdc5b8b362248f25ecbce0e70"
+systemos_volume_uuid = "6678E466-2F88-4C56-9408-DC7361BAA0BA"
+systemos_image_sha256 = "14330ed990fe7022114b10718f4defe3049d49b6e5d52fd3ac71a487541cd1f3"
+
+
+[payload.adt]
+root_match_volume_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"

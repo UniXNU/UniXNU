@@ -15,6 +15,15 @@ AVAILABILITY_TAG=${UNIXNU_AVAILABILITYVERSIONS_TAG:-AvailabilityVersions-141.1}
 # The architecture and OS profiles select the kernel slice and the deployment target.
 XNU_ARCH_STRING=${UNIXNU_XNU_ARCH:-arm64}
 IOS_VERSION=${UNIXNU_IOS_VERSION:-17.0}
+# The OS profile names the userspace the kernel serves: ios (default) or macosx. Both build the same
+# iOS-platform kernel with the same memory layout and link address; macosx defines XNU_TARGET_OS_OSX
+# instead of XNU_TARGET_OS_IOS, which gives IOKit classes the padded vtables and aligned containers
+# that macOS kexts are built against and turns on the macOS paths of the kernel.
+case "${UNIXNU_XNU_TARGET:-ios}" in
+  ios) XNU_TARGET_DEFINE=-DXNU_TARGET_OS_IOS ;;
+  macosx) XNU_TARGET_DEFINE=-DXNU_TARGET_OS_OSX ;;
+  *) echo 'UNIXNU_XNU_TARGET must be ios or macosx' >&2; exit 1 ;;
+esac
 if [ ! -d refer/xnu/.git ]; then
   git clone --depth 1 --branch "$XNU_TAG" https://github.com/apple-oss-distributions/xnu.git refer/xnu
 fi
@@ -821,7 +830,7 @@ make -C .cache/xnu-work "${XNU_BUILD_TARGET:-build}" SDKROOT="${XNU_SDKROOT:-iph
   MACHINE_CONFIGS=BCM2837 KERNEL_CONFIGS=DEVELOPMENT \
   ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG="$XNU_ARCH_STRING" LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY \
   ARM64_LINK_ADDR=0xfffffff007004000 ARM64_PLKSEG_ADDR=0xfffffff004004000 \
-  DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION -DXNU_TARGET_OS_IOS" \
+  DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=$IOS_VERSION $XNU_TARGET_DEFINE" \
   DEPLOYMENT_LINKER_FLAGS="-Wl,-ios_version_min,$IOS_VERSION" \
   RC_DARWIN_KERNEL_VERSION="$XNU_DARWIN" RC_ProjectSourceVersion="$XNU_VERSION" \
   BUILD_LTO=0 BOUND_CHECKS=0 BUILD_WERROR="${XNU_BUILD_WERROR:-0}" MAKEJOBS=-j"${JOBS:-4}" \

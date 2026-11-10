@@ -52,6 +52,8 @@ def version_env(modules, ctx=None):
             env['UNIXNU_XNU_TAG'] = 'xnu-' + profile['xnu_version']
         if profile.get('ios_version'):
             env['UNIXNU_IOS_VERSION'] = profile['ios_version']
+        # The userspace the kernel serves: ios (default) or macosx (XNU_TARGET_OS_OSX instead of XNU_TARGET_OS_IOS).
+        env['UNIXNU_XNU_TARGET'] = profile.get('target', 'ios')
         # The root images of the OS: volume UUIDs and image digests the kernel and the storage builder check.
         root = ctx.board.get('root', {})
         for key, variable in (('os_volume_uuid', 'XNU_OWNER_ROOT_VOLUME_UUID'),
