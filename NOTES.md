@@ -2,6 +2,25 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 20:20: 0273 MODEM SERVICE MODE: registered on LTE for good, kern.sweet_cell; METAL REGRESSION FIXED
+  (builds 0258-0273 had dropped the uncommitted GPU page-table fix)** (patch `xnu/patches/0273-umi-x55-service.patch`,
+  kernel d51c6ec; image **`shim/out/umi-0273b-x55service-gpu.img`** = 0270's line with `sweetmdm=9 sweetmdmonline=1`;
+  booted ~20:13; log: scratchpad `umi-0273.log`).
+  - **BUILD NOTE: build with the whole working tree, do NOT stash.** From 0258 to 0273 I stashed the uncommitted
+    changes before each build to keep the modem kernels "clean"; that removed an uncommitted GPU fix in
+    `sweet_adreno.c` / `SweetAdreno.cpp` (another session's, used in `umi-0256-gputables-6g.img`: SA_TABLES_MAX
+    1024 -> 8192, exited processes' GPU windows reused before new ones, BoMap refusals logged, "tables n/max" in the
+    memory line). Without it GPU page tables run out once enough processes use Metal (WebKit.GPU): the user saw Metal
+    broken on 0272. 0273b is built with the whole tree again (Wi-Fi WIP `sweet_wlce/wldp/wlsta.c` included too, as in
+    0256). That GPU / Wi-Fi WIP is still uncommitted (not mine).
+  - `sweetmdm=9`: the mission loop runs for good; timers by mach time; sleeps 2 ms between polls after the first
+    minute; once registered NAS / DMS every 30 s (10 s before), UIM every 60 s, DIAG mask down to 0x18, a status line a
+    minute; restart on loss (MHI all ones or MDM2AP errfatal), up to `sweetmdmrestart` (10). **sysctl
+    `kern.sweet_cell`**: `reg=1 rat=lte mcc=228 mnc=2 dbm=-90 sim=ready mode=online` (for the iOS side).
+  - Result: registered from ~60 s on, every status line to 250 s `reg=1 rat=lte ... dbm=-90 sim=ready mode=online`,
+    MHI M0, no restart; GPU `tables 341/8192, 0 failed allocs`; kernel_task 4-6 % of a core, the phone 8-16 % idle.
+  - Next: the iOS side - CommCenter (or a stand-in) fed from the modem: SIM, operator, bars; then data (WDS + IP
+    channels 100/101) and SMS (WMS).
 - **2026-11-10 20:00: 0272 THE X55 IS REGISTERED ON LTE: SIM READY, CS + PS attached, MCC 228 MNC 02, -90 dBm**
   (patch `xnu/patches/0272-umi-x55-usim-provisioning.patch`, kernel 6a74c19, image
   **`shim/out/umi-0272-x55usim.img`** = 0270's line (`sweetmdm=8 sweetmdmonline=1`); booted ~19:53; log: scratchpad

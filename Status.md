@@ -25,7 +25,7 @@
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
 | 🦷 Bluetooth | QCA6390 over UART (921600 baud): scan, connect and pair in Settings, Control Center button, off / on (slow); see the tests below | ⚠️ |
-| 📶 Cellular Data | The X55 modem boots from the kernel and registers on LTE with the SIM (kernel 0272); nothing in iOS uses it yet (no data, calls or SMS) | ⚠️ |
+| 📶 Cellular Data | The X55 modem boots from the kernel and stays registered on LTE with the SIM (kernels 0272-0273); nothing in iOS uses it yet (no data, calls or SMS) | ⚠️ |
 | 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |
@@ -128,9 +128,10 @@
 * **Cellular**: the Mi 10's modem is an external Snapdragon X55 on PCIe2, brought up entirely by the kernel
   (`sweet_mdm.c`, kernels 0260-0272): power and PCIe2 link, sbl1 over BHI, the other 12 images over MHI / Sahara,
   mission mode, QRTR, its TFTP and remote-EFS services (nothing written to the phone), operating mode steered by the
-  host, SIM provisioning session: **SIM READY and REGISTERED on LTE (-90 dBm)**. Nothing in iOS uses it yet (kernel
-  0259's `AppleBaseband` stub keeps CommCenter from crash-looping; iOS shows "Cellular issue detected"). Next: keep
-  the modem service running past the test window, then a bridge to CommCenter (SIM, operator, bars), mobile data
+  host, SIM provisioning session: **SIM READY and REGISTERED on LTE (-90 dBm)**, kept up as a kernel service with its
+  state in `kern.sweet_cell` (kernel 0273). Nothing in iOS uses it yet (kernel
+  0259's `AppleBaseband` stub keeps CommCenter from crash-looping; iOS shows "Cellular issue detected"). Next: a
+  bridge to CommCenter (SIM, operator, bars), mobile data
   (WDS, IP_HW0 100/101), SMS (WMS)
 * **CPU load**: the TTS synthesizers' crashes in the first minutes (KonaSynthesizer / SiriTTSSynthesizerAU / MacinTalkAUSP)
 * **fairplayd**: `fairplayd.H2` is out of launchd's job list (that unblocked location on 2026-10-31); still to do:
