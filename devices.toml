@@ -2839,8 +2839,8 @@ soc = "SM8250"
 [[device]]
 name = "pje110"
 repository = "ledgerliu/UniXNU-pje110"
-title = "pje110"
-title_zh = "pje110"
+title = "OnePlus Ace 3 (PJE110)"
+title_zh = "一加 Ace 3（PJE110）"
 format = 1
 legacy_page = "link"
 repository_id = 1444404361
@@ -3651,8 +3651,8 @@ record_state = "available"
 [[device]]
 name = "sheng-macos"
 repository = "CrossDarwin/macOS-ForSheng"
-title = "macOS on sheng"
-title_zh = "sheng 上的 macOS"
+title = "Xiaomi Pad 6S Pro (macOS)"
+title_zh = "小米平板 6S Pro（macOS）"
 format = 1
 legacy_page = "preserve"
 soc = "SM8550"
@@ -4387,8 +4387,8 @@ revision = "da7be33002b00f75302899d1ce00adcff5a8442e"
 [[device]]
 name = "unixnu-build"
 repository = "iskssksjjsjjzjs/unixnu-build"
-title = "unixnu-build"
-title_zh = "unixnu-build"
+title = "Build configuration (device unspecified)"
+title_zh = "构建配置（设备未注明）"
 format = 1
 legacy_page = "preserve"
 soc = "build tree"
