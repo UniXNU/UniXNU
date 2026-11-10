@@ -10,10 +10,14 @@ installation state; keep it for later builds as make-data-seed.py describes.
 The seed travels in every payload beside the kernel, and the packed format holds at most 256 MiB, so the
 template (about 0.8 GiB) is not copied whole. Files below KEEP stay real files, as the system writes them;
 every other file becomes a symbolic link to the same file in the system volume's template, as macOS does
-for the paths of Data.symlink-patterns. The copy is made in a scratch volume first and copied again into
-the seed's image, so the seed holds no blocks of the replaced files.
+for the paths of Data.symlink-patterns. The directories of READONLY, signed bundles that only system updates
+change, become one link each to their template directory instead: a link inside a bundle points outside it,
+and code signature validation (kernelmanagerd's kext validation of /Library/Apple) refuses such bundles.
+The copy is made in a scratch volume first and copied again into the seed's image, so the seed holds no
+blocks of the replaced files. --volume-uuid gives the Data volume the UUID the kernel mounts
+(CONFIG_XNU_OWNER_DATA_VOLUME_UUID), so a new seed can replace an older one without a kernel build.
 
-    sudo python3 scripts/make-macos-data-seed.py OS OUTPUT --gib N [--skip-setup]
+    sudo python3 scripts/make-macos-data-seed.py OS OUTPUT --gib N [--skip-setup] [--volume-uuid UUID]
 """
 import argparse
 import contextlib
@@ -22,9 +26,11 @@ import os
 from pathlib import Path
 import plistlib
 import stat
+import struct
 import subprocess
 import sys
 import tempfile
+import uuid
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'drivers/DarwinBoot/Test'))
@@ -32,6 +38,7 @@ import packed_ramdisk  # noqa: E402
 
 TEMPLATE = 'System/Library/Templates/Data'
 KEEP = ('private/', 'Users/', 'Library/Preferences/', 'Library/Keychains/')
+READONLY = ('Library/Apple', 'Library/Application Support/Apple', 'Library/Documentation', 'Library/WebServer')
 
 
 def main():
@@ -41,6 +48,7 @@ def main():
     parser.add_argument('--gib', type=int, required=True)
     parser.add_argument('--skip-setup', action='store_true',
                         help='mark Setup Assistant done (/private/var/db/.AppleSetupDone)')
+    parser.add_argument('--volume-uuid', type=uuid.UUID, help='the Data volume UUID (default: a new one)')
     args = parser.parse_args()
     if os.geteuid() != 0:
         parser.error('run as root: the Data template keeps its owners')
@@ -107,6 +115,49 @@ def copy_template(template, mount):
               + ', '.join(sorted(unprotected)), file=sys.stderr)
 
 
+def link_template_directories(mount):
+    """Replace each READONLY directory with one link to its template directory, keeping its owner."""
+    for relative in READONLY:
+        path = mount / relative
+        if not path.is_dir() or path.is_symlink():
+            continue
+        st = os.lstat(path)
+        subprocess.run(['chflags', '-R', 'nouchg,noschg', path], check=True)
+        subprocess.run(['rm', '-rf', path], check=True)
+        os.symlink('/' + TEMPLATE + '/' + relative, path)
+        os.lchown(path, st.st_uid, st.st_gid)
+
+
+def fletcher64(data):
+    lo = hi = 0
+    for (word,) in struct.iter_unpack('<I', data):
+        lo = (lo + word) % 0xFFFFFFFF
+        hi = (hi + lo) % 0xFFFFFFFF
+    c0 = 0xFFFFFFFF - ((lo + hi) % 0xFFFFFFFF)
+    c1 = 0xFFFFFFFF - ((lo + c0) % 0xFFFFFFFF)
+    return struct.pack('<II', c0, c1)
+
+
+def set_volume_uuid(raw, new):
+    """Give the one volume of the raw container image the UUID new, in every checksummed superblock copy."""
+    with open(raw, 'r+b') as f:
+        data = bytearray(f.read())
+    if data[32:36] != b'NXSB':
+        raise SystemExit(f'{raw}: no APFS container superblock')
+    size = struct.unpack_from('<I', data, 36)[0]
+    found = set()
+    for block in range(0, len(data) - size + 1, size):
+        if data[block + 32:block + 36] != b'APSB' or fletcher64(data[block + 8:block + size]) != data[block:block + 8]:
+            continue
+        found.add(bytes(data[block + 240:block + 256]))
+        data[block + 240:block + 256] = new.bytes
+        data[block:block + 8] = fletcher64(data[block + 8:block + size])
+    if len(found) != 1:
+        raise SystemExit(f'{raw}: expected one volume, found {len(found)} volume UUIDs')
+    with open(raw, 'r+b') as f:
+        f.write(data)
+
+
 def link_template_files(mount):
     """Replace every regular file outside KEEP with a link to its template copy, keeping its owner."""
     kept = linked = 0
@@ -164,6 +215,7 @@ def build(parser, args, os_mount):
                 done.touch()
                 os.chown(done, 0, 0)
                 done.chmod(0o644)
+            link_template_directories(scratch)
             kept, linked = link_template_files(scratch)
             for path in (scratch / '.fseventsd', scratch / '.Spotlight-V100'):
                 subprocess.run(['rm', '-rf', path], check=True)
@@ -172,7 +224,10 @@ def build(parser, args, os_mount):
                 for path in (mount / '.fseventsd', mount / '.Spotlight-V100'):
                     subprocess.run(['rm', '-rf', path], check=True)
         (work / 'scratch.cdr').unlink()
-        print(f'{kept} template files copied, {linked} linked to /{TEMPLATE}', file=sys.stderr)
+        print(f'{kept} template files copied, {linked} linked to /{TEMPLATE}, '
+              f'{len(READONLY)} directories linked', file=sys.stderr)
+        if args.volume_uuid:
+            set_volume_uuid(raw, args.volume_uuid)
         base = work / 'base.dbr'
         packed_ramdisk.pack(raw, base)
         candidate = work / 'data.dbr'
