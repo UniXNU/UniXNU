@@ -5,6 +5,7 @@ probe runs it after the original IOGPUFamily kext has loaded. Same binding recip
 original constructor, destructor and metaclass addresses from build/gpu-analysis/ioaccelerator-base-abi.json)."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import struct
 import subprocess
@@ -34,20 +35,27 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-# iPadOS 27 (arm64e fileset): the reviewed 24A446 plan, original addresses before the collection slide.
+# iPadOS 27 and macOS 27.3 (arm64e filesets): the plan of the build, original addresses before the collection slide. The macOS
+# base is IOGraphicsFamily's IOAccelerator, read from the symbols of its collection.
 FILESET = ARCH == 'arm64e' and IOS_VERSION.split('.')[0] == '27'
-plan_path = ROOT / ('build/gpu-analysis/ioaccelerator-base-abi-24A446.json' if FILESET else 'build/gpu-analysis/ioaccelerator-base-abi.json')
+BUILD = os.environ.get('UNIXNU_IPSW_BUILD') or '24A446'
+if os.environ.get('UNIXNU_XNU_TARGET') != 'macosx':
+    BUILD = '24A446'
+BASE = 'IOAccelerator' if BUILD == '26C5035r' else 'IOAcceleratorES'
+plan_path = ROOT / (f'build/gpu-analysis/ioaccelerator-base-abi-{BUILD}.json' if FILESET else 'build/gpu-analysis/ioaccelerator-base-abi.json')
 # The audit of the original base class needs the hardware-observed parent evidence of the audited kernel; its recorded result
 # ships with the scripts and seeds a fresh tree.
-recorded = ROOT / ('scripts/data/ioaccelerator-base-abi-24A446.json' if FILESET else 'scripts/data/ioaccelerator-base-abi.json')
+recorded = ROOT / (f'scripts/data/ioaccelerator-base-abi-{BUILD}.json' if FILESET else 'scripts/data/ioaccelerator-base-abi.json')
 if not plan_path.exists() and recorded.exists():
     plan_path.parent.mkdir(parents=True, exist_ok=True)
     plan_path.write_bytes(recorded.read_bytes())
 if not plan_path.exists():
     print(run(['python3', ROOT / 'scripts/audit-target-accelerator-base.py'], text=True), end='')
 plan = json.loads(plan_path.read_text())
-if plan['operational_overrides'] or plan['instance_bytes'] != 136 or plan['virtual_entries'] != 168:
-    sys.exit('The audited original base is not the expected 136-byte, 168-entry class without operational overrides')
+# IOService has 168 vtable entries in the iOS-target kernel and 272 in the macOS-target one (padded kext vtables).
+SERVICE_ENTRIES = 272 if BUILD == '26C5035r' else 168
+if plan['operational_overrides'] or plan['instance_bytes'] != 136 or plan['virtual_entries'] != SERVICE_ENTRIES:
+    sys.exit(f'The audited original base is not the expected 136-byte, {SERVICE_ENTRIES}-entry class without operational overrides')
 
 record = json.loads((ROOT / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837/iokit/DEVELOPMENT/IOPlatformExpert.cpo.json').read_text().strip().rstrip(','))
 source = ROOT / 'drivers/Adreno740/NativeAdrenoAccelerator.cpp'
@@ -80,10 +88,11 @@ symbols = []
 for k in range(count):
     ix, kind, section, _, va = struct.unpack_from('<IBBHQ', raw, at + k * 16)
     symbols.append((raw[strings + ix:raw.index(b'\0', strings + ix)].decode(), va, kind))
-bindings = {'__ZN15IOAcceleratorESC2EPK11OSMetaClass': int(plan['protected_compatible_constructor_aliases'][0], 16),
-            '__ZN15IOAcceleratorESD2Ev': int(plan['nondeleting_destructor'], 16),
-            '__ZN15IOAcceleratorES10gMetaClassE': int(plan['metaclass'], 16)}
-undefined = {n for n, _, k in symbols if k == 1 and 'IOAcceleratorES' in n}
+mangled = f'{len(BASE)}{BASE}'
+bindings = {f'__ZN{mangled}C2EPK11OSMetaClass': int(plan['protected_compatible_constructor_aliases'][0], 16),
+            f'__ZN{mangled}D2Ev': int(plan['nondeleting_destructor'], 16),
+            f'__ZN{mangled}10gMetaClassE': int(plan['metaclass'], 16)}
+undefined = {n for n, _, k in symbols if k == 1 and mangled in n}
 extra = undefined - set(bindings)
 if extra or not undefined & set(bindings):
     sys.exit('Unexpected original-base imports: %s' % sorted(extra))
