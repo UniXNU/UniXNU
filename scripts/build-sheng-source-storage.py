@@ -199,10 +199,10 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         flags.append('-DNATIVE_BOOT_PROCESS_CAPTURE=1')
         sources += [device_source(name) for name in
                     ('BootProcessProbe.c', 'BootUiTraceProbe.c', 'BootProcessWorker.c')]
-        # The launchd job policy (sheng-disable-watchdogd, sheng-lite, sheng-disable-jobs, sheng-setup) that BootProgress carries on
+        # The launchd job policy (disable-watchdogd, lite, disable-jobs, setup) that BootProgress carries on
         # iPadOS 17; the kernel runs it after the Data mount.
         sources.append(device_source('BootWatchdogPolicy.c'))
-        # The diagnostic file export (sheng-diag-export): the unified log, crash reports and a screenshot, read through the VFS.
+        # The diagnostic file export (diag-export): the unified log, crash reports and a screenshot, read through the VFS.
         sources.append(device_source('BootDiagExport.c'))
         sources.append(device_source('WifiFirmware.c'))
         sources.append(device_source('BluetoothFirmware.c'))

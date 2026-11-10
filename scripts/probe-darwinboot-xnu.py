@@ -80,7 +80,7 @@ parser.add_argument('--read-entry-indirect', action='append', default=[], metava
 parser.add_argument('--read-entry-user-vector', action='append', default=[], help='Read an actual bounded user argv vector through ARG:HEX_OFFSET:HEX_COUNT')
 parser.add_argument('--read-entry-user-indirect', action='append', default=[], metavar='ARG:OFFSET:LENGTH', help='Read an explicitly user-space pointer field through the bounded observer')
 parser.add_argument('--negative-platform-match', action='store_true', help='Supply an explicit unmatched synthetic platform compatible string')
-parser.add_argument('--smp', type=int, default=1, help='Offline QEMU CPU count; above 1 enables sheng-smp and the PSCI secondary-start path')
+parser.add_argument('--smp', type=int, default=1, help='Offline QEMU CPU count; above 1 enables smp and the PSCI secondary-start path')
 parser.add_argument('--armcpu', action='store_true', help='Describe GICv3 resources and inspect real CPU/IRQ initialization')
 parser.add_argument('--missing-gic', action='store_true', help='Omit GIC resources to test CPU driver rejection')
 parser.add_argument('--check-commpage', action='store_true', help='Require real legacy and RO commpage user page shifts of 12')
@@ -479,7 +479,7 @@ if args.smp > 1:
     if not args.armcpu:
         parser.error('--smp requires --armcpu')
     config=esp/'EFI/UniXNU/unixnu.toml'
-    config.write_text(config.read_text().replace('args = "','args = "sheng-smp=1 ',1))
+    config.write_text(config.read_text().replace('args = "','args = "smp=1 ',1))
 if args.original_cpu_present:
     if not (args.legacy_display_transfer and args.load_mobile_graphics and args.prelink_report) or args.native_air_init or args.native_user:
         parser.error('Original CPU presentation requires original system graphics and validated copy, without an owned renderer')

@@ -7,7 +7,7 @@ The same device ships with different storage sizes, so the size is chosen per bu
   --gib N        a container of exactly N GiB;
   --auto         sized from the tablet's userdata partition: asks a tablet in fastboot (`fastboot getvar partition-size:userdata`, read only) or takes
                  --userdata-bytes, and leaves out the root image (build/userdata-root/userdata-root.json), a 4 MiB guard, the log reserve
-                 (--reserve-mib, the sheng-log-reserve value of the image, default 1024; 0 = none) and the store's own header and bitmap, then
+                 (--reserve-mib, the log-reserve value of the image, default 1024; 0 = none) and the store's own header and bitmap, then
                  rounds down to a whole GiB and keeps one more GiB free.
 The container is grown on this Mac (a sparse raw image attached without mounting, `diskutil apfs resizeContainer`), then packed again: the output
 keeps only the nonzero pages, so it is about as big as BASE. The volume UUID is unchanged. The result is a different disk for the persistent
