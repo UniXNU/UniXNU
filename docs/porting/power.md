@@ -136,7 +136,7 @@ The reference route, from [AudioProbe.cpp](https://github.com/UniXNU/UniXNU-shen
 | Format | Mono, 48 kHz |
 | iOS | The HAL plug-in's input port; iOS accepts it with the Thunderbolt transport type |
 
-Check capture with `sheng-audio=4`, which reads two seconds at boot: the
+Check capture with `audio=4`, which reads two seconds at boot: the
 `[mic]` and `[mic capture]` log rows give returned periods, bytes, the share of
 non-zero samples and the peak. Then record in an app and read `[audio-io]`.
 
@@ -203,9 +203,9 @@ On SM8550 the governors use these inputs:
 
 - CPU: each CPU's idle time from the scheduler, read every 16 ms. A domain follows its busiest CPU with a 1.25 margin and steps down after four quieter windows.
 - GPU: the GMU XO busy counter. The level that keeps the GPU about half busy is voted over HFI together with that level's bandwidth.
-- Touch: a touch report holds the P CPU domains and the GPU at their top level until 1 s after the last report (`sheng-cpufreq-boost-ms`, `sheng-gpu-dcvs-boost-ms`).
+- Touch: a touch report holds the P CPU domains and the GPU at their top level until 1 s after the last report (`cpufreq-boost-ms`, `gpu-dcvs-boost-ms`).
 - Frames: GPU submissions in 2 of the last 4 windows keep every CPU domain at 60 percent of its top level or more for 300 ms. GPU work after an idle drop starts at twice the current clock, at least 578 MHz, for 50 ms.
-- Fence waits: a waiter sleeps until the fence interrupt, at most 1 ms (`sheng-gpu-pause-us`), instead of polling.
+- Fence waits: a waiter sleeps until the fence interrupt, at most 1 ms (`gpu-pause-us`), instead of polling.
 
 **Result:** frequency requests and power transitions have observed effects and
 preserve the dependent devices' operation.

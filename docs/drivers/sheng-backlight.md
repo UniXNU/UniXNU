@@ -57,8 +57,8 @@ The board sets the ADT property `vmm-present` for AMFI, which makes MobileGestal
 
 | Boot argument | Effect |
 | --- | --- |
-| `sheng-backlight=1` | Starts the driver |
-| `sheng-backlight-control=0` | Leaves out `backlight-control` and the metaclass answer |
+| `backlight=1` | Starts the driver |
+| `backlight-control=0` | Leaves out `backlight-control` and the metaclass answer |
 | `log-display=1` | Adds the `L` rows to the boot log |
 
 ## Verification

@@ -19,7 +19,7 @@ The task's GPU role selects its foreground or background request. Ring 0 takes p
 
 Each ring tracks its queued context and page table. The CP records the executed table after `CP_SMMU_TABLE_UPDATE`, and preemption restores that snapshot. Context switching saves GMEM, runs the performance-counter SRAM postamble and holds the GMU keepalive vote until the incoming WPTR is restored. Read pointers come from each ring's own shadow. Active jobs retain their ring identity when the fence-history table wraps.
 
-The reference enables mode 2 with `sheng-gpu-preempt=2`. Mode 1 sends only low/background requests to ring 1; mode 0 uses one ring. CPU-only page-table switching also uses ring 0. The switch watchdog is 1 s. A failed switch disables further preemption and recovery replays pending work on ring 0; diagnostics retain the failure.
+The reference enables mode 2 with `gpu-preempt=2`. Mode 1 sends only low/background requests to ring 1; mode 0 uses one ring. CPU-only page-table switching also uses ring 0. The switch watchdog is 1 s. A failed switch disables further preemption and recovery replays pending work on ring 0; diagnostics retain the failure.
 
 ## Build and verification
 

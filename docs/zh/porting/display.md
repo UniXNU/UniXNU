@@ -41,8 +41,8 @@
    及相应的 `offline-legacy-*` 参数。
 3. 在 CPU 呈现路径中确认像素布局、行跨度、分配大小和缓存处理，检查已知画面能否显示。
 4. 确认交换完成通知与 IOSurface 生命周期后再启用 [GPU 呈现](/zh/porting/gpu)。
-5. 按目标控制器适配时序读取。参考探针 `sheng-dpu=1` 通过 `DisplayTimingProbe.cpp`
-   采样 SM8550 DPU 和双 DSI 计数器。根据实际面板模式设置刷新策略；参考实现用 `sheng-vsync=120` 请求 120 Hz。
+5. 按目标控制器适配时序读取。参考探针 `dpu=1` 通过 `DisplayTimingProbe.cpp`
+   采样 SM8550 DPU 和双 DSI 计数器。根据实际面板模式设置刷新策略；参考实现用 `vsync=120` 请求 120 Hz。
 
 对 `NativeGOPWire.h` 路径，先通过 mode 请求读取格式和几何参数，再检查每个呈现缓冲的大小与行跨度。
 GPU 交接使用 `NGPSwap.sequence` 跟踪待处理帧，复制完成后用相同序列提交 `NGPComplete`。
@@ -61,13 +61,13 @@ GPU 交接使用 `NGPSwap.sequence` 跟踪待处理帧，复制完成后用相�
 
 | 参数 | 读取内容 |
 | --- | --- |
-| `sheng-dpu=2` | VIG 0 和 1 的源地址、尺寸、格式和取图设置；CTL 0 状态；两个接口的 tear check；apps SMMU 中的显示流 |
-| `sheng-dpu=3` | 另外重写每条管线的当前地址，并测量 CTL flush 的锁存时间 |
+| `dpu=2` | VIG 0 和 1 的源地址、尺寸、格式和取图设置；CTL 0 状态；两个接口的 tear check；apps SMMU 中的显示流 |
+| `dpu=3` | 另外重写每条管线的当前地址，并测量 CTL flush 的锁存时间 |
 
 参考实现中两条 VIG 管线取同一个 32 位物理地址，右侧管线用自己的源 x 坐标；面板自行
 刷新，flush 不需要 start，5.4 ms 内锁存。显示 context bank 起始时关闭地址转换。
 
-直接扫描输出（`sheng-dpu-scanout=2`）为实验功能，默认关闭：它给显示 bank 一个
+直接扫描输出（`dpu-scanout=2`）为实验功能，默认关闭：它给显示 bank 一个
 stage 1 窗口（ShengUfs），让管线直接读取合成器的 surface。任何失败都会回退到 GPU 复制。
 
 窗口的 TCR2 把符号扩展字段（SEP，位 17:15）设为 7，与 arm-smmu 对 AArch64 上下文的
@@ -97,7 +97,7 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
 4. 让发布的属性和接受的请求与所选系统一致。iPadOS 17 使用 `IODisplayParameters` 亮度范围、
    `backlight-control`、`brightness` 和 `FadePeriod`。iPadOS 27 还需要毫尼特、滑块表、校准参数和
    `brightness-nits`，并且在报告虚拟平台的板子上丢弃所有请求。[ShengBacklight](/zh/drivers/sheng-backlight) 列出了每一项。
-5. 构建服务和注册封装。参考显示配方包含两者，`sheng-backlight=1` 启用 probe。
+5. 构建服务和注册封装。参考显示配方包含两者，`backlight=1` 启用 probe。
 
 在解析后的构建树定位集成点：
 

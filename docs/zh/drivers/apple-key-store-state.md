@@ -10,7 +10,7 @@
 
 密钥封装由软件完成：设备密钥来自板级通过 `native_aks_device_id` 返回的标识，keychain 用它存取条目。这不是硬件数据保护。不支持引用密钥操作和设备锁定。
 
-没有 keybag 时，板级设置 `sheng-aks-sls=3`，上报无密码。
+没有 keybag 时，板级设置 `aks-sls=3`，上报无密码。
 
 ## 集成
 

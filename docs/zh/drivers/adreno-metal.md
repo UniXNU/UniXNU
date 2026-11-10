@@ -22,13 +22,13 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 
 相同 UID 的客户端在可写时共用账户 home 下的 `Library/Caches/org.unixnu.metal`。沙箱限制写入时使用私有缓存。`NATIVE_METAL_SHARED_CACHE_DIR` 可指定共享目录，空值关闭共享。缓存覆盖 Apple 前端结果、runtime 产物和 Turnip IR3。并发导入使用独立临时文件，管线日志按进程分开。
 
-渲染编码器调用在调用时完成转换，commit 通过 runtime 的调度线程提交，管线不会提前生成。`sheng-metal-flow=1` 打开三条 metal2vulkan 路径，用于测试：
+渲染编码器调用在调用时完成转换，commit 通过 runtime 的调度线程提交，管线不会提前生成。`metal-flow=1` 打开三条 metal2vulkan 路径，用于测试：
 
 - 渲染编码器调用由 runtime 的 lowering 线程转换。转换时才发现的拒绝会让命令缓冲失败。
 - 没有其他提交流程运行时，commit 直接在提交线程上提交。
 - 每个程序把管线记录追加到缓存的 `pipeline-records-<name>.bin`。新设备在后台以 utility 优先级重新生成记录中的管线。
 
-这些路径默认关闭，因为它们在 sheng 上没有测出帧率提升，还有一次测试启动停在 logo 后不再出帧。`sheng-metal-flow=` 取任一值时，都会在 `FL` 计数变化后写入 os_log，每十秒最多一次。
+这些路径默认关闭，因为它们在 sheng 上没有测出帧率提升，还有一次测试启动停在 logo 后不再出帧。`metal-flow=` 取任一值时，都会在 `FL` 计数变化后写入 os_log，每十秒最多一次。
 
 同一进程的 Metal 逻辑队列共用一个 Vulkan 队列和内核队列。前端汇总存活队列的当前请求，采用其中最高的优先级；队列降级或销毁后撤回提升。getter 返回各队列自身的请求，setter 返回后端是否接受。内核根据任务的 GPU role 选择前台或后台优先级，策略不使用进程名。
 
@@ -51,8 +51,8 @@ python3 scripts/check-native-metal-frontend-host.py
 
 帧诊断保留分配、命令、完成处理及 GPU、显示时间线，像素抓取关闭。使用方法见 [GPU 帧诊断](/zh/porting/gpu-diagnostics)。
 
-启用 `sheng-gpu-trace=1` 后，内核事件 65 记录 `iconservicesagent` 获取的 Metal 设备和创建的命令队列。对于含绘制或计算任务的命令缓冲区，最多记录八条 `metal-work`，包含完成状态、绘制次数和计算派发次数。
+启用 `gpu-trace=1` 后，内核事件 65 记录 `iconservicesagent` 获取的 Metal 设备和创建的命令队列。对于含绘制或计算任务的命令缓冲区，最多记录八条 `metal-work`，包含完成状态、绘制次数和计算派发次数。
 
-`sheng-wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
+`wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
 
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。

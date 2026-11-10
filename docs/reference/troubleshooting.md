@@ -62,7 +62,7 @@
 | Kernel panics at entry | Page tables, kernel window, boot arguments | Use the QEMU fixture and the boot progress log |
 | Panic names a provider | Device tree node or driver archive | Add the node or enable the driver |
 | No root device | Userdata image, UUID, capacity | Flash the image, check the UUID and window offsets |
-| Data store window refused | Seed size, `sheng-log-reserve`, root image | Recalculate root, Data and log allocations; select a seed size that fits |
+| Data store window refused | Seed size, `log-reserve`, root image | Recalculate root, Data and log allocations; select a seed size that fits |
 | Display assertion in userland | Display provider and boot arguments | Check the display driver and the focus arguments |
 
 ## Logs

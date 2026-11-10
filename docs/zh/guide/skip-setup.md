@@ -83,12 +83,12 @@ BUILD, VERSION = '21H461', '17.7.11'
 
 ## 任务
 
-在 sheng 的 iPadOS 27.0.1（24A446）上，`sheng-lite=1` 允许 launchd 按需启动 `iconservicesagent`。IconRendering 使用 Metal。该服务设置 `FORCE_SOFTWARE_RENDERER=0` 和 `CI_ENABLE_METAL_GPU=0`。J820 原厂配置的非活跃硬上限为 15 MiB，活跃软上限为 1,224 MiB。
+在 sheng 的 iPadOS 27.0.1（24A446）上，`lite=1` 允许 launchd 按需启动 `iconservicesagent`。IconRendering 使用 Metal。该服务设置 `FORCE_SOFTWARE_RENDERER=0` 和 `CI_ENABLE_METAL_GPU=0`。J820 原厂配置的非活跃硬上限为 15 MiB，活跃软上限为 1,224 MiB。
 
-`sheng-lite=2` 停用图标服务。主屏幕和 Dock 只显示图标底板，「设置」仍可打开。也可用 `sheng-disable-jobs` 单独指定服务，多个 launchd 标签用逗号分隔。
+`lite=2` 停用图标服务。主屏幕和 Dock 只显示图标底板，「设置」仍可打开。也可用 `disable-jobs` 单独指定服务，多个 launchd 标签用逗号分隔。
 
 ```
-sheng-disable-jobs=com.apple.identityservicesd,com.apple.locationd
+disable-jobs=com.apple.identityservicesd,com.apple.locationd
 ```
 
 ## 输出

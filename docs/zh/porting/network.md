@@ -37,7 +37,7 @@
 5. 建立端点 DMA 范围，确认分配缓冲区在选定缓存策略下可达。
 6. 接入 MSI 并确认中断到达，再依赖中断推进驱动。
 
-**预期结果：** 端点正确、BAR 可读、DMA 可用且中断到达。参考探针用 `sheng-wifi` 选择阶段：
+**预期结果：** 端点正确、BAR 可读、DMA 可用且中断到达。参考探针用 `wifi` 选择阶段：
 1 检查交接状态，2 启动链路，4 检查端点。当前端点路径在阶段 5 及以上进入可复用协议栈，由协议栈执行 MHI 和固件启动。
 在新设备启用前阅读对应阶段源码。
 
@@ -84,7 +84,7 @@ rg -n 'nativewifi|wifi_module_objs|WifiNet|WifiProbe' scripts/build-gop-legacy-d
 ## WCN7850 参考实现 {#sheng}
 
 参考实现能加入 WPA2-Personal 网络，通过 DHCP 获得地址并加载网页。
-`sheng-wifi=5` 启动 Wi-Fi；`sheng-wifi-aj=0` 让设置应用负责加入网络。
+`wifi=5` 启动 Wi-Fi；`wifi-aj=0` 让设置应用负责加入网络。
 
 | 方面 | 结论 |
 | --- | --- |

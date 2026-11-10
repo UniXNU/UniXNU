@@ -119,7 +119,7 @@ python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
-From the UniXNU checkout, with `sheng-bluetooth=1` and `log-bluetooth=2` in the board's boot
+From the UniXNU checkout, with `bluetooth=1` and `log-bluetooth=2` in the board's boot
 arguments:
 
 ```sh

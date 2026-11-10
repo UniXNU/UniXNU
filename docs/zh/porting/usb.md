@@ -59,7 +59,7 @@ inner shareable 块。
 
 ## 3. 注册类
 
-设置 `sheng-usb` 后，板级代码启动一个工作线程，依次执行：
+设置 `usb` 后，板级代码启动一个工作线程，依次执行：
 
 1. `qcom_dwc3_bring_up`。
 2. 用 `OSKextLoadKextWithIdentifier` 加载 `com.apple.driver.AppleUSBXDCI` 和
@@ -104,13 +104,13 @@ clang++ -std=c++17 -I.. ucsi_host.cpp && ./a.out
 | `chip-id` | `board.toml` 的 `[payload.adt]` |
 | `board-id`、`security-domain` | OS 配置的 `adt.chosen.u32` |
 | `/System` 和系统守护进程使用同一个文件系统编号 | [`native-union-statfs-fsid`](/zh/xnu/patch-reference) |
-| 锁状态 3 | [`sheng-aks-sls=3`](/zh/drivers/apple-key-store-state) |
+| 锁状态 3 | [`aks-sls=3`](/zh/drivers/apple-key-store-state) |
 
 三个 ID 使用 `MobileDevice.framework` 内设备映射表中该机型的行。
 
 ## 6. 构建和验证
 
-在 UniXNU 仓库中，确认板级启动参数含 `sheng-usb=1` 和 `log-sys=1`：
+在 UniXNU 仓库中，确认板级启动参数含 `usb=1` 和 `log-sys=1`：
 
 ```sh
 ./unixnu build kernel payload -D ../UniXNU-<device> --os <profile>
@@ -137,7 +137,7 @@ lockdown 会话。[抓取日志](/zh/porting/log-capture)后可查看 `[usb]` �
 | `UserDeniedPairing`，屏幕上没有弹窗 | `/System` 的文件系统编号 |
 | 点“信任”后要求输入密码 | 锁状态 |
 
-测试主机模式时，`sheng-usb-host=<s>` 在延时后强制进入主机模式，`sheng-usb-back=<s>` 再回到线缆决定的角色。
+测试主机模式时，`usb-host=<s>` 在延时后强制进入主机模式，`usb-back=<s>` 再回到线缆决定的角色。
 设备结果按[适配记录](/zh/porting/records)记录。
 
 ## 下一步

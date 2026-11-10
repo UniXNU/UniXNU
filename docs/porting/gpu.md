@@ -99,7 +99,7 @@ to distinguish allocation, mapping and execution failures.
 
 ### Scheduling and memory reuse {#scheduling}
 
-The reference enables mode 2 with `sheng-gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
+The reference enables mode 2 with `gpu-preempt=2`. High, normal-high and real-time requests use ring 0; normal, low, background and unspecified requests use ring 1. The task's GPU role selects its foreground or background request. Queues preserve FIFO across priority changes; preemption saves GMEM and restores each ring's executed page table. See [Adreno740 scheduling](/drivers/adreno740#scheduling).
 
 Runtime scheduling and completion threads use interactive QoS on iOS as well as macOS. The encoding thread adopts the render thread's scheduling policy and priority when that reference has a fixed policy.
 
@@ -107,11 +107,11 @@ Unused owned image backing serves later pooled and dedicated images. The room wo
 
 ### Render mode with an 8-bit BGRA framebuffer {#render-mode}
 
-With `sheng-fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an unbacked, lazily allocated transient attachment use GMEM when the render-pass constraints allow it. Other passes keep the system-memory policy. The recorded `turnip-transient-attachments-in-gmem.patch` applies this choice before the SYSMEM override, so memoryless attachments can remain in tile memory.
+With `fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an unbacked, lazily allocated transient attachment use GMEM when the render-pass constraints allow it. Other passes keep the system-memory policy. The recorded `turnip-transient-attachments-in-gmem.patch` applies this choice before the SYSMEM override, so memoryless attachments can remain in tile memory.
 
-`turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `sheng-tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
+`turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
 
-`sheng-metal-flow=1` enables the metal2vulkan lowering thread, commit submission and pipeline warm pass for testing. The default is off. See [AdrenoMetal](/drivers/adreno-metal).
+`metal-flow=1` enables the metal2vulkan lowering thread, commit submission and pipeline warm pass for testing. The default is off. See [AdrenoMetal](/drivers/adreno-metal).
 
 Metal clients use one sample by default. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves the requested sample count; texture types, pipeline counts and resolve handling follow that policy.
 
@@ -149,7 +149,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 ADRENO_PLUGIN_DIR=build/adreno-metal-plugin27 python3 scripts/make-gpu-addon.py --publish build/gpuaddon.bin
 ```
 
-Pass the addon and its matching owner trust bundle to the payload with `--gpu-addon` and `--owner-trust-cache`, and enable the board's addon loader (`sheng-gpu-addon=1` in the reference). Keep the existing Data seed so its persistent data and caches retain their identity. See [packaging](/porting/packaging). The runtime plugin name is `NativeAdrenoMetal`.
+Pass the addon and its matching owner trust bundle to the payload with `--gpu-addon` and `--owner-trust-cache`, and enable the board's addon loader (`gpu-addon=1` in the reference). Keep the existing Data seed so its persistent data and caches retain their identity. See [packaging](/porting/packaging). The runtime plugin name is `NativeAdrenoMetal`.
 
 Check the selected OS profile's sandbox, user-client and trust-cache integration.
 The Metal bridge never returns a nil encoder: a pass it cannot encode gets an
