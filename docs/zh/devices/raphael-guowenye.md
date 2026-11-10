@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/SystemOS, launchd and display-service progress; visible desktop incomplete and historical raw verification logs private.
+Independent Redmi K20 Pro port: local APFS/SystemOS and original launchd main evidence; desktop incomplete, full source commit and public verification logs pending.
 
-源记录: [porting.toml](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/porting.toml), `4a4ca3e2301f8c6a5901786fc88206942607e0bd`.
+源记录: [porting.toml](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/porting.toml), `1c435f2291edab0eda01bef865bdf4e7d69a9aa2`.
 
 本页按设备记录自动生成。
 
@@ -46,8 +46,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
-- The default intentionally disables unqualified hardware. Explicit handset wrapper adds SoftwareAES, VirtioMmioBlock and VerifiedRoot, handset-storage.series and native-diagnostic.series, storage/root/UFS recipes. ArmCpu upstream is not linked; independent SoC archive occupies its integration slot. Publication20261105 splits device and SoC repositories; feeds and lock pin guowenye/UniXNU-sm8150-common at c77321d82010250d6f100d7c17d7e721c17782bf. Public workspace orchestration, tests and source locks are retained under development/; no private inputs or generated images are included.
-- License publication20261105 adds the full upstream BSD-2-Clause-Patent text, preserves existing file notices and pins the SoC at its licensed source commit c77321d82010250d6f100d7c17d7e721c17782bf. Only licensing, documentation and source references changed; no build or handset result is added.
+- The default intentionally disables unqualified hardware. Explicit handset wrapper adds SoftwareAES, VirtioMmioBlock and VerifiedRoot, handset-storage.series and native-diagnostic.series, storage/root/UFS recipes. ArmCpu upstream is not linked; independent SoC archive occupies its integration slot.
+- Publication20261105 adds the full BSD-2-Clause-Patent license used by existing SPDX declarations and links it from each repository README. The public repositories contain licensed source snapshots; active hardware source pins remain unchanged.
 
 ### 完成条件
 
@@ -55,18 +55,18 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 当前范围
 
-- Shared SoC is published and pinned in feeds.toml and unixnu.lock. Default config is not handset qualification; complete production recipes remain incomplete.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- The shared SoC is published and pinned in feeds.toml and unixnu.lock. The default config is not handset qualification.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
-- Published device source includes preserved workspace scripts, tests and source locks under development/. Keep the reviewed SoC commit pinned and collect new immutable public verification evidence separately.
+- Freeze complete reviewed device/SoC/workspace commits, then pin the published SoC feed and rerun the same resolution.
 
 ### 证据
 
-- `source`: [Canonical board and ordered static bootstrap inputs.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/board.toml)
-- `source`: [Explicit handset development configuration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/configs/raphael_handset_storage_defconfig)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Canonical board and ordered static bootstrap inputs.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/board.toml)
+- `source`: [Explicit handset development configuration.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/configs/raphael_handset_storage_defconfig)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 固件与启动 {#firmware}
 
@@ -88,6 +88,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
+- An explicit hardware-watchdog return mode re-arms the already qualified20/21s APSS watchdog at native capture and stops petting, instead of disabling it before fragile context recovery. Original userspace services and watchdogd remain unchanged. Actual C control-flow/ASan/UBSan pass; 896MiB handset automatically returned to Android without manual or fastboot recovery; bootreason bootloader does not identify the hardware reset branch. Only independent UFS logs are returned in this mode, not the full checkpoint.
+- Explicit896MiB candidate selects an existing audited high-PA interval and extends exact loader/recovery policies; QEMU exercises the same high physical address regime. Original256/512/704MiB branches remain. High-PA recovery QEMU passes39 checks. The896MiB handset returned automatically to Android, with complete600/1000s process snapshots and3548 persistent UFS records; BackBoard proc-thrashing and a later CommCenter watchdog panic remain, no desktop.
 - Bounded SEC/DXE and Darwin entry supply native XNU; success does not make vendor UEFI protocols generally reusable. Canonical source is now inside the board package.
 
 ### 完成条件
@@ -97,7 +99,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No production firmware table or automatic blob extraction recipe is declared. Owner keys, binary images and device identity remain private; local frozen paths are workspace inputs.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -105,10 +107,10 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Diagnostic platform configuration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Diagnostic.dsc)
-- `source`: [Diagnostic firmware integration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Diagnostic.fdf)
-- `source`: [Existing private source hashes and use boundaries.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/proprietary-files.txt)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Diagnostic platform configuration.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/firmware/RaphaelPkg/Diagnostic.dsc)
+- `source`: [Diagnostic firmware integration.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/firmware/RaphaelPkg/Diagnostic.fdf)
+- `source`: [Existing private source hashes and use boundaries.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/proprietary-files.txt)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## CPU 与中断 {#cpu}
 
@@ -137,7 +139,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No SMP, secondary-core startup, IPI or global interrupt ownership qualification.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -145,8 +147,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Independent CPU archive recipe and XNU ABI use.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-cpu.py)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Independent CPU archive recipe and XNU ABI use.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/scripts/build-raphael-cpu.py)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 内存与 DMA {#memory}
 
@@ -166,6 +168,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
+- 1536MiB extends the local exact recovery to multiple L1 slots with up to three L2 and two edge L3 pages; the original XNU bootstrap allocation order is checked across all16 pages. Actual C ASan/UBSan and independent Python verify every granted recovery page, edge exclusion and unchanged legacy transition bytes. High-PA multi-L1 original-kernel recovery QEMU passes39 checks with24576-byte transition tables; the1536MiB handset contrast is running, desktop unverified.
+- Explicit896MiB candidate selects an existing audited high-PA interval and extends exact loader/recovery policies; QEMU exercises the same high physical address regime. Original256/512/704MiB branches remain. High-PA recovery QEMU passes39 checks. The896MiB handset returned automatically to Android, with complete600/1000s process snapshots and3548 persistent UFS records; BackBoard proc-thrashing and a later CommCenter watchdog panic remain, no desktop.
 - 171336Z704MiB handset contrast:initial VM1801664KiB pages,378 independent UFS records,dropped0,complete360s snapshot;599 frames/0 transfer errors,22 watchdog checkins/0 failures,no recorded pressure kill or panic,3.70GiB reads versus512MiB5.12GiB.SpringBoard still waits for LS seeding;lsd parses application Info.plist.Android/root/transient cleanup verified;full return failed/null,no desktop.Next retains704MiB and uses qualified720/780s observer contract.
 - 512MiB rootless QEMU qualified all39 checks after alignment-aware one-L1 placement and exact bootstrap-table bound256; captured real512MiB tables and corrupted-descriptor rejection also pass ASan/UBSan. Handset185720Z confirms real\_phys\_size536870912 and original launchd main with restored snapshots and Android cleanup; same critical tzinit status30 panic rejects full checkpoint. No new RAM ownership generalization.
 - Explicit512MiB allocation candidate retains audited handset RAM/guards and one-L1 exact recovery mapping;39 host boundary/negative checks pass. Same frozen240s kernel; subsequent185720Z independently confirms actual allocation and recovery.
@@ -178,7 +182,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No general SMMU takeover, complete RAM ownership or arbitrary concurrent DMA qualification.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -186,9 +190,9 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Board RAM and fixed reservations; inspection-only.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/dts/raphael.dts)
-- `source`: [Sanitized observed resource inputs.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/hardware-observations.json)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Board RAM and fixed reservations; inspection-only.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/dts/raphael.dts)
+- `source`: [Sanitized observed resource inputs.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/hardware-observations.json)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 存储与根卷 {#storage}
 
@@ -231,7 +235,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - The SEC and explicit native XNU single-block diagnostics have handset persistence proof; this does not qualify generic writable storage or continuous logs; new explicit diagnostic-window WRITE10/FUA and bounded SYNCHRONIZE CACHE10 implementation passes the isolated UFS model; generic writable volumes and persistent Data remain unverified. No GPT modification, cold PHY/clock/reset management, generic LUN access or persistent Data qualification. Owner authentication is not the Apple seal.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -239,9 +243,9 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Independent handset storage build and original ABI binding.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-ufs.py)
-- `source`: [Read-only controller integration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/patches/xnu/raphael-ufs-controller.patch)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Independent handset storage build and original ABI binding.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/scripts/build-raphael-ufs.py)
+- `source`: [Read-only controller integration.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/patches/xnu/raphael-ufs-controller.patch)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 显示 {#display}
 
@@ -261,6 +265,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
+- 172949Z长窗口已自动回Android，回收6710条/13949575字节/dropped0；600秒183进程883线程、1000秒209进程1092线程、1800秒189进程655线程均完整。SpringBoard27在1005秒进入原SBDashBoardSetupViewController欢迎文字动画，最终进入UIApplication事件循环，已越过原BKS签到等待；用户两次报告你好欢迎页且持续超过60秒。2698帧、13张RGB采样framebuffer差异0，实际查看低分辨率样本为深灰欢迎背景和细小元素，不能独立读出欢迎文字；无图标桌面。原watchdog165次签到/0失败，无记录panic/压力kill。Android/root/新boot ID/临时FDT清理成立；原完整failed/null保持。下一候选采用官方21H461 skip-setup及no-auto-dim临时Data偏好，已完成887记录内核、39项恢复QEMU和手机镜像。证据：artifacts/desktop-no-locationd-long/20261106T172309Z/interpretation.json。
+- 北京时间2026-11-07约01:50，172949Z长窗口实机用户明确报告“目前开机了，显示的是苹果你好欢迎页面”。这是本机首次越过进度条进入原生首次设置欢迎UI的现场证据；当前采集仍运行，持续60秒及对应UFS/RGB待回收。D01仍未完成，欢迎页不等同含StatusBar/Dock的SpringBoard桌面；原failed/null完整checkpoint判据保持。后续重点由迁移阻塞转为原首次设置流程及桌面，取消常规画面询问。证据：artifacts/desktop-no-locationd-long/20261106T172309Z/native-hello-observation.json。
 - The handset ADT omitted the resource-free direct arm-io display-subsystem and chosen display-scale enumeration policy already required by the same original userland in QEMU. The new generator adds the inherited framebuffer declaration and one logical pixel per physical pixel; strict normalization rejects extra MMIO/IRQ and preserves all qualified hardware bytes. Nine local host guards, staging QEMU and240s unchanged-kernel phone155924Z passed with full restoration and Android cleanup. Display clients/frames remain0 and original SpringBoard waits for both cfprefsd roles; backboardd is not observed. The360s comparison161209Z recovered matching-nonce CRC-verified globals with3 display clients and backboardd startup, still0 submissions/frames; original watchdogd critical exit panic rejects the full checkpoint. Android return520.653s, full framebuffer restore and reboot/root/transient cleanup passed. No desktop claim.
 - QEMU display state and firmware GOP/pixel diagnostics cannot establish a handset XNU frame or SpringBoard desktop. The migrated recipe builds 358 original ABI slots plus the offline keystore. A pinned XNU allocation macro omits trailing kt\_zshared: allow that warning category with -Werror retained, matching the existing UFS recipe.
 
@@ -271,17 +277,19 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No handset desktop/display-presentation qualification; full panel timing/backlight/power hooks remain open.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
-- Build and gate the explicit handset display candidate on the qualified512MiB/Data/240s contract, then require original-family service/frame counters and independent visible-frame observation; no keystore or panel-MMIO policy change.
+- Current8192/704MiB native logs have complete720s snapshots and late RGB loading-bar samples,with one framebuffer sample mismatch. Qualify the standard console-to-graphics handoff before the first accepted frame;retain UFS logs and require physical desktop evidence.
 
 ### 证据
 
-- `source`: [Board display development adapter.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/drivers/RaphaelDesktopDisplay.cpp)
-- `source`: [Audited ABI recipe using assembled package.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/build-raphael-desktop-display.py)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Four submitted RGB thumbnails still show loading bar;one sampled framebuffer differs46 pixels. CPU-ledger display-submit work dominates sampled services;physical desktop absent. Standard console handoff candidate pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-late-frame.json)
+- `source`: [Board display development adapter.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/drivers/RaphaelDesktopDisplay.cpp)
+- `source`: [Audited ABI recipe using assembled package.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/scripts/build-raphael-desktop-display.py)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
+- `source`: [Explicit software key wrapping candidate covers12 unsupported AKS selector10 requests; actual generic C++ and board identity callback host checks pass. Handset effect pending; no hardware protection or desktop claim.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-aks-wrap.json)
 
 ## 输入 {#input}
 
@@ -302,6 +310,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 开发经验
 
 - Firmware keys do not demonstrate native OS touch or reliable desktop interaction.
+- 2026-11-07: original Hello UI and native lock screen observed; swiping has no effect because no native Goodix/HID provider is integrated. Independent Normandy packet decoding and read/ACK core pass host ASan/UBSan fixtures; native bus, HID delivery and physical interaction remain pending.
 
 ### 完成条件
 
@@ -310,7 +319,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No native handset touch/HID implementation or interaction proof.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -318,7 +327,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## GPU {#gpu}
 
@@ -347,7 +356,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No handset GPU/Metal acceleration; exact firmware/power/IOMMU contract remains pending.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -355,7 +364,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 网络 {#network}
 
@@ -384,7 +393,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No native phone Wi-Fi/BT implementation or packet evidence.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -392,7 +401,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 音频 {#audio}
 
@@ -421,7 +430,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No native audio implementation; codec/service/route contracts remain pending.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -429,7 +438,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 电源 {#power}
 
@@ -449,6 +458,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
+- 2026-11-07: the explicit hardware-return profile preserves the armed 20-second watchdog and waits for hardware reset after log capture. Recovered long-window handset runs retain original watchdogd, UFS logs and Android return evidence; the full FDT checkpoint remains failed/null and is not replaced by hardware-return success.
 - Explicit watchdog-method-checkpoint diagnostic preserves original method/hardware checks and360s/420s v4 bounds, but stops after the first completed original daemon method and at least10 polls. Default builds do not select it. Full887-record build162658Z and QEMU39 gates passed; phone163215Z fully passed first selector0 result0,3 method calls,1 checkin,no failure/exception,231300.639ms/437pets. Android return452.986s/full restore and cleanup passed. This early return is not full360s observer qualification. Next entry checkpoint164851Z had no Android/native return through665.674s; xnu\_executed=null, physical recovery pending, unchanged rerun prohibited. Its marker2 initially-zero client status cannot prove completed return. Marker3 sets NotReady before entry and publishes actual parent return afterward; full887-record165046Z kernel/prelink/payload prepared, no handset boot.
 - V33/223537Z returned matching native records and complete Android cleanup;3 opens/2 closes but no externalMethod entry. Corrected v32/v33 original-executable symbolication resolves BRK0x10000b160 and callers0x100009ef8/0x10000895c, not selector0 failure. The daemon first requires IOService with IOPropertyMatch IOPMUPrimary numeric1. Candidate exposes that diagnostic registry handle on the bounded watchdog service and verifies the actual original property-matching path; inherited setProperties remains unsupported, no PMU hardware or metadata persistence acknowledged.20s hardware and360s/420s bounds unchanged. Full887-record build and real original-property-match QEMU passed. Phone225501Z accepted temporary boot but USB return absent through664.258s; native execution unknown. User confirmed black screen and forced reboot; independent Android/root/new-boot-ID/no-transient-FDT recovery check passed on20261102T004239Z. Do not rerun that image. V35 keeps all hardware/method checks, selecting the already supported v2 physical120s observer/180s absolute pet contract in a new ADT and1200poll kernel limit. The first frozen3600poll candidate was rejected by the unchanged handset build budget gate before any boot; client admission permits only exact v2 or v4 contracts. Same-run deadline and return evidence remain required.
 - Original watchdogd first exception in phone211750Z resolves to missing IOWatchdog service. v30 was rejected before handset execution by QEMU duplicate metaclass panic. New candidate inherits the supplied248-byte/171-slot abstract class with complete compiled-slot audit and late registration; original Apple private initialization/hardware callbacks are excluded. Root/type1/exclusive-owner client uses the existing bounded hardware pet backend;20s missed-checkin and420s absolute limit remain. Full887-record build and QEMU39 gates passed, including real original-module load, subclass ancestry and service publication with hardware unavailable. Phone215950Z automatic Android return/cleanup passed but normal checkpoint rejected: original protobox explicitly denies iokit-open-service RaphaelDiagnosticWatchdog; service published/hardware armed but0 opens/checkins. V32/221554Z cleared that denial and reached3 opens/2 closes; the original pre-method primary-registry lookup fails,0 method entries/checkins, originalproc\_exit panic. Full Android cleanup passed. Next candidate adds first actual external-method argument/result telemetry only; request validation and watchdog behavior stay unchanged.
@@ -462,7 +472,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - Only diagnostic watchdog/return is implemented; no general PMGR, battery, sleep/wake or peripheral power qualification.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -470,8 +480,8 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Watchdog readback and restoration.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Drivers/DiagnosticReturnDxe/NativeWatchdog.c)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
+- `source`: [Watchdog readback and restoration.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/firmware/RaphaelPkg/Drivers/DiagnosticReturnDxe/NativeWatchdog.c)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
 
 ## 镜像组装 {#packaging}
 
@@ -496,7 +506,6 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 - Handset182935Z original initproc\_spawned=1 and original launchd boot tasks establish main; critical child tzinit exited30 on readonly var and triggered original proc\_exit panic. Full experiment rejected; Android ordinary reboot/root/cleanup passed. See evidence/native-launchd-main.json.
 - The package launcher is copied unchanged from UniXNU c96b29975645b711dc06bc435c3ad27321ce817c. Only ipados-17.7.11-21H461 is configured; default and OS17 checks resolve 62 patches. A separate local runtime leaves the frozen handset backend unchanged. Manual macOS workflows check the layout or gate full builds on complete recipes; no remote run or full package build is claimed.
 - Original launchd exec and22 syscalls are observed locally; dyld completion and launchd main are not. Ephemeral offline keystore/scratch Data do not establish secure or persistent phone services. Explicit --offline-keystore may now accompany the handset diagnostic scratch-Data/display profile, using its owned display opt-in rather than an implicit handset boot argument. The pinned generic state component and selector semantics remain unchanged; host boundary, full887-record build and rootless QEMU39 checks pass. Phone032503Z fully passes native checkpoint, automatic Android return and cleanup: state service stage2/opens2/calls4; original MKB\_INIT completes without the fatal recovery request. UFS log79 records/48962 bytes/zero drops persists independently. Display clients/frames remain0; no desktop.
-- License publication20261105 adds the full upstream BSD-2-Clause-Patent text, preserves existing file notices and pins the SoC at its licensed source commit c77321d82010250d6f100d7c17d7e721c17782bf. Only licensing, documentation and source references changed; no build or handset result is added.
 
 ### 完成条件
 
@@ -505,7 +514,7 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - No standalone production firmware/payload recipe; private Apple inputs and workspace orchestration remain required. Original trust cache is not a full Apple authentication chain.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
@@ -513,11 +522,11 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 证据
 
-- `source`: [Package ownership, static recipes and firmware startup contracts.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/README.md)
-- `source`: [Ordered board patch selection.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/patches/xnu/series)
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
-- `source`: [Unmodified upstream templates/package.sh; all board selection is in TOML.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/scripts/package.sh)
-- `source`: [Sanitized local adoption checks, explicit incomplete release recipe and no handset claim.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/packaging-20261102.json)
+- `source`: [Package ownership, static recipes and firmware startup contracts.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/README.md)
+- `source`: [Ordered board patch selection.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/patches/xnu/series)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
+- `source`: [Unmodified upstream templates/package.sh; all board selection is in TOML.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/scripts/package.sh)
+- `source`: [Sanitized local adoption checks, explicit incomplete release recipe and no handset claim.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/packaging-20261102.json)
 
 ## 诊断 {#diagnostics}
 
@@ -537,6 +546,29 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 
 ### 开发经验
 
+- 180944Z官方skip-setup/no-auto-dim候选唯一临时启动已接受；仅更改独立临时Data种子中的官方21H461首次设置/保持亮屏配置，保留1536MiB/32MiB日志/2Hz及1800/1860秒合同、原watchdogd和现有服务策略。887记录内核、39项恢复QEMU及手机镜像已通过。自动回收进行中，不再常规询问画面；原欢迎UI已实机确认，主屏幕仍待验。候选：artifacts/desktop-skip-setup/20261106T175720Z。
+- 同无定位服务配置长窗口候选构建通过：只将已有720/780秒合同改为1800/1860秒及既有600/1000/1800进程采样，原seed/服务/1536MiB/32MiB日志/2Hz显示与20秒硬件阈值保持。887记录内核、预链接/载荷、39项恢复QEMU及临时镜像通过；等待原PNG启动快照编码及迁移是否继续。无新桌面证据。候选：artifacts/desktop-no-locationd-long/20261106T172309Z。
+- 170225Z实机自动回Android，2717条/5552176字节/dropped0，720秒完整199进程1040线程；locationd/CommCenter不在完整快照，无记录watchdog panic/压力kill。迁移child248最终线程不再有CLInternalPerformMigration，thread2258采样在原SplashBoard启动快照PNG编码（ImageIO/libz deflate），thread2245等定时信号量；单样本不能证明持续进展或死锁。SB仍等原BKS签到，851帧/五张RGB采样framebuffer差异0，末张已打开仍进度条，无桌面；原完整failed/null保留。下一轮保持服务/内存/显示，仅使用已有1800/1860秒匹配合同及600/1000/1800秒进程采样，判别冷启动快照生成与持续等待；旧30分钟轮次仍有FairPlay阻塞，不能代替当前配置。用户要求取消常规画面询问，继续自动回收。证据：artifacts/desktop-no-locationd/20261106T165808Z/interpretation.json。
+- Next first-desktop profile adds onlycom.apple.locationd to disabled-job preference following actual CoreLocation migration/UI-service wait.Originalwatchdogd,priorfairplay/adid configuration,other seed/OS and720/780s contract retained.Full887-record kernel,prelink/payload,recoveryQEMU39 andhandset image pass.No synthetic service replies orbaseband claim.Actual watchdog/service progress anddesktop pending.
+- NoCommCenter handset163425Z:2605records/5277844bytes/dropped0,complete720s197processes973threads.NoCommCenter in complete snapshot,no originalwatchdog panic/pressure kill.MIG1203 absent;BackBoard/LS mainCFRunLoop.SB stillBKS;child263 migration waitsCoreLocation,location background threads waitActivityKit/SpringBoard,BLS andIDS;causal startup cycle unproven.977frames/fiveRGB samples differences0,last viewed loading bar,no desktop.Originalfailed/null preserved.Next onlylocationd excluded via ephemeral originallaunchd preference,originalmigration error paths/watchdogd retained.
+- Next first-desktop profile adds onlycom.apple.CommCenter to disabled-job preference following actual CommCenter180s watchdog panic.Originalwatchdogd,priorfairplay/adid configuration,other seed/OS and720/780s contract retained.Full887-record kernel,prelink/payload,recoveryQEMU39 andhandset image pass.No synthetic service replies orbaseband claim.Actual watchdog/service progress anddesktop pending.
+- Service-profile handset155932Z:2387records/4712675bytes/dropped0;complete720s named service sections,but originalwatchdogd CommCenter180s panic interrupts ALLPROC\_0171\_000.Whole snapshot remains incomplete;170 closed processes840threads recovered,original logs unchanged.No fairplay/AES starts,priorMIG1203 absent,locationd mainCFRunLoop.SB stillBKS;CFPrefs/migration waits persist.871frames/fiveRGB samples differences0,last viewed loading bar,no desktop.Clean hardware-return predicate verified;no redundant Android reboot,cleanup new-boot fieldnull.Originalfailed/null preserved.Next onlyCommCenter disabled,originalwatchdogd retained.
+- First-desktop ephemeral launchd disabled.plist profile forfairplayd.A2/adid builds; original seed entries/payload retained,one root0644 file appended.Original OS/SystemOS,AES special-key rejection and other services unchanged.No synthetic service replies.Full887-record kernel,prelink/payload,recoveryQEMU39 andhandset image pass.1536MiB/32MiB/720s observer780s pet/hardware return.Override consumption,migration anddesktop await handset.
+- AES handset153706Z:1459records/3261754bytes/dropped0,complete360s154processes.All14 original fairplay requests use specialAES selector2201,128bits,32bytes,presentIV,encrypt0; SoftwareAES returnsUnsupported0xe00002c7 before rawCBC. No key material/substitute keys. MIG1203 remains queued atlaunchd.222frames/two framebuffer samples differences0,last viewed loading bar,no desktop.Originalfailed/null retained.Next ephemeral original launchd disabled-job preference for first desktop; specialAES remains unsupported.
+- Scoped SoftwareAES fairplay entry/eight original returns observer builds. Removing instrumentation restores original source byte-identically; original returns/callbacks and original driver retained.No key material logged.Full887-record kernel,prelink/payload,recoveryQEMU39 andhandset image pass.1536MiB/32MiB/360s observer420s pet/hardware return.Original AES error anddesktop await handset.
+- OriginalFairPlay handset063216Z:1464records/3255897bytes/dropped0,complete360s151processes619threads.All16 original driver matches/iterator/open succeed; daemon16 normal exits follow line233 AES-helper errors.Static original helper converts any nonzero IOAES vtable0x550 return toEINVAL\(-22\); rawAES result/arguments unknown.MIG1203 still queues atlaunchd.261frames,two RGB/framebuffer samples differences0,last viewed loading bar.No recorded panic/pressure kill.Originalfailed/null retained,no desktop.Next scoped original AES result logging,no key material.
+- Explicit original21H461 FairPlayIOKit integration responds to observed null-iterator daemon lookup. Actual prelink preserves original executable bytes and26 symbolic addends.155 frozen branch-skipped inline words retain original bytes; actual inventory rejects fallthrough/direct-incoming mutations.Indirect control flow unproven;360/420s handset candidate building,no runtime or desktop claim.
+- IOKit handset060806Z:2531records/5112724bytes/dropped0;complete720s195processes934threads.Originalfairplay51queries requestcom\_apple\_driver\_FairPlayIOKit,all return no iterator then normalstatus0exit;driver absent from selected prelink. Concrete startup dependency gap confirmed.921frames/five framebuffer samples differences0,last viewed loading bar.No recorded panic/pressure kill.Originalfailed/null retained,no desktop.Next original21H461 driver with360/420s diagnostic contract.
+- Scoped original fairplay IOKit matching/iterator/open result observer implemented; existing original function statements restored byte-identically when diagnostics removed, call counts and returns unchanged.Full887-record kernel,recoveryQEMU39,handset image pass.Original daemon exit cause and desktop await handset.
+- IPC handset053927Z:2428records/4825634bytes/dropped0,complete720s191processes.229IPC samples match mach\_msg2 PC;locationd MIG1203 destination owned bylaunchd1,queue4.Originalfairplayd.A2 exits51times withstatus0 andno reason;otherMIG1203clients also waitlaunchd.No fairplay process at final941frames/fiveRGB loading-bar samples/framebuffer differences0.Originalfailed/null retained,no desktop.Original daemon exit cause awaits IOKit lookup/iteration/open evidence.
+- 32MiB handset045854Z automatically returned;6290records/12905853bytes/dropped0,complete1800093ms snapshot. 600/1000/1800s190/211/212processes880/763/769threads,zero truncation. OriginalBackBoard/LS/CommCenter survive; SpringBoard waitsBKS,BackBoard waitsDataMigration,migration waitsCoreLocation,locationd remainsMIG1203. No fairplay in three snapshots; runtime destination unknown.2975frames/13RGB loading-bar samples/framebuffer differences0. No recorded panic or pressure kill.Originalfailed/null retained,no desktop.Next720sIPC-peer observation.
+- 1536MiB handset041456Z automatically returned;4096records/8622633bytes/dropped0,1137.068s prefix then append allocation exhausted.600/1000s188processes867threads and211processes772threads complete;matched-name replacement instances136-&gt;4,originalBackBoard57/LS98/CommCenter83 retained.SpringBoard waitsBKS checkin;BackBoard waitsDataMigration;current migration plugin waitsCoreLocation.1585frames/eightRGB loading-bar samples/framebuffer differences0.Final process/panic state unknown after capacity.Original failed/null retained,no desktop.Next32MiB log with same1536MiB/services.
+- 095332Z ledger-reference correction handset:835records/444209bytes/no drops,all five LS captures and720079ms final snapshot completed.Third-capture interruption absent this run.2774frames/no display transport errors,watchdog58checkins/no failures,UFS errors0,no recorded pressure kill/panic.LS advances through plist/plugin/signature scanning;final MCM query,SpringBoard still waits for seeding.Android boot\_completed/root/new boot ID/transient cleanup confirmed.Original failed/null retained;onsite progress bar,no verified desktop.Next single variable1800/1860s cold scan window.
+- 092115Z pmap try-lock handset:321 records/100972 bytes/no drops,360922ms,two LS samples,third capture lsd98/thread599 lacks return,last438 frames/UFS failures0/no final snapshot.Onsite black screen.Independent log salvaged read-only during Android system\_server ActivityStarter NPE/RescueParty recovery;one normal ADB reboot eventually confirmed boot\_completed/root/new boot ID/transient cleanup.Causal relation of Android crash to native run unknown.Original failed/null remains,no desktop.Reference-balance correction now building.
+- Confirmed diagnostic lifetime defect in pinned compiled ARM pmap APIs:pmap\_reference only increments pmap ref\_count,but pmap\_destroy unconditionally ledger\_dereference even on nonfinal pmap release.Capture now retains pmap ledger under target task lock before pmap\_reference.Actual native wrappers reproduce old ledger-reference drain;corrected acquisition balances both counts across2000 captures,including busy/null-pmap/null-ledger cases under ASan/UBSan.Handset effect and desktop not yet verified.704MiB/720/780s and original service policy unchanged.
+- 085206Z task try-lock handset result:329 records/101912 bytes/no drops,361206ms,two complete LS samples.Third lsd98 thread601 capture again lacks return;task-mutex root cause unproven.Last638 frames,UFS failures0,no final snapshot.Onsite progress bar,no desktop.Android/root/new boot ID/transient cleanup confirmed;original failed/null preserved.Next changes only diagnostic pmap lookup from spinning pmap\_find\_phys to original pmap\_try\_lock+pmap\_vtophys,holding shared lock through physical read and explicitly marking busy.704MiB and720/780s unchanged;handset pending.
+- 081841Z phase tracing recovered324 records/97865 bytes/zero drops at361s.Third sample completed four lsd98 threads,but thread781 capture entry had no return;internal blocking versus exception unknown.Two full LS samples,no final snapshot.Onsite startup text then black.Android/root/new boot ID/transient cleanup confirmed;original failed/null preserved,no desktop.Next changes only target-task acquisition to original task\_lock\_try;busy task explicitly skips user unwind.704MiB and720/780s unchanged.Host actual branch contention/refcount/null-pmap tests pass ASan/UBSan;handset pending.
+- 072851Z LS-progress run recovered297 records/93412 bytes/zero drops,only361s log and two samples;lsd98 is in original system-content scan at the second sample.Last poll2841/457 frames,UFS failures0,no final snapshot or recorded panic/pressure kill.Log stops near third sampling boundary;interrupted operation unknown.Full1800s execution and LS deadlock not proven.Android/root/new boot ID/transient cleanup confirmed,original failed/null preserved,no desktop.Next adds normal-context sampling phase markers with existing720/780s contract.
 - Explicit v6 cold-start contract adds1800s observer/1860s absolute pet while retaining20s hardware threshold,old contracts and704MiB grant. Only this selected root\_limit18000 samples one lsd process/eight referenced threads every120 physical seconds,up to16 independent named UFS sections,without consuming final eight slots.Actual C interval/lifetime/sample-bound tests and watchdog boundary/rejection cases pass ASan/UBSan;old snapshot decode identical,new progress roundtrip passes. Kernel/prelink/payload build,39 recovery-QEMU checks and handset image structure inspection passed for artifacts/desktop-ls-scan-window/20261104T182635Z. Contract v6 confirms1800000/1860000ms and704MiB. User requested stop after build;handset\_boot\_attempted=false,desktop\_verified=false;no new handset experiment.
 - 180247Z MCM receiver sampling:727 independent UFS records,360463 bytes,dropped0,complete720s snapshot,2237 frames and55 watchdog checkins without transfer or heartbeat failure,no pressure kill/panic recorded.Both MCM receivers captured;one CFRunLoop,other actively creates metadata after SetDataProtection.lsd98 progressed beyond sync signing reply into original plugin registration.SpringBoard still waits for seeding.Android/root/transient cleanup verified;full return failed/null,no desktop.Next samples LS progress every120s during one explicit1800s cold boot.
 - 173412Z704MiB/720s independent UFS recovery:727 records,358407 bytes,dropped0,complete snapshot and RETURNING;2299 retired frames,0 transfer errors,55 watchdog checkins,0 failures,no recorded pressure kill or panic.SpringBoard still waits for LS seeding;lsd99 synchronously waits for MCM code-signing update.Two containermanager processes64/92 omitted by eight-slot priorities.Next prioritizes MCM receivers with original memory,budgets and service behavior.Android/root/transient cleanup verified;full return remains failed/null,no desktop.
@@ -562,16 +594,45 @@ Independent Redmi K20 Pro source snapshot with pinned shared SoC: local APFS/Sys
 ### 当前范围
 
 - Public immutable logs/full source commit and remote CI remain missing. No desktop or reliable completion ETA.
-- This publication captures the current source snapshot, not the exact historical source state of each local experiment. Historical raw logs and device inputs remain private; local summaries do not establish a formal public verification level.
+- This source snapshot does not replace the exact source state of historical experiments. Raw logs and device inputs remain private; source summaries do not establish a formal public verification level.
 
 ### 下一步
 
-- Handset180921Z proxy snapshot returned no native telemetry and manual recovery182112Z passed. Qualify an independent pre-reset phase readout before another service-window/proxy handset experiment; firmware QR logs alone do not cover post-handoff native snapshots. Preserve unreadable experiments and do not retry the same image. Service cause, first frame and sustained display still require handset evidence.
+- Standard console handoff is observed and five sampled framebuffer images agree,but still show loading bar. Compare existing differential copy against398.639s cumulative copy elapsed time while retaining704MiB/8192/720s and original services. Preserve rejected full-checkpoint reports;require visible handset desktop.
 
 ### 证据
 
-- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/porting-status-20261101.md)
-- `source`: [Returned diagnostic ABI and bounded records.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/package/firmware/RaphaelPkg/Include/RaphaelDiagnostic.h)
-- `source`: [Sanitized local watchdog exit observation and focused read-only followup; no desktop claim.](https://github.com/guowenye/UniXNU-raphael/blob/4a4ca3e2301f8c6a5901786fc88206942607e0bd/evidence/native-service-watchdog.json)
+- `source`: [Sanitized source-maintained progress and evidence limits; no public device-log assertion.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/porting-status-20261101.md)
+- `source`: [Returned diagnostic ABI and bounded records.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/firmware/RaphaelPkg/Include/RaphaelDiagnostic.h)
+- `source`: [Sanitized local watchdog exit observation and focused read-only followup; no desktop claim.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-service-watchdog.json)
+- `source`: [Local handset30-minute log:14 LS samples complete;8MiB capacity exhausted during final snapshot. Complete persisted prefix shows SpringBoard waiting for LS,8912 retired frames and zero transport errors;onsite progress then black,no desktop. Original checkpoint failure retained.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-ls-ledger-long.json)
+- `source`: [Local handset runtime VFS counters confirm1024 target vnodes and actual count reaches1024;namecache enabled,not observed full.720s LS and final snapshot complete;SpringBoard still waits for LS,no handset desktop.8192-vnode comparison pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-vfs-cache.json)
+- `source`: [Local native8192 vnode setting confirmed,5620 actual vnodes and namecache5738/9011;720s complete snapshots still show SpringBoard waiting for LS scan.2724 retired frames,zero transport errors;onsite black,no desktop. Android recovery verified.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-vnode8192.json)
+- `source`: [Explicit diagnostic-only nonblocking90x195 RGB sampling every120 physical seconds, with sampled inherited-framebuffer equality counters. No physical-panel or desktop assertion. Host actual helper sanitizer tests pass; handset pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/package/drivers/RaphaelFrameProbe.h)
+- `source`: [Four late native RGB thumbnails show loading bar,one framebuffer sample differs46 pixels;writer unknown. Complete720s snapshots and Android recovery;no desktop. Source inspection identifies missing standard console-to-graphics handoff;next comparison pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-late-frame.json)
+- `source`: [Standard console release observed,five loading-bar RGB samples with changing details all match sampled framebuffer. Last copy elapsed398.639s includes preemption;BackBoard submit thread419.649 CPU seconds. Full720s independent snapshots,zero logged transport/watchdog failures,Android recovery verified;no desktop. Differential copy comparison next.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-console-handoff.json)
+- `source`: [Existing64-byte cached-shadow differential helper selected in isolated handset adapter,retaining standard console release and timing. Host887-record kernel,prelink/payload,39 recovery-QEMU checks and image pass. Handset130408Z completed720s independent snapshots:copy elapsed366.571s versus398.639s,BackBoard submit still400.070 CPU seconds;4267 retired frames and zero recorded transfer errors. Five loading-bar RGB samples match framebuffer;Android recovery verified,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-frame-diff.json)
+- `source`: [Explicit2Hz software presentation cadence uses original getRefreshAttributes at slot301 and original display-refresh property publisher. Inherited hardware mode unchanged;generated358-slot ABI ownership and publisher bytes checked.887-record kernel,prelink/payload,39 recovery-QEMU checks and handset image pass. Handset133438Z recovered complete720s snapshots:published1 but zero frames;SpringBoard EXC\_BREAKPOINT at original FBSDisplayMode validity check,32 occurrences. Android recovery verified;candidate regresses display initialization,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-software-refresh.json)
+- `source`: [From working differential-copy parent,original nominal display metadata preserved;original-workloop timer defers validated pending presentations to500ms minimum spacing.887-record kernel,prelink/payload,39 recovery-QEMU checks and handset image pass;handset141301Z recovered complete720s snapshots,9 retired frames,13 kicks,11 validations,no selected-service exception.Actual2Hz not verified.Source onlyPending rejects queued successors;next fixes head removal and continued scheduling.Final servicePID1..255 bound omits latePIDs;LS completion unknown.Android recovery verified,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-copy-pace.json)
+- `source`: [Original-mode paced submission now handles a validated pending head with successors using TAILQ semantics and rearms after completion.Actual source FIFO1..8 and malformed-link ASan/UBSan tests pass;887-record kernel,prelink/payload,39 recovery-QEMU checks and handset image pass.Handset145317Z complete720s independent snapshots show855 retired frames and sustained1.997Hz,zero transfer errors.Copy elapsed73.178s and BackBoard submit23.579 CPU seconds.Four loading-bar thumbnails match sampled framebuffer;SpringBoard now waits for BKSSystemShellService check-in.BackBoard8-thread capture truncated;receiver pending.Android recovery verified,onsite progress then black,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-copy-queue.json)
+- `source`: [SpringBoard original BKSSystemShellService check-in waits while BackBoard first8-thread sample is truncated.Add independent32-thread receiver snapshot,retaining original8-slot ABI and service policy.Actual C lifetime/capacity sanitizer tests,new decoder and old-record compatibility pass;Observed profiled141 is also prioritized because LS and migration both wait for MCProfileConnection checkIn;actual selection sanitizer passes.Full kernel,prelink/payload,39 recovery-QEMU checks and handset image pass.Handset153215Z captures all21 BackBoard threads with no truncation and profiled142.SpringBoard,BackBoard URL lookup and profiled await LS reseeding;LS still actively scans.BKS wait is not stationary.868 frames/zero errors,loading-bar RGB;Android recovery and cleanup verified.Final native screen unknown,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-bks-receiver.json)
+- `source`: [Complete BackBoard and profiled samples converge on active LaunchServices reseeding;several background threads sampled in original throttle\_lowpri\_io.All volumes already solidstate.Add exact original PE\_get\_default25/100/500ms to0/0/0ms startup-window comparison,retain periods/services/display.Host ADT reversibility and malformed-policy checks pass;Full kernel,prelink/payload,39 recovery-QEMU checks and handset image pass.Handset160537Z confirms windows0/0/0,sleep counts143/147/0;965 lossless log records,720s snapshots,868 frames and loading-bar RGB,no desktop.LS serves store replies;SpringBoard waits BKS and data migration waits profiled.Android/root/cleanup verified.Next collects all live processes and LS path samples.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-io-window.json)
+- `source`: [All live-process snapshot via original proc\_iterate/NOWAITTRANS,no PID255 limit;512-thread bound per process and32-thread streaming with explicit totals/truncation/duration.Old selected8 ABI unchanged.LS saved path arguments use resident pages only and require matching syscall PC.Host actual C lifetime/path sanitizer and old decoder compatibility pass;full kernel,prelink,payload,39 recovery-QEMU checks and handset image pass.Handset pending,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-all-services.json)
+- `source`: [Handset independent UFS log:125 processes648 threads,no truncation,capture1.546s;917 frames remain progress bar. LS database waiter returned by605.709s;migration waits for install placeholder work. Confirmed configd gethostuuid waits for IOPlatformUUID and lockdownd waits for SCPreferences. Android/root/cleanup confirmed;original failed/null report retained,no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-all-services.json)
+- `source`: [Confirmed configd waits for missing IOPlatformUUID. Supply stable private port-assigned UUIDv4 to existing original-first adapter;no Apple/hardware identity claim. Exact ADT delta and persistent identity checks pass;kernel behavioral sources unchanged;new log binding rebuilt,39 recovery QEMU and image passed.Handset171504Z confirms configd advances beyond gethostuuid into CFRunLoop and added configuration threads;lockdownd no longer sampled in PreferencesMonitor.LS continues active plist work at720s,no desktop.Android/root/cleanup verified.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-platform-uuid.json)
+- `source`: [After confirmed UUID repair,LS still actively parses original bundle metadata at720s. Extend only existing observer/pet contract to1800/1860s,retain20s hardware threshold and current2Hz display. Exact ADT restoration confirms other properties unchanged.Full build and39 recovery QEMU passed.Handset1271 records/8 LS samples ended early:original watchdogd requests panic for missed media/audio/thermal checkins.BackBoard exit namespace1/code4 confirms VM page shortage Jetsam;Data wired buffers reach225MiB.No final snapshot or desktop.Android/root/cleanup verified.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-platform-long.json)
+- `source`: [Implement pageable CPU-only Data buffers with matched original IOMallocPageableZero/IOFreePageable;retain wired pointer tables and scratch. Addresses observed BackBoard VM-page-shortage Jetsam and225MiB wired Data allocation. Existing4000-operation sparse differential and error-path ASan/UBSan,record/layout,full build,39 recovery QEMU and image pass.Handset183513Z:Data I/O failures0,wired last74764 versus parent127816 at different elapsed times;media/audio/thermal now checkin.BackBoard exit namespace1/code5 process-thrashing Jetsam;CommCenter misses checkins and original watchdogd panics. Eight RGB samples remain progress bar,no final allproc,1205 frames,no desktop.Android/root/cleanup verified.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-pageable-data.json)
+- `source`: [Original watchdogd panics before1800s final snapshot. Add independently named allproc snapshots at600s and1000s;retain final snapshot,original services,pageable Data,704MiB and display. Actual C scheduling/reference pairing,0-513 threads,PID1024,ASan/UBSan and partial/old decoder compatibility pass.Full native build,prelink,payload,39 recovery QEMU checks and handset image passed;handset not attempted.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-early-processes.json)
+- `source`: [Two early allproc captures complete with127/130 processes and573/624 threads,no truncation; BackBoard VM-page shortage and media watchdog panic remain. No desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-early-processes.json)
+- `source`: [Original locationd MIG1203 request statically matches fairplayd.A2 server24-byte handler;runtime receiver remains unknown.Add nonblocking IPC destination/special-reply-copyout identities in unused128-word thread fields and original fairplay/location exit reasons.Original OSFMK/BSD Werror objects and18 actual helper sanitizer/decoder cases,3 malformed rejections pass.No new handset or desktop claim.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-ipc-peer.json)
+- `source`: [Sanitized local complete1800s UFS/frames/processes result; original full-checkpoint failed/null retained, no desktop.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-log32-complete.json)
+- `source`: [Scoped original IOKit result trace host build; runtime dependency and desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-fairplay-iokit-trace.json)
+- `source`: [Original FairPlayIOKit integration and actual prelink/mutation checks; original executable bytes retained, runtime and desktop await handset.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-original-fairplay.json)
+- `source`: [Original AES result/nonsecret-argument observation host build; actual failure phase and desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-fairplay-aes-trace.json)
+- `source`: [First-desktop ephemeral service configuration host build; original specialAES failure remains unsupported and actual handset desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-desktop-services-profile.json)
+- `source`: [Single additional CommCenter first-desktop exclusion host build; original watchdogd retained,actual desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-no-commcenter-profile.json)
+- `source`: [Single additional locationd first-desktop exclusion host build; original watchdogd retained,actual desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-no-locationd-profile.json)
+- `source`: [Same service configuration with existing1800/1860s observation; host complete,handset pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-no-locationd-long.json)
+- `source`: [Official21H461 skip-setup/no-auto-dim seed,host complete; unique handset boot accepted,desktop pending.](https://github.com/guowenye/UniXNU-raphael/blob/1c435f2291edab0eda01bef865bdf4e7d69a9aa2/evidence/native-skip-setup.json)
 
 </div>

@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Catalog identity for the ruby \(Redmi Note 12 Pro 5G, MT6877\) XNU 8796 + iPhone X iOS 16.7.16 \(20H392\) userland bring-up. Public main documents the verified 0155 line; p3-eint-hal \(0160, ruby\_eint/EINT14\) is in development. The implementation, build recipe and device evidence live in lky005/ruby-ios-bringup. This repository selects no UniXNU components and does not claim a UniXNU UEFI or format-2 build.
+Catalog identity for the ruby \(Redmi Note 12 Pro 5G, MT6877\) XNU 8796 + iPhone X iOS 16.7.16 \(20H392\) userland bring-up. Public main documents the verified 0179 line \(v0.5.0 at 22cdb29; current main b3c704f\); the native EINT14 touch path is verified, G7/G8 and a full 10 min repeat were not run. The implementation, build recipe and device evidence live in lky005/ruby-ios-bringup. This repository selects no UniXNU components and does not claim a UniXNU UEFI or format-2 build.
 
-Source record: [porting.toml](https://github.com/lky005/UniXNU-ruby/blob/d321b43deae0fba70f3fd566fa25d41648b7bf82/porting.toml), `d321b43deae0fba70f3fd566fa25d41648b7bf82`.
+Source record: [porting.toml](https://github.com/lky005/UniXNU-ruby/blob/9f6dc15b3d52b26fb4436b060ff238e6a8c78da8/porting.toml), `9f6dc15b3d52b26fb4436b060ff238e6a8c78da8`.
 
 This page is generated from the device record.
 
@@ -32,7 +32,7 @@ This page is generated from the device record.
 
 ### Hardware and dependencies
 
-- MT6877 board identity, iPhone X iOS 16.7.16 \(20H392\) userland, XNU 8796 recipe and the 0155 patchset from lky005/ruby-ios-bringup.
+- MT6877 board identity, iPhone X iOS 16.7.16 \(20H392\) userland, XNU 8796 recipe and the 0179 patchset from lky005/ruby-ios-bringup.
 
 ### Configuration
 
@@ -42,12 +42,12 @@ This page is generated from the device record.
 ### Procedure
 
 - Read README.md and follow the pinned links to the main repository.
-- Use the main repository xnu-0155 workflow as the build gate; this repository has no CI.
+- Use the main repository xnu-0179 workflow as the build gate; this repository has no CI.
 
 ### Development findings
 
-- Public main is the 0155 line: patchset da13b6df \(151 files\), exec-data 2e98fd85 and image 3b44c0e2.
-- The development branch p3-eint-hal \(0160\) adds ruby\_eint and wires EINT14 into the touch thread; its CI builds are green, but this record does not claim a 0160 device gate.
+- Public main is the 0179 line: patchset 10b1e2e8 \(175 files\), exec-data a4fb021e and image d438ba47; v0.5.0 is anchored at 22cdb29 and the current main is b3c704f.
+- The 0179 device gates passed G1-G6; the 8-failure soft reset logged no-ack and G7/G8 plus a full 10 min repeat were cancelled by decision.
 
 ### Completion criteria
 
@@ -59,15 +59,15 @@ This page is generated from the device record.
 
 ### Next action
 
-- Merge the 0160 line to main and refresh the public status links after its device gate is published.
+- None for this line; future P2c/P3 changes get their own record.
 
 ### Evidence
 
-- `source`: [Public device identity, current pins and the documented 0155 line.](https://github.com/lky005/ruby-ios-bringup/blob/main/README.md)
-- `host`: [xnu-0155 workflow success on main; the kernel patchset and exec-data gate passed.](https://github.com/lky005/ruby-ios-bringup/actions/runs/41362698995)
-  Command: <code>gh run view 41362698995 --repo lky005/ruby-ios-bringup</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
-- `host`: [host-checks workflow success on main.](https://github.com/lky005/ruby-ios-bringup/actions/runs/41362698921)
-  Command: <code>gh run view 41362698921 --repo lky005/ruby-ios-bringup</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
+- `source`: [Public device identity, current pins and the documented 0179 line.](https://github.com/lky005/ruby-ios-bringup/blob/main/README.md)
+- `host`: [xnu-0179 workflow success on main; the kernel patchset 10b1e2e8 and exec-data a4fb021e gates passed.](https://github.com/lky005/ruby-ios-bringup/actions/runs/42232048852)
+  Command: <code>gh run view 42232048852 --repo lky005/ruby-ios-bringup</code>. Revision: `b3c704ff5c16ced6fe252bd6fbdada7236f1a56a`.
+- `host`: [host-checks workflow success on main.](https://github.com/lky005/ruby-ios-bringup/actions/runs/42232048946)
+  Command: <code>gh run view 42232048946 --repo lky005/ruby-ios-bringup</code>. Revision: `b3c704ff5c16ced6fe252bd6fbdada7236f1a56a`.
 
 ## Firmware and boot {#firmware}
 
@@ -115,16 +115,16 @@ This page is generated from the device record.
 
 ### Configuration
 
-- The XNU kernel is built for the MT6877 CPU/GIC/timer topology; the pinned 0155 image boots on the author's unit.
+- The XNU kernel is built for the MT6877 CPU/GIC/timer topology; the pinned 0179 image boots on the author's unit.
 
 ### Procedure
 
-- Boot the 0155 image and inspect the boot log and GIC/timer initialization.
+- Boot the 0179 image and inspect the boot log and GIC/timer initialization.
 
 ### Development findings
 
 - Public STATUS records six Cortex-A55 cores, 16K pages, GICv3 and timers.
-- EINT work checks GIC SPI256 -&gt; INTID288 read-only before arming; the public 0155 line does not yet ship the EINT14 consumer.
+- 0179 ships the native EINT14 consumer: SPI288 -&gt; RubyGIC INTID 288 -&gt; child controller -&gt; oneshot WorkLoop; G1-G6 passed.
 
 ### Completion criteria
 
@@ -136,11 +136,11 @@ This page is generated from the device record.
 
 ### Next action
 
-- Record per-core entry and timer/IPI checks from a clean 0160 build after it lands on main.
+- Record per-core entry and timer/IPI checks in a future clean run; not part of the P2b gates.
 
 ### Evidence
 
-- `source`: [6x Cortex-A55, 16K pages, GICv3 and timers are part of the verified boot.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
+- `source`: [6x Cortex-A55, 16K pages, GICv3, timers and the 0179 native EINT line are part of the verified boot.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
 
 ## Memory and DMA {#memory}
 
@@ -156,7 +156,7 @@ This page is generated from the device record.
 
 ### Procedure
 
-- Boot the 0155 image and inspect the handoff and root layout.
+- Boot the 0179 image and inspect the handoff and root layout.
 
 ### Development findings
 
@@ -172,7 +172,7 @@ This page is generated from the device record.
 
 ### Next action
 
-- Add the memory map and reservation evidence when the 0160 line is published.
+- No additional memory-map claim; the P2b gates did not audit DMA/SMMU.
 
 ### Evidence
 
@@ -192,7 +192,7 @@ This page is generated from the device record.
 
 ### Procedure
 
-- Boot the 0155 image; mount iosroot read/write; boot the rescue image and run the /etc/rc checks.
+- Boot the 0179 image; mount iosroot read/write; boot the rescue image and run the /etc/rc checks.
 
 ### Development findings
 
@@ -212,7 +212,7 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [UFS LUN 2 HFS+ root read/write and the md0 rescue-root 8/8 checks.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
+- `source`: [UFS LUN 2 HFS+ root read/write and the md0 rescue-root 8/8 checks.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
 
 ## Display {#display}
 
@@ -228,12 +228,12 @@ This page is generated from the device record.
 
 ### Procedure
 
-- Boot the 0155 image and observe SpringBoard on the panel; the public demo shows the home screen.
+- Boot the 0179 image and observe SpringBoard on the panel; the public demo shows the home screen.
 
 ### Development findings
 
 - Public README/STATUS record IOSurface/IOMFB -&gt; LK framebuffer at 1080x2400 and a live SpringBoard.
-- The demo clip was captured on the 0084 build; it is not a 0160 display claim.
+- The demo clip was captured on the 0084 build; it is not a 0179 display claim.
 
 ### Completion criteria
 
@@ -245,7 +245,7 @@ This page is generated from the device record.
 
 ### Next action
 
-- Re-capture the demo on the 0160 line after it is published.
+- Re-capture the demo on 0179 or a later line.
 
 ### Evidence
 
@@ -257,37 +257,37 @@ This page is generated from the device record.
 
 ### Hardware and dependencies
 
-- Goodix GT9916R touch panel on bit-bang SPI3 and the volume/power keys.
+- Goodix GT9916R touch panel on EINT14 \(edge falling\) with the SPI288 parent, and the volume/power keys.
 
 ### Configuration
 
-- The 0155 line boots with the real touch driver \(sweetgt=1\); volume/power keys arrive through HID.
+- The 0179 line boots with the native EINT14 oneshot service \(rubyeint=1, rubyeintb1=1, rubykpdirq=1\); gt\_thread is removed and commands run on the IOCommandGate. The 0085 bit-bang poll is historical.
 
 ### Procedure
 
-- Boot the 0155 image; touch the panel; observe SWEET GT initialization and HID down/up; press the volume and power keys.
+- Boot the 0179 image; touch the panel; observe EINT14 oneshot active/enabled and HID down/up; press the volume down key; run eint status and gt diag.
 
 ### Development findings
 
-- Public STATUS records real GT9916R HID down/up, 11+ HID lines, volume-down KPD, power/volume-up TOPSTATUS 0x2a and zero PMIC writes.
-- EINT14 touch events are a 0159/0160 development feature, not a public 0155 claim.
+- Public STATUS records G1-G6; first 10 min isr 2381-&gt;6004, ok 5997, fail 7; \~5 min stress isr 8672-&gt;13282, ok 12866, fail +9; 1-5-finger frames; no panic/stuck/re-activation.
+- G7/G8 and a full 10 min repeat were cancelled by decision; the 8-failure soft reset logged no-ack and the ok path is not proven; no ESD timer.
 
 ### Completion criteria
 
-- Real touch and the hardware keys reach userland on the 0155 image.
+- Native EINT14 touch and the hardware keys reach userland on the 0179 image.
 
 ### Current limits
 
-- Multi-touch gestures beyond the documented two-contact dispatch and the EINT14 event path are not claimed for public main.
+- G7/G8, a full 10 min repeat, the soft-reset ok path and ESD/silent-stuck recovery are not claimed.
 
 ### Next action
 
-- Publish the 0160 EINT14 device gate before adding it to this record.
+- No additional gate for this line; future P2c/P3 changes get their own record.
 
 ### Evidence
 
-- `device`: [0155 device run: real GT9916R touch HID, 11+ HID lines, volume/power keys, 19/19 probe and no panic.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
-  Command: <code>boot the 0155 image; touch the panel; observe SWEET GT and HID down/up; press the volume and power keys</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
+- `device`: [0179 device run: G1-G6, first 10 min + \~5 min stress; native EINT14 HID and volume-down key; no panic/stuck/re-activation.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
+  Command: <code>boot the 0179 image; touch the panel; eint status; gt diag; press volume down</code>. Revision: `b3c704ff5c16ced6fe252bd6fbdada7236f1a56a`.
 
 ## GPU {#gpu}
 
@@ -323,7 +323,7 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [GPU is listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
+- `source`: [GPU is listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
 
 ## Network {#network}
 
@@ -359,7 +359,7 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Wi-Fi, Bluetooth and cellular are listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
+- `source`: [Wi-Fi, Bluetooth and cellular are listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
 
 ## Audio {#audio}
 
@@ -395,7 +395,7 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Audio is listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
+- `source`: [Audio is listed among the not-yet-implemented peripherals.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
 
 ## Power {#power}
 
@@ -407,15 +407,15 @@ This page is generated from the device record.
 
 ### Configuration
 
-- The 0155 line reads battery/charger state read-only; it does not write PMIC, charger or rail registers.
+- The 0179 line keeps the read-only MT6360 path verified in the 0155 run; it does not write PMIC, charger or rail registers.
 
 ### Procedure
 
-- Boot the 0155 image; run 'battery status'; read the SWEET BATTERY line and the I2C5 arbiter counters.
+- Battery status was verified in the 0155 run and is carried in the 0179 line; the P2b G1-G6 gates focused on touch/IRQ.
 
 ### Development findings
 
-- Public STATUS records OCV 4311 mV, CHG 0xa2 FULL, FOD 0x94 external, external=1/full=1, 8/8 I2C5 arbiter and no PMIC/charger/rail writes.
+- Public STATUS records 0155 battery OCV 4311 mV, CHG 0xa2 FULL, FOD 0x94 external, external=1/full=1, 8/8 I2C5 arbiter and no PMIC/charger/rail writes.
 - Battery UI latency \(P2.4, 30 s poll, 100-&gt;98 on unplug\) remains open; Type-C is read-only.
 
 ### Completion criteria
@@ -432,8 +432,8 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `device`: [0155 device run: 4311 mV, external=1/full=1, 8/8 I2C5 arbiter, no PMIC/charger/rail writes.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
-  Command: <code>battery status</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
+- `device`: [0155 device run: 4311 mV, external=1/full=1, 8/8 I2C5 arbiter, no PMIC/charger/rail writes.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
+  Command: <code>battery status (0155 run; carried into the 0179 line)</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
 
 ## Image assembly {#packaging}
 
@@ -449,11 +449,11 @@ This page is generated from the device record.
 
 ### Procedure
 
-- Follow the main repository reproduction steps with config/0155.env.
+- Follow the main repository reproduction steps with config/0179.env.
 
 ### Development findings
 
-- Public README records patchset da13b6df, kernel full 491f2373, exec-data 2e98fd85, image 3b44c0e2 and payload a00dd751.
+- Public README records patchset 10b1e2e8, kernel full 2b008e52, exec-data a4fb021e, image d438ba47 and payload 72fc737c.
 - The boot image itself is not published in the repository.
 
 ### Completion criteria
@@ -466,11 +466,11 @@ This page is generated from the device record.
 
 ### Next action
 
-- Record the 0160 image hashes when that line lands on main.
+- None; the 0179 image is pinned.
 
 ### Evidence
 
-- `source`: [Public reproduction steps for the pinned 0155 boot image.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/en/09-reproduce.md)
+- `source`: [Public reproduction steps for the pinned 0179 boot image.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/en/09-reproduce.md)
 
 ## Diagnostics {#diagnostics}
 
@@ -478,7 +478,7 @@ This page is generated from the device record.
 
 ### Hardware and dependencies
 
-- USB CDC console, SWEETLOG ring decoder and the 19-command read-only board probe.
+- USB CDC console, SWEETLOG ring decoder and the read-only eint/gt diagnostic commands.
 
 ### Configuration
 
@@ -486,27 +486,28 @@ This page is generated from the device record.
 
 ### Procedure
 
-- Boot the 0155 image; run the 19-command read-only probe over the USB console; decode the SWEETLOG ring with tools/sweetlog/decode.py.
+- Boot the 0179 image; use eint status and gt diag over the USB 0x2E channel; decode the SWEETLOG ring with tools/sweetlog/decode.py.
 
 ### Development findings
 
-- Public STATUS records 19/19 probe commands, 8/8 I2C5 arbiter, six snapshots and no panic.
+- 0179 runs used eint status/gt diag and recorded G1-G6; the 19/19 read-only probe, eight I2C5 arbiter steps and six snapshots were verified in the 0155 run and remain historical.
+- Occasional EP0 0x2E EPIPE is recovered by checking the done counter, re-sending once, or re-enumerating the USB device.
 
 ### Completion criteria
 
-- The probe completes read-only and the log decoder recovers the console ring.
+- The read-only diagnostic path and console ring decode work on the 0179 image.
 
 ### Current limits
 
-- The probe is read-only; it does not provide charger control, PMIC writes or a complete peripheral inventory.
+- The 19-command probe was not re-run on 0179; no charger control, PMIC writes or complete peripheral inventory is provided.
 
 ### Next action
 
-- Keep the diagnostic path read-only; add EINT status only after the 0160 gate is public.
+- Keep the diagnostic path read-only; no additional diagnostic gate for this line.
 
 ### Evidence
 
-- `device`: [0155 device run: 19/19 probe, 8/8 I2C5 arbiter, six snapshots, no panic.](https://github.com/lky005/ruby-ios-bringup/blob/main/STATUS.md)
-  Command: <code>run the 19-command read-only probe over the USB console</code>. Revision: `e81510fd7cf75ba1c8a3ee81749c53a2e16df41d`.
+- `device`: [0179: G1-G6 and eint/gt diagnostics; 0155: 19/19 probe, 8/8 I2C5 arbiter, no panic.](https://github.com/lky005/ruby-ios-bringup/blob/main/docs/records/STATUS.md)
+  Command: <code>eint status; gt diag (0179 device run)</code>. Revision: `b3c704ff5c16ced6fe252bd6fbdada7236f1a56a`.
 
 </div>

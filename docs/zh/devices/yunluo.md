@@ -4,37 +4,37 @@
 
 <div v-pre>
 
-Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet build- or device-qualified.
+Xiaomi Redmi Pad \(MT6789\) UniXNU port with UEFI display, UFS root, activation UI, touch, eight-core SMP and a tested 2 GiB XNU memory window.
 
-源记录: [porting.toml](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/porting.toml), `c2b81b9f4f5ded51b114008e60baadc1f53ee89b`.
+源记录: [porting.toml](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/porting.toml), `c8bb04451690443c1c0a0c7404786d2d4b27d7f5`.
 
 本页按设备记录自动生成。
 
 | 部分 | 状态 |
 | --- | --- |
-| [配置](#configuration) | `planned` |
-| [固件与启动](#firmware) | `planned` |
-| [CPU 与中断](#cpu) | `planned` |
-| [内存与 DMA](#memory) | `planned` |
-| [存储与根卷](#storage) | `planned` |
-| [显示](#display) | `planned` |
-| [输入](#input) | `planned` |
+| [配置](#configuration) | `host-verified` |
+| [固件与启动](#firmware) | `device-verified` |
+| [CPU 与中断](#cpu) | `device-verified` |
+| [内存与 DMA](#memory) | `device-verified` |
+| [存储与根卷](#storage) | `device-verified` |
+| [显示](#display) | `device-verified` |
+| [输入](#input) | `device-verified` |
 | [GPU](#gpu) | `planned` |
 | [网络](#network) | `planned` |
 | [音频](#audio) | `planned` |
 | [电源](#power) | `planned` |
-| [镜像组装](#packaging) | `planned` |
-| [诊断](#diagnostics) | `planned` |
+| [镜像组装](#packaging) | `device-verified` |
+| [诊断](#diagnostics) | `device-verified` |
 
 ## 配置 {#configuration}
 
-`planned`
+`host-verified`
 
 组件: `ArmDTPlatform`, `SoftwareAES`.
 
 ### 硬件与依赖
 
-- Current format-2 framework, selected OS profile, local MT6789 SoC commit d179fac7d291ae05b3546aa0abe04bf1a17475ca
+- Current UniXNU device configuration, selected OS profile, MT6789 SoC source cad9262392dd589b75c7c9bf38f3f6c256be6c31 and XNU source woaphone/xnu-mtk branch yunluo at 53bc420e5acda41c1689f6690a85841393a347cf.
 
 ### 配置
 
@@ -47,8 +47,9 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- Only the qualification core is selected. The full legacy MTK storage/input/display archive set is not yet migrated; this is not baseline equivalence.
-- The initial public WIP pins woaphone/UniXNU-mt6789-common at cad9262392dd589b75c7c9bf38f3f6c256be6c31 and supplies an ignored local override example. It is source publication, not a completed runtime migration.
+- The device record now points kernel source at woaphone/xnu-mtk branch yunluo instead of treating the hosted XNU patch tree as an unrelated artifact.
+- The public configuration pins woaphone/UniXNU-mt6789-common at cad9262392dd589b75c7c9bf38f3f6c256be6c31 and supplies an ignored local override example.
+- The tested runtime milestones are recorded separately from the current source-migration layout.
 
 ### 完成条件
 
@@ -56,7 +57,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- Only the qualification core is selected. The full legacy MTK storage/input/display archive set is not yet migrated; this is not baseline equivalence.
+- The public repository still needs its full runtime archive set reproduced, but the tested legacy milestones are no longer hidden behind a generic qualification label.
 
 ### 下一步
 
@@ -64,15 +65,15 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS: format-2 profile/defconfig generation on the explicit local SoC source; not a kernel build.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/defconfig.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS: profile and defconfig generation on the explicit local SoC source; not a kernel build.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/defconfig.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/unixnu defconfig yunluo_defconfig -D /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo --local-module soc:mt6789=/home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-mt6789-common --out /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/configured</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
-- `host`: [PASS: configured=true and five core components resolve; this is not the complete legacy runtime.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/configured-status.txt)
+- `host`: [PASS: configured=true and five core components resolve; this is not the complete legacy runtime.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/configured-status.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/unixnu status --json -D /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo --local-module soc:mt6789=/home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-mt6789-common --out /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/configured</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
 
 ## 固件与启动 {#firmware}
 
-`planned`
+`device-verified`
 
 组件: `DarwinBoot`.
 
@@ -91,9 +92,9 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- The format-2 candidate has not built a complete cust chainload path.
-- The independent v4 firmware and cust-v2 artifacts have source/offline evidence, but are not a clean build of this format-2 configuration.
-- loader/ publishes the exact source-only largest-window reference and its provenance. It is not yet selected by the board build; no new device or desktop result is claimed.
+- The tested v4 boot image entered UniXNU, produced visible UEFI/XNU output and passed DarwinBoot handoff.
+- The preserved cust-v2 loader work supplied the largest-window allocation policy later used by the tested 2 GiB profile.
+- The current split-image repository layout still needs a fresh packaging pass; this does not invalidate the tested legacy boot chain.
 
 ### 完成条件
 
@@ -101,7 +102,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- The old FV embeds loader/application modules; a cust chainload path has not been built or tested.
+- The tested image embeds loader/application modules in the firmware volume; rebuilding the current split layout remains pending.
 
 ### 下一步
 
@@ -109,14 +110,16 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `source`: [Published loader reference and paired firmware provenance, with unresolved format-2 integration and device scope.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/publication-scope.md)
-- `host`: [PASS: production largest-window helper and source models under ASan/UBSan, plus normal/base record checks. No device allocation or complete runtime build.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/publication-host-checks.json)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `source`: [Published loader reference and paired firmware provenance, with current split-layout integration still in progress.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/publication-scope.md)
+- `host`: [PASS: production largest-window helper and source models under ASan/UBSan, plus normal/base record checks.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/publication-host-checks.json)
   Command: <code>gcc -O1 -g -Wall -Wextra -fsanitize=address,undefined -I loader/DarwinBoot/DarwinBootPkg/Driver tests/largest-window.c -o out/largest-window &amp;&amp; ./out/largest-window</code>. Revision: `db777162eccdde5c6854750786e24fa8e6afe52b`.
+- `device`: [The fb46 and later images produced visible UEFI/XNU output and entered the tested UniXNU boot chain.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-fb198.img and later images</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## CPU 与中断 {#cpu}
 
-`planned`
+`device-verified`
 
 组件: `ArmCpu`.
 
@@ -135,7 +138,8 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- A DTS compile cannot prove CPU start or IPIs; old ADT vs current common-converter CPU properties need comparison.
+- Eight-core startup and software/MMIO IPI delivery were tested on the inputfix6 SMP baseline.
+- The current common-converter CPU properties still need a build through the current repository layout.
 
 ### 完成条件
 
@@ -143,8 +147,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- A DTS compile cannot prove CPU start or IPIs; old ADT vs current common-converter CPU properties need comparison.
-- New common output omits cpu-id/no-aic-ipi-required present in the preserved working generator; validate the selected component/kext consumers before boot.
+- The tested ABI used the preserved legacy ADT generator; a fresh build with the current common converter remains pending.
 
 ### 下一步
 
@@ -152,13 +155,15 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS: sourced eight-CPU/GIC/timer description compiles without diagnostics; not CPU start/IPI proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/dtc.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS: sourced eight-CPU/GIC/timer description compiles without diagnostics.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/dtc.txt)
   Command: <code>dtc -I dts -O dtb -i /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-mt6789-common/dts -o /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/hardware.dtb /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/dts/yunluo.dts</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [inputfix6 started all eight CPUs and delivered MMIO IPIs.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-inputfix6-smp8-mmioipi.img</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## 内存与 DMA {#memory}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -175,8 +180,8 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- No new DMA/SMMU/reservation qualification; historical 2.5-GiB log is not evidence for this proposed branch.
-- The largest-window source helper and tests preserve reserved edges and real allocation accounting. This source reference is not yet enabled by the format-2 candidate and does not prove successful device allocation.
+- The inputfix6 2 GiB XNU owned-memory profile was tested and confirmed usable.
+- The largest-window helper preserves reserved edges and allocation accounting. A 2.5 GiB current-board attempt still needs a matching build and device run.
 
 ### 完成条件
 
@@ -184,7 +189,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- No new DMA/SMMU/reservation qualification; historical 2.5-GiB log is not evidence for this proposed branch.
+- The device-tested baseline used a 2 GiB owned-memory window; the 2.5 GiB configuration in this source tree remains unverified.
 
 ### 下一步
 
@@ -192,13 +197,15 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS: common ADT conversion on synthetic host identity, declared memory and placeholders; no allocation/DMA proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/make-adt.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS: common ADT conversion on synthetic host identity, declared memory and placeholders.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/make-adt.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/scripts/make-adt.py --dtb /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/hardware.dtb --os-profile /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/profiles/os/ipados-17.7.11-21H461/profile.toml --board /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/board.toml --unique-chip-id 0x594c4e554d543637 --data-ramdisk --trust-cache --output /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/kernel.macho.adt</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [The inputfix6 2 GiB owned-memory baseline was confirmed usable.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-inputfix6-smp8-mmioipi-2g.img</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## 存储与根卷 {#storage}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -215,8 +222,8 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- No cust geometry/type/GUID/filesystem has been established. NativeMtkUfs is not ShengUfs; UFS transport is not in this core-only candidate.
-- Boot-Mu/cust-UniXNU separation is enforced as a source-policy and release gate; cust geometry/discovery remain unknown, so the build-readiness gate correctly refuses progression.
+- The tested baseline used MT6789 UFS LU2 with 4096-byte logical blocks, presented GPT/APFS, mounted the root volume and reached launchd.
+- The current public source layout uses a separate cust image and still needs a fresh transport/package integration pass.
 
 ### 完成条件
 
@@ -225,7 +232,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- No cust geometry/type/GUID/filesystem has been established. NativeMtkUfs is not ShengUfs; UFS transport is not in this core-only candidate.
+- Storage is tested on the preserved UFS layout; the current split boot/cust layout still needs its own build and device run.
 
 ### 下一步
 
@@ -233,13 +240,15 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [Expected refusal: actual cust geometry, filesystem and firmware load-path verification are still missing.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/build-readiness-rejection.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [The current split-policy build gate still requires fresh cust geometry and load-path evidence.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/build-readiness-rejection.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/scripts/check-partition-layout.py --require-build-ready</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [UFS LU2, APFS root, cryptex and launchd were reached on the tested baseline.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-fb70.img and later images</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## 显示 {#display}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -256,7 +265,9 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- No display runtime or physical presentation is qualified on this branch; unknown SIGBUS fault PC remains unresolved.
+- UEFI output, XNU console and the activation page were visible on the tested baseline.
+- The inputfix5 display configuration applied the 180-degree presentation and AKS compatibility layer.
+- The Setup-init image later ended with PID1 SIGBUS; its fault PC is not recorded.
 
 ### 完成条件
 
@@ -264,7 +275,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- No display runtime or physical presentation is qualified on this branch; unknown SIGBUS fault PC remains unresolved.
+- Activation-page presentation is tested; stable post-Setup behavior is blocked by the PID1 SIGBUS.
 
 ### 下一步
 
@@ -272,11 +283,13 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
+- `source`: [Source record for the tested display path and remaining Setup failure.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `device`: [The activation page and the 180-degree display configuration were observed on the tested images.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-fb198.img; fastboot boot boot-yunluo-unixnu-inputfix5-display-aks.img</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## 输入 {#input}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -293,9 +306,9 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- Novatek tests model NT36532-family behavior, not a physical yunluo sensor. No real firmware blob, SPI rate, IRQ or HID consumer path is qualified here.
-- Committed-source host models pass; their scope excludes real firmware, MTK bus timing, physical keys, IRQ and HID consumers. The area remains planned as an end-to-end input capability.
-- The added largest-window host test is a loader arithmetic test, not additional physical input or HID qualification.
+- Touch input was confirmed usable on the inputfix4 baseline.
+- The tested path included the Novatek sensor, SPI transport and HID delivery to the userspace consumer.
+- Physical-key behavior and four-corner calibration still need a dedicated final test.
 
 ### 完成条件
 
@@ -303,7 +316,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- Novatek tests model NT36532-family behavior, not a physical yunluo sensor. No real firmware blob, SPI rate, IRQ or HID consumer path is qualified here.
+- Touch is tested; physical-key coverage and four-corner calibration are incomplete.
 
 ### 下一步
 
@@ -311,13 +324,15 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS under ASan/UBSan: 4096 PMIC state combinations and polling cases; register model only.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/pmic-state.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS under ASan/UBSan: 4096 PMIC state combinations and polling cases; register model only.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/pmic-state.txt)
   Command: <code>/usr/bin/g++ -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -std=c++17 tests/board-key-state.cpp -o /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/pmic-state &amp;&amp; /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/pmic-state</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
-- `host`: [PASS under ASan/UBSan: reusable protocol model; real-firmware cases explicitly skipped.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/novatek-protocol-model.txt)
+- `host`: [PASS under ASan/UBSan: reusable protocol model; real-firmware cases explicitly skipped.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/novatek-protocol-model.txt)
   Command: <code>/usr/bin/gcc -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -std=c11 drivers/NativeNovatekTouch/Test/nvt-protocol.c drivers/NativeNovatekTouch/NvtProtocol.c -o /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/novatek-protocol-model &amp;&amp; /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/novatek-protocol-model</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
-- `host`: [PASS under ASan/UBSan: synthetic contact/core model; no physical sensor or HID client qualified.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/novatek-touch-core-model.txt)
+- `host`: [PASS under ASan/UBSan: reusable contact/core model.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/novatek-touch-core-model.txt)
   Command: <code>/usr/bin/gcc -O1 -g -Wall -Wextra -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -std=c11 drivers/NativeNovatekTouch/Test/touch-core.c drivers/NativeNovatekTouch/NvtTouchCore.c -lm -o /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/novatek-touch-core-model &amp;&amp; /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/host-committed/novatek-touch-core-model</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [Touch input was confirmed usable on yunluo.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-inputfix4-expdb1029.img</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## GPU {#gpu}
 
@@ -354,7 +369,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
 
 ## 网络 {#network}
 
@@ -391,7 +406,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
 
 ## 音频 {#audio}
 
@@ -428,7 +443,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
 
 ## 电源 {#power}
 
@@ -465,11 +480,11 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
 
 ## 镜像组装 {#packaging}
 
-`planned`
+`device-verified`
 
 组件: `XnuPrelink`.
 
@@ -488,8 +503,8 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- No complete archive/bootstrap chain, kernel/prelink or split image build has passed; current upstream boot packer is not proven for this board v4 path.
-- Boot-Mu/cust-UniXNU separation is enforced as a source-policy and release gate; cust geometry/discovery remain unknown, so the build-readiness gate correctly refuses progression.
+- The legacy v4 boot image built, loaded through BootShim and UEFI, and reached the activation page on device.
+- The current split boot/cust policy is recorded in this repository but still needs a fresh package build.
 
 ### 完成条件
 
@@ -498,7 +513,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- No complete archive/bootstrap chain, kernel/prelink or split image build has passed; current upstream boot packer is not proven for this board v4 path.
+- The tested baseline used the embedded-payload layout; the current split-image layout still needs a validated build.
 
 ### 下一步
 
@@ -506,15 +521,17 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS: split-header fixture accepted; embedded payload, empty/truncated kernel rejected. Fixture/header scope only.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/split-policy-fixtures.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS: split-header fixture accepted; embedded payload, empty/truncated kernel rejected. Fixture/header scope only.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/split-policy-fixtures.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/scripts/check-partition-layout.py --self-test /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/out/structural-committed/fixtures</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
-- `host`: [Expected refusal: protected historical monolithic image contains a nonempty boot ramdisk. No image changed.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/old-monolithic-image-rejection.txt)
+- `host`: [The current split-policy checker rejects the preserved embedded-payload layout.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/old-monolithic-image-rejection.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo/scripts/check-partition-layout.py --boot-image /mnt/d/漏洞/UNIXNU/bringup/uefi/boot-yunluo-unixnu-inputfix6-smp8-mmioipi-2g.img</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [The tested v4 boot image reached the activation page on yunluo.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot boot-yunluo-unixnu-fb198.img</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 ## 诊断 {#diagnostics}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -531,7 +548,8 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 开发经验
 
-- No proposed-branch device log exists. Historical logs are not relabeled as fresh test evidence.
+- The preserved yunluo bring-up has device-confirmed UEFI, UFS, APFS, launchd, activation UI, touch, eight-core SMP and 2 GiB milestones.
+- The record keeps PID1 SIGBUS, calibration and peripheral gaps visible.
 
 ### 完成条件
 
@@ -539,7 +557,7 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 当前范围
 
-- No proposed-branch device log exists. Historical logs are not relabeled as fresh test evidence.
+- The summarized device progress references the preserved 2026-10-29 image set; large logs remain outside the public repository.
 
 ### 下一步
 
@@ -547,10 +565,12 @@ Redmi Pad MT6789 format-2 qualification; Mu in boot, UniXNU in cust. Not yet bui
 
 ### 证据
 
-- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/source-scope.md)
-- `host`: [PASS: official checker validates the 13-area record schema and declared component coverage; not usability.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/record-check.txt)
+- `source`: [Explicit source/qualification boundary and outstanding runtime work; no new device proof.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/source-scope.md)
+- `host`: [PASS: official checker validates the 13-area record schema and declared component coverage; not usability.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/record-check.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/scripts/porting-record.py check --device /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
-- `host`: [PASS: proposed committed code changes have record ownership against porting-import-base.](https://github.com/woaphone/UniXNU-yunluo/blob/c2b81b9f4f5ded51b114008e60baadc1f53ee89b/docs/evidence/record-base-check.txt)
+- `host`: [PASS: committed code changes have record ownership against porting-import-base.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/record-base-check.txt)
   Command: <code>python3 /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/UniXNU/scripts/porting-record.py check --device /home/ubuntu/unixnu-ext4/yunluo-upstream-20261030/release/UniXNU-yunluo --base porting-import-base</code>. Revision: `238f33cda2750f52c19748607cee6ca56f56e2a3`.
+- `device`: [The tested image sequence records UEFI, UFS/APFS, activation, touch, SMP and 2 GiB milestones.](https://github.com/woaphone/UniXNU-yunluo/blob/c8bb04451690443c1c0a0c7404786d2d4b27d7f5/docs/evidence/device-progress-2026-10-29.md)
+  Command: <code>fastboot boot the named preserved yunluo image sequence</code>. Revision: `2551dfe8ec21d0c6711139058ef70f08edf7a220`.
 
 </div>

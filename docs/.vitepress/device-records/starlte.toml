@@ -62,10 +62,10 @@ next_action = ["Rebase uefi/ on a newer Silicium and rebuild prebuilt/SILICIUM_U
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/52f5b2a5d695346c996d67f5d10e6941e09da4f3"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/226d304eb28203b3068a2bc774d18bd1910d89a3"
 result = "Device run, 2 November 2026: the loader moved the payload out of the modem's region and the boot reached iOS; the CP and ABOX regions were left out of XNU's memory. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1"
-revision = "52f5b2a5d695346c996d67f5d10e6941e09da4f3"
+revision = "226d304eb28203b3068a2bc774d18bd1910d89a3"
 
 [[area.evidence]]
 kind = "source"
@@ -87,17 +87,17 @@ next_action = ["Try bootcpu=4 cpus=8 and recover core 1."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/3685b5ea31c21c068a49d178becbd8d88674d296"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/73ea2ba822b832ebc4cbd44541560a73b6492532"
 result = "Device run, 2 November 2026: six cores (2 A55 + 4 M3) running iOS 16.5, launchd and SpringBoard up. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1"
-revision = "3685b5ea31c21c068a49d178becbd8d88674d296"
+revision = "73ea2ba822b832ebc4cbd44541560a73b6492532"
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/9427e4dc624b245bcd9fb084521cdff235f1f7b7"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/2606efc508fc9a3a3dd9ee2a67bb45022a4bc0a6"
 result = "Device run, 2 November 2026: cohtest reported 2 A55s and 4 M3s, every pair both ways, all checks passed. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 cohtest=1"
-revision = "9427e4dc624b245bcd9fb084521cdff235f1f7b7"
+revision = "2606efc508fc9a3a3dd9ee2a67bb45022a4bc0a6"
 
 [[area]]
 id = "memory"
@@ -114,10 +114,10 @@ next_action = ["Program the SysMMUs where a driver needs more than a fixed buffe
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/245dbcc5303e9036e5e0a2f6c40ffa288ae8eb76"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/f5c5dcae6501aa8990db5f2e34ac50be56b2cfa5"
 result = "Device run, 2 November 2026: the display's buffers at 0xD4000000 mapped through IOKit, frames shown by the DPP, no panic. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 fb_dpp=1"
-revision = "245dbcc5303e9036e5e0a2f6c40ffa288ae8eb76"
+revision = "f5c5dcae6501aa8990db5f2e34ac50be56b2cfa5"
 
 [[area]]
 id = "storage"
@@ -134,15 +134,15 @@ next_action = ["Keep the self-test's fallback count at zero across daily runs; a
 
 [[area.evidence]]
 kind = "source"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/bd924a364fc559c0bc36c458db7e1c94c095d187"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/0b50896ab167da00fd92a7ed400765ff962c8a94"
 result = "ufs=3 merged (kernel PR 155): the kernel's own UFS driver after a self-test against the loader's reads, writes fenced to USERDATA."
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/85d4705e44d55d95c48075282bfa773c62445229"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/9561e4516cae85fa4839ae02ad4803aede9b03b6"
 result = "Device runs, 2 November 2026: hfs mounted Data on ufs_USERDATA_data; /private/var's contents kept from one boot to the next. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 system_apfs=ufs_SYSTEM ufs_write=1 var_hfs=ufs_USERDATA_data"
-revision = "85d4705e44d55d95c48075282bfa773c62445229"
+revision = "9561e4516cae85fa4839ae02ad4803aede9b03b6"
 
 [[area.evidence]]
 kind = "device"
@@ -166,22 +166,22 @@ next_action = ["Measure frame pacing (fps_log) and remove late frames."]
 
 [[area.evidence]]
 kind = "source"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/7059832d7546ead6240779b45660a28db9abd5b5"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/5a361c56cd2aa7dd117c184fd445f4057479336c"
 result = "fb_zc and mali_gov merged (kernel PR 160): the window server's surface scanned out with nothing copied, the GPU's clock after its load."
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/245dbcc5303e9036e5e0a2f6c40ffa288ae8eb76"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/f5c5dcae6501aa8990db5f2e34ac50be56b2cfa5"
 result = "Device run, 2 November 2026: exynos_dpu attached VGF0's scaler, 3 buffers of 1125x2436 at 0xd4000000; the display's frames scaled to the panel. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 panel=1 fb_dpp=1"
-revision = "245dbcc5303e9036e5e0a2f6c40ffa288ae8eb76"
+revision = "f5c5dcae6501aa8990db5f2e34ac50be56b2cfa5"
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/f15c752f419bd99be6529b2a84b97755da25fbc9"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/b387fc685063716f31c5f450a0917620538cbcf8"
 result = "Device run, 2 November 2026: the Control Center brightness slider changed the panel's brightness. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 panel=1 backlight=2 brightness_bridge=1"
-revision = "f15c752f419bd99be6529b2a84b97755da25fbc9"
+revision = "b387fc685063716f31c5f450a0917620538cbcf8"
 
 [[area]]
 id = "input"
@@ -198,10 +198,10 @@ next_action = ["Confirm the keys on the phone."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/a4458d524738a4eaba424d5b73b96ac2a7830e63"
 result = "Device run, 1 November 2026: touch worked in SpringBoard. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=2 bootcpu=2 s6sy761=1"
-revision = "402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+revision = "a4458d524738a4eaba424d5b73b96ac2a7830e63"
 
 [[area]]
 id = "gpu"
@@ -218,10 +218,10 @@ next_action = ["Run Metal through the Panfrost path (GPU.md)."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/a4458d524738a4eaba424d5b73b96ac2a7830e63"
 result = "Device run, 1 November 2026: mali=9 ran and CoreAnimation drew through Mesa's Panfrost. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=2 bootcpu=2 mali=9"
-revision = "402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+revision = "a4458d524738a4eaba424d5b73b96ac2a7830e63"
 
 [[area]]
 id = "network"
@@ -238,10 +238,10 @@ next_action = ["BlueTool's boot for iOS's bluetoothd (BLUETOOTH.md, iOS)."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/f4a0b823f2f852ab237fac9daa621a8853cfa061"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/e4d1341140464659270bc617fea4b64c097c2533"
 result = "Device runs wifi-d1 to wifi-d4, 3 November 2026 (kernel PR 157, merged): WPA2 joined, configd's DHCP, the gateway and the Internet answering the console's wifi ping; then iOS's Settings join. The captures are kept privately (they hold iOS's own log lines); this entry describes them."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 ufs=3 wifi_pcie=6 brcmfmac=8 brcmfmac_poll=1 brcmfmac_tcm_idx=1 wifi=1"
-revision = "f4a0b823f2f852ab237fac9daa621a8853cfa061"
+revision = "e4d1341140464659270bc617fea4b64c097c2533"
 
 [[area.evidence]]
 kind = "source"
@@ -263,10 +263,10 @@ next_action = ["The headphones' first run (cs47l93_hp=1, AUDIO.md, The headphone
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/dc5fbb431909904560cc13f0dac3801143f6434c"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/44a5cf50f72ccac9f494418ee2a9711dc49d0228"
 result = "Device runs a1-b3, 3 November 2026, phone 2 (kernel PR 163, merged): the tone and iOS's sounds through ABOX and both MAX98512s. The captures are kept privately (they hold iOS's own log lines); this entry describes them."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 ufs=3 abox=8 max98512=3"
-revision = "dc5fbb431909904560cc13f0dac3801143f6434c"
+revision = "44a5cf50f72ccac9f494418ee2a9711dc49d0228"
 
 [[area.evidence]]
 kind = "source"
@@ -288,24 +288,24 @@ next_action = ["Throttle the GPU from the TMU's G3D zone."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/027dd2bdab502fb86795df3b0005168d7cf02d16"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/9aee90ff931e88447611b896543fa3cfc4b45ea4"
 result = "Device run, 1 November 2026: battery level and charger state in iOS, vibration felt, the A55s at 1.79 GHz through ACPM DVFS. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=2 bootcpu=2 max77705=1 max77705_haptic=1 cpufreq_lit=1794000"
-revision = "027dd2bdab502fb86795df3b0005168d7cf02d16"
+revision = "9aee90ff931e88447611b896543fa3cfc4b45ea4"
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/85dcf35b0be14bde7de40a2d574781d92e5e95e6"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/569e11701ca9b1b789c18c4540c17bca29b9fd10"
 result = "Device run, 2 November 2026: cpufreq_gov logged both clusters' loads and rates each second; tmu read 8 sensors. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 cpufreq_gov=1 tmu=3"
-revision = "85dcf35b0be14bde7de40a2d574781d92e5e95e6"
+revision = "569e11701ca9b1b789c18c4540c17bca29b9fd10"
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/85cab8d2073efaf5c99bb67beb3d00fc9d3aae2e"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/86ec08357fb16d9bf5820b619a9e3f88cf042d1c"
 result = "Device run, 2 November 2026: the S2MPS18 RTC read gave the time of day. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 rtc_pmic=1"
-revision = "85cab8d2073efaf5c99bb67beb3d00fc9d3aae2e"
+revision = "86ec08357fb16d9bf5820b619a9e3f88cf042d1c"
 
 [[area]]
 id = "packaging"
@@ -322,10 +322,10 @@ next_action = ["Keep the image script in step with the loader's payload layout."
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/486e4528b985c8dee53ed51e32b0d1c812bf8480"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/bcea30101a03970da042bdb1dcb29f7699f5a8c4"
 result = "Device run, 2 November 2026: an image made by mkimage.sh, flashed to BOOT from TWRP, booted iOS 16.5 on six cores. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1"
-revision = "486e4528b985c8dee53ed51e32b0d1c812bf8480"
+revision = "bcea30101a03970da042bdb1dcb29f7699f5a8c4"
 
 [[area]]
 id = "diagnostics"
@@ -342,17 +342,17 @@ next_action = ["Keep every new driver's steps logged before they are taken."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/a4458d524738a4eaba424d5b73b96ac2a7830e63"
 result = "Device run, 1 November 2026: enumerated at high speed as 1209:0001, the log streamed live and the console answered. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=2 bootcpu=2 usb_gadget=5 max77705_usbsw=1"
-revision = "402471149a39a4ebc6f260ec2f0b6ffa8f1ff503"
+revision = "a4458d524738a4eaba424d5b73b96ac2a7830e63"
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/9f9d8927733e4b53a45927a7b83973b97612d8f5"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/63c51c6c1c0b1eee9198fd18ed78d5bb984749d1"
 result = "Device run, 2 November 2026: the run ended on time and the phone restarted into TWRP through the PMU's software reset. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 loader_return_after=150"
-revision = "9f9d8927733e4b53a45927a7b83973b97612d8f5"
+revision = "63c51c6c1c0b1eee9198fd18ed78d5bb984749d1"
 
 [[area]]
 id = "camera"
@@ -369,10 +369,10 @@ next_action = ["The rear cameras (CAMERA.md)."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/Scion-Project/scion-kernel/commit/b0a0d91a8decfed727631d111e3be34762baab94"
+reference = "https://github.com/Scion-Project/scion-kernel/commit/faeb2ec93aac73365372245ab72403179775d537"
 result = "Device run cn3-7, 3 November 2026 (kernel PR 162, merged): the front camera streaming at 30 frames a second into the stock Camera app's preview. The capture is kept privately (it holds iOS's own log lines); this entry describes it."
 command = "USB console capture: the phone's CDC-ACM port (1209:0001, usb_gadget=5) read on the host with a serial terminal, the run's boot-args and kernel log recorded; boot-args: cpus=6 bootcpu=2 m3_prep=3 pan=0 isa_floor=1 ufs=2 cam_s9=7 cam=5"
-revision = "b0a0d91a8decfed727631d111e3be34762baab94"
+revision = "faeb2ec93aac73365372245ab72403179775d537"
 
 [[area.evidence]]
 kind = "source"

@@ -1,0 +1,188 @@
+schema_version = 1
+[device]
+name = "meizu21"
+soc = "SM8650"
+os_profile = "ios-16.5-meizu-darwin22"
+summary = "UniXNU transition: host menu/protocol verified; retained Darwin22 hardware path; r20 not device-tested."
+
+[[area]]
+id = "configuration"
+status = "host-verified"
+components = []
+paths = ["board.toml", "feeds.toml", "configs/**", "profiles/**", "unixnu.lock"]
+inputs = ["SM8650, retained iOS16.5/Darwin22.5, source pins in unixnu.lock."]
+configuration = ["Format 2 resolves the custom OS profile; inherited Darwin23 archives are explicitly replaced."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Format 2 resolves the custom OS profile; inherited Darwin23 archives are explicitly replaced."]
+completion = ["Replace retained drivers with ABI-audited native component recipes."]
+limits = ["The selected native DarwinBoot source is for review only; stage 1 uses the board protocol adapter."]
+next_action = ["Replace retained drivers with ABI-audited native component recipes."]
+evidence = [{ kind = "host", reference = "evidence/configure.log", result = "Format 2 resolves the custom OS profile; inherited Darwin23 archives are explicitly replaced.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
+
+[[area]]
+id = "firmware"
+status = "host-verified"
+components = []
+paths = ["firmware/**", "scripts/build-bridge.sh", "proprietary-files.txt"]
+inputs = ["Exact r19 DEBUG FD; real UniXNU 04573c5; retained loader SHA0be90c00; physical FB E3940000."]
+configuration = ["DEBUG menu and production bridge compile; the bridge fits the existing embedded-loader slot."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["DEBUG menu and production bridge compile; the bridge fits the existing embedded-loader slot."]
+completion = ["Confirm menu and kernel handoff on Meizu21 after the owner returns."]
+limits = ["No r20 hardware boot. Current original firmware sources diverge from the stable binary."]
+next_action = ["Confirm menu and kernel handoff on Meizu21 after the owner returns."]
+evidence = [{ kind = "host", reference = "evidence/packaging-check.json", result = "DEBUG menu and production bridge compile; the bridge fits the existing embedded-loader slot.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = []
+paths = ["dts/**"]
+inputs = ["Retained loader uses GICD17100000/GICR17180000, core shift8, and default cpus=1."]
+configuration = ["CPU/interrupt code is preserved in the independent kernel snapshot; no SMP behavior changed."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["CPU/interrupt code is preserved in the independent kernel snapshot; no SMP behavior changed."]
+completion = ["Preserve the working primary-core path while auditing native GIC/timer ABI."]
+limits = ["No new native ArmCpu integration or SMP verification."]
+next_action = ["Preserve the working primary-core path while auditing native GIC/timer ABI."]
+evidence = [{ kind = "source", reference = "evidence/kernel-snapshot.json", result = "CPU/interrupt code is preserved in the independent kernel snapshot; no SMP behavior changed." }]
+
+[[area]]
+id = "memory"
+status = "host-verified"
+components = []
+paths = ["firmware/Xnup.h", "tests/xnup.c"]
+inputs = ["FD A4000000+400000, payload F0000000+3800000, retained kernel window B0000000..D8000000."]
+configuration = ["All firmware file offsets and MemoryMap stay unchanged; bounded parser passes 100000 mutations."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["All firmware file offsets and MemoryMap stay unchanged; bounded parser passes 100000 mutations."]
+completion = ["Audit native DarwinBoot placement against 16KiB pages and actual free windows."]
+limits = ["QEMU does not establish DMA or SMMU behavior on SM8650."]
+next_action = ["Audit native DarwinBoot placement against 16KiB pages and actual free windows."]
+evidence = [{ kind = "host", reference = "evidence/xnup-r20-test.log", result = "All firmware file offsets and MemoryMap stay unchanged; bounded parser passes 100000 mutations.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = []
+paths = ["board.toml", "scripts/package.sh"]
+inputs = ["Existing UFS/APFS root and cryptex occupy protected super; boot_a must remain intact."]
+configuration = ["Packaging carries forward the exact small root ramdisk and meizu_ufs/root_apfs arguments."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Packaging carries forward the exact small root ramdisk and meizu_ufs/root_apfs arguments."]
+completion = ["After menu validation, confirm existing root still mounts; keep super immutable."]
+limits = ["No root-image transformation, new partition geometry, userdata recipe or storage hardware test."]
+next_action = ["After menu validation, confirm existing root still mounts; keep super immutable."]
+evidence = [{ kind = "source", reference = "evidence/inputs.json", result = "Packaging carries forward the exact small root ramdisk and meizu_ufs/root_apfs arguments." }]
+
+[[area]]
+id = "display"
+status = "host-verified"
+components = []
+paths = ["configs/unixnu.toml", "dts/**"]
+inputs = ["Physical 1080x2340, BGRx32, stride4320, framebuffer E3940000."]
+configuration = ["Real UniXNU renders a portrait menu at this geometry in QEMU; r16 Dock correction is retained."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Real UniXNU renders a portrait menu at this geometry in QEMU; r16 Dock correction is retained."]
+completion = ["Check menu and Dock on the phone without changing memory reservations."]
+limits = ["QEMU validates menu layout, not phone panel presentation, backlight or acceleration."]
+next_action = ["Check menu and Dock on the phone without changing memory reservations."]
+evidence = [{ kind = "host", reference = "evidence/qemu-result.log", result = "Real UniXNU renders a portrait menu at this geometry in QEMU; r16 Dock correction is retained.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
+
+[[area]]
+id = "input"
+status = "implemented"
+components = []
+paths = ["configs/meizu21_transition_defconfig"]
+inputs = ["Goodix GPIO48/49/50/51, reset161, IRQ162; raw coordinates10800x23400; TCS0 power path."]
+configuration = ["Existing persistent quiet touch kernel and libhakios/backboardd bridge are preserved."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Existing persistent quiet touch kernel and libhakios/backboardd bridge are preserved."]
+completion = ["Verify repeated iOS touches after r20 boot before replacing the HID path."]
+limits = ["r20 has not been phone-tested; touch input for the UEFI menu is not implemented."]
+next_action = ["Verify repeated iOS touches after r20 boot before replacing the HID path."]
+evidence = [{ kind = "source", reference = "evidence/kernel-snapshot.json", result = "Existing persistent quiet touch kernel and libhakios/backboardd bridge are preserved." }]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["README.md"]
+inputs = ["A750/SM8650; native DT profiles43051400 and43051401; stock Meizu firmware pins preserved locally."]
+configuration = ["GPU probe remains off. Neither A740 rendering nor Ace5 preparation proves A750 rendering here."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["GPU probe remains off. Neither A740 rendering nor Ace5 preparation proves A750 rendering here."]
+completion = ["Read real SoC/GPU revision first, then port power and memory ownership before firmware execution."]
+limits = ["No Meizu GPU power/SMMU/GMU/HFI/CP submission, frontend ABI or Metal verification."]
+next_action = ["Read real SoC/GPU revision first, then port power and memory ownership before firmware execution."]
+evidence = [{ kind = "source", reference = "evidence/inputs.json", result = "GPU probe remains off. Neither A740 rendering nor Ace5 preparation proves A750 rendering here." }]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["README.md"]
+inputs = ["Native WLAN adaptation and firmware transport are not migrated by the boot manager."]
+configuration = ["No networking driver from another board is enabled in this transition."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["No networking driver from another board is enabled in this transition."]
+completion = ["Inventory Meizu WLAN transport/firmware after the boot/GPU migration stage."]
+limits = ["No working network claim or new radio operation."]
+next_action = ["Inventory Meizu WLAN transport/firmware after the boot/GPU migration stage."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["README.md"]
+inputs = ["SM8650 DSP/codec routing requires board-specific firmware and service adaptation."]
+configuration = ["Existing code is preserved; no Ace5 audio or modem initialization is imported."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Existing code is preserved; no Ace5 audio or modem initialization is imported."]
+completion = ["Audit actual board audio resources and services before enabling a native driver."]
+limits = ["No audio playback/capture result."]
+next_action = ["Audit actual board audio resources and services before enabling a native driver."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "implemented"
+components = []
+paths = ["README.md"]
+inputs = ["Approved touch rails: ldob9=2960mV, ldob12=1800mV, HPM7; verified TCS0 response masks."]
+configuration = ["The working touch voltage/ACK/recovery implementation remains in the retained kernel."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["The working touch voltage/ACK/recovery implementation remains in the retained kernel."]
+completion = ["Preserve existing touch power behavior; audit GPU resource ownership separately."]
+limits = ["No GPU rail write, new PMIC configuration, battery or suspend migration."]
+next_action = ["Preserve existing touch power behavior; audit GPU resource ownership separately."]
+evidence = [{ kind = "source", reference = "evidence/kernel-snapshot.json", result = "The working touch voltage/ACK/recovery implementation remains in the retained kernel." }]
+
+[[area]]
+id = "packaging"
+status = "host-verified"
+components = []
+paths = ["scripts/pack-transition.py", "scripts/prepare-assets.py", "scripts/package.sh", ".gitignore"]
+inputs = ["Pinned complete r19 image, exact legacy loader, current linked kernel, stock DTB, DEBUG menu."]
+configuration = ["Repacked image is unpacked and compared; kernel/root/cmdline/shim/DTB remain exact."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["Repacked image is unpacked and compared; kernel/root/cmdline/shim/DTB remain exact."]
+completion = ["Device-test r20 boot_b while retaining the complete r16 rollback."]
+limits = ["r20 unflashed; native UniXNU userdata, generic payload and bootshim recipes are not used."]
+next_action = ["Device-test r20 boot_b while retaining the complete r16 rollback."]
+evidence = [{ kind = "host", reference = "evidence/packaging-check.json", result = "Repacked image is unpacked and compared; kernel/root/cmdline/shim/DTB remain exact.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
+
+[[area]]
+id = "diagnostics"
+status = "host-verified"
+components = ["DarwinBoot"]
+paths = ["scripts/configure.py", "scripts/preserve-kernel.py", "scripts/update-record.py", "scripts/audit-handoff.py", "evidence/**", "AGENTS.md"]
+inputs = ["Logs include production DEBUG builds, bounded-parser sanitizers and QEMU menu/protocol receiver."]
+configuration = ["The QEMU receiver exits before any phone kernel or hardware operation. Sources and image pins are recorded."]
+procedure = ["Run scripts/package.sh --check, then scripts/package.sh; inspect the referenced evidence."]
+findings = ["The QEMU receiver exits before any phone kernel or hardware operation. Sources and image pins are recorded."]
+completion = ["Record the first phone menu/kernel/desktop checkpoint with image SHA after the owner returns."]
+limits = ["Host evidence must not be labelled hardware verification; native DarwinBoot ABI is still incompatible."]
+next_action = ["Record the first phone menu/kernel/desktop checkpoint with image SHA after the owner returns."]
+evidence = [{ kind = "host", reference = "evidence/qemu-result.log", result = "The QEMU receiver exits before any phone kernel or hardware operation. Sources and image pins are recorded.", command = "bash scripts/package.sh", revision = "63f39b92ede3d30c53f8317d5607bb2ceb099342" }]
