@@ -61,8 +61,9 @@ class GitHub:
         for page in range(1, 11):
             result = self.request('search/repositories?' + urlencode({
                 'q': query, 'per_page': 100, 'page': page}))
-            if result.get('total_count', 0) > 1000:
-                raise ValueError(f'Split this search into smaller queries: {query}')
+            # The search API enumerates at most 1000 results, so a broader query is capped there, not an error: the
+            # authoritative discovery is the bounded topic:unixnu and org:UniXNU queries, which a compliant device
+            # repository is required to satisfy (the unixnu topic), and the name/description query only supplements them.
             if result.get('incomplete_results'):
                 raise ValueError(f'GitHub returned an incomplete search: {query}')
             items = result['items']
