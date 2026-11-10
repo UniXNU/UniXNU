@@ -89,7 +89,7 @@ def build_plugin(target):
     # Replay is a diagnostic capture from a host GPU simulation, not a runtime
     # dependency. Do not require unrelated test fixtures in a release build.
     script('build-adreno-metal-plugin.py', '--target', target, '--no-replay')
-    return ROOT / 'build' / ('adreno-metal-plugin27' if target == 'ios27' else 'adreno-metal-plugin')
+    return ROOT / 'build' / {'ios27': 'adreno-metal-plugin27', 'macos27': 'adreno-metal-plugin-macos27'}.get(target, 'adreno-metal-plugin')
 
 
 def bundle_cdhash(path, options=()):
@@ -218,16 +218,17 @@ def main():
     seed = Path(request['data_ramdisk'])
     addon = Path(request['gpu_addon']) if request.get('gpu_addon') else None
     trust = Path(request['trust_cache']) if request.get('trust_cache') else None
+    want_addon = request.get('gpu_addon_enabled', True)
     with tempfile.TemporaryDirectory(prefix='prepare-', dir=out) as td:
         work = Path(td)
-        if not seed.is_file() or addon is None:
+        if not seed.is_file() or (addon is None and want_addon):
             with os_mount(request['os_image'], work) as mount:
                 if not seed.is_file():
                     if not request['init_data']:
                         raise SystemExit('refuse to generate Data without --init-data')
                     script('make-data-seed.py', mount, seed, '--gib', str(request['data_gib']),
                            '--build', request['build'], *(['--skip-setup'] if request.get('skip_setup') else []))
-                if addon is None:
+                if addon is None and want_addon:
                     plugin = build_plugin(request['target'])
                     extra = []
                     for profile in request.get('wallpapers', []):
@@ -354,12 +355,15 @@ def main():
             original = work / 'apple-trust.bundle'
             script('bundle-ipsw-trust.py', original, *request['trust_modules'])
             hashes = addon_hashes(addon, work / 'addon', request.get('audio_system_plugins', ()),
-                                  appsync_report['system_executables'] if appsync_report else None)
+                                  appsync_report['system_executables'] if appsync_report else None) if addon else []
             candidate = work / 'owner-trust.bundle'
-            script('trust-append-module.py', original, candidate, *hashes)
+            if hashes:
+                script('trust-append-module.py', original, candidate, *hashes)
+            else:
+                original.replace(candidate)
             trust = out / 'owner-trust.bundle'
             candidate.replace(trust)
-        (out / 'generated.json').write_text(json.dumps(dict(data_ramdisk=str(seed), gpu_addon=str(addon),
+        (out / 'generated.json').write_text(json.dumps(dict(data_ramdisk=str(seed), gpu_addon=str(addon) if addon else None,
                                                           trust_cache=str(trust)), indent=2) + '\n')
 
 
