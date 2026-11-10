@@ -1,0 +1,115 @@
+The Darwin 26 MAC hook mpo_vnode_notify_end_rename_swap (mac_policy_ops slot 55, mpo_reserved16 in xnu-12377).
+macOS 27's Sandbox locks the labels of both vnodes in its begin_rename_swap hook (slot 58, will_rename_swap here) and
+unlocks them in end_rename_swap. xnu-12377 never called slot 55, so renamex_np(RENAME_SWAP) (launchd's dirs_cleaner
+boot task) returned to user space holding both label locks and the kernel panicked. The end hook now runs once vn_rename
+returns, whatever its result.
+--- a/security/mac_policy.h
++++ b/security/mac_policy.h
+@@ -5656,6 +5656,26 @@
+  *  the rename operation itself.
+  */
+ typedef void mpo_vnode_notify_will_rename_swap_t(
++	kauth_cred_t cred,
++	struct vnode *v1,
++	struct label *vl1,
++	struct vnode *v2,
++	struct label *vl2
++	);
++
++/**
++ *  @brief Notify that a swap rename has finished
++ *  @param cred User credential for the renaming process
++ *  @param v1 vnode 1 of the swap
++ *  @param vl1 label of vnode 1
++ *  @param v2 vnode 2 of the swap
++ *  @param vl2 label of vnode 2
++ *
++ *  The Darwin 26 hook that closes mpo_vnode_notify_will_rename_swap (begin_rename_swap there), called once the
++ *  rename returns, whether it succeeded or not. macOS 27's Sandbox holds the labels of both vnodes from the
++ *  begin hook to this one.
++ */
++typedef void mpo_vnode_notify_end_rename_swap_t(
+ 	kauth_cred_t cred,
+ 	struct vnode *v1,
+ 	struct label *vl1,
+@@ -6074,7 +6094,7 @@
+ 	mpo_reserved_hook_t                     *mpo_reserved13;
+ 	mpo_reserved_hook_t                     *mpo_reserved14;
+ 	mpo_reserved_hook_t                     *mpo_reserved15;
+-	mpo_reserved_hook_t                     *mpo_reserved16;
++	mpo_vnode_notify_end_rename_swap_t      *mpo_vnode_notify_end_rename_swap;
+ 	mpo_reserved_hook_t                     *mpo_reserved17;
+ 	mpo_reserved_hook_t                     *mpo_reserved18;
+ 	mpo_vnode_notify_will_rename_swap_t     *mpo_vnode_notify_will_rename_swap;
+--- a/security/mac_framework.h
++++ b/security/mac_framework.h
+@@ -576,6 +576,8 @@
+     struct vnode *fdvp, struct componentname *fcnp, struct vnode *tvp,
+     struct vnode *tdvp, struct componentname *tcnp);
+ void    mac_vnode_notify_will_rename_swap(vfs_context_t ctx,
++    struct vnode *fvp, struct vnode *tvp);
++void    mac_vnode_notify_end_rename_swap(vfs_context_t ctx,
+     struct vnode *fvp, struct vnode *tvp);
+ void    mac_vnode_notify_setacl(vfs_context_t ctx, struct vnode *vp, struct kauth_acl *acl);
+ void    mac_vnode_notify_setattrlist(vfs_context_t ctx, struct vnode *vp, struct attrlist *alist);
+--- a/security/mac_vfs.c
++++ b/security/mac_vfs.c
+@@ -2929,7 +2929,32 @@
+ 	VFS_KERNEL_DEBUG_END1(109, fvp);
+ }
+ 
++/*
++ * Pairs with mac_vnode_notify_will_rename_swap, under the same enforcement checks, so a policy that took state in the
++ * will hook gets the end hook too.
++ */
+ void
++mac_vnode_notify_end_rename_swap(vfs_context_t ctx,
++    struct vnode *fvp, struct vnode *tvp)
++{
++	kauth_cred_t cred;
++
++#if SECURITY_MAC_CHECK_ENFORCE
++	/* 21167099 - only check if we allow write */
++	if (!mac_vnode_enforce) {
++		return;
++	}
++#endif
++	cred = vfs_context_ucred(ctx);
++	if (!mac_cred_check_enforce(cred)) {
++		return;
++	}
++
++	MAC_PERFORM(vnode_notify_end_rename_swap, cred,
++	    fvp, mac_vnode_label(fvp), tvp, mac_vnode_label(tvp));
++}
++
++void
+ mac_vnode_notify_rename_swap(vfs_context_t ctx, struct vnode *fdvp,
+     struct vnode *fvp, struct componentname *fcnp, struct vnode *tdvp,
+     struct vnode *tvp, struct componentname *tcnp)
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -10133,6 +10133,12 @@
+ 	error = vn_rename(fdvp, &fvp, &fromnd->ni_cnd, fvap,
+ 	    tdvp, &tvp, &tond->ni_cnd, tvap,
+ 	    flags, ctx);
++
++#if CONFIG_MACF
++	if (ISSET(flags, VFS_RENAME_SWAP)) {
++		mac_vnode_notify_end_rename_swap(ctx, fvp, tvp);
++	}
++#endif
+ 
+ 	if (locked_vp) {
+ 		vnode_link_unlock(fvp);
+--- a/bsd/kern/policy_check.c
++++ b/bsd/kern/policy_check.c
+@@ -191,7 +191,7 @@
+ 	.mpo_reserved13 = (mpo_reserved_hook_t *)common_hook,
+ 	.mpo_reserved14 = (mpo_reserved_hook_t *)common_hook,
+ 	.mpo_reserved15 = (mpo_reserved_hook_t *)common_hook,
+-	.mpo_reserved16 = (mpo_reserved_hook_t *)common_hook,
++	CHECK_SET_HOOK(vnode_notify_end_rename_swap)
+ 	.mpo_reserved17 = (mpo_reserved_hook_t *)common_hook,
+ 	.mpo_reserved18 = (mpo_reserved_hook_t *)common_hook,
+ 	CHECK_SET_HOOK(vnode_notify_will_rename_swap)
