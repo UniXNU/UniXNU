@@ -1,0 +1,1032 @@
+Signatures with 16 KiB hash pages on the 4 KiB kernel, authenticated at first use: boot argument cs-lazy=1.
+
+Without the argument nothing changes: an image is read to its code limit when its signature is added and the
+table of 4 KiB hashes is made then. With it, adding a signature reads nothing. An original 16 KiB block is
+authenticated when one of its 4 KiB pages is first validated: its pages are paged in one after the other and
+copied into a private buffer, the buffer is hashed and compared with the block's slot of the code directory, and
+only on a match the hashes of its 4 KiB parts, made from that same buffer, are recorded. A page is validated
+against its recorded hash as before, so nothing is accepted that the signed 16 KiB hash does not cover. The
+argument is read once at boot, so a blob is of one form for its life; a blob whose hash is longer than 32 bytes
+keeps the eager form.
+
+A block has one of three answers. Ready: its derived hashes are recorded, written once and final. Bad: its
+buffer did not match the signed hash; its pages are answered tainted, unless another thread's buffer matched
+and made it ready. No answer yet: a validation answers "not validated, not tainted", as for a page without a
+hash, which accepts nothing and marks no page, so the page is validated again on its next use.
+
+The VM asks before it validates (vm_fault_cs_lazy_pending, object locked): vm_fault_page, when it has found
+the page and before it takes it, drops the page, the locks and the top page, keeps the object and its pager
+with a reference and a paging reference, authenticates and returns VM_FAULT_RETRY, which covers the slow path,
+the copies inside vm_fault_page, vm_object_copy_slowly and the source pages and peeks of every pager; the fast
+path of vm_fault leaves such a page to the slow path; vm_fault_wire_fast returns KERN_FAILURE so that vm_fault
+takes it; the Mach-O loader authenticates the header blocks before it checks them. vm_fault_enter, should it
+still meet such a block, enters nothing and returns KERN_ABORTED. The low-memory substitution of the I/O page
+list copies an unvalidated page into the same signed object, where the copy is validated when it is mapped.
+A block that cannot be read fails the fault with KERN_MEMORY_ERROR and leaves no answer.
+
+The pages of a block are fetched through vm_fault_page from the vnode's VM object (vm_fault_cs_lazy_fetch), one
+at a time, with no VM lock and no busy page held by the authentication, never through VNOP_READ.
+
+The answers live in chunks of 127 blocks (16 KiB per 1.98 MiB of file) that are allocated at the first
+authentication in them and found through a table of chunk pointers. Table and chunks are mapped read-only
+before they can be reached and are written through the physical aperture, as the read-only zone allocator
+writes its elements on a kernel without a monitor; the table pointer is a field of the blob in that zone.
+
+Instead of the refusal of a whole image at load: the structural checks are unchanged, an image shorter than its
+code limit is refused, and a block that differs from its signed hash is found when it is first used.
+
+sysctl vm.cs_native4k_stats gains: lazy <0|1> blobs, auth (blocks authenticated), bad, err, ms, "retry" per
+site (page, fast, wire, load, enter) and "unready" (validations that met a block without an answer: total, map,
+pager, reval, range), which must stay 0.
+
+Has not run on hardware.
+--- a/bsd/kern/mach_loader.c
++++ b/bsd/kern/mach_loader.c
+@@ -1795,6 +1795,15 @@
+ 						printf("validating initial pages of %s\n", vp->v_name);
+ 					}
+ 
++					/*
++					 * cs-lazy=1: nothing was read when the signature was added, so the 16 KiB blocks of these
++					 * pages are authenticated here, where paging the file in is allowed. A block that cannot
++					 * be read leaves its pages not validated, a block that differs from its signed hash
++					 * taints them, and both fail below as before.
++					 */
++					(void)cs_native4k_lazy_authenticate(vp, (memory_object_offset_t)file_offset, alloc_size,
++					    CS_LAZY_SITE_LOADER);
++
+ 					while (off < alloc_size && ret == LOAD_SUCCESS) {
+ 						tainted = CS_VALIDATE_TAINTED;
+ 
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -109,6 +109,8 @@
+ static int cs_native4k_prepare(vnode_t vp, struct cs_blob *blob);
+ static int cs_native4k_prepare_measured(vnode_t vp, struct cs_blob *blob, bool image_activation);
+ static void cs_native4k_forget(struct cs_blob *blob);
++static int cs_native4k_lazy_prepare(vnode_t vp, struct cs_blob *blob);
++static void cs_native4k_lazy_free(struct cs_blob *blob);
+ #endif
+ 
+ ZONE_DEFINE_TYPE(ubc_info_zone, "ubc_info zone", struct ubc_info,
+@@ -3965,6 +3967,11 @@
+ static void
+ cs_blob_cleanup(struct cs_blob *blob)
+ {
++#if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
++	if (blob->csb_native4k_lazy != NULL) {
++		cs_native4k_lazy_free(blob);
++	}
++#endif
+ 	if (blob->csb_native4k_hashes != NULL) {
+ #if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
+ 		cs_native4k_forget(blob);
+@@ -6101,6 +6108,9 @@
+  * blobs): a kernel that authenticated a block when one of its pages is first validated would have read and hashed only
+  * these. The table numbers are the wired bytes of derived hashes held now and at most. Nothing here changes what is read,
+  * accepted or refused.
++ * With cs-lazy=1 (below) a blob is counted in its class with its code limit and the time of its set-up only; the read
++ * and hash times, the bytes and the blocks hashed then are those of the blocks authenticated at their first use, and the
++ * table numbers are the tables of chunk pointers and the chunks allocated so far.
+  */
+ struct cs_native4k_class {
+ 	uint64_t        blobs;
+@@ -6135,10 +6145,13 @@
+ 	}
+ 
+ 	const uint64_t start = mach_absolute_time();
+-	const int error = cs_native4k_prepare(vp, blob);
++	int error = cs_native4k_lazy ? cs_native4k_lazy_prepare(vp, blob) : 0;
++	if (error == 0 && blob->csb_native4k_lazy == NULL) {
++		error = cs_native4k_prepare(vp, blob);
++	}
+ 	const uint64_t ticks = mach_absolute_time() - start;
+ 
+-	if (error != 0 || blob->csb_native4k_hashes == NULL) {
++	if (error != 0 || (blob->csb_native4k_hashes == NULL && blob->csb_native4k_lazy == NULL)) {
+ 		os_atomic_inc(&cs_native4k_refused_blobs, relaxed);
+ 		return error;
+ 	}
+@@ -6150,6 +6163,7 @@
+ 	os_atomic_add(&counts->bytes, bytes, relaxed);
+ 	os_atomic_add(&counts->ticks, ticks, relaxed);
+ 
++	/* A lazy blob has no such table; its own were counted when they were made. */
+ 	const unsigned long table_bytes =
+ 	    os_atomic_add(&cs_native4k_table_bytes, (unsigned long)blob->csb_native4k_hashes_size, relaxed);
+ 	if (table_bytes > os_atomic_load(&cs_native4k_table_bytes_peak, relaxed)) {
+@@ -6207,9 +6221,404 @@
+ }
+ 
+ /*
++ * The lazy form, boot argument cs-lazy=1 (fixed at boot, so a blob is of one form for its life). Adding a signature
++ * reads nothing. An original 16 KiB block is authenticated when one of its 4 KiB pages is first validated: its pages are
++ * paged in one after the other and copied into a private buffer, the buffer is hashed and compared with the block's
++ * slot of the code directory, and only on a match the hashes of its 4 KiB parts, made from that same buffer, are
++ * recorded and the block becomes ready. A page is then validated against its recorded hash, as in the eager form, so
++ * no byte is accepted that the signed 16 KiB hash does not cover: any buffer that matches the signed hash holds the
++ * signed bytes, whatever the file did meanwhile and however many threads authenticate the block at once. A block whose
++ * buffer does not match becomes bad, and its pages are answered tainted, unless another thread's buffer made it ready.
++ * A block that is neither is answered "not validated, not tainted", the answer for a page without a hash: nothing
++ * accepts the page, no page is marked, and the VM, which asks cs_native4k_lazy_pending before each validation,
++ * authenticates and comes back.
++ *
++ * The states and the derived hashes live in chunks of 127 blocks (four pages for 1.98 MiB of the file), allocated when
++ * a block of theirs is first authenticated and found through a table of chunk pointers. Table and chunks are mapped
++ * read-only before they can be reached, as the eager table is, and are written through the physical aperture, the way
++ * the read-only zone allocator writes its elements on a kernel without a monitor (pmap_ro_zone_memcpy). The pointer to
++ * the table is a field of the blob, which is in that read-only zone.
++ *
++ * Instead of the eager form's refusal of a whole image at load: the structural checks are the same, an image shorter
++ * than its code limit is refused, and a block that does not match its signed hash is found when it is first used and
++ * taints its pages, which is what a kernel with native 16 KiB pages does page by page.
++ */
++#define CS_LAZY_BLOCK           16384
++#define CS_LAZY_SLOT            32      /* bytes kept per derived hash; a larger hash keeps the blob eager */
++#define CS_LAZY_CHUNK_BLOCKS    127
++#define CS_LAZY_CHUNK_SIZE      16384
++#define CS_LAZY_UNKNOWN         0
++#define CS_LAZY_READY           1
++#define CS_LAZY_BAD             2
++/* The answer of cs_validate_hash for a block that is not authenticated, kept inside this file. */
++#define CS_VALIDATE_UNREADY     0x80000000
++
++struct cs_native4k_lazy_chunk {
++	_Atomic uint8_t state[CS_LAZY_CHUNK_BLOCKS + 1];
++	uint8_t         hash[CS_LAZY_CHUNK_BLOCKS][CS_LAZY_BLOCK / 4096][CS_LAZY_SLOT];
++};
++_Static_assert(sizeof(struct cs_native4k_lazy_chunk) == CS_LAZY_CHUNK_SIZE, "a chunk is four pages");
++
++struct cs_native4k_lazy {
++	vm_size_t       allocation;     /* bytes of this table */
++	uint32_t        blocks;         /* original blocks up to the code limit */
++	uint32_t        chunks;
++	struct cs_native4k_lazy_chunk *_Atomic chunk[];
++};
++
++TUNABLE(uint32_t, cs_native4k_lazy, "cs-lazy", 0);
++unsigned long cs_native4k_lazy_blobs = 0;       /* blobs added in the lazy form */
++unsigned long cs_native4k_lazy_blocks = 0;      /* blocks authenticated, ready */
++unsigned long cs_native4k_lazy_bad = 0;         /* blocks that did not match their signed hash */
++unsigned long cs_native4k_lazy_errors = 0;      /* authentications that could not read or allocate */
++unsigned long cs_native4k_lazy_unready = 0;     /* validations answered "not authenticated" */
++uint64_t cs_native4k_lazy_ticks = 0;            /* inside the authentications */
++unsigned long cs_native4k_lazy_counts[CS_LAZY_COUNTERS];
++/* Held only to record an answer, never across a read. */
++static LCK_MTX_DECLARE(cs_native4k_lazy_lock, &cs_native4k_lck_grp);
++
++void
++cs_native4k_lazy_count(unsigned int counter)
++{
++	if (counter < CS_LAZY_COUNTERS) {
++		os_atomic_inc(&cs_native4k_lazy_counts[counter], relaxed);
++	}
++}
++
++static void
++cs_native4k_lazy_wired(unsigned long bytes)
++{
++	const unsigned long table_bytes = os_atomic_add(&cs_native4k_table_bytes, bytes, relaxed);
++	if (table_bytes > os_atomic_load(&cs_native4k_table_bytes_peak, relaxed)) {
++		os_atomic_store(&cs_native4k_table_bytes_peak, table_bytes, relaxed);
++	}
++}
++
++/* Through the writable address of each page (vm_fault_cs_lazy_alias: the physical aperture). */
++static void
++cs_native4k_lazy_write(const void *address, const void *data, size_t length)
++{
++	const uint8_t *to = address, *from = data;
++
++	while (length != 0) {
++		const size_t part = MIN(length, (size_t)PAGE_SIZE - ((uintptr_t)to & PAGE_MASK));
++		memcpy(vm_fault_cs_lazy_alias(to), from, part);
++		to += part;
++		from += part;
++		length -= part;
++	}
++}
++
++static int
++cs_native4k_lazy_prepare(vnode_t vp, struct cs_blob *blob)
++{
++	const CS_CodeDirectory *cd = blob->csb_cd;
++	const struct cs_hash *md = blob->csb_hashtype;
++	vm_offset_t storage = 0;
++	vm_size_t allocation;
++	uint64_t limit;
++	off_t end, size = 0;
++	int error;
++
++	/* What cs_native4k_prepare requires of a signature. */
++	if (PAGE_SHIFT != 12 || blob->csb_hash_pageshift != 14 || cd == NULL || md == NULL ||
++	    md->cs_size == 0 || md->cs_size > CS_HASH_MAX_SIZE ||
++	    md->cs_digest_size > CS_HASH_MAX_SIZE || blob->csb_base_offset < 0 ||
++	    (blob->csb_base_offset & PAGE_MASK) || blob->csb_hash_firstlevel_pageshift ||
++	    ((ntohl(cd->version) >= CS_SUPPORTSSCATTER) && ntohl(cd->scatterOffset))) {
++		return ENOTSUP;
++	}
++	limit = ntohl(cd->codeLimit);
++	if (!limit || ((ntohl(cd->version) >= CS_SUPPORTSCODELIMIT64) &&
++	    ntohll(cd->codeLimit64) && ntohll(cd->codeLimit64) != limit) ||
++	    ntohl(cd->nCodeSlots) != ((limit + 16383) >> 14)) {
++		return ENOTSUP;
++	}
++	if (md->cs_size > CS_LAZY_SLOT) {
++		/* No slot holds this hash: the caller makes the eager table. */
++		return 0;
++	}
++	/* The eager read fails on an image that ends before its code limit. */
++	error = vnode_size(vp, &size, vfs_context_current());
++	if (error != 0) {
++		return error;
++	}
++	if (os_add_overflow(blob->csb_base_offset, (off_t)limit, &end) || end > size) {
++		return EIO;
++	}
++
++	const uint32_t blocks = (uint32_t)((limit + CS_LAZY_BLOCK - 1) / CS_LAZY_BLOCK);
++	const uint32_t chunks = (blocks + CS_LAZY_CHUNK_BLOCKS - 1) / CS_LAZY_CHUNK_BLOCKS;
++	allocation = round_page(sizeof(struct cs_native4k_lazy) + (vm_size_t)chunks * sizeof(struct cs_native4k_lazy_chunk *));
++	if (kmem_alloc(kernel_map, &storage, allocation, KMA_KOBJECT | KMA_ZERO, VM_KERN_MEMORY_SECURITY) != KERN_SUCCESS) {
++		return ENOMEM;
++	}
++	struct cs_native4k_lazy *lazy = (struct cs_native4k_lazy *)storage;
++	lazy->allocation = allocation;
++	lazy->blocks = blocks;
++	lazy->chunks = chunks;
++	if (mach_vm_protect(kernel_map, storage, allocation, FALSE, VM_PROT_READ) != KERN_SUCCESS) {
++		kmem_free(kernel_map, storage, allocation);
++		return EPERM;
++	}
++	cs_native4k_lazy_wired((unsigned long)allocation);
++	blob->csb_native4k_lazy = lazy;
++	blob->csb_native4k_hash_count = (vm_size_t)((limit + PAGE_MASK) >> PAGE_SHIFT);
++	os_atomic_inc(&cs_native4k_lazy_blobs, relaxed);
++	return 0;
++}
++
++/* The blob is being freed and nothing can validate against it any more. */
++static void
++cs_native4k_lazy_free(struct cs_blob *blob)
++{
++	struct cs_native4k_lazy *lazy = blob->csb_native4k_lazy;
++	unsigned long bytes = (unsigned long)lazy->allocation;
++
++	for (uint32_t i = 0; i < lazy->chunks; i++) {
++		struct cs_native4k_lazy_chunk *chunk = os_atomic_load(&lazy->chunk[i], relaxed);
++		if (chunk != NULL) {
++			kmem_free(kernel_map, (vm_offset_t)chunk, CS_LAZY_CHUNK_SIZE);
++			bytes += CS_LAZY_CHUNK_SIZE;
++		}
++	}
++	kmem_free(kernel_map, (vm_offset_t)lazy, lazy->allocation);
++	os_atomic_sub(&cs_native4k_table_bytes, bytes, relaxed);
++	os_atomic_inc(&cs_native4k_released_blobs, relaxed);
++	if (blob->csb_native4k_touched != NULL) {
++		kfree_data(blob->csb_native4k_touched,
++		    cs_native4k_touched_words(blob->csb_native4k_hash_count) * sizeof(uint32_t));
++		blob->csb_native4k_touched = NULL;
++	}
++	blob->csb_native4k_lazy = NULL;
++	blob->csb_native4k_hash_count = 0;
++}
++
++/* The chunk of a block; with create, a new one is put in the table when there is none (NULL when there is no memory). */
++static struct cs_native4k_lazy_chunk *
++cs_native4k_lazy_chunk(const struct cs_native4k_lazy *lazy, uint32_t block, bool create)
++{
++	const uint32_t index = block / CS_LAZY_CHUNK_BLOCKS;
++	struct cs_native4k_lazy_chunk *chunk = os_atomic_load(&lazy->chunk[index], acquire);
++	vm_offset_t storage = 0;
++
++	if (chunk != NULL || !create) {
++		return chunk;
++	}
++	if (kmem_alloc(kernel_map, &storage, CS_LAZY_CHUNK_SIZE, KMA_KOBJECT | KMA_DATA | KMA_ZERO,
++	    VM_KERN_MEMORY_SECURITY) != KERN_SUCCESS) {
++		return NULL;
++	}
++	if (mach_vm_protect(kernel_map, storage, CS_LAZY_CHUNK_SIZE, FALSE, VM_PROT_READ) != KERN_SUCCESS) {
++		kmem_free(kernel_map, storage, CS_LAZY_CHUNK_SIZE);
++		return NULL;
++	}
++	struct cs_native4k_lazy_chunk *_Atomic *slot = vm_fault_cs_lazy_alias(&lazy->chunk[index]);
++	if (os_atomic_cmpxchgv(slot, NULL, (struct cs_native4k_lazy_chunk *)storage, &chunk, release)) {
++		cs_native4k_lazy_wired(CS_LAZY_CHUNK_SIZE);
++		return (struct cs_native4k_lazy_chunk *)storage;
++	}
++	/* Another thread's chunk is in the table. */
++	kmem_free(kernel_map, storage, CS_LAZY_CHUNK_SIZE);
++	return chunk;
++}
++
++static uint8_t
++cs_native4k_lazy_state(const struct cs_native4k_lazy *lazy, uint32_t block)
++{
++	const struct cs_native4k_lazy_chunk *chunk = cs_native4k_lazy_chunk(lazy, block, false);
++
++	return chunk == NULL ? CS_LAZY_UNKNOWN : os_atomic_load(&chunk->state[block % CS_LAZY_CHUNK_BLOCKS], acquire);
++}
++
++/*
++ * Records the answer for a block: ready with its derived hashes, or bad. Ready is final and its hashes are written once,
++ * before the state; bad gives way to ready (another thread's buffer matched) and never replaces it.
++ */
++static void
++cs_native4k_lazy_record(struct cs_native4k_lazy_chunk *chunk, uint32_t block, const void *derived)
++{
++	const uint32_t at = block % CS_LAZY_CHUNK_BLOCKS;
++	_Atomic uint8_t *state = vm_fault_cs_lazy_alias(&chunk->state[at]);
++
++	lck_mtx_lock(&cs_native4k_lazy_lock);
++	const uint8_t now = os_atomic_load(state, relaxed);
++	if (now != CS_LAZY_READY && derived != NULL) {
++		cs_native4k_lazy_write(chunk->hash[at], derived, sizeof(chunk->hash[at]));
++		os_atomic_store(state, CS_LAZY_READY, release);
++		os_atomic_inc(&cs_native4k_lazy_blocks, relaxed);
++		os_atomic_inc(&cs_native4k_full_blocks, relaxed);
++	} else if (now == CS_LAZY_UNKNOWN) {
++		os_atomic_store(state, CS_LAZY_BAD, release);
++		os_atomic_inc(&cs_native4k_lazy_bad, relaxed);
++		os_atomic_inc(&cs_validate_page_bad_hash, relaxed);
++	}
++	lck_mtx_unlock(&cs_native4k_lazy_lock);
++}
++
++/*
++ * The blob that validates this page of the file, when it is a lazy one and the page has a derived hash; the choice of
++ * the blob is that of cs_validate_hash.
++ */
++static const struct cs_blob *
++cs_native4k_lazy_find(struct vnode *vp, memory_object_offset_t page_offset, uint32_t *block)
++{
++	if (!cs_native4k_lazy || vp == NULL) {
++		return NULL;
++	}
++	for (const struct cs_blob *blob = ubc_get_cs_blobs(vp); blob != NULL; blob = blob->csb_next) {
++		const off_t offset = (off_t)page_offset - blob->csb_base_offset;
++		if (offset < blob->csb_start_offset || offset >= blob->csb_end_offset ||
++		    blob->csb_mem_kaddr == NULL || blob->csb_cd == NULL) {
++			continue;
++		}
++		const struct cs_native4k_lazy *lazy = blob->csb_native4k_lazy;
++		if (lazy == NULL || blob->csb_hash_pageshift != 14 || (offset & PAGE_MASK) ||
++		    offset >= (off_t)ntohl(blob->csb_cd->codeLimit) || (uint64_t)offset / CS_LAZY_BLOCK >= lazy->blocks) {
++			return NULL;
++		}
++		*block = (uint32_t)((uint64_t)offset / CS_LAZY_BLOCK);
++		return blob;
++	}
++	return NULL;
++}
++
++boolean_t
++cs_native4k_lazy_pending(struct vnode *vp, memory_object_offset_t page_offset)
++{
++	uint32_t block = 0;
++	const struct cs_blob *blob = cs_native4k_lazy_find(vp, page_offset, &block);
++
++	return blob != NULL && cs_native4k_lazy_state(blob->csb_native4k_lazy, block) == CS_LAZY_UNKNOWN;
++}
++
++/* Authenticates one block that has no answer yet. */
++static kern_return_t
++cs_native4k_lazy_block(struct vnode *vp, const struct cs_blob *blob, uint32_t block)
++{
++	const struct cs_native4k_lazy *lazy = blob->csb_native4k_lazy;
++	const CS_CodeDirectory *cd = blob->csb_cd;
++	const struct cs_hash *md = blob->csb_hashtype;
++	const uint64_t start = (uint64_t)block * CS_LAZY_BLOCK;
++	const size_t length = (size_t)MIN((uint64_t)CS_LAZY_BLOCK, (uint64_t)ntohl(cd->codeLimit) - start);
++	const memory_object_offset_t position = (memory_object_offset_t)blob->csb_base_offset + start;
++	const memory_object_control_t control = ubc_getobject(vp, UBC_FLAGS_NONE);
++	const uint64_t read_start = mach_absolute_time();
++	uint8_t derived[CS_LAZY_BLOCK / 4096][CS_LAZY_SLOT];
++	uint8_t digest[CS_HASH_MAX_SIZE];
++	union cs_hash_union ctx;
++	kern_return_t kr = KERN_SUCCESS;
++	uint8_t *buffer;
++
++	if (control == MEMORY_OBJECT_CONTROL_NULL) {
++		return KERN_MEMORY_ERROR;
++	}
++	buffer = kalloc_data(CS_LAZY_BLOCK, Z_WAITOK);
++	if (buffer == NULL) {
++		return KERN_RESOURCE_SHORTAGE;
++	}
++	/* One page at a time: no page is held busy while the next one is paged in. */
++	for (size_t sub = 0; sub < length && kr == KERN_SUCCESS; sub += PAGE_SIZE) {
++		kr = vm_fault_cs_lazy_fetch(control, position + sub, position, position + CS_LAZY_BLOCK, buffer + sub);
++	}
++	const uint64_t hash_start = mach_absolute_time();
++	os_atomic_add(&cs_native4k_read_ticks, hash_start - read_start, relaxed);
++	if (kr == KERN_SUCCESS) {
++		const char *lower = blob->csb_mem_kaddr;
++		const uint8_t *expected = hashes(cd, block, md->cs_size, lower, lower + blob->csb_mem_size);
++		bool matches = false;
++
++		os_atomic_add(&cs_native4k_bytes, (uint64_t)length, relaxed);
++		if (expected != NULL) {
++			md->cs_init(&ctx);
++			md->cs_update(&ctx, buffer, length);
++			md->cs_final(digest, &ctx);
++			matches = bcmp(expected, digest, md->cs_size) == 0;
++		}
++		if (matches) {
++			bzero(derived, sizeof(derived));
++			for (size_t sub = 0; sub < length; sub += PAGE_SIZE) {
++				md->cs_init(&ctx);
++				md->cs_update(&ctx, buffer + sub, MIN((size_t)PAGE_SIZE, length - sub));
++				md->cs_final(digest, &ctx);
++				memcpy(derived[sub >> PAGE_SHIFT], digest, md->cs_size);
++			}
++		}
++		struct cs_native4k_lazy_chunk *chunk = cs_native4k_lazy_chunk(lazy, block, true);
++		if (chunk == NULL) {
++			kr = KERN_RESOURCE_SHORTAGE;
++		} else {
++			cs_native4k_lazy_record(chunk, block, matches ? derived : NULL);
++		}
++	}
++	if (kr != KERN_SUCCESS) {
++		os_atomic_inc(&cs_native4k_lazy_errors, relaxed);
++	}
++	const uint64_t end = mach_absolute_time();
++	os_atomic_add(&cs_native4k_hash_ticks, end - hash_start, relaxed);
++	os_atomic_add(&cs_native4k_lazy_ticks, end - read_start, relaxed);
++	kfree_data(buffer, CS_LAZY_BLOCK);
++	return kr;
++}
++
++kern_return_t
++cs_native4k_lazy_authenticate(struct vnode *vp, memory_object_offset_t offset, vm_size_t length, unsigned int site)
++{
++	const memory_object_offset_t end = offset + length;
++
++	for (memory_object_offset_t page = offset & ~(memory_object_offset_t)PAGE_MASK; page < end; page += PAGE_SIZE) {
++		uint32_t block = 0;
++		const struct cs_blob *blob = cs_native4k_lazy_find(vp, page, &block);
++
++		if (blob == NULL || cs_native4k_lazy_state(blob->csb_native4k_lazy, block) != CS_LAZY_UNKNOWN) {
++			continue;
++		}
++		cs_native4k_lazy_count(site);
++		const kern_return_t kr = cs_native4k_lazy_block(vp, blob, block);
++		if (kr != KERN_SUCCESS) {
++			return kr;
++		}
++	}
++	return KERN_SUCCESS;
++}
++
++/*
++ * The derived hash of a page of a lazy blob for cs_validate_hash, or NULL with the answer: CS_VALIDATE_UNREADY for a
++ * block that is not authenticated, CS_VALIDATE_TAINTED for a bad block and for a page that has no derived hash.
++ */
++static const unsigned char *
++cs_native4k_lazy_hash(const struct cs_blob *blob, off_t offset, off_t limit, size_t hash_size, unsigned *answer)
++{
++	const struct cs_native4k_lazy *lazy = blob->csb_native4k_lazy;
++	const uint64_t block = (uint64_t)offset / CS_LAZY_BLOCK;
++
++	*answer = CS_VALIDATE_TAINTED;
++	if (offset < 0 || (offset & PAGE_MASK) || offset >= limit || block >= lazy->blocks || hash_size > CS_LAZY_SLOT) {
++		return NULL;
++	}
++	const struct cs_native4k_lazy_chunk *chunk = cs_native4k_lazy_chunk(lazy, (uint32_t)block, false);
++	const uint8_t state =
++	    chunk == NULL ? CS_LAZY_UNKNOWN : os_atomic_load(&chunk->state[block % CS_LAZY_CHUNK_BLOCKS], acquire);
++	if (state == CS_LAZY_READY) {
++		return chunk->hash[block % CS_LAZY_CHUNK_BLOCKS][((uint64_t)offset % CS_LAZY_BLOCK) >> PAGE_SHIFT];
++	}
++	if (state == CS_LAZY_UNKNOWN) {
++		*answer = CS_VALIDATE_UNREADY;
++		os_atomic_inc(&cs_native4k_lazy_unready, relaxed);
++	}
++	return NULL;
++}
++
++/*
+  * The counters as one line: per class blobs/size/ms, then the ms inside the reads and inside the hashing, the 16 KiB
+  * blocks hashed and the ones touched (of those, in class 2 blobs), the page validations served from derived hashes, the
+- * wired KiB of derived hashes now and at most, the blobs released and refused, and the longest prepare.
++ * wired KiB of derived hashes now and at most, the blobs released and refused, and the longest prepare. Then the lazy
++ * form: whether it is on, its blobs, the blocks authenticated at first use, the bad ones, the authentications that
++ * failed to read or allocate and the ms inside all of them; "retry" is what each site did with a page whose block was
++ * not authenticated (page: vm_fault_page authenticated and the fault started again; fast: the fast path of vm_fault left
++ * it to the slow path; wire: vm_fault_wire_fast left it to vm_fault; load: header blocks at image activation; enter:
++ * vm_fault_enter gave the fault back); "unready" is the validations that met such a block all the same, in total and
++ * for entering or copying a page, a pager's source page, a text revalidation and cs_validate_range. These must be 0.
+  */
+ size_t cs_native4k_stats_text(char *text, size_t size);
+ size_t
+@@ -6230,7 +6639,7 @@
+ 		strlcpy(longest_name, cs_native4k_longest_name, sizeof(longest_name));
+ 		lck_mtx_unlock(&cs_native4k_longest_lock);
+ 	}
+-	return (size_t)scnprintf(text, size,
++	const size_t length = (size_t)scnprintf(text, size,
+ 	           "exec %llu/%lluK/%llums lib %llu/%lluK/%llums large %llu/%lluM/%llums read %llums hash %llums "
+ 	           "blocks %lu touched %lu large %lu checks %lu table %luK peak %luK released %lu refused %lu "
+ 	           "longest %llums %lluK %s",
+@@ -6249,19 +6658,58 @@
+ 	           os_atomic_load(&cs_native4k_released_blobs, relaxed),
+ 	           os_atomic_load(&cs_native4k_refused_blobs, relaxed),
+ 	           longest_ns / NSEC_PER_MSEC, longest_bytes >> 10, longest_name);
++	uint64_t lazy_ns;
++	absolutetime_to_nanoseconds(os_atomic_load(&cs_native4k_lazy_ticks, relaxed), &lazy_ns);
++	return length + (size_t)scnprintf(text + length, size - length,
++	           " lazy %u blobs %lu auth %lu bad %lu err %lu %llums retry page %lu fast %lu wire %lu load %lu enter %lu "
++	           "unready %lu map %lu pager %lu reval %lu range %lu",
++	           cs_native4k_lazy, os_atomic_load(&cs_native4k_lazy_blobs, relaxed),
++	           os_atomic_load(&cs_native4k_lazy_blocks, relaxed), os_atomic_load(&cs_native4k_lazy_bad, relaxed),
++	           os_atomic_load(&cs_native4k_lazy_errors, relaxed), lazy_ns / NSEC_PER_MSEC,
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_SITE_FAULT_PAGE], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_SITE_FAULT_FAST], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_SITE_WIRE_FAST], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_SITE_LOADER], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_SITE_ENTER], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_unready, relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_MAP], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_PAGER], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_REVALIDATE], relaxed),
++	           os_atomic_load(&cs_native4k_lazy_counts[CS_LAZY_MISS_RANGE], relaxed));
+ }
+ 
+ static int
+ sysctl_cs_native4k_stats SYSCTL_HANDLER_ARGS
+ {
+ #pragma unused(oidp, arg1, arg2)
+-	char text[512];
++	char text[800];
+ 
+ 	(void)cs_native4k_stats_text(text, sizeof(text));
+ 	return SYSCTL_OUT(req, text, strlen(text) + 1);
+ }
+ SYSCTL_PROC(_vm, OID_AUTO, cs_native4k_stats, CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_LOCKED,
+     0, 0, sysctl_cs_native4k_stats, "A", "Cost of code signatures with 16 KiB hash pages on 4 KiB pages");
++#else
++/* No signatures with 16 KiB hash pages on this kernel: nothing is ever pending. */
++uint32_t cs_native4k_lazy = 0;
++
++boolean_t
++cs_native4k_lazy_pending(__unused struct vnode *vp, __unused memory_object_offset_t page_offset)
++{
++	return FALSE;
++}
++
++kern_return_t
++cs_native4k_lazy_authenticate(__unused struct vnode *vp, __unused memory_object_offset_t offset, __unused vm_size_t length,
++    __unused unsigned int site)
++{
++	return KERN_SUCCESS;
++}
++
++void
++cs_native4k_lazy_count(__unused unsigned int counter)
++{
++}
+ #endif
+ static boolean_t
+ cs_validate_hash(
+@@ -6338,7 +6786,16 @@
+ 					*tainted = CS_VALIDATE_NX;
+ 					return TRUE;
+ 				}
+-				if ((offset & PAGE_MASK) || offset >= codeLimit ||
++				if (blob->csb_native4k_lazy != NULL) {
++					/* cs-lazy=1: the hash derived when the page's block was authenticated, or no answer yet. */
++					unsigned answer = CS_VALIDATE_TAINTED;
++					hash = cs_native4k_lazy_hash(blob, offset, codeLimit, hashtype->cs_size, &answer);
++					if (hash == NULL) {
++						*bytes_processed = PAGE_SIZE;
++						*tainted = answer;
++						return FALSE;
++					}
++				} else if ((offset & PAGE_MASK) || offset >= codeLimit ||
+ 				    blob->csb_native4k_hashes == NULL ||
+ 				    index >= blob->csb_native4k_hash_count ||
+ 				    hashtype->cs_size > blob->csb_native4k_hashes_size ||
+@@ -6346,8 +6803,9 @@
+ 					*bytes_processed = PAGE_SIZE;
+ 					*tainted = CS_VALIDATE_TAINTED;
+ 					return FALSE;
++				} else {
++					hash = blob->csb_native4k_hashes + index * hashtype->cs_size;
+ 				}
+-				hash = blob->csb_native4k_hashes + index * hashtype->cs_size;
+ 				native4k_cached = TRUE;
+ 				os_atomic_inc(&cs_native4k_page_checks, relaxed);
+ 				cs_native4k_touch(blob, index, codeLimit > CS_NATIVE4K_UNCACHED);
+@@ -6680,6 +7138,13 @@
+ 		    &bytes_processed,
+ 		    &subrange_tainted);
+ 
++#if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
++		if (subrange_tainted & CS_VALIDATE_UNREADY) {
++			/* cs-lazy=1: the block was not authenticated; the range is not validated and not tainted. */
++			cs_native4k_lazy_count(CS_LAZY_MISS_RANGE);
++			subrange_tainted &= ~CS_VALIDATE_UNREADY;
++		}
++#endif
+ 		*tainted |= subrange_tainted;
+ 
+ 		if (bytes_processed == 0) {
+--- a/bsd/sys/ubc_internal.h
++++ b/bsd/sys/ubc_internal.h
+@@ -171,6 +171,9 @@
+ 	vm_size_t       csb_native4k_hash_count;
+ 	/* Which original 16K blocks had a page validated, one bit each; a measurement, never read to decide anything. */
+ 	uint32_t        *csb_native4k_touched;
++	/* Boot argument cs-lazy=1: the states and derived hashes of the original 16K blocks, each filled when one of its
++	 * pages is first validated. NULL for a blob whose derived hashes were all made when it was added. */
++	struct cs_native4k_lazy *csb_native4k_lazy;
+ };
+ 
+ /*
+--- a/osfmk/vm/vm_fault.c
++++ b/osfmk/vm/vm_fault.c
+@@ -104,6 +104,7 @@
+ #include <vm/vm_protos_internal.h>
+ #include <vm/vm_external.h>
+ #include <vm/memory_object.h>
++#include <vm/memory_object_internal.h>
+ #include <vm/vm_purgeable_internal.h>   /* Needed by some vm_page.h macros */
+ #include <vm/vm_shared_region.h>
+ #if __arm64__
+@@ -428,7 +429,146 @@
+ 	}
+ 	if (token.thread != THREAD_NULL) {
+ 		thread_priority_floor_end(&token);
++	}
++}
++
++/*
++ * Signatures with 16 KiB hash pages on this kernel's 4 KiB pages, boot argument cs-lazy=1 (bsd/kern/ubc_subr.c): the
++ * 16 KiB block of a page of a signed file is authenticated when one of its pages is first validated, and that pages
++ * the block in. The validations run with the object locked and often the page busy, so each path that leads to one
++ * asks here first, with the page's object locked (shared is enough): true means that this page would be hashed and
++ * that its block has no answer yet. vm_fault_page then drops everything, authenticates and has the fault start again;
++ * the paths that find their page without it go to a path that does (the fast path of vm_fault to the slow path,
++ * vm_fault_wire_fast to vm_fault). A validation that meets such a block all the same accepts nothing and marks nothing:
++ * the page stays "not validated, not tainted" and is validated on its next use.
++ */
++static bool
++vm_fault_cs_lazy_pending(
++	vm_object_t     object,
++	vm_page_t       m)
++{
++	struct vnode    *vnode;
++
++	if (__probable(!cs_native4k_lazy) || !object->code_signed) {
++		return false;
++	}
++	/* What vm_page_validate_cs_fast answers without a hash. */
++	if (m->vmp_wpmapped || m->vmp_cs_validated == VMP_CS_ALL_TRUE || m->vmp_cs_tainted != VMP_CS_ALL_FALSE ||
++	    object->internal || !object->alive || object->terminating ||
++	    object->pager == MEMORY_OBJECT_NULL || !object->pager_ready) {
++		return false;
++	}
++	vnode = vnode_pager_lookup_vnode(object->pager);
++	return vnode != NULL && cs_native4k_lazy_pending(vnode, m->vmp_offset + object->paging_offset);
++}
++
++/*
++ * The recorded answers of the authentications (states and derived hashes) are wired kernel memory that is mapped
++ * read-only before anything can reach it. They are written through the physical aperture, as the elements of the
++ * read-only zones are on a kernel without a monitor (pmap_ro_zone_memcpy): this is the address there of a byte of them.
++ */
++void *
++vm_fault_cs_lazy_alias(
++	const void      *address)
++{
++#if __arm64__
++	const pmap_paddr_t pa = kvtophys((vm_offset_t)address);
++
++	if (pa == 0) {
++		panic("%s: %p is not mapped", __func__, address);
++	}
++	return (void *)phystokv(pa);
++#else
++	panic("%s: %p: no signatures with 16 KiB hash pages here", __func__, address);
++#endif
++}
++
++/*
++ * One page of a signed file for the authentication of its 16 KiB block (cs_native4k_lazy_authenticate): the page at
++ * this offset of the file is paged in through vm_fault_page, as a pager's source page is, and copied out. The caller
++ * holds no VM lock and no busy page, and only this one page is held busy here, for the copy: a file system that pages
++ * in whole blocks waits for the busy pages around the one it reads, and must never wait for one of this thread's.
++ * The page is not validated: the block's hash decides about the copies.
++ */
++kern_return_t
++vm_fault_cs_lazy_fetch(
++	memory_object_control_t control,
++	memory_object_offset_t  page_offset,
++	memory_object_offset_t  cluster_start,
++	memory_object_offset_t  cluster_end,
++	void                    *buffer)
++{
++	vm_object_t             object = memory_object_control_to_vm_object(control);
++	struct vm_object_fault_info fault_info = {
++		.interruptible = THREAD_UNINT,
++		.behavior = VM_BEHAVIOR_DEFAULT,
++		.stealth = TRUE,
++		.fi_cs_lazy_fetch = TRUE,
++	};
++	vm_page_t               page, top_page;
++	vm_object_t             page_object;
++	vm_prot_t               prot;
++	kern_return_t           error_code;
++	vm_fault_return_t       vmfr;
++
++	if (object == VM_OBJECT_NULL) {
++		return KERN_MEMORY_ERROR;
++	}
++retry:
++	vm_page_grab_prime();
++	vm_object_lock(object);
++	if (!object->alive || object->terminating || object->pager == MEMORY_OBJECT_NULL || !object->pager_ready ||
++	    page_offset < object->paging_offset || cluster_start < object->paging_offset) {
++		vm_object_unlock(object);
++		return KERN_MEMORY_ERROR;
++	}
++	vm_object_paging_begin(object);
++	/* The read around the page stays inside its block. */
++	fault_info.lo_offset = cluster_start - object->paging_offset;
++	fault_info.hi_offset = cluster_end - object->paging_offset;
++	error_code = 0;
++	prot = VM_PROT_READ;
++	page = VM_PAGE_NULL;
++	top_page = VM_PAGE_NULL;
++	vmfr = vm_fault_page(object, page_offset - object->paging_offset, VM_PROT_READ, FALSE, FALSE, &prot, &page,
++	    &top_page, NULL, &error_code, FALSE, &fault_info, NULL);
++	switch (vmfr) {
++	case VM_FAULT_SUCCESS:
++		break;
++	case VM_FAULT_RETRY:
++		goto retry;
++	case VM_FAULT_MEMORY_SHORTAGE:
++		if (vm_page_wait(THREAD_UNINT)) {
++			goto retry;
++		}
++		return KERN_RESOURCE_SHORTAGE;
++	case VM_FAULT_SUCCESS_NO_VM_PAGE:
++		vm_object_paging_end(object);
++		vm_object_unlock(object);
++		return KERN_MEMORY_ERROR;
++	default:
++		return KERN_MEMORY_ERROR;
+ 	}
++	page_object = VM_PAGE_OBJECT(page);
++	bcopy((const void *)phystokv((pmap_paddr_t)VM_PAGE_GET_PHYS_PAGE(page) << PAGE_SHIFT), buffer, PAGE_SIZE);
++	if (page->vmp_q_state != VM_PAGE_ON_SPECULATIVE_Q) {
++		/* As a pager does with its source page: a page left on no queue is never reclaimed. */
++		vm_page_lockspin_queues();
++		if (page->vmp_q_state != VM_PAGE_ON_SPECULATIVE_Q) {
++			vm_page_speculate(page, FALSE);
++		}
++		vm_page_unlock_queues();
++	}
++	vm_page_wakeup_done(page_object, page);
++	vm_object_paging_end(page_object);
++	vm_object_unlock(page_object);
++	if (top_page != VM_PAGE_NULL) {
++		vm_object_lock(object);
++		VM_PAGE_FREE(top_page);
++		vm_object_paging_end(object);
++		vm_object_unlock(object);
++	}
++	return KERN_SUCCESS;
+ }
+ 
+ #define ALIGNED(x) (((x) & (PAGE_SIZE_64 - 1)) == 0)
+@@ -1565,6 +1705,44 @@
+ 					return VM_FAULT_RETRY;
+ 				}
+ 			}
++			if (!must_be_resident && !fault_info->fi_cs_lazy_fetch &&
++			    __improbable(vm_fault_cs_lazy_pending(object, m))) {
++				/*
++				 * CODE SIGNING, cs-lazy=1:
++				 * Whoever gets this page will validate it, with the object locked, and its
++				 * 16 KiB block has not been authenticated. Do that now, where nothing is
++				 * held: give up the page, the locks and the top page, keep the object and
++				 * its pager (and with the pager the vnode's signatures) with a reference
++				 * and a paging reference, page the block in and start the fault again. The
++				 * block then has an answer, so this is not taken a second time for it. A
++				 * block that cannot be read fails the fault.
++				 */
++				struct vnode *cs_vnode = vnode_pager_lookup_vnode(object->pager);
++				const memory_object_offset_t cs_offset = m->vmp_offset + object->paging_offset;
++				kern_return_t cs_kr;
++
++				vm_object_reference_locked(object);
++				vm_object_paging_begin(object);
++				vm_fault_cleanup(object, first_m);
++				thread_interrupt_level(interruptible_state);
++
++				cs_kr = cs_native4k_lazy_authenticate(cs_vnode, cs_offset, PAGE_SIZE, CS_LAZY_SITE_FAULT_PAGE);
++
++				vm_object_lock(object);
++				vm_object_paging_end(object);
++				vm_object_unlock(object);
++				vm_object_deallocate(object);
++				if (cs_kr == KERN_SUCCESS) {
++					return VM_FAULT_RETRY;
++				}
++				if (cs_kr == KERN_RESOURCE_SHORTAGE) {
++					return VM_FAULT_MEMORY_SHORTAGE;
++				}
++				if (error_code) {
++					*error_code = KERN_MEMORY_ERROR;
++				}
++				return VM_FAULT_MEMORY_ERROR;
++			}
+ 			if (type_of_fault == NULL && (m->vmp_q_state == VM_PAGE_ON_SPECULATIVE_Q) &&
+ 			    !(fault_info != NULL && fault_info->stealth)) {
+ 				/*
+@@ -2836,6 +3014,16 @@
+ #else /* CODE_SIGNING_MONITOR */
+ 		vm_page_validate_cs(m, fault_page_size, fault_phys_offset);
+ #endif /* CODE_SIGNING_MONITOR */
++
++		if (__improbable(vm_fault_cs_lazy_pending(VM_PAGE_OBJECT(m), m))) {
++			/*
++			 * cs-lazy=1: the page's 16 KiB block was not authenticated, so the validation gave no
++			 * answer. The paths of vm_fault see to it before they get here; for any other, nothing is
++			 * entered and the fault is given back the way an interrupted one is, to be taken again.
++			 */
++			cs_native4k_lazy_count(CS_LAZY_SITE_ENTER);
++			return KERN_ABORTED;
++		}
+ 	}
+ 
+ 	/* If the map is switched, and is switch-protected, we must protect
+@@ -5418,6 +5606,16 @@
+ 				goto done;
+ 			}
+ 			assert(m_object == VM_PAGE_OBJECT(m));
++
++			if (__improbable(vm_fault_cs_lazy_pending(m_object, m))) {
++				/*
++				 * cs-lazy=1: the page's 16 KiB block is not authenticated and that needs
++				 * to page in... let the slow path deal with it: vm_fault_page authenticates
++				 * and the fault starts again.
++				 */
++				cs_native4k_lazy_count(CS_LAZY_SITE_FAULT_FAST);
++				break;
++			}
+ 
+ 			if (vm_fault_cs_need_validation(map->pmap, m, m_object,
+ 			    PAGE_SIZE, 0) ||
+@@ -7963,6 +8161,14 @@
+ 		kr = KERN_SUCCESS;
+ 		goto done;
+ 	}
++	if (__improbable(vm_fault_cs_lazy_pending(object, m))) {
++		/*
++		 * cs-lazy=1: the page's 16 KiB block is not authenticated; give up, vm_fault does it.
++		 */
++		cs_native4k_lazy_count(CS_LAZY_SITE_WIRE_FAST);
++		kr = KERN_FAILURE;
++		goto unlock_and_deallocate;
++	}
+ 
+ 	/*
+ 	 * The page must already be wired
+@@ -8904,10 +9110,11 @@
+ 	return FALSE;
+ }
+ 
+-void
+-vm_page_validate_cs_mapped_slow(
++static void
++vm_page_validate_cs_mapped_slow_site(
+ 	vm_page_t       page,
+-	const void      *kaddr)
++	const void      *kaddr,
++	unsigned int    cs_lazy_miss)
+ {
+ 	vm_object_t             object;
+ 	memory_object_offset_t  mo_offset;
+@@ -8952,6 +9159,12 @@
+ 	page->vmp_cs_tainted |= tainted;
+ 	page->vmp_cs_nx |= nx;
+ 
++	if (__improbable(cs_native4k_lazy != 0) && validated == VMP_CS_ALL_FALSE && tainted == VMP_CS_ALL_FALSE &&
++	    cs_native4k_lazy_pending(vnode, mo_offset)) {
++		/* The page's 16 KiB block was not authenticated: no answer, and whoever led here is counted. */
++		cs_native4k_lazy_count(cs_lazy_miss);
++	}
++
+ #if __arm64__
+ 	/* Boot-argument fixups of signed text land after validation, through the physical aperture, before any mapping. */
+ 	if (validated == VMP_CS_ALL_TRUE && tainted == VMP_CS_ALL_FALSE &&
+@@ -8977,6 +9190,14 @@
+ }
+ 
+ void
++vm_page_validate_cs_mapped_slow(
++	vm_page_t       page,
++	const void      *kaddr)
++{
++	vm_page_validate_cs_mapped_slow_site(page, kaddr, CS_LAZY_MISS_PAGER);
++}
++
++void
+ vm_page_validate_cs_mapped(
+ 	vm_page_t       page,
+ 	vm_map_size_t   fault_page_size,
+@@ -8991,7 +9212,8 @@
+ static void
+ vm_page_map_and_validate_cs(
+ 	vm_object_t     object,
+-	vm_page_t       page)
++	vm_page_t       page,
++	unsigned int    cs_lazy_miss)
+ {
+ 	vm_object_offset_t      offset;
+ 	vm_map_offset_t         koffset;
+@@ -9037,7 +9259,7 @@
+ 	kaddr = CAST_DOWN(vm_offset_t, koffset);
+ 
+ 	/* validate the mapped page */
+-	vm_page_validate_cs_mapped_slow(page, (const void *) kaddr);
++	vm_page_validate_cs_mapped_slow_site(page, (const void *) kaddr, cs_lazy_miss);
+ 
+ 	assert(page->vmp_busy);
+ 	assert(object == VM_PAGE_OBJECT(page));
+@@ -9070,7 +9292,7 @@
+ 	if (vm_page_validate_cs_fast(page, fault_page_size, fault_phys_offset)) {
+ 		return;
+ 	}
+-	vm_page_map_and_validate_cs(object, page);
++	vm_page_map_and_validate_cs(object, page, CS_LAZY_MISS_MAP);
+ }
+ 
+ void
+@@ -9645,7 +9867,7 @@
+ 	/*
+ 	 * Check the code signature of the page in question.
+ 	 */
+-	vm_page_map_and_validate_cs(object, page);
++	vm_page_map_and_validate_cs(object, page, CS_LAZY_MISS_REVALIDATE);
+ 
+ 	/*
+ 	 * At this point:
+--- a/osfmk/vm/vm_object_xnu.h
++++ b/osfmk/vm/vm_object_xnu.h
+@@ -123,7 +123,8 @@
+ 	/* boolean_t */ fi_used_for_tpro:1,
+ 	/* boolean_t */ fi_change_wiring:1,
+ 	/* boolean_t */ fi_no_sleep:1,
+-	    __vm_object_fault_info_unused_bits:19;
++	/* boolean_t */ fi_cs_lazy_fetch:1,     /* vm_fault_cs_lazy_fetch: the page is wanted to authenticate its block */
++	    __vm_object_fault_info_unused_bits:18;
+ 	int             pmap_options;
+ };
+ 
+--- a/osfmk/vm/vm_protos.h
++++ b/osfmk/vm/vm_protos.h
+@@ -286,6 +286,39 @@
+     vm_size_t size,
+     unsigned *result);
+ extern uint32_t cs_text_fixup_page(struct vnode *vp, memory_object_offset_t page_offset, void *kva);
++
++/*
++ * Signatures with 16 KiB hash pages on 4 KiB pages, boot argument cs-lazy=1 (bsd/kern/ubc_subr.c): an original 16 KiB
++ * block is authenticated against the code directory when one of its pages is first validated. cs_native4k_lazy_pending
++ * says that the block of this page of the file has not been authenticated yet (any lock that keeps the vnode's
++ * signatures, such as the lock of its VM object, is enough; it never sleeps). cs_native4k_lazy_authenticate does it for
++ * the blocks of a range of the file: it pages the blocks in, so the caller holds no VM lock and no busy page, and keeps
++ * the vnode's signatures alive (a paging reference on its VM object, or a reference on the vnode). It returns
++ * KERN_SUCCESS when every block now has an answer, right or wrong, KERN_RESOURCE_SHORTAGE to wait for memory and try
++ * again, anything else when a block could not be read. vm_fault_cs_lazy_fetch (osfmk/vm/vm_fault.c) copies one page of
++ * the vnode's VM object out for it; cluster_start and cluster_end bound the read around it. vm_fault_cs_lazy_alias is
++ * the writable address, valid to the end of its page, of a byte of the recorded answers, which are mapped read-only.
++ */
++enum {
++	CS_LAZY_SITE_FAULT_PAGE,        /* vm_fault_page authenticated, the fault starts again */
++	CS_LAZY_SITE_FAULT_FAST,        /* the fast path of vm_fault left the page to the slow path */
++	CS_LAZY_SITE_WIRE_FAST,         /* vm_fault_wire_fast left the page to vm_fault */
++	CS_LAZY_SITE_LOADER,            /* the Mach-O header blocks at image activation */
++	CS_LAZY_SITE_ENTER,             /* vm_fault_enter met an unauthenticated block after all and gave the fault back */
++	CS_LAZY_MISS_MAP,               /* a validation met an unauthenticated block: entering or copying a page */
++	CS_LAZY_MISS_PAGER,             /* the same in a pager's validation of a source page */
++	CS_LAZY_MISS_REVALIDATE,        /* the same in the revalidation of a text page */
++	CS_LAZY_MISS_RANGE,             /* the same in cs_validate_range */
++	CS_LAZY_COUNTERS
++};
++extern uint32_t cs_native4k_lazy;
++extern boolean_t cs_native4k_lazy_pending(struct vnode *vp, memory_object_offset_t page_offset);
++extern kern_return_t cs_native4k_lazy_authenticate(struct vnode *vp, memory_object_offset_t offset, vm_size_t length,
++    unsigned int site);
++extern void cs_native4k_lazy_count(unsigned int counter);
++extern kern_return_t vm_fault_cs_lazy_fetch(memory_object_control_t control, memory_object_offset_t page_offset,
++    memory_object_offset_t cluster_start, memory_object_offset_t cluster_end, void *buffer);
++extern void *vm_fault_cs_lazy_alias(const void *address);
+ extern void cs_validate_page(
+ 	struct vnode *vp,
+ 	memory_object_t pager,
