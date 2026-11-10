@@ -25,7 +25,7 @@
 | 🔊 Audio | Speaker works (ringtones, system sounds); no microphones, earpiece not used | ⚠️ |
 | 🛜 WiFi | 2.4 GHz, open + WPA2-PSK, legacy rates | ⚠️ |
 | 🦷 Bluetooth | QCA6390 over UART (921600 baud): scan, connect and pair in Settings, Control Center button, off / on (slow); see the tests below | ⚠️ |
-| 📶 Cellular Data | The X55 modem boots from the kernel and stays registered on LTE with the SIM (kernels 0272-0273); the status bar shows the carrier (Sunrise) with signal bars through sweet-telephonyd, the CommCenter stand-in. No mobile data yet; calls and SMS are not planned | ⚠️ |
+| 📶 Cellular Data | The X55 modem boots from the kernel and stays registered on LTE with the SIM (kernels 0272-0273); the status bar shows the carrier (Sunrise) with signal bars through sweet-telephonyd, the CommCenter stand-in. Mobile data: the modem opens a data session (IPv4 address, DNS; kernel 0275), packets not carried yet; calls and SMS are not planned | ⚠️ |
 | 📍 Location | Works through Wi-Fi positioning (Weather shows the city, Maps asks for permission) | ✅ |
 | 🛰️ GPS | No GPS receiver driver yet; location comes from Wi-Fi | ❌ |
 | 🪵 USB | Device mode (USB Ethernet + kernel log) for development; no host / iTunes | ⚠️ |

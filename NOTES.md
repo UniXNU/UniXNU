@@ -2,6 +2,21 @@
 
 ## umi (Xiaomi Mi 10, SM8250) port - branch `umi` on qcom-toolbox/ios-sweet (2026-10-20)
 
+- **2026-11-10 23:00: MOBILE DATA STAGE A - Sunrise gives an IPv4 data session** (patch
+  `xnu/patches/0275-umi-x55-data-session.patch`, kernel 7104ab7; image `shim/out/umi-0275-data-session.img` = 0273b's
+  line with `sweetmdm=10` (= service mode 9 + data; a separate boot-arg did not fit: 613 > 607 characters); no ADT
+  baseband node). Order and values from the OnePlus 8 Pro port's notes (same X55): WDA Set Data Format 0x20 (0x11 raw
+  IP, 0x12 / 0x13 QMAP, 0x15 4 datagrams, 0x16 0x1c00, 0x17 endpoint PCIe 3 / interface 4 = IP_HW0) -> WDS Bind Mux
+  Data Port 0xa2 (same endpoint, mux 1) -> Set IP Family 0x4d (4) -> Start Network Interface 0x20 (0x19 = 4, default
+  profile, no APN) -> Get Current Settings 0x2d (mask 0xa310). **All result 0 first time**, handle in the answer; a WDS
+  packet service status indication (0x22) followed. Settings: IPv4 /30 (private, carrier NAT), gateway the other
+  address of the /30, two DNS servers, MTU 1410 (addresses only in the log / `kern.sweet_cell_data`, not here).
+  No packets yet: next stage B = MHI channels 100 / 101 (event rings 7 / 8, burst mode 3; our MHI has only rings 0 / 1,
+  so NER and the ring contexts grow), QMAP framing (4-byte header: pad, mux, big-endian length); stage C = a network
+  interface for iOS.
+  - **The 2-frame screen loop is the GPU, not the node or the modem:** on 0275 (no node) it came back, and this boot's
+    `SWEET ADRENO` lines show fences timing out (63-77 per 10 s, submitted > completed) where good boots show 0. It
+    happens on some boots only (0274 boot 1: yes; 0273b: no; 0275: yes) - left to the GPU work.
 - **2026-11-10 22:55: STATUS BAR SHOWS "Sunrise" WITH 3 STABLE BARS (no SOS)** (kernel unchanged, image
   `shim/out/umi-0273b-x55service-gpu.img`; sweet-telephonyd ec488b6 + this commit; MobileGestalt cache rebuilt).
   - SOS decoding (SystemStatusServer, in SpringBoard): `_shouldShowEmergencyOnlyStatus...` = hasCellularTelephony &&
