@@ -1,0 +1,122 @@
+IOKit: report when no mapping of a physical descriptor's pages is left
+
+A driver that hands physical pages to user tasks through an IOGeneralMemoryDescriptor of physical ranges
+cannot tell from the descriptor's free whether its pages are still mapped: a task can copy its IOKit mapping
+in the VM, and the copy refers to the device pager's VM object, not to the descriptor.
+iokit_physical_descriptor_close_notify registers a handler that runs once, when the device pager closes
+(IOKit released the descriptor and the VM reported the object's last unmap), or at the free of a descriptor
+that never made a pager.
+
+--- a/iokit/Kernel/IOKitKernelInternal.h
++++ b/iokit/Kernel/IOKitKernelInternal.h
+@@ -162,6 +162,10 @@
+ 	unsigned int             pagerContig:1;
+ 	unsigned int             unused:31;
+ 	IOMemoryDescriptor * memory;
++	/* iokit_physical_descriptor_close_notify: runs once no mapping of the descriptor's pages can exist (device_close, or the
++	 * descriptor's free when it never had a device pager). */
++	void                      (*closeHandler)(void *);
++	void *                       closeContext;
+ };
+ 
+ struct IOMemoryDescriptorReserved {
+--- a/iokit/Kernel/IOMemoryDescriptor.cpp
++++ b/iokit/Kernel/IOMemoryDescriptor.cpp
+@@ -247,12 +247,72 @@
+ 	uintptr_t     device_handle)
+ {
+ 	IOMemoryDescriptorReserved * ref = (IOMemoryDescriptorReserved *) device_handle;
++	void                      (*closeHandler)(void *) = ref->dp.closeHandler;
++	void *                       closeContext = ref->dp.closeContext;
+ 
+ 	IOFreeType( ref, IOMemoryDescriptorReserved );
+ 
++	/*
++	 * The pager closes when its references are down to the one its VM object holds: IOKit released its own with the
++	 * descriptor, and the VM called memory_object_last_unmap, which it does only once the object's references are down to
++	 * the named one (no map entry, memory entry or copy object refers to it). No mapping of the pages can exist or be made.
++	 */
++	if (closeHandler) {
++		closeHandler(closeContext);
++	}
++
+ 	return kIOReturnSuccess;
+ }
+ };      // end extern "C"
++
++/*
++ * iokit_physical_descriptor_close_notify
++ *
++ * For a driver that hands the pages of an IOGeneralMemoryDescriptor of physical ranges to user tasks and reuses them later:
++ * handler(context) runs exactly once, when no mapping of those pages exists or can be made any more. A task can copy its
++ * IOKit mapping in the VM (mach_vm_remap, a memory entry made from it, a copy-on-write copy in a message); every such copy
++ * refers to the device pager's VM object, not to the descriptor, so the descriptor's free does not mean the pages are unmapped.
++ * The device pager closes (device_close) only when IOKit has released its reference with the descriptor and the VM has told
++ * the pager that the object's last mapping is gone (memory_object_last_unmap, called when the object's references are down
++ * to the named one): the handler runs there. A descriptor that never made a device pager was never mapped, and its handler
++ * runs at its free.
++ *
++ * The descriptor must be of type kIOMemoryTypePhysical or kIOMemoryTypePhysical64, not mapped yet, without a handler, and is
++ * not re-initialized afterwards (initWithOptions refuses). The handler runs from the descriptor's free or from the VM's
++ * teardown of a mapping, without the VM object's lock but possibly under gIOMemoryLock: it must not block on a lock held
++ * across a mapping or an unmapping, and must not map or unmap memory itself.
++ */
++extern "C" kern_return_t
++iokit_physical_descriptor_close_notify(IOMemoryDescriptor * md, void (*handler)(void *), void * context);
++
++extern "C" kern_return_t
++iokit_physical_descriptor_close_notify(IOMemoryDescriptor * md, void (*handler)(void *), void * context)
++{
++	IOGeneralMemoryDescriptor * gmd = OSDynamicCast(IOGeneralMemoryDescriptor, md);
++	IOOptionBits                type;
++	kern_return_t               kr;
++
++	if (!gmd || !handler) {
++		return KERN_INVALID_ARGUMENT;
++	}
++	type = (IOOptionBits) (gmd->getFlags() & kIOMemoryTypeMask);
++	if ((kIOMemoryTypePhysical != type) && (kIOMemoryTypePhysical64 != type)) {
++		return KERN_INVALID_ARGUMENT;
++	}
++	LOCK;
++	IOMemoryDescriptorReserved * ref = gmd->getKernelReserved();
++	if (!ref) {
++		kr = KERN_RESOURCE_SHORTAGE;
++	} else if (ref->dp.devicePager || ref->dp.closeHandler) {
++		kr = KERN_FAILURE;      // mapped already, or a handler is set
++	} else {
++		ref->dp.closeContext = context;
++		ref->dp.closeHandler = handler;
++		kr = KERN_SUCCESS;
++	}
++	UNLOCK;
++	return kr;
++}
+ 
+ /* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * */
+ 
+@@ -2170,6 +2230,10 @@
+ 		 * An existing memory descriptor is being retargeted to point to
+ 		 * somewhere else.  Clean up our present state.
+ 		 */
++		if (reserved && reserved->dp.closeHandler) {
++			// Its handler stands for the pages it describes now (iokit_physical_descriptor_close_notify).
++			return false;
++		}
+ 		IOOptionBits type = _flags & kIOMemoryTypeMask;
+ 		if ((kIOMemoryTypePhysical != type) && (kIOMemoryTypePhysical64 != type)) {
+ 			while (_wireCount) {
+@@ -2530,7 +2594,13 @@
+ 			// (IOMemoryDescriptorReserved) so no reserved access after this point
+ 			device_pager_deallocate((memory_object_t) reserved->dp.devicePager );
+ 		} else {
++			// Never mapped: no device pager, so nothing but this descriptor ever named the pages.
++			void (*closeHandler)(void *) = reserved->dp.closeHandler;
++			void * closeContext = reserved->dp.closeContext;
+ 			IOFreeType(reserved, IOMemoryDescriptorReserved);
++			if (closeHandler) {
++				closeHandler(closeContext);
++			}
+ 		}
+ 		reserved = NULL;
+ 	}
