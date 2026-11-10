@@ -1,0 +1,422 @@
+The macOS 27 kernel interfaces the macOS kexts bind to and xnu-12377 lacks, each as the macOS 27.3
+kernel (26C5035r) behaves where this kernel has the equivalent:
+- set_/match_compilation_service_cdhash_with_length, unrestrict_local_signing_cdhash_with_length:
+  the iPadOS 27 *_ext calls under their macOS names (the same 64-byte cdhash with its length).
+- cluster_update_range_with_callback: cluster_update_range under its macOS name.
+- vfs_context_is_strict_content_protection: the 0x8000 I/O policy bit, never set here.
+- vnodeop_desc_name: the descriptor's name.
+- task_get_sanitizer_config: 0; spawn does not take a sanitizer configuration on this kernel.
+- ifnet_enable_synchronous_input: input keeps the input thread; no state to set.
+- image4_v2_set_nonce_digest, _roll_nonce, _load_diavlo_root_ca, _load_local_policy: monitor
+  commands; with no code signing monitor they fail as the macOS kernel does when the monitor call
+  fails (3 for a NULL argument, 0xffff otherwise).
+- os_log_coprocessor_with_handle: the coprocessor message path without the per-coprocessor id.
+- os_metric_coprocessor: no metrics stream; the record is not logged.
+- IOService::CallPlatformFunction (DriverKit, declared as the 27.2 DriverKit SDK declares it, with
+  the SERIALIZABLE keyword): iig generates the stub, the dispatch and the call; the kernel
+  implementation answers unsupported (no user platform function handlers) and never forwards.
+diff --git a/bsd/kern/kern_codesigning.c b/bsd/kern/kern_codesigning.c
+index 2671137..5b22f66 100644
+--- a/bsd/kern/kern_codesigning.c
++++ b/bsd/kern/kern_codesigning.c
+@@ -970,6 +970,31 @@ unrestrict_local_signing_cdhash_ext(
+ 	}
+ }
+ 
++/*
++ * macOS 27 names these three calls *_with_length; they take the same 64-byte
++ * cdhash and its length (at +0x40) as the iPadOS 27 *_ext calls above.
++ */
++void
++set_compilation_service_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash)
++{
++	set_compilation_service_cdhash_ext(cdhash);
++}
++
++bool
++match_compilation_service_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash)
++{
++	return match_compilation_service_cdhash_ext(cdhash);
++}
++
++void
++unrestrict_local_signing_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash)
++{
++	unrestrict_local_signing_cdhash_ext(cdhash);
++}
++
+ kern_return_t
+ get_trust_level_kdp(
+ 	__unused pmap_t pmap,
+diff --git a/bsd/net/kpi_interface.c b/bsd/net/kpi_interface.c
+index bc7da6f..c86d954 100644
+--- a/bsd/net/kpi_interface.c
++++ b/bsd/net/kpi_interface.c
+@@ -706,6 +706,22 @@ ifnet_set_flags(ifnet_t interface, u_int16_t new_flags, u_int16_t mask)
+ 	return 0;
+ }
+ 
++/*
++ * macOS 27 lets a driver ask for synchronous input on an interface it has not
++ * attached yet. This kernel's input path has no synchronous mode: packets keep
++ * going through the input thread, so after the preconditions macOS checks the
++ * request needs no state.
++ */
++errno_t ifnet_enable_synchronous_input(ifnet_t interface);
++errno_t
++ifnet_enable_synchronous_input(ifnet_t interface)
++{
++	if (interface == NULL) {
++		return EINVAL;
++	}
++	return 0;
++}
++
+ u_int16_t
+ ifnet_flags(ifnet_t interface)
+ {
+diff --git a/bsd/sys/code_signing.h b/bsd/sys/code_signing.h
+index 908177d..6e8b834 100644
+--- a/bsd/sys/code_signing.h
++++ b/bsd/sys/code_signing.h
+@@ -402,6 +402,18 @@ void
+ unrestrict_local_signing_cdhash_ext(
+ 	const cs_cdhash_ext_t *cdhash);
+ 
++void
++set_compilation_service_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash);
++
++bool
++match_compilation_service_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash);
++
++void
++unrestrict_local_signing_cdhash_with_length(
++	const cs_cdhash_ext_t *cdhash);
++
+ /**
+  * The kernel or the monitor environments allocate some data which is used by AppleImage4
+  * for storing critical system information such as nonces. AppleImage4 uses this API to
+diff --git a/bsd/sys/ubc.h b/bsd/sys/ubc.h
+index 9da7573..8d75d1c 100644
+--- a/bsd/sys/ubc.h
++++ b/bsd/sys/ubc.h
+@@ -106,6 +106,8 @@ int UBCINFOEXISTS(const struct vnode *);
+ void    cluster_update_state(vnode_t, vm_object_offset_t, vm_object_offset_t, boolean_t);
+ int     cluster_update_range(vnode_t, off_t, off_t, off_t,
+     int (*)(vnode_t, off_t, off_t, off_t, off_t, off_t, void *), void *);
++int     cluster_update_range_with_callback(vnode_t, off_t, off_t, off_t,
++    int (*)(vnode_t, off_t, off_t, off_t, off_t, off_t, void *), void *);
+ 
+ int     advisory_read(vnode_t, off_t, off_t, int);
+ int     advisory_read_ext(vnode_t, off_t, off_t, int, int (*)(buf_t, void *), void *, int);
+diff --git a/bsd/vfs/kpi_vfs.c b/bsd/vfs/kpi_vfs.c
+index 0e222bf..cf3d39d 100644
+--- a/bsd/vfs/kpi_vfs.c
++++ b/bsd/vfs/kpi_vfs.c
+@@ -1466,6 +1466,23 @@ vfs_context_iopolicy_unassigned_0x8000(__unused vfs_context_t ctx)
+ 	return false;
+ }
+ 
++/*
++ * macOS 27's name of the same policy bit (0x8000 of p_vfs_iopolicy, strict
++ * content protection), which nothing in this kernel sets.
++ */
++boolean_t
++vfs_context_is_strict_content_protection(vfs_context_t ctx)
++{
++	return vfs_context_iopolicy_unassigned_0x8000(ctx);
++}
++
++/* The readable name of a vnode operation (vnodeop_desc.vdesc_name). */
++const char *
++vnodeop_desc_name(struct vnodeop_desc *desc)
++{
++	return desc ? desc->vdesc_name : NULL;
++}
++
+ /*
+  * vfs_context_proc
+  *
+diff --git a/bsd/vfs/vfs_cluster.c b/bsd/vfs/vfs_cluster.c
+index b83d31c..12f9d35 100644
+--- a/bsd/vfs/vfs_cluster.c
++++ b/bsd/vfs/vfs_cluster.c
+@@ -3941,6 +3941,14 @@ cluster_update_range(vnode_t vp, off_t offset, off_t length, off_t filesize,
+ 	return 0;
+ }
+ 
++/* macOS 27's name of cluster_update_range, with the same arguments and contract. */
++int
++cluster_update_range_with_callback(vnode_t vp, off_t offset, off_t length, off_t filesize,
++    int (*callback)(vnode_t, off_t, off_t, off_t, off_t, off_t, void *), void *callback_arg)
++{
++	return cluster_update_range(vp, offset, length, filesize, callback, callback_arg);
++}
++
+ 
+ static void
+ cluster_update_state_internal(vnode_t vp, struct cl_extent *cl, int flags, boolean_t defer_writes,
+diff --git a/config/BSDKernel.exports b/config/BSDKernel.exports
+index 6d16d33..ecdd33b 100644
+--- a/config/BSDKernel.exports
++++ b/config/BSDKernel.exports
+@@ -280,6 +280,7 @@ _ifnet_set_capabilities_supported
+ _ifnet_set_capabilities_enabled
+ _ifnet_set_eflags
+ _ifnet_set_flags
++_ifnet_enable_synchronous_input
+ _ifnet_set_hdrlen
+ _ifnet_set_link_mib_data
+ _ifnet_set_lladdr
+diff --git a/config/Libkern.exports b/config/Libkern.exports
+index f822678..5c046bd 100644
+--- a/config/Libkern.exports
++++ b/config/Libkern.exports
+@@ -713,6 +713,10 @@ _img4_interface_register
+ _image4_dlxk_link
+ _image4_dlxk_get
+ _image4_v2_interface_register
++_image4_v2_load_diavlo_root_ca
++_image4_v2_load_local_policy
++_image4_v2_roll_nonce
++_image4_v2_set_nonce_digest
+ _inet_ntop
+ _inflate
+ _inflateEnd
+@@ -786,6 +790,8 @@ _ml_get_interrupts_enabled
+ _ml_set_interrupts_enabled
+ _os_log_coprocessor
+ _os_log_coprocessor_register_with_type
++_os_log_coprocessor_with_handle
++_os_metric_coprocessor
+ _os_log_create
+ _os_log_debug_enabled
+ _os_log_info_enabled
+diff --git a/config/Private.exports b/config/Private.exports
+index 28e7500..b67174c 100644
+--- a/config/Private.exports
++++ b/config/Private.exports
+@@ -393,6 +393,9 @@ _csblob_get_addr
+ _csblob_get_base_offset
+ _csblob_get_cdhash
+ _csblob_get_cdhash_with_length
++_match_compilation_service_cdhash_with_length
++_set_compilation_service_cdhash_with_length
++_unrestrict_local_signing_cdhash_with_length
+ _csblob_get_code_directory
+ _csblob_get_entitlements
+ _csblob_get_der_entitlements
+@@ -1052,6 +1055,7 @@ _strnstr
+ _sysdiagnose_notify_user
+ _task_find_region_details
+ _task_get_platform_binary
++_task_get_sanitizer_config
+ _task_get_suspend_stats
+ _task_set_cs_auxiliary_info
+ _task_id_token_to_energy_id
+@@ -1134,6 +1138,8 @@ _vfs_context_is_dataless_manipulator
+ _vfs_context_skip_mtime_update
+ _vfs_context_allow_entitled_reserve_access
+ _vfs_context_ignores_content_protection
++_vfs_context_is_strict_content_protection
++_vnodeop_desc_name
+ _vfs_context_iopolicy_unassigned_0x8000
+ _vfs_setdevvp
+ _vfs_devvp
+@@ -1264,6 +1270,7 @@ _vnode_cleardirty
+ _vnode_clearfastdevicecandidate
+ _vnode_getname_printable
+ _cluster_update_range
++_cluster_update_range_with_callback
+ _vnode_getfromfd
+ _vnode_parent
+ _vnode_getparent_and_name
+diff --git a/iokit/DriverKit/IOService.iig b/iokit/DriverKit/IOService.iig
+index 4180871..86ac8f2 100644
+--- a/iokit/DriverKit/IOService.iig
++++ b/iokit/DriverKit/IOService.iig
+@@ -38,6 +38,7 @@
+ #include <DriverKit/OSObject.iig>
+ 
+ class IOMemoryDescriptor;
++class OSString;
+ class IOBufferMemoryDescriptor;
+ class IOUserClient;
+ class OSAction;
+@@ -591,6 +592,22 @@ public:
+ 	virtual kern_return_t
+ 	ReleasePMAssertion(uint64_t assertionID);
+ 
++   /*!
++    * @function CallPlatformFunction
++    * @abstract Calls the platform function with the given name.
++    * @param    functionName Name of the function to be called.
++    * @param    waitForFunction If <code>true</code>, <code>CallPlatformFunction</code> will not
++    *           return until the function has been called.
++    * @param    inParam Dictionary containing the input parameters.
++    * @param    outParam Pointer to a storage that will contain the output parameters.
++    * @result   An IOReturn code; <code>kIOReturnSuccess</code> if the function was successfully
++    *           executed, <code>kIOReturnUnsupported</code> if a service to execute the function
++    *           could not be found. Other return codes may be returned by the function.
++	*/
++	virtual kern_return_t
++	CallPlatformFunction(OSString * functionName, bool waitForFunction,
++		OSDictionary * inParam, OSDictionary ** outParam) LOCAL SERIALIZABLE;
++
+ private:
+ 	virtual void
+ 	Stop_async(
+diff --git a/iokit/DriverKit/OSObject.iig b/iokit/DriverKit/OSObject.iig
+index cb6b015..a2789a0 100644
+--- a/iokit/DriverKit/OSObject.iig
++++ b/iokit/DriverKit/OSObject.iig
+@@ -82,6 +82,7 @@ typedef OSObject * OSObjectPtr;
+ #define NATIVE					IIG_NATIVE
+ #define LOCAL					IIG_LOCAL
+ #define LOCALONLY				IIG_LOCALONLY
++#define SERIALIZABLE			IIG_SERIALIZABLE
+ #define REMOTE					IIG_REMOTE
+ #define LOCALHOST				IIG_LOCALHOST
+ #define INVOKEREPLY				IIG_INVOKEREPLY
+diff --git a/iokit/Kernel/IOUserServer.cpp b/iokit/Kernel/IOUserServer.cpp
+index 14d77fb..a7a37de 100644
+--- a/iokit/Kernel/IOUserServer.cpp
++++ b/iokit/Kernel/IOUserServer.cpp
+@@ -5639,6 +5639,22 @@ IOService::ReleasePMAssertion_Impl(uint64_t assertionID)
+ 	return reserved->uvars->userServer->serviceReleasePMAssertion(this, assertionID);
+ }
+ 
++/*
++ * A DriverKit call of a kernel platform function (macOS 27). A kernel service
++ * answers it through a user platform function handler it registers; this
++ * kernel registers none, so the call is unsupported, as for a service without
++ * a handler. Calls are not forwarded to other DriverKit processes.
++ */
++kern_return_t
++IOService::CallPlatformFunction_Impl(OSString * functionName, bool waitForFunction __unused,
++    OSDictionary * inParam __unused, OSDictionary ** outParam __unused)
++{
++	if (functionName == NULL) {
++		return kIOReturnBadArgument;
++	}
++	return kIOReturnUnsupported;
++}
++
+ void
+ IOUserServer::serverAck(void)
+ {
+diff --git a/libkern/image4/image4_v2.c b/libkern/image4/image4_v2.c
+index 5cf8959..caf158d 100644
+--- a/libkern/image4/image4_v2.c
++++ b/libkern/image4/image4_v2.c
+@@ -21,3 +21,47 @@ image4_v2_interface_register(const void *interface)
+ 	}
+ 	_image4_v2_interface = interface;
+ }
++
++/*
++ * macOS 27 nonce and policy calls. Each is a command to the code signing
++ * monitor; this kernel has none, so each fails as the macOS kernel does when
++ * the monitor call fails without a monitor error: 3 for a NULL argument (the
++ * policy loaders), 0xffff otherwise.
++ */
++#define IMAGE4_V2_INVALID 3
++#define IMAGE4_V2_MONITOR_FAILED 0xffff
++
++int image4_v2_set_nonce_digest(const void *domain, const void *digest, size_t length);
++int image4_v2_roll_nonce(const void *domain);
++int image4_v2_load_diavlo_root_ca(const void *a, size_t a_length, const void *b, size_t b_length);
++int image4_v2_load_local_policy(const void *policy, size_t length);
++
++int
++image4_v2_set_nonce_digest(__unused const void *domain, __unused const void *digest, __unused size_t length)
++{
++	return IMAGE4_V2_MONITOR_FAILED;
++}
++
++int
++image4_v2_roll_nonce(__unused const void *domain)
++{
++	return IMAGE4_V2_MONITOR_FAILED;
++}
++
++int
++image4_v2_load_diavlo_root_ca(const void *a, size_t a_length, const void *b, size_t b_length)
++{
++	if (a == NULL || a_length == 0 || b == NULL || b_length == 0) {
++		return IMAGE4_V2_INVALID;
++	}
++	return IMAGE4_V2_MONITOR_FAILED;
++}
++
++int
++image4_v2_load_local_policy(const void *policy, size_t length)
++{
++	if (policy == NULL || length == 0) {
++		return IMAGE4_V2_INVALID;
++	}
++	return IMAGE4_V2_MONITOR_FAILED;
++}
+diff --git a/libkern/os/log.c b/libkern/os/log.c
+index 419f656..2331b31 100644
+--- a/libkern/os/log.c
++++ b/libkern/os/log.c
+@@ -932,6 +932,35 @@ os_log_coprocessor(void *buff, uint64_t buff_len, os_log_type_t type,
+ 	return true;
+ }
+ 
++/*
++ * macOS 27: a coprocessor message through the handle its registration returned
++ * (the first 16 bits are the coprocessor's id). This kernel keeps one
++ * coprocessor message path, so the message goes the way os_log_coprocessor
++ * sends it, without the per-coprocessor id.
++ */
++bool os_log_coprocessor_with_handle(const uint16_t *handle, void *buff, uint64_t buff_len, os_log_type_t type,
++    const char *uuid, uint64_t timestamp, uint32_t offset, bool stream_log);
++bool
++os_log_coprocessor_with_handle(__unused const uint16_t *handle, void *buff, uint64_t buff_len, os_log_type_t type,
++    const char *uuid, uint64_t timestamp, uint32_t offset, bool stream_log)
++{
++	return os_log_coprocessor(buff, buff_len, type, uuid, timestamp, offset, stream_log);
++}
++
++/*
++ * macOS 27: a coprocessor metric record for the Darwin 26 metrics stream,
++ * which this kernel does not have. The record is not logged; the call returns
++ * false, as os_log_coprocessor does for a message it does not log.
++ */
++bool os_metric_coprocessor(const void *handle, const void *metric, const void *values, uint64_t a, uint64_t b,
++    uint64_t c, uint64_t d, uint64_t e);
++bool
++os_metric_coprocessor(__unused const void *handle, __unused const void *metric, __unused const void *values,
++    __unused uint64_t a, __unused uint64_t b, __unused uint64_t c, __unused uint64_t d, __unused uint64_t e)
++{
++	return false;
++}
++
+ static inline firehose_tracepoint_t
+ firehose_trace_start(const log_payload_s *lp, uint8_t **ft_priv_data)
+ {
+diff --git a/osfmk/kern/task.c b/osfmk/kern/task.c
+index bac41b9..4754f13 100644
+--- a/osfmk/kern/task.c
++++ b/osfmk/kern/task.c
+@@ -762,6 +762,13 @@ task_get_platform_binary(task_t task)
+ 	return (task_ro_flags_get(task) & TFRO_PLATFORM) != 0;
+ }
+ 
++uint8_t task_get_sanitizer_config(task_t task);
++uint8_t
++task_get_sanitizer_config(__unused task_t task)
++{
++	return 0;
++}
++
+ boolean_t
+ task_is_a_corpse(task_t task)
+ {
