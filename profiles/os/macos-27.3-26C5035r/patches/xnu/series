@@ -24,3 +24,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-owner-root-authenticated-open.patch
 ../xnu-12377/macos-hardware-volume.patch
 ../xnu-12377/macos-droidvm-k27-parity.patch
+../xnu-12377/macos-app-cryptex.patch
