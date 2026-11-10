@@ -4,7 +4,7 @@ Bring-up proceeds in stages. Each stage has a visible result and a log line. Iso
 
 For repeated builds, save paths in [unixnu.local.toml](/reference/configuration#local-build-inputs). After changing boot arguments, rebuild the payload and boot image using the [argument workflow](/xnu/boot-arguments#apply-arguments). Follow the [green-bar diagnosis](/guide/debugging#green-bar) for a stall at loader handoff.
 
-Before enabling a peripheral, complete its [adaptation procedure](/porting/drivers). Build the image with [Building](/building), then use these checkpoints in order. After each failure, keep the image and the last log before changing inputs.
+Before enabling a peripheral, complete its [adaptation procedure](/porting/drivers). Build the image with [Building](/building), then use these checkpoints in order. After each failure, keep the image and the last log before changing inputs. A macOS image follows the same stages with the [macOS checkpoints](/porting/macos#bring-up).
 
 ## Stage 1: UEFI
 

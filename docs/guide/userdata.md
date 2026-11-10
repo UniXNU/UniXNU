@@ -27,7 +27,7 @@ windows = [
 ]
 ```
 
-A window with `optional = true` is skipped when the IPSW does not have it.
+A window with `optional = true` is skipped when the IPSW does not have it. The macOS profile lists a third window, `App` (`Cryptex1,AppOS`).
 
 The image size is the sum of the windows, each aligned to 1 MiB, plus the 1 MiB header region. The step rejects an image larger than the partition.
 

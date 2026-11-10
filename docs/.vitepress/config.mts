@@ -52,6 +52,7 @@ function taskSidebars(prefix: string, zh: boolean) {
       item('Component selection', '选择组件', 'reference/components'),
       item('Select and add SoC support', '选择与添加 SoC 支持', 'porting/soc-support'),
       item('arm64e OS profiles', 'arm64e OS 配置', 'porting/arm64e'),
+      item('macOS profile', 'macOS 配置', 'porting/macos'),
     ]),
     group('2. Describe hardware', '2. 描述硬件', [
       item('Device tree', '设备树', 'porting/device-tree'),
@@ -63,6 +64,7 @@ function taskSidebars(prefix: string, zh: boolean) {
       item('Platform and memory', '平台与内存', 'porting/platform'),
       item('UFS storage', 'UFS 存储', 'porting/ufs'),
       item('Display and brightness', '显示与亮度', 'porting/display'),
+      item('Brightness interface', '亮度接口', 'porting/brightness'),
       item('Touch, buttons and keyboard', '触控、按键与键盘', 'porting/input'),
       item('GPU and Metal', 'GPU 与 Metal', 'porting/gpu'),
       item('Wi-Fi', 'Wi-Fi', 'porting/network'),
@@ -70,7 +72,7 @@ function taskSidebars(prefix: string, zh: boolean) {
       item('USB', 'USB', 'porting/usb'),
       item('Baseband and cellular', '基带与移动网络', 'porting/baseband'),
       item('DSP, audio and power', 'DSP、音频与电源', 'porting/power'),
-      item('Develop a driver', '开发驱动', 'drivers/overview'),
+      item('Develop a driver', '开发驱动', 'porting/driver-development'),
       item('Change XNU', '修改 XNU', 'xnu/source-and-patches'),
     ]),
     group('4. Verify and publish', '4. 验证与发布', [

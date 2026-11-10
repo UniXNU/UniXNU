@@ -298,5 +298,5 @@ QEMU 生成器是最小完整示例。真实板级的数值记录在[设备](/zh
 ## 下一步
 
 - [启动负载](/zh/concepts/payload)
-- [设备树匹配](/zh/drivers/device-tree-matching)
+- [provider 匹配](/zh/porting/driver-development#matching)
 - [bring-up 顺序](/zh/porting/bring-up)

@@ -32,7 +32,7 @@ Resolve this before enabling the XNU presentation backend.
 
 ## 2. Adapt the XNU display backend
 
-Read [GopFramebuffer](/drivers/gop-framebuffer) and its `NativeLegacyDisplay.cpp`,
+Read `GopFramebuffer` and its `NativeLegacyDisplay.cpp`,
 `NativeGOPPresenter.cpp` and `NativeGOPWire.h`. It consumes `PE_current_console`
 and integrates with the selected MobileFramebuffer and IOSurface ABI.
 
@@ -124,7 +124,7 @@ behind the OS-facing brightness service.
    uses `IODisplayParameters` brightness limits, `backlight-control`, `brightness` and
    `FadePeriod`. iPadOS 27 also needs millinits, a slider table, calibration and
    `brightness-nits`, and drops every request on a board that reports a virtual
-   platform. [ShengBacklight](/drivers/sheng-backlight) lists each one.
+   platform. The [brightness interface](/porting/brightness) lists each one.
 5. Build the service and its registration wrapper. The reference display recipe does
    both; `backlight=1` enables its probe.
 

@@ -23,9 +23,9 @@ examples.
 
 ## 1. Select the transport and sensor protocol
 
-Read [QcomGeniSpi](/drivers/qcom-geni-spi),
-[ShengNovatekTouch](/drivers/sheng-novatek-touch) and
-[ShengHidInput](/drivers/sheng-hid-input). Their responsibilities are:
+Read `QcomGeniSpi`,
+`ShengNovatekTouch` and
+`ShengHidInput`. Their responsibilities are:
 
 
 For a different sensor, implement its identification, firmware and report

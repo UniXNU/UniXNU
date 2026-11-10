@@ -104,7 +104,7 @@ clang++ -std=c++17 -I.. ucsi_host.cpp && ./a.out
 | `chip-id` | `board.toml` 的 `[payload.adt]` |
 | `board-id`、`security-domain` | OS 配置的 `adt.chosen.u32` |
 | `/System` 和系统守护进程使用同一个文件系统编号 | [`native-union-statfs-fsid`](/zh/xnu/patch-reference) |
-| 锁状态 3 | [`aks-sls=3`](/zh/drivers/apple-key-store-state) |
+| 锁状态 3 | [`aks-sls=3`](/zh/xnu/boot-arguments) |
 
 三个 ID 使用 `MobileDevice.framework` 内设备映射表中该机型的行。
 

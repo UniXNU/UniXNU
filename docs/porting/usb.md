@@ -112,7 +112,7 @@ clang++ -std=c++17 -I.. ucsi_host.cpp && ./a.out
 | `chip-id` | `[payload.adt]` in `board.toml` |
 | `board-id`, `security-domain` | `adt.chosen.u32` in the OS profile |
 | One file system number for `/System` and system daemons | [`native-union-statfs-fsid`](/xnu/patch-reference) |
-| Lock state 3 | [`aks-sls=3`](/drivers/apple-key-store-state) |
+| Lock state 3 | [`aks-sls=3`](/xnu/boot-arguments) |
 
 Use the model's row in the device map inside `MobileDevice.framework` for the three IDs.
 

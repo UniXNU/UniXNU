@@ -92,7 +92,7 @@ These inputs live outside the UniXNU repositories.
 
 ### Target IPSW
 
-An OS profile targets either an iOS or an iPadOS restore image. The image family must match the device identity ([MobileGestalt](/guide/mobilegestalt#ipados-and-ios)). The arm64 targets are iOS 16 and iPadOS 17; the arm64e targets are iOS 27 and iPadOS 27.
+An OS profile targets an iOS, iPadOS or macOS restore image. The image family must match the device identity ([MobileGestalt](/guide/mobilegestalt#ipados-and-ios)). The arm64 targets are iOS 16 and iPadOS 17; the arm64e targets are iOS 27, iPadOS 27 and macOS 27.
 
 | Architecture | Target | Version | Build | Restore image |
 | --- | --- | --- | --- | --- |
@@ -102,6 +102,8 @@ An OS profile targets either an iOS or an iPadOS restore image. The image family
 | arm64e | iPadOS, iPad Pro M5 (iPad17,1 to iPad17,4) | 27.0.1 | 24A446 | [iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw](https://updates.cdn-apple.com/2026FallFCS/6074e110-d48d-40c2-b0e8-b611520941a3/iPad17,1,iPad17,2,iPad17,3,iPad17,4_27.0.1_24A446_Restore.ipsw) |
 
 iOS 16 and iPadOS 17 are both arm64 images and share the arm64 patch series (`profiles/arch/arm64`); a fix to one applies to the other. The links come from [ipsw.me](https://ipsw.me) and point to Apple's servers.
+
+The macOS profile targets `UniversalMac_27.3_26C5035r_Restore.ipsw` (Mac17,11). Its URL is `[ipsw] url` of the profile, and its further inputs are in [macOS profile](/porting/macos#inputs).
 
 `[ipsw] url` in the device repository is the default. `--ipsw` or `UNIXNU_IPSW` overrides it. Download the image outside the repository.
 

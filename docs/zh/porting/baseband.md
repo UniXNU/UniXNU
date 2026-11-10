@@ -2,7 +2,7 @@
 
 没有蜂窝基带的 Wi-Fi 平板可以跳过本页。在 `porting.toml` 中将蜂窝网络项设为 `not-applicable`，在 `limits` 写明硬件原因。
 
-示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 [QcomBaseband](/zh/drivers/qcom-baseband)。它把 iOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iOS 17（21H461）。
+示例使用 **HoshinoYumeka（[@chiba233](https://github.com/chiba233)）** 编写的 `QcomBaseband`。它把 iOS 的 ABM、BBUpdater 和 CommCenter 接到高通 modem。Coachz 示例使用 SC7180、IPA v4.2 和 iOS 17（21H461）。
 
 先完成[平台内存与 DMA](/zh/porting/platform)，确认 modem 型号、控制传输、数据引擎、固件、SIM 接口和 EFS/NV 存储。
 

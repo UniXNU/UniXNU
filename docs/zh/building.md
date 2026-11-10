@@ -27,6 +27,8 @@ cd UniXNU
 
 `status` 显示最终 profile、版本、补丁顺序和输出目录。
 `-D` 记录在 `out/state.json`，后续命令均在 UniXNU 主仓库执行。
+`--os VERSION` 为单条命令选择另一个 OS profile。macOS 构建的每条命令都带
+`--os macos-27`，并按 [macOS 配置](/zh/porting/macos)操作。
 
 **预期结果：** 设备/配置选择正确，源码路径已解析。
 
@@ -196,6 +198,7 @@ Linux 路径使用相同的选定 profile、归档配方和预链接检查。随
 | 选项 | 含义 |
 | --- | --- |
 | `-D DIR` | 设备仓库，首次使用后会记住。 |
+| `--os VERSION` | 本次运行的 OS profile：`17`、`26`、`27`、`macos-27` 或 `profiles/os` 目录名，默认取 `board.os_profile`。 |
 | `--out DIR` | 输出根目录，默认是本仓库的 `out/`。 |
 | `-j N` | 并行任务数，默认取 `JOBS` 或 CPU 数量。 |
 | `--target DEBUG\|RELEASE` | EDK II 构建目标，默认 `DEBUG`。 |

@@ -27,7 +27,7 @@
 
 ## 2. 适配 XNU 显示后端
 
-阅读 [GopFramebuffer](/zh/drivers/gop-framebuffer)及其 `NativeLegacyDisplay.cpp`、
+阅读 `GopFramebuffer`及其 `NativeLegacyDisplay.cpp`、
 `NativeGOPPresenter.cpp` 和 `NativeGOPWire.h`。它从 `PE_current_console` 获取帧缓冲，
 并接入选定的 MobileFramebuffer 和 IOSurface ABI。
 
@@ -96,7 +96,7 @@ surface、latch 时间和翻转等待 GPU 的时间。帧缓冲必须是 8 位 B
    服务请求在工作循环上处理，确认失败处理后再启用渐变调光。
 4. 让发布的属性和接受的请求与所选系统一致。iPadOS 17 使用 `IODisplayParameters` 亮度范围、
    `backlight-control`、`brightness` 和 `FadePeriod`。iPadOS 27 还需要毫尼特、滑块表、校准参数和
-   `brightness-nits`，并且在报告虚拟平台的板子上丢弃所有请求。[ShengBacklight](/zh/drivers/sheng-backlight) 列出了每一项。
+   `brightness-nits`，并且在报告虚拟平台的板子上丢弃所有请求。[亮度接口](/zh/porting/brightness)列出了每一项。
 5. 构建服务和注册封装。参考显示配方包含两者，`backlight=1` 启用 probe。
 
 在解析后的构建树定位集成点：

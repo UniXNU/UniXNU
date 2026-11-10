@@ -1,7 +1,7 @@
 # Wi-Fi adaptation
 
 Start with [platform interrupts and DMA](/porting/platform). Identify the actual
-radio, PCI ID, firmware and board-data variant. Read [Ath12kWifi](/drivers/ath12k-wifi)
+radio, PCI ID, firmware and board-data variant. Read `Ath12kWifi`
 and its `include/nw_abi.h` before implementing callbacks.
 
 Use [driver build integration](/porting/drivers#build-integration) to connect

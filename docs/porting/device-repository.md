@@ -158,6 +158,11 @@ Tables merge by key. Ordinary arrays replace the inherited array. Component
 dependencies are added in build order. Use `unixnu status --json` to inspect
 the resolved settings, sources, overrides, and patch order.
 
+`[os_overrides."<profile>"]` holds the values that differ for one OS profile,
+and `[package.defconfig]` maps each profile to its defconfig. `--os` selects the
+profile for one command. See [profile fields](/reference/configuration#profile-fields)
+and the [macOS values](/porting/macos#device) for a complete override.
+
 Files without `schema_version` use format 1 and its module paths. Format 2
 outputs use `out/<device>/<os_profile>/<config>/`, where `<config>` is the
 defconfig name with `_defconfig` removed.

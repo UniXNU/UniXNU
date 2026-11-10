@@ -28,4 +28,4 @@ flowchart TD
 
 ## 下一步
 
-按顺序阅读[移植设备](/zh/porting/steps)。
+按顺序阅读[移植设备](/zh/porting/steps)。移植 macOS 时同时阅读 [macOS 配置](/zh/porting/macos)。

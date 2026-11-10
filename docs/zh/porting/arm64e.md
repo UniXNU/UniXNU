@@ -29,6 +29,7 @@ arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache �
 | 设备 | SoC | OS 配置 | 状态 |
 | --- | --- | --- | --- |
 | sheng | SM8550 | `ipados-27.0.1-24A446` | 开发中 |
+| sheng | SM8550 | `macos-27.3-26C5035r` | 开发中 |
 
 ## 配置结构
 
@@ -36,6 +37,7 @@ arm64e 配置以指针认证（PAC）编译 XNU，并链接目标 kernelcache �
 | --- | --- |
 | `profiles/arch/arm64e` | arm64e 编译配置、PAC 密钥管理和 XNU 补丁系列 |
 | `profiles/os/ipados-27.0.1-24A446` | XNU `12377.121.6` 加 Darwin 26 调用、iPadOS 27.0.1 IPSW 固定版本、预链接根组件和 OS 补丁 |
+| `profiles/os/macos-27.3-26C5035r` | 为 macOS 用户空间构建的同一 XNU、macOS 27.3 IPSW 固定版本、预链接根组件和 OS 补丁。见 [macOS 配置](/zh/porting/macos) |
 
 OS 配置用 `[os] arch = "arm64e"` 选择架构。没有该项的配置使用 `profiles/arch/arm64`。
 两种架构使用相同的组件，arm64e 构建把它们编译为 arm64e。
@@ -66,7 +68,7 @@ SM8550 没有 SME。
 ## 操作步骤
 
 1. 在每个启用的 CPU 上完成[要求](#requirements)中的检查并记录结果。
-2. 在设备配置中设置 `board.os_profile = "ipados-27.0.1-24A446"`，或对单次运行给 `./unixnu` 传 `--os 27`。
+2. 在设备配置中设置 `board.os_profile = "ipados-27.0.1-24A446"`，或对单次运行给 `./unixnu` 传 `--os 27`。macOS 传 `--os macos-27`，并按 [macOS 配置](/zh/porting/macos)操作。
 3. 运行 `./unixnu fetch` 和 `./unixnu status --json`，确认 arm64e 配置、XNU 版本和补丁顺序。
 4. 按[构建](/zh/building)依次构建内核、package、固件、payload、userdata 和启动镜像。
 5. 按[启动验证顺序](/zh/porting/bring-up)记录每个检查点。
@@ -76,3 +78,4 @@ SM8550 没有 SME。
 - 公开的 `xnu-12377.121.6` 源码在 `osfmk/arm/pmap` 中保留非 SPTM 的 pmap。
 - arm64e 内核使用 `BCM2837` 机器配置和非 SPTM 的 pmap 编译，并关闭 Apple CPU 计数器。
 - iPadOS 27 的 kernelcache 是 `MH_FILESET`，符号表已删除。kext 代码直接跳转到内核，所以 arm64 的 prelink 步骤不适用。
+- macOS 27.3 的 kernelcache 保留符号表。预链接映射按名称建立，fileset 保持其链接地址。

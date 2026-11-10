@@ -28,6 +28,8 @@ cd UniXNU
 
 `status` reports the effective profiles, revisions, patch order and output directory. `-D` is remembered in
 `out/state.json`. Run subsequent commands from the main UniXNU checkout.
+`--os VERSION` selects another OS profile for one command. A macOS build passes
+`--os macos-27` to every command and follows [macOS profile](/porting/macos).
 
 **Expected result:** the intended device/configuration and resolved source paths.
 
@@ -205,6 +207,7 @@ The Linux path uses the same selected profiles, archive recipes and prelink chec
 | Option | Meaning |
 | --- | --- |
 | `-D DIR` | Device repository. Remembered after the first use. |
+| `--os VERSION` | OS profile for this run: `17`, `26`, `27`, `macos-27` or a `profiles/os` directory name. Default `board.os_profile`. |
 | `--out DIR` | Output root. Default `out/` in this repository. |
 | `-j N` | Parallel jobs. Default is `JOBS` or the CPU count. |
 | `--target DEBUG\|RELEASE` | EDK II build target. Default `DEBUG`. |

@@ -39,6 +39,7 @@ Record the result of each check in the device `porting.toml`.
 | Device | SoC | OS profile | State |
 | --- | --- | --- | --- |
 | sheng | SM8550 | `ipados-27.0.1-24A446` | In development |
+| sheng | SM8550 | `macos-27.3-26C5035r` | In development |
 
 ## Profile layout
 
@@ -46,6 +47,7 @@ Record the result of each check in the device `porting.toml`.
 | --- | --- |
 | `profiles/arch/arm64e` | arm64e build configuration, PAC key management and XNU patch series |
 | `profiles/os/ipados-27.0.1-24A446` | XNU `12377.121.6` with the Darwin 26 calls, iPadOS 27.0.1 IPSW pins, prelink roots and OS patches |
+| `profiles/os/macos-27.3-26C5035r` | The same XNU built for macOS user space, macOS 27.3 IPSW pins, prelink roots and OS patches. See [macOS profile](/porting/macos) |
 
 The OS profile selects its architecture with `[os] arch = "arm64e"`. Profiles
 without the key use `profiles/arch/arm64`. Both architectures use the same
@@ -84,7 +86,8 @@ sysctls and the commpage capability words. SM8550 has no SME.
 
 1. Run the [requirement](#requirements) checks on every enabled CPU and record them.
 2. Set `board.os_profile = "ipados-27.0.1-24A446"` in the device configuration, or pass
-   `--os 27` to `./unixnu` for one run.
+   `--os 27` to `./unixnu` for one run. For macOS, pass `--os macos-27` and
+   follow [macOS profile](/porting/macos).
 3. Run `./unixnu fetch` and `./unixnu status --json`. Confirm the arm64e profile, XNU revision and patch order.
 4. Build with [Building](/building): kernel, package, firmware, payload, userdata, boot image.
 5. Follow the [bring-up order](/porting/bring-up) and record each checkpoint.
@@ -94,3 +97,4 @@ sysctls and the commpage capability words. SM8550 has no SME.
 - The public `xnu-12377.121.6` tree keeps the non-SPTM pmap in `osfmk/arm/pmap`.
 - The arm64e kernel builds with the `BCM2837` machine config, the non-SPTM pmap and Apple CPU counters disabled.
 - The iPadOS 27 kernelcache is an `MH_FILESET` with stripped symbol tables. Its kext code branches directly into the kernel, so the arm64 prelink step does not apply.
+- The macOS 27.3 kernelcache keeps its symbol tables. Its prelink map is built from names, and the fileset stays at its linked addresses.
