@@ -340,6 +340,22 @@ def main():
             addon = out / 'bluetooth-addon.bin'
             candidate.replace(addon)
             (out / 'bluetooth-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
+        # Firmware tools stage device firmware the board extracted beforehand (data, not executables) under one firmware/ prefix
+        # of the Data addon; they read local inputs only.
+        for tool in request.get('firmware_tools', []):
+            stem = Path(tool).stem
+            stage = work / ('firmware-' + stem)
+            run(sys.executable, Path(request['device']) / tool, stage)
+            staged = json.loads((stage / 'report.json').read_text())
+            prefix, directory = staged['firmware_prefix'], staged['directory']
+            if (Path(prefix).parts[:1] != ('firmware',) or '..' in Path(prefix).parts or Path(directory).is_absolute() or
+                    '..' in Path(directory).parts):
+                raise ValueError(f'invalid firmware directory from {tool}')
+            candidate = work / ('firmware-' + stem + '-addon.bin')
+            script('addon-add-dir.py', addon, candidate, prefix, stage / directory)
+            addon = out / ('firmware-' + stem + '-addon.bin')
+            candidate.replace(addon)
+            (out / ('firmware-' + stem + '.json')).write_bytes((stage / 'report.json').read_bytes())
         appsync_report = None
         if request.get('appsync'):
             if (request.get('target'), request.get('build')) != ('ios27', '24A446'):

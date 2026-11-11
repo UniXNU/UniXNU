@@ -87,7 +87,8 @@ def prepare(ctx, kernel_build=False):
         if bluetooth.path is None:
             raise Error('QcaBluetooth source missing; run unixnu fetch')
         request['bluetooth_component'] = str(bluetooth.path.resolve())
-    if not seed.is_file() or not trust or (want_addon and not addon) or spec.get('wifi_tool') or spec.get('bluetooth_tool') or spec.get('appsync'):
+    if (not seed.is_file() or not trust or (want_addon and not addon) or spec.get('wifi_tool') or spec.get('bluetooth_tool') or spec.get('appsync') or
+            spec.get('firmware_tools')):
         source = Ipsw(ctx)
         if not seed.is_file() or (want_addon and not addon) or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool') or spec.get('appsync'):
             request['os_image'] = str(source.disk_image('OS'))
