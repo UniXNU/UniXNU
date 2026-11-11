@@ -17,7 +17,7 @@ diff --git a/src/freedreno/fdl/fd6_layout.c b/src/freedreno/fdl/fd6_layout.c
 diff --git a/src/freedreno/vulkan/tu_clear_blit.cc b/src/freedreno/vulkan/tu_clear_blit.cc
 --- a/src/freedreno/vulkan/tu_clear_blit.cc
 +++ b/src/freedreno/vulkan/tu_clear_blit.cc
-@@ -5604,6 +5604,24 @@
+@@ -5604,6 +5604,33 @@
        bin.offset.x + bin.extent.width,    bin.offset.y + bin.extent.height,
     };
     r3d_coords_raw(cmd, cs, coords);
@@ -33,12 +33,21 @@ diff --git a/src/freedreno/vulkan/tu_clear_blit.cc b/src/freedreno/vulkan/tu_cle
 +tu_attachment_unpadded(struct tu_cmd_buffer *cmd, const struct tu_image_view *iview)
 +{
 +   const struct fd_dev_info *info = cmd->device->physical_device->info;
-+   return iview->image->layout[0].tile_mode == TILE6_LINEAR &&
-+          (iview->image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT ||
-+           (iview->image->vk.external_handle_types &
-+            (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
-+             VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT))) &&
-+          (iview->view.width % info->gmem_align_w || iview->view.height % info->gmem_align_h);
++   const struct fdl_layout *layout = &iview->image->layout[0];
++   if (layout->tile_mode != TILE6_LINEAR ||
++       !(iview->image->vk.tiling == VK_IMAGE_TILING_DRM_FORMAT_MODIFIER_EXT ||
++         (iview->image->vk.external_handle_types &
++          (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
++           VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT))))
++      return false;
++   /* A blit event's blocks reach up to gmem_align_w - 1 texels past a row's last one and up to gmem_align_h - 1 rows past
++    * the last row. Rows whose pitch holds the width rounded up to a block take that reach in their own padding (a surface
++    * 3048 texels wide with 64-byte rows has 8 texels of it), so only a height that is not whole blocks, or a pitch tighter
++    * than that, needs the draws and 2D blits: a screen-size surface otherwise paid a shaded load and a 2D store per pass.
++    */
++   const uint32_t level = iview->vk.base_mip_level;
++   const uint32_t reach = ALIGN_POT(iview->view.width, info->gmem_align_w) * layout->cpp;
++   return iview->view.height % info->gmem_align_h || reach > fdl_pitch(layout, level);
  }
  
  template <chip CHIP>
