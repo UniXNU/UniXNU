@@ -16,7 +16,9 @@ Browse device documentation and porting records from each repository.
 | [chenjin1494/UniXNU-sheng](https://github.com/chenjin1494/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(chenjin1494\)](/devices/sheng-chenjin1494) | Porting record | SM8550 |
 | [dlc16/UniXNU-sheng](https://github.com/dlc16/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(dlc16\)](/devices/sheng-dlc16) | Porting record | SM8550 |
 | [DnuyaSha/UniXNU-sheng](https://github.com/DnuyaSha/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(DnuyaSha\)](/devices/sheng-dnuyasha) | Porting record | SM8550 |
+| [Dong666-yantong/UniXNU-sheng](https://github.com/Dong666-yantong/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Dong666-yantong\)](/devices/sheng-dong666-yantong) | Porting record | SM8550 |
 | [donglc16/UniXNU-sheng](https://github.com/donglc16/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(donglc16\)](/devices/sheng-donglc16) | Porting record | SM8550 |
+| [doubleloves/UniXNU-sheng](https://github.com/doubleloves/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(doubleloves\)](/devices/sheng-doubleloves) | Record pending | SM8550 |
 | [Enlixk/UniXNU-sheng](https://github.com/Enlixk/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Enlixk\)](/devices/sheng-enlixk) | Porting record | SM8550 |
 | [FFT-infra/UniXNU-alioth-sheng-template](https://github.com/FFT-infra/UniXNU-alioth-sheng-template) | [Xiaomi Pad 6S Pro \(FFT-infra\)](/devices/sheng-fft-infra) | Porting record | SM8550 |
 | [gkxqh/UniXNU-sheng](https://github.com/gkxqh/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(gkxqh\)](/devices/sheng-gkxqh) | Porting record | SM8550 |
@@ -36,6 +38,7 @@ Browse device documentation and porting records from each repository.
 | [mataht/sheng-macos-link-lab](https://github.com/mataht/sheng-macos-link-lab) | [Xiaomi Pad 6S Pro \(sheng\): macOS 26.5 port with its own kernel and drivers; the full system reaches the desktop with CPU rendering \(mataht\)](/devices/sheng-mataht) | Porting record | SM8550 |
 | [matejkoo217/UniXNU-fuxi](https://github.com/matejkoo217/UniXNU-fuxi) | [Xiaomi 13 \(fuxi\)](/devices/fuxi) | Porting record | SM8550 |
 | [Murderd1/UniXNU-sheng](https://github.com/Murderd1/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Murderd1\)](/devices/sheng-murderd1) | Porting record | SM8550 |
+| [QianFengMax/UniXNU-sheng](https://github.com/QianFengMax/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(QianFengMax\)](/devices/sheng-qianfengmax) | Porting record | SM8550 |
 | [RamstorageAI/UniXNU-sheng](https://github.com/RamstorageAI/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(RamstorageAI\)](/devices/sheng-ramstorageai) | Porting record | SM8550 |
 | [Soneoylys/UniXNU-sheng](https://github.com/Soneoylys/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Soneoylys\)](/devices/sheng-soneoylys) | Porting record | SM8550 |
 | [TheArchitectEngineer/UniXNU-sheng](https://github.com/TheArchitectEngineer/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(TheArchitectEngineer\)](/devices/sheng-thearchitectengineer) | Porting record | SM8550 |
@@ -45,3 +48,4 @@ Browse device documentation and porting records from each repository.
 | [wzc35418/UniXNU-sheng](https://github.com/wzc35418/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(wzc35418\)](/devices/sheng-wzc35418) | Porting record | SM8550 |
 | [yeyingjun-codes/UniXNU-sheng](https://github.com/yeyingjun-codes/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yeyingjun-codes\)](/devices/sheng-yeyingjun-codes) | Record pending | SM8550 |
 | [yuyaukong/UniXNU-sheng](https://github.com/yuyaukong/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yuyaukong\)](/devices/sheng-yuyaukong) | Repository link | SM8550 |
+| [zy-xyz/UniXNU-sheng](https://github.com/zy-xyz/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(zy-xyz\)](/devices/sheng-zy-xyz) | Porting record | SM8550 |

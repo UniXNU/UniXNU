@@ -44,10 +44,11 @@
 | [小米 8](/zh/devices/models/dipper) | dipper | SDM845 | 1 |
 | [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/zh/devices/models/diting) | diting | SM8475 | 2 |
 | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/zh/devices/models/dizi) | dizi | SM7435 | 1 |
+| [OnePlus 13 CPH2653: iPhone iOS 16 source preparation](/zh/devices/models/dodge) | dodge | SM8750 | 1 |
 | [DroidVM 客户机（Gunyah 上的 crosvm）](/zh/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
 | [OnePlus 5T](/zh/devices/models/dumpling) | dumpling | MSM8998 | 1 |
 | [Rongyue E5](/zh/devices/models/e5) | e5 | UMS9621 | 1 |
-| [联想拯救者 Y700 四代](/zh/devices/models/elden) | elden | SM8750P | 2 |
+| [联想拯救者 Y700 四代](/zh/devices/models/elden) | elden | SM8750P | 3 |
 | [小米平板 5 Pro Wi-Fi](/zh/devices/models/elish) | elish | SM8250-AC | 1 |
 | [一加 6](/zh/devices/models/enchilada) | enchilada | SDM845 | 5 |
 | [小米平板 5 Pro 5G](/zh/devices/models/enuma) | enuma | SM8250, SM8250-AC | 3 |
@@ -87,6 +88,7 @@
 | [魅族 20 Classic](/zh/devices/models/m2381) | m2381 | SM8550 | 2 |
 | [POCO X7 / Redmi Note 14 Pro 5G](/zh/devices/models/malachite) | malachite | MT6878 | 1 |
 | [Redmi Note 12 Turbo / POCO F5](/zh/devices/models/marble) | marble | SM7475 | 3 |
+| [Meizu 15 \(M8810, eMMC, 4 GB DRAM, 1080x1920 AMOLED panel\)](/zh/devices/models/meizu15) | meizu15 | SDM660 | 1 |
 | [Meizu 21 \(M461Q\)](/zh/devices/models/meizu21) | meizu21 | SM8650 | 2 |
 | [Redmi Note 9](/zh/devices/models/merlinx) | merlinx | MT6768 | 2 |
 | [LG G8X ThinQ \(LM-G850, mh2lm\)](/zh/devices/models/mh2lm) | mh2lm | SM8150 | 1 |
@@ -118,7 +120,7 @@
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 4 |
 | [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 8 |
-| [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 3 |
+| [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 4 |
 | [一加 Ace 3（PJE110）](/zh/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/zh/devices/models/pma120) | pma120 | SM8850 | 1 |
 | [小米 MIX 2S](/zh/devices/models/polaris) | polaris | SDM845 | 4 |
@@ -137,7 +139,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 41 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 45 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |

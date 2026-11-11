@@ -6,7 +6,7 @@
 
 Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
-源记录: [porting.toml](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/porting.toml), `f85fbe118d1ec79fc776117408e4ca0ecfb73ea2`.
+源记录: [porting.toml](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/porting.toml), `3b0cf3ee4764cda6d01e69f30d1b78344b0994c5`.
 
 本页按设备记录自动生成。
 
@@ -25,6 +25,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 | [电源](#power) | `implemented` |
 | [镜像组装](#packaging) | `implemented` |
 | [诊断](#diagnostics) | `implemented` |
+| [native-root-source](#native-root-source) | `host-verified` |
 
 ## 配置 {#configuration}
 
@@ -47,7 +48,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -57,15 +58,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [Native22G100board/profile/arm64e source selection; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native22G100board/profile/arm64e source selection; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 固件与启动 {#firmware}
 
@@ -88,7 +89,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -98,15 +99,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [PongUEFI and original signed Qualcomm firmware integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [PongUEFI and original signed Qualcomm firmware integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## CPU 与中断 {#cpu}
 
@@ -129,7 +130,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -139,15 +140,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [EightCPU PSCI/GIC and native timer; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [EightCPU PSCI/GIC and native timer; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 内存与 DMA {#memory}
 
@@ -170,7 +171,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -180,15 +181,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [Native4KiB ownership and physical DMA translation; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native4KiB ownership and physical DMA translation; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 存储与根卷 {#storage}
 
@@ -211,7 +212,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -221,15 +222,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [NativeUFS/APFS and128GB writableData; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [NativeUFS/APFS and128GB writableData; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 显示 {#display}
 
@@ -252,7 +253,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -262,15 +263,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [Native brightness and hardware display output; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native brightness and hardware display output; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 输入 {#input}
 
@@ -293,7 +294,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -303,15 +304,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [GoodixIRQ and nativeHID/button integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [GoodixIRQ and nativeHID/button integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## GPU {#gpu}
 
@@ -334,7 +335,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -344,15 +345,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [A730/Turnip/Metal hardware rendering and per-processVA; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [A730/Turnip/Metal hardware rendering and per-processVA; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 网络 {#network}
 
@@ -375,7 +376,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -385,15 +386,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [PongQCA6490 nativeWiFi; actual cellular qualification separate; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [PongQCA6490 nativeWiFi; actual cellular qualification separate; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 音频 {#audio}
 
@@ -416,7 +417,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -426,15 +427,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [AudioReach/TFA9873 nativeIOAudio2 and software decoding; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [AudioReach/TFA9873 nativeIOAudio2 and software decoding; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 电源 {#power}
 
@@ -457,7 +458,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -467,15 +468,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [Native battery/externalpower and AW20036Glyph; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native battery/externalpower and AW20036Glyph; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 镜像组装 {#packaging}
 
@@ -498,7 +499,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -508,15 +509,15 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [Native kernel/bindings/closure/boot pipeline; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native kernel/bindings/closure/boot pipeline; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## 诊断 {#diagnostics}
 
@@ -539,7 +540,7 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
 ### 开发经验
 
-- Current native source compiles; realIPA init and rule cache are online; iOS cellular update status and IP traffic remain incomplete
+- Native source compiles; real SIM identities, network registration, IPv4/IPv6 WAN and cellular-only HTTP200 are observed; native calls/SMS and call audio remain incomplete
 
 ### 完成条件
 
@@ -549,14 +550,60 @@ Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 ### 当前范围
 
 - Native ABI/firmware inputs remain local
-- Remaining cellular registration, slow frames, audio resume and preview paths require device qualification
+- Native calls/SMS, microphone PCM, receiver call audio, slow-frame and preview scenarios remain under qualification
 
 ### 下一步
 
-- Complete native cellular update-state and actual WANIP qualification
+- Repair native call policy and qualify actual calls/SMS and audio routes
 
 ### 证据
 
-- `source`: [RealSIM/IPA/WAN/QMI status with no fabricated networking state; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/f85fbe118d1ec79fc776117408e4ca0ecfb73ea2/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [RealSIM/IPA/WAN/QMI status with no fabricated networking state; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+
+## native-root-source {#native-root-source}
+
+`host-verified`
+
+组件: `PongPlatform24`.
+
+### 硬件与依赖
+
+- Native22G100 original ABI and Pong private firmware remain local
+
+### 配置
+
+- Root source checkout with pinned driver gitlinks; no copied native-source overlay
+
+### 操作步骤
+
+- Compile native bootstrap/UI and complete source kernel from root
+- Read requested REC files using native read-only APFS
+- Temporary boot matching runtime without automatic restart
+
+### 开发经验
+
+- services302 new bootstrap/input compiled and ran original launchd; real input reports observed
+- Native read-only APFS obtained actual UID/GID and requested baseband files without a full-system capture
+
+### 完成条件
+
+- Root scripts consume root sources and driver submodules
+- Existing component licenses remain in their repositories; removed legacy sources are no longer linked
+
+### 当前范围
+
+- Native VoLTE support remains false although physical IMS registration is real; calls/SMS are not qualified
+- The source IOHIDDevice private ABI from upstream iOS17 is not reused on22G100 arm64e
+
+### 下一步
+
+- Repair the native call policy and actual voice/SMS path
+
+### 证据
+
+- `host`: [Full native22G100 arm64e kernel link returned0 from root sources and pinned driver submodules; native bootstrap/UI compilation returned0](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
+  Command: <code>scripts/build-pong-ios18e.py --phase full --configuration DEVELOPMENT --chained --optimize-size with local ABI/firmware inputs</code>. Revision: `ddc0a02d6d940f0e79ee4a598970cf2980b676f3`.
+- `device`: [Original launchd, actual input and physical IMS registration observed; native calls/SMS still incomplete](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
+  Command: <code>fastboot boot services300/boot-final/pong-xnu-initial.img with services302 runtime; two bounded USB captures</code>. Revision: `ddc0a02d6d940f0e79ee4a598970cf2980b676f3`.
 
 </div>

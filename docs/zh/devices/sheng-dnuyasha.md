@@ -6,7 +6,7 @@
 
 Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input, firmware and power integration. This record describes implementation coverage and the evidence required for each milestone.
 
-源记录: [porting.toml](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/porting.toml), `d172bccb5a575188363534df5b5c269c8d27a77c`.
+源记录: [porting.toml](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/porting.toml), `d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8`.
 
 本页按设备记录自动生成。
 
@@ -36,26 +36,32 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 硬件与依赖
 
-- SM8550 profile, iPadOS 27.0.1 build 24A446, arm64e sheng\_ipados27\_defconfig and pinned component sources.
+- SM8550 profile, iPadOS 26.5.2 build 23F84, arm64e sheng\_ipados26\_defconfig and pinned component sources.
 
 ### 配置
 
-- board.soc\_source = sm8550; board.os\_profile = ipados-27.0.1-24A446; schema\_version = 2.
+- board.soc\_source = sm8550; board.os\_profile = ipados-26.5.2-23F84; schema\_version = 2.
 - The device owns ShengUfs, ShengHidInput, ShengNovatekTouch and ShengPreflight submodules.
 
 ### 操作步骤
 
 - Read https://unixnu.com/porting/device-repository and https://unixnu.com/porting/records.
-- Run ./unixnu defconfig sheng\_ipados27\_defconfig -D ../UniXNU-sheng from UniXNU.
-- Run ./unixnu status --json -D ../UniXNU-sheng and verify the effective profile is ipados-27.0.1-24A446, the defconfig is sheng\_ipados27\_defconfig, and the component/source pins and patch order resolve.
+- Run ./unixnu defconfig sheng\_ipados26\_defconfig -D ../UniXNU-sheng from UniXNU.
+- Run ./unixnu status --json -D ../UniXNU-sheng and review profiles, components, source pins and patch order.
 
 ### 开发经验
 
-- The 24A446 kernel arguments include sheng-keyboard=1, which starts the keyboard cover driver; the 17 and 26 overrides do not.
+- The kernel adopts the low DRAM bank by default; memory-outside=0 on the command line leaves it alone. The built-in macOS arguments include gpu-pool=0.
+- The macOS payload.adt lists owned\_memory\_outside\_ranges 8 \(the loader's table of free memory outside the window, which the kernel adopts\) and owned\_memory\_outside\_reserved for memory a driver uses there at a fixed address; memory-outside=0 on the command line leaves that memory alone.
+- The macOS-only switches the kernel reads \(timebase-user, cs-lazy, keyboard-lone, armcpu-edge, boot-payload-release, thermal, thermal-ms, thermal-level, board-clock\) are built-in arguments of package/BootWatchdogPolicy.c on the macOS target, which keeps the command line under its 1000-byte limit; payload.adt sets owned\_memory\_outside\_ranges 8. Not yet run on hardware.
+- The macOS 27.3 kernel arguments drop -v and serial=3 and add ca-fb-8bit=1, armcpu-edge=1, boot-payload-release=1, thermal=1 and board-clock=7; the macOS payload.adt sets owned\_memory\_size 0x180000000 with owned\_memory\_excluded\_ranges 64 and loader\_inputs. Not yet run on hardware.
+- The macOS 27.3 kernel arguments in board.toml include fb-half=2, the reading of WindowServer half-float frames that gives correct colours on hardware.
+- The macOS 27.3 override of board.toml keeps the Bluetooth runtime tool with target macos27 and adds bluetooth=1 to the kernel arguments \(864 bytes\); the iPadOS settings are unchanged.
+- The 24A446 kernel arguments include keyboard=1, which starts the keyboard cover driver; the 17 and 26 overrides do not.
 - The 24A446 profile enables payload.runtime.appsync and appsync=1. The 17 and 26 overrides remove payload.runtime and replace the kernel arguments, so they do not select this adapter.
 - Tables merge in ARM64, SoC, OS, device order. Arrays replace inherited selections, so include every required component and fragment.
 - The selected defconfig applies after the explicit configuration fragments. Keep OS ABI and IPSW pins in the OS profile.
-- The active default configuration is iPadOS 27.0.1 \(24A446\), using sheng\_ipados27\_defconfig. The 26.5.2 \(23F84\) and 17.7.11 \(21H461\) configurations are legacy os\_overrides and must not be described as the active OS27 build. Keep verification evidence explicitly tied to its OS profile and image revision.
+- The active 23F84 configuration remains minimal. Source storage/input archives are built separately and are not yet selected for boot. OS-profile source pins select the public macOS 26.5 families without claiming binary ABI compatibility.
 - feeds.toml pins the SoC source at the commit that holds patches/xnu-12377/series, which board.toml lists as soc:patches/xnu-12377/series; a pin older than that commit leaves the series missing.
 - board.toml carries the 27 values at the top level and the differences of the 17 and 26 profiles under os\_overrides, so one branch serves every profile., .github/workflows/package.yml runs scripts/package.sh on a macOS runner with the UniXNU and uefi-sheng checkouts beside the device repository; the platform seed comes from the UNIXNU\_UNIQUE\_CHIP\_ID secret, and the run offers boot.img, payload.img, kernel.macho and the manifest as its artifacts. Run it in a fork and delete the run after downloading them., and the run passes its own GITHUB\_TOKEN to the packaging step for api.github.com, whose anonymous quota a hosted runner exhausts., The kernel archives of the 27 and 26 profiles list build-sheng-source-storage.py after component:ShengUfs, so the source storage archive and root-policies.bin the defconfigs link no longer depend on a leftover of an earlier build., and name scripts/policies/&lt;profile&gt; in --policy-dir, the signed headers the repository ships., and the 27 kernel archives run fetch-adreno-inputs.py and the three prepare-sheng-\* generators before build-adreno740-kits.py, so the generated GMU and SMMU headers no longer come from earlier local runs., with fetch-sheng-dts.py first: the firmware step runs after the kernel step, and the generators read the DTS sources it fetches.
 - \[firmware\] preflight lists scripts/fetch-sheng-dts.py before scripts/check-sheng.py, and \[bootimg\] dtb names the device tree it builds \(build/sheng/sheng.dtb\) for the pack step.
@@ -73,15 +79,10 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - .github/workflows/package.yml pins UniXNU revision be0e4fab0072bceaa8d744a4a6875ba5461cd7ff, which selects the GPU, Metal, display and source-storage latency integration. Existing installations retain their original Data seed through the packaging cache or an explicit seed import.
 - The packaging workflow pins the UniXNU commit with the GMEM colour order fix and lazily allocated memory for memoryless attachments.
 - The packaging workflow pins the Wi-Fi runtime builder and Data firmware integration; device gitlinks pin the matching Ath12kWifi and Wi-Fi DMA support.
-- The 24A446 runtime selects signed Bluetooth userland and sheng-bluetooth=1. Other OS profiles remove the runtime stanza.
-- drivers/QcomDwc3 is a submodule. The iPadOS 27 prelink roots add the USB stacks, and its boot arguments add sheng-usb=1 and sheng-aks-sls=3.
-- The package workflow downloads the three WCN7850 firmware files from linux-firmware with curl because kernel.org rejects urllib, then fails closed unless each file size and SHA-256 matches firmware/wcn7850/manifest.json.
-- The package workflow fetches the locked Ath12kWifi Linux, FreeBSD and wpa\_supplicant sources before packaging because prepare-supplicant.py checks deps/ before the later kernel-build fetch can run.
-- The CI source-fetch step patches the pinned Ath12kWifi fetch-sources.py sparse-checkout call to use slash-stripped paths and --skip-checks because the lock mixes directory and individual-file paths.
-- The CI source-fetch patch is fail-closed: it accepts exactly the known upstream call or the already-patched call and stops if the upstream script layout changes, rather than silently continuing without the fix.
-- The Wi-Fi firmware and source fetches are required packaging inputs; failures in download, locked revision, archive hash, required source files or firmware manifest verification stop the package job rather than disabling Wi-Fi.
-- The package workflow now repairs the exact turnip-frame-diagnostics.patch creation header for src/freedreno/vulkan/tu\_frame\_diagnostic.h, inserts a real LF-terminated new file mode 100644 line, verifies it, and runs git apply --stat before packaging; the previous generic repair emitted a literal backslash-n, so the 2026-11-09 package run still failed while applying this patch.
-- The SM8550 feed pin must include Sm8550GeniUart.h, Sm8550GeniUart.c, Sm8550QupDma.h and Sm8550QupDma.c: BluetoothProbe.cpp and build-qca-bluetooth.py compile against these inputs; pin 009512d62acc907189648aa51f2066d85940e97d adds the missing GENI UART and QUP DMA sources.
+- The 24A446 runtime selects signed Bluetooth userland and bluetooth=1. Other OS profiles remove the runtime stanza.
+- drivers/QcomDwc3 is a submodule. The iPadOS 27 prelink roots add the USB stacks, and its boot arguments add usb=1 and aks-sls=3.
+- The board's kernel.prelink.roots \(the iPadOS 27 list plus the USB stacks\) replaced every profile's list, so the macOS kernel was prelinked with the iPadOS closure. The list moved to os\_overrides."ipados-27.0.1-24A446"; iPadOS 27, 26 and 17 resolve to unchanged roots and macos-27.3-26C5035r uses its profile list. An os\_overrides remove deletes the merged key, so it cannot drop only the board value.
+- The macOS override \(macos-27.3-26C5035r\) removes the iPadOS install entry, seed-edit tool and audio, Wi-Fi, Bluetooth, wallpaper and AppSync runtime layers, and sets ADT chip\_id 6050 \(T6050, Mac17,11\).
 
 ### 完成条件
 
@@ -97,14 +98,14 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/board.toml)
-- `source`: [The sheng-lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the sheng-lite=1 jobs.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-boot-watchdog-policy.py)
-- `device`: [Boot 50d4021e7 with sheng-lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `source`: [The lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the lite=1 jobs.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-boot-watchdog-policy.py)
+- `device`: [Boot 50d4021e7 with lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch4.img</code>. Revision: `fe636ce2c24b5f5ef406e2dc70504d2573f00092`.
-- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/board.toml)
-- `device`: [On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `device`: [On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4.img</code>. Revision: `1c0d9770f6b3cf8de565ba793146c8d5427b979f`.
-- `device`: [On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `device`: [On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4-lock-fix.img</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
 
 ## 固件与启动 {#firmware}
@@ -159,9 +160,9 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/proprietary-files.txt)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/proprietary-files.txt)
 - `source`: [Shared FDT initrd block-device publication; board memory policy remains in uefi-sheng.](https://github.com/UniXNU/UniXNU/blob/8d157ee18ae9c4d518aba28cb3040a84e860dcd1/package/UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.c)
-- `host`: [2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados26-boot-build.json)
+- `host`: [2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados26-boot-build.json)
   Command: <code>shasum -a 256 ../UniXNU/out/sheng/ipados-26.5.2-23F84/sheng_ipados26/boot/boot.img</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
 
 ## CPU 与中断 {#cpu}
@@ -178,7 +179,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 配置
 
 - dts/sheng.dts includes sm8550.dtsi; shared CPU and interrupt definitions come from the SoC source.
-- Kernel arguments select sheng-smp=1 and armcpu-spi-ipi=1.
+- Kernel arguments select smp=1 and armcpu-spi-ipi=1.
 
 ### 操作步骤
 
@@ -187,6 +188,10 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- macOS 27.3: timebase-user=1 lets userspace read the 5/4 scaled timebase without a trap; the kernel changes libsystem's counter path in place after code signing validation. Not yet run on hardware.
+- armcpu-edge=1 with the two-cluster matrix of zzzzzzzzzzz-sheng-edge-matrix.patch lets an idle P core take waiting E work; without the argument no thread moves between the clusters \(macOS runs 56 to 61: the busiest E core at 90 % or more in 13 to 28 % of the rows\). Not yet run on hardware.
+- The cores are registered without a power gate latency, so every IODelay of a thread blocks on a timer; armcpu-idle-latency-us sets one \(default 0\).
+- cpufreq=4 is in the macOS 27.3 kernel arguments; the probe runs there unchanged.
 - CPU affinity values are hardware identifiers. Enabled CPU count and MPIDR affinities must be checked together.
 - GIC register ranges must use translated physical addresses from the hardware tree.
 - XNU accepts work interval operations 6, 7 and 8 \(interval start, update and finish\) through patches/xnu/native-work-interval-instance.patch in UniXNU; without a performance controller they only succeed.
@@ -206,8 +211,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/dts/sheng.dts)
-- `device`: [Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/dts/sheng.dts)
+- `device`: [Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch3.img</code>. Revision: `948a8b8696e56c0ab74a4a1ee22753744ea462e3`.
 
 ## 内存与 DMA {#memory}
@@ -231,6 +236,9 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- macOS 27.3: DarwinBoot lists the free memory outside the kernel's window \(the low DRAM bank, about 867 MiB by the firmware's map\) and the kernel adopts it as ordinary VM memory, page by page after a probe load \(458 MiB on hardware, hw.memsize 6.37 GiB\). The aperture addresses of that memory lie below the kernel's static region, outside the addresses the kernel map's ranges share. The built-in arguments keep the GPU pool off \(gpu-pool=0\); the rest is memory another owner keeps \(the probe's load is refused\) and stays untouched. payload.adt owned\_memory\_outside\_reserved keeps the audio driver's DSP buffer \(64 KiB at 0xd0000000\) out. The GPU pool of package/GpuMemoryPool.cpp is used only by a kernel that does not adopt the memory.
+- macOS 27.3: the kernel window starts at DRAM bank 1 \(0x880000000\) and spans the inaccessible range 0x8BB300000..0x8C0000000; DarwinBoot lists that range and firmware-held memory and the kernel leaves them out \(expected hw.memsize 5811 to 6067 MiB, was 4864\). Not yet run on hardware.
+- The macOS kernel was built with the embedded jetsam policy: 196 highwater kills in five boots \(com.apple.dock.extra 113, iconservicesagent 62\); on the macOS target the highwater and compressor-thrashing kills are removed, as in Apple's macOS kernel.
 - The sheng WLAN node exports the wlan ADT name used by wifid matching. It adds service-discovery metadata to the shared DTS; DRAM reservations and DMA resource ownership continue to use the existing board and controller descriptions.
 - Physical register translation and CPU virtual mappings have different purposes. Preserve physical resource ranges in hardware descriptions.
 - GPU and UFS use different SMMU instances and stream assignments.
@@ -252,7 +260,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/dts/sheng.dts)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/dts/sheng.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -281,16 +289,23 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
-- ShengUfs also owns the apps SMMU stage 1 windows for the display bank \(sheng-dpu-scanout\) and the WiFi endpoint \(sheng-wifi=2 or more\); both are off by default.
+- Verified-root tables of header-only policies are read and authenticated whole at bring-up, but only a SHA-256 of each 4096-byte table page stays wired \(about 1 MiB for the macOS 27.3 windows instead of 130 MiB of tables\). A block takes its table page from a wired cache of native-vroot-cache MiB \(default 8\) shared by all windows, or reads it from the .vroot object through the transport, checks it against the kept page hash and caches it; a page that does not match refuses every block it covers. native-vroot-cache=0 keeps each whole table wired. The UFS row shows vt \(hits, misses, reads, evictions, waits, refused pages\) and vtc \(cache pages, wired KiB\). Not yet run on hardware.
+- macOS 27.3: cs-lazy=1 authenticates a 16 KiB signed block when one of its pages is first validated instead of reading every image whole when its signature is added. Not yet run on hardware.
+- Both block devices report Medium Type Solid State; before, every disk logged isssd 0 and swap, read-ahead and I/O throttling used their rotating-disk values. Not yet run on hardware.
+- On macOS 27.3 no volume and no swap is encrypted; UFS command slots never ran out \(32, peak 13\). The signature pass over the dyld shared cache \(6873 MiB, about 30 s of every boot in one thread\) runs on every processor.
+- ShengUfs also owns the apps SMMU stage 1 windows for the display bank \(dpu-scanout\) and the WiFi endpoint \(wifi=2 or more\); both are off by default.
 - An idle AHB branch may report CLK\_OFF with hardware gating enabled. Check enable and gating bits together.
 - SMMU bypass still has address-width constraints. Validate every DMA range and context-bank assignment.
 - ShengUfs contains controller access, GPT/window parsing and sheng Data/log policy. Reuse each layer according to its inputs.
 - iPadOS 26 source-interface build: ShengUfs and all 15 public IOStorageFamily 337.100.1 compilation units produce arm64e iOS 26 objects. Verified-root policy flags remain enabled; four root-path host suites pass ASan/UBSan.
 - The Wi-Fi SMMU window is now 128 MiB: the mainline firmware/CE/DP allocation exceeded the previous 48 MiB window on device; stream ownership and 32-bit IOVA base remain unchanged. The display bank's TCR2 SEP field \(bits 17:15\) is set so IOVAs with bit 31 translate. The userdata reserve past the log and its export region is readable through native\_ufs\_import\_read and is never written by the driver.
 - scripts/policies/ipados-\* carry the signed root-policy headers \(manifest.header.bin, trusted-key.bin, verification.json\) of each OS profile; the kernel archives pass scripts/policies/&lt;profile&gt; to build-sheng-source-storage.py with --policy-dir, and the full block tables stay local inputs of the userdata image., and .gitignore keeps scripts/policies/\*\*/\*.bin tracked under the global \*.bin ignore.
-- ShengUfs runs up to 32 commands at once: the request list sits on a write-combined page of its own \(as Linux's coherent DMA memory on this non-coherent stream\) and slot s uses entry s; without that page 16 slots use the even entries of region A. Completion takes the controller interrupt \(GIC SPI 265, UTRCE, UTRD interrupt bit\) and wakes only the slots whose doorbell bits cleared; a wait polls for 200 us, then sleeps. Page-aligned buffers are read and written by DMA through a PRDT of up to 1 MiB per command. A full slot pool hands a freed slot to its oldest waiter.
-- The link runs HS-G5 Rate A on two lanes in FAST mode as the boot firmware left it \(PA\_TxGear and PA\_RxGear 5, PA\_PWRMode 0x11\). sheng-ufs-bench=1 runs, before the boot goes on, the read tests of the Linux reader's ufsbench on the same LBAs of the root image, compares zero copy with the data-area path, prints the results into the message buffer and restarts into fastboot. scripts/linux-ufsbench.py runs the same tests on the same LBAs under the mainline Linux reader, unattended; scripts/compare-ufsbench.py compares the two.
+- ShengUfs runs up to 32 commands at once: the request list sits on a write-combined page of its own \(as Linux's coherent DMA memory on this non-coherent stream\) and slot s uses entry s; without that page 16 slots use the even entries of region A. Completion takes the controller interrupt \(GIC SPI 265, UTRCE, UTRD interrupt bit\) and wakes only the slots whose doorbell bits cleared; a wait spins for 200 us \(native-ufs-spin-us\), one WFE between polls instead of 2 us timer pauses, then sleeps on the interrupt, earlier if another thread waits for its CPU; native-ufs-wait=0 restores the timer pauses and 2 sleeps at once. The UFS row shows where commands complete, the spins and the commands still in flight. Not yet run on hardware. Page-aligned buffers are read and written by DMA through a PRDT of up to 1 MiB per command. A full slot pool hands a freed slot to its oldest waiter.
+- The link runs HS-G5 Rate A on two lanes in FAST mode as the boot firmware left it \(PA\_TxGear and PA\_RxGear 5, PA\_PWRMode 0x11\). ufs-bench=1 runs, before the boot goes on, the read tests of the Linux reader's ufsbench on the same LBAs of the root image, compares zero copy with the data-area path, prints the results into the message buffer and restarts into fastboot. scripts/linux-ufsbench.py runs the same tests on the same LBAs under the mainline Linux reader, unattended; scripts/compare-ufsbench.py compares the two.
 - NativeRamBlock serves direct Data requests without its gate: reads take no lock, a write holds its page range and the flush lock shared and commits its bits under one lock, a flush holds the flush lock exclusive. A synchronize with no write since the last flush sends no command.
+- macOS mounts Data at /System/Volumes/Data. The system volume's /private is empty; /etc, /var and /tmp resolve through the /private firmlink of /usr/share/firmlinks. APFS sets firmlinks only for the Data volume of the system volume's own group, and the owner Data volume is on another device, so macos-owner-data-firmlinks.patch sets each listed firmlink with vnode\_setasfirmlink after the mount and follows firmlinks on name cache misses.
+- The macOS Data seed comes from /System/Library/Templates/Data \(about 0.8 GiB\). Its entries are owned by root and service accounts \(\_windowserver, \_mdnsresponder, \_postfix and others\), so scripts/make-macos-data-seed.py copies it with ditto as root; the iPadOS seed is written with owners off \(uid 99\).
+- The Data seed is carried in every payload beside the 137 MiB macOS kernel, and the packed format holds at most 256 MiB, so the 0.8 GiB template is not copied whole: files below private/, Users/, Library/Preferences/ and Library/Keychains/ \(267 files, 18 MiB\) are copied, and the other 13004 files become links to the system volume's template, as macOS does for Data.symlink-patterns. The copy goes through a scratch volume so the seed image holds no blocks of the replaced files; the macOS payload volume is 192 MiB.
 
 ### 完成条件
 
@@ -303,6 +318,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - The SoC DTSI exports host and PHY ranges. GCC and UFS SMMU handling currently use constants and operations in ShengUfs.
 - The root transport uses a polled request slot. Its firmware adoption path requires a usable existing request list.
 - 23F84 now has deferred source storage registration, original IOStorageFamily/APFS loading, signed policy sidecar handoff and build selection. These latest changes have not been built or run: the user explicitly stopped testing. Runtime class/interface compatibility, root mount and persistence remain unqualified. See reports/ipados26-source-storage-runtime.json.
+- The macOS Data template has 19 entries with the restricted flag \(Library/StagedExtensions, private/var/db/oah and others\). With System Integrity Protection enabled on the build Mac no process may set that flag, so make-macos-data-seed.py copies them without it and fails on any other copy error; on the device those Data directories are not SIP-protected.
 
 ### 下一步
 
@@ -311,10 +327,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 证据
 
 - `source`: [Implementation and configuration described in this section](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp)
-- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados26-source-drivers.json)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
-- `device`: [Every read test \(4 KiB to 1 MiB, queue depth 1, 8 and 32, random and sequential\) matches or exceeds the mainline Linux 7.2 ufshcd-qcom driver on the same tablet; worst ratio 1.013 \(4 KiB at queue depth 8\). 1000 zero-copy reads match the data-area path.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/SourceStorage.cpp)
-  Command: <code>boot with sheng-ufs-bench=1 and read the UFS log; ufsbench on the Linux reader over the same LBAs; three runs each</code>. Revision: `fd420df000f43213d9cd019725abff0849c98c72`.
+- `device`: [Every read test \(4 KiB to 1 MiB, queue depth 1, 8 and 32, random and sequential\) matches or exceeds the mainline Linux 7.2 ufshcd-qcom driver on the same tablet; worst ratio 1.013 \(4 KiB at queue depth 8\). 1000 zero-copy reads match the data-area path.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/SourceStorage.cpp)
+  Command: <code>boot with ufs-bench=1 and read the UFS log; ufsbench on the Linux reader over the same LBAs; three runs each</code>. Revision: `fd420df000f43213d9cd019725abff0849c98c72`.
+- `source`: [The macos-27.3-26C5035r override selects the UniXNU macOS profile, whose macos-owner-data-firmlinks.patch mounts owner Data at /System/Volumes/Data and sets the firmlinks; not yet run on the device.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `source`: [\[os\_overrides."macos-27.3-26C5035r".payload.runtime\] data\_seed\_tool selects UniXNU scripts/make-macos-data-seed.py, which copies the system volume's Data template with owners as root.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
 
 ## 显示 {#display}
 
@@ -329,9 +347,9 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 配置
 
 - Select GopFramebuffer; CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y; artwork-display-gamut = sRGB.
-- sheng-vsync=120 requests board display timing.
-- sheng-dpu-scanout=2 lets the display pipes fetch the compositor surface through a stage 1 window of the display bank \(TCR2 SEP 7\); off by default. The flip waits for the GPU fence of the frame \(always on\).
-- sheng-backlight=1 starts the backlight driver; sheng-backlight-control=0 leaves out backlight-control and the AppleARMBacklight metaclass answer.
+- vsync=120 requests board display timing.
+- dpu-scanout=2 lets the display pipes fetch the compositor surface through a stage 1 window of the display bank \(TCR2 SEP 7\); off by default. The flip waits for the GPU fence of the frame \(always on\).
+- backlight=1 starts the backlight driver; backlight-control=0 leaves out backlight-control and the AppleARMBacklight metaclass answer.
 
 ### 操作步骤
 
@@ -340,6 +358,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- macOS 27.3: QuartzCore presents half float because the device answers as virtualized \(vmm-present\); ca-fb-8bit=1 makes WindowServer present 8-bit BGRA, which the display pipes scan out directly. Not yet run on hardware.
+- macOS: WindowServer presents half-float frames that are already encoded; fb-half=2 in the macOS kernel arguments takes them as such, and the grey cast of the linear reading \(fb-half=1\) is gone on hardware.
 - The GENI I2C core also moves buffered transfers of any length for the keyboard cover; the backlight register transfers are unchanged.
 - iPadOS 27 reads the nits range from IODisplayParameters.BrightnessMilliNits and sets brightness-nits as signed 16.16. CoreBrightness needs backlight-marketing-table and backlight-calibration-parameters to create the display. BrightnessControl reads LmaxProduct as 4 bytes of 16.16 and LmidProduct and LminProduct as numbers; a zero LmaxProduct makes every slider position the maximum. iPadOS 17 uses brightness and FadePeriod; the service accepts both.
 - ADT vmm-present makes MobileGestalt answer IsVirtualDevice, and iPadOS 27 CoreBrightness then selects VMBLControl, which drops every brightness request. AMFI and many frameworks need the answer, so UniXNU scripts/appsync/BacklightMode.m changes only backboardd: initBLControl: gets mode 1 instead of 3.
@@ -348,7 +368,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - The display source and ABI binding are selected independently from the physical panel configuration.
 - The board configuration declares sRGB for the current 8-bit framebuffer path.
 - scripts/build-gop-legacy-display.py also builds the board driver objects in the display archive, including the ADSP, IPC router, FAT reader and battery manager.
-- With sheng-dpu=2 DisplayTimingProbe reads the VIG 0 and 1 pipes, CTL 0 and the tear checks; sheng-dpu=3 also rewrites the pipe addresses and times the flush latch \(5.4 ms, no start needed: the panel refreshes by itself\).
+- With dpu=2 DisplayTimingProbe reads the VIG 0 and 1 pipes, CTL 0 and the tear checks; dpu=3 also rewrites the pipe addresses and times the flush latch \(5.4 ms, no start needed: the panel refreshes by itself\).
 - Direct scanout: the compositor submits a swap when the command buffer is scheduled, so the flip waits until the GPU wrote the frame; the wait removes the flicker \(content changes of the shown surface fell from 808 to 2 per run\). Direct scanout needs the 8-bit BGRA framebuffer.
 - The GENI I2C core also moves 1 to 8 byte writes and 1 to 4 byte reads \(the audio amplifiers use 32-bit registers\); the backlight keeps its 8-bit transfers.
 - The legacy display builder now refuses arm64e/iOS 26 before reading original ABI addresses. Its existing use of kernel\_target.TRIPLE does not qualify the iOS 17 class layout for 23F84. Source input transport compilation is independent of this builder.
@@ -373,8 +393,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/LegacyDisplayProbe.cpp)
-- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/LegacyDisplayProbe.cpp)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/LegacyDisplayProbe.cpp)
+- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/LegacyDisplayProbe.cpp)
 
 ## 输入 {#input}
 
@@ -388,7 +408,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 配置
 
-- Select ShengHidInput, ShengNovatekTouch and QcomGeniSpi; sheng-touch=4 and sheng-touch-hid=1 select board integration.
+- Select ShengHidInput, ShengNovatekTouch and QcomGeniSpi; touch=4 and touch-hid=1 select board integration.
 
 ### 操作步骤
 
@@ -397,6 +417,10 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The touch thread counts its line interrupts, wakes, header peeks \(stale, invalid\), full frame reads and frames with the time in each \(\[touch cost\]\); idle, it reads one frame about every 1.5 s, 2.4 ms each.
+- The touch thread sleeps through the 5418-byte frame transfer until the serial engine's interrupt \(GIC SPI 357\) instead of polling; a deadline covers a lost interrupt and after eight transfers without gain it polls again \(touch-spi-irq=0 keeps polling\). Not yet run on hardware.
+- Once touched, the touch controller leaves doze and sends every frame of its active scan, about 0.38 s of CPU per second in the touch thread with nobody touching. The touch thread sends the doze host command again once three seconds have passed without a finger, checked after every wake whatever frame type was announced; on hardware the thread then returns to no CPU time.
+- On macOS 27.3 the HID device starts with offline-hid-home=1, and WindowServer pairs the touch screen with the display by the service's displayUUID, the UUID the framebuffer publishes as IOMFBUUID.
 - ButtonProbe retries the PMIC interrupt setup up to four times; a failure records the failing command in B err.
 - backboardd caches the event service's usage pair when it first sees the service, and drops every touch if that pair is not 0x0d/4. The DriverKit driver writes 1/6 and registers the service, so HidInputProbe checks every 2 ms until the service has been registered for 10 s.
 - The shared SMMU fixture adds UART14 stream 0x423 beside touch without modifying its route and accepts a 64-bit DMA buffer address.
@@ -423,15 +447,15 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/BootDiagExport.c)
+- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/BootDiagExport.c)
 - `host`: [Host replays cover adjacent-key taps, bottom-edge tip-down coordinates and four- and five-finger pinches with stable IDs.](https://github.com/UniXNU/ShengNovatekTouch/blob/3b44b1b7603eaadae942ea44ddc51bdcc48ad060/Test/touch-core.c)
   Command: <code>python3 scripts/check-touch-host.py</code>. Revision: `3b44b1b7603eaadae942ea44ddc51bdcc48ad060`.
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/TouchBoard.h)
-- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados26-source-drivers.json)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/TouchBoard.h)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
-- `device`: [Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/TouchProbe.cpp)
+- `device`: [Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/TouchProbe.cpp)
   Command: <code>fastboot boot sch1.img</code>. Revision: `8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87`.
-- `device`: [Five fingers retained distinct IDs through a 250 ms pause. All 57 rapid typing contacts released. Both App Switcher gestures failed and rapid taps sometimes selected alternate characters.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `device`: [Five fingers retained distinct IDs through a 250 ms pause. All 57 rapid typing contacts released. Both App Switcher gestures failed and rapid taps sometimes selected alternate characters.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch2.img</code>. Revision: `8ec842f38c21ef1d73e12000fae16df7442e0c73`.
 
 ## keyboard {#keyboard}
@@ -447,7 +471,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 配置
 
-- sheng-keyboard=1 starts the driver. sheng-keyboard-khz selects 1000 \(default\), 400 or 100 kHz; sheng-keyboard-backlight sets the backlight from 0 \(default\) to 100.
+- keyboard=1 starts the driver. keyboard-khz selects 1000 \(default\), 400 or 100 kHz; keyboard-backlight sets the backlight from 0 \(default\) to 100.
 - The supplies use active TCS 2 of the apps RSC under AppsSmmuLock, as the microphone and USB rails do.
 - The iPadOS 27 build compiles KeyboardCover.cpp with the source interface command of NativeHidInput and embeds the pinned image.
 
@@ -459,6 +483,10 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- keyboard-lone=1 keeps a report's only touching contact although the controller gives it no confidence; two or more such contacts are still lifted as resting hands. Not yet run on hardware.
+- On macOS the touchpad is dead while its reports carry only touching contacts without confidence \(3 to 28 s at first use\); cause unknown, the KP rows record such reports. The pointer takes movement only between reports with the same contact ids and keeps a click's button until release.
+- On macOS 27.3 the cover is a keyboard and a pointer: no Keyboard Power input \(macOS reads it as the power key held down\) and the touchpad as relative motion, scroll steps and two buttons \(wn8030\_pointer\_report\). On the tablet the keys work, macOS's keyboard setup completes and the pointer moves in the right directions \(macOS 27.3, 2026-11-10\); scrolling and the buttons were not reported on.
+- keyboard=1 is in the macOS 27.3 kernel arguments; the cover enumerates there as an I2C HID keyboard.
 - The boot ROM answers id 0xc8 in state 0, takes a 65-byte header \(state 1\), 99 data blocks of up to 503 bytes, a verify command \(state 3\) and a boot command. The image header's ram\_code\_checksum is the byte sum of the 49756 code bytes; the header command carries their 32-bit word sum.
 - Controller frames start with 0x57 and byte 3 names the content: report 5 keyboard, 6 consumer, 0x19 touchpad, 0x22 to 0x24 vendor messages \(0xa2 attach state, 0x64 accelerometer, 0x24, 0x31 and 0x32 authentication\).
 - SmartCoverServiceFilter matches a service whose usage pairs include Touch Pad, Finger and Keyboard and whose transport does not contain test, and it needs SurfaceDimensions. IOHIDDevice lists only Application and Physical collections as usage pairs, so the fingers are Physical collections of one device.
@@ -489,12 +517,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/KeyboardProbe.cpp)
-- `host`: [2536 codec checks pass under ASan and UBSan. For the pinned image the header command and the first and last data commands match the script's own encoding of the boot ROM structures \(99 blocks, 49756 code bytes\).](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-wn8030-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/KeyboardProbe.cpp)
+- `host`: [2536 codec checks pass under ASan and UBSan. For the pinned image the header command and the first and last data commands match the script's own encoding of the boot ROM structures \(99 blocks, 49756 code bytes\).](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-wn8030-host.py)
   Command: <code>python3 scripts/check-wn8030-host.py</code>. Revision: `87dd80c2de24d40a5038e4d73f2ce444e23de84c`.
-- `device`: [iPadOS 27.0.1 \(24A446\) with appsync=1: the image loads in 586 ms at 1 MHz, attach creates the HID device, typing, Caps Lock, the touchpad and its pointer and scroll gestures work, folding the cover behind the tablet disables input, and the buttons arm \(B st=3\).](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/KeyboardProbe.cpp)
+- `device`: [iPadOS 27.0.1 \(24A446\) with appsync=1: the image loads in 586 ms at 1 MHz, attach creates the HID device, typing, Caps Lock, the touchpad and its pointer and scroll gestures work, folding the cover behind the tablet disables input, and the buttons arm \(B st=3\).](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/KeyboardProbe.cpp)
   Command: <code>fastboot boot boot.img</code>. Revision: `87dd80c2de24d40a5038e4d73f2ce444e23de84c`.
-- `host`: [3185 checks pass under ASan and UBSan, including 67- and 513-byte writes and 68-byte reads through a 16-word FIFO model.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/tests/geni_i2c_host.c)
+- `host`: [3185 checks pass under ASan and UBSan, including 67- and 513-byte writes and 68-byte reads through a 16-word FIFO model.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/tests/geni_i2c_host.c)
   Command: <code>python3 scripts/check-geni-i2c-host.py</code>. Revision: `83e43ef798df30a889a3cea76d6393a962d35d77`.
 
 ## GPU {#gpu}
@@ -512,7 +540,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 - Select Adreno740, AdrenoMetal and AirNir; shared SM8550 operations arrive through component dependencies.
 - Board scripts combine shared GMU code with package/ShengGmuVotes.c.
-- sheng-gpu-preempt defaults to 2: requested high priorities use ring 0, normal/low work uses ring 1. Mode 1 sends only low/background to ring 1; mode 0 selects one ring.
+- gpu-preempt defaults to 2: requested high priorities use ring 0, normal/low work uses ring 1. Mode 1 sends only low/background to ring 1; mode 0 selects one ring.
 
 ### 操作步骤
 
@@ -521,15 +549,22 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The GPU governor counts a 16 ms window as work only when the GPU was busy for 1 % of it or the ring holds jobs; an idle window's trace of busy time is rest, so the wake boost fires at the first work after a pause \(60 to 95 boosts a run on hardware, none before\).
+- macOS 27.3: DarwinBoot lists the free memory outside the kernel's window \(the low DRAM bank, about 867 MiB\) and package/GpuMemoryPool.cpp hands it to the GPU driver, which serves buffer objects from it before it takes window memory \(gpu-pool=0 turns it off\). gpu-bundle-system=1 is off: with the plugin only under /System/Library/Extensions IOGPU refuses it and WindowServer gets no Metal device.
+- Fence waiters are woken by the driver's completion pass from the GPU interrupt \(gpu-fence-wake=0 keeps the timed pause\); a submission no longer cleans the driver's eleven context buffers \(8548 KiB each time before\); a GPU-denied task submits at background priority; gpu-dcvs-span sets how many 16 ms windows the governor sums \(default 1\). Not yet run on hardware.
+- The Metal runtime discards idle resources that callers declare Volatile and answers Empty when they are used again \(gpu-purge=0 keeps them\). Not yet run on hardware.
+- The GPU governor treats the GPU as idle only after 80 ms without work. One empty 16 ms window at the floor level used to count as idle, so every light frame after it took the wake boost to the top level: macOS at rest spent 96 % of the time above the floor with the GPU under 1 % busy. With the corrected rule the wake boosts at rest dropped from 530 to none in a run.
 - Each ring restores its executed page-table snapshot, saves GMEM and runs the SRAM postamble. GMU keepalive covers restore-register writes through the incoming WPTR update; board writes retry AHB-fence drops.
 - The shared process queue keeps FIFO across priority changes. Current live Metal requests determine priority, with task GPU role selecting foreground or background.
 - All AdrenoMetal clients use one sample by default; NATIVE\_METAL\_SINGLE\_SAMPLE=0 preserves a process's requested sample counts. The frontend implements heap aliasing, swizzles, mip/slice copies, function constants and callbacks, specialized link names, backing-allocation statistics, queue capacity and full viewport/scissor arrays.
 - Writable same-user caches cover frontend, runtime and Turnip IR3 artifacts; restricted clients use private caches. Normal builds enable Mesa disk caching and apply the recorded vendor patches.
-- The optional sheng-wallpaper-freeze=1 mode retains a Poster renderer's first completed large IOSurface draw and parks later runtime commits. PosterBoard and compositor clients keep running. Event 60 identifies the completion boundary and parked commands.
+- The optional wallpaper-freeze=1 mode retains a Poster renderer's first completed large IOSurface draw and parks later runtime commits. PosterBoard and compositor clients keep running. Event 60 identifies the completion boundary and parked commands.
 - The current sheng iPadOS 27 image boots and accepts touch interaction, and shader priming covers 280 of 280 selected libraries. Foreground and room-worker 64 MiB allocations still overlap. Focused latency capture retains full-width runtime memory phases, command and pass timings, paired callbacks and allocation roles. GPU pixel collection and per-frame content scans are disabled.
 - The kernel GPU ring keeps submission, retirement, display arrival, fence, latch, build identity and the render server's render, encode and completion thread identities; client processes forward nothing else. The decoders read only these records and write touch-window subsets.
 - check-gpu-trace.py checks that Turnip's GMEM swap trace \(passes, transfers, attachments\) leaves only the render server, and the kernel store keeps events 36, 37 and 44.
-- AdrenoMetal carries 25 patches over metal2vulkan 963f0e64. The lowering thread, commit submission and pipeline warm pass are off by default and sheng-metal-flow=1 enables them for testing. They showed no measured frame rate gain, and one of four boots with them stopped presenting at the logo. pipeline\_waits stays Exact because the upstream default drops draws of a pipeline not made in time.
+- AdrenoMetal carries 25 patches over metal2vulkan 963f0e64. The lowering thread, commit submission and pipeline warm pass are off by default and metal-flow=1 enables them for testing. They showed no measured frame rate gain, and one of four boots with them stopped presenting at the logo. pipeline\_waits stays Exact because the upstream default drops draws of a pipeline not made in time.
+- The macos27 target builds Turnip, the Rust bridge and NativeAdrenoMetal.bundle as arm64e Mach-Os for macOS 27 \(LC\_BUILD\_VERSION platform 1, minos 27.0\). The macOS bundle keeps the executable and Turnip in Contents/MacOS \(turnip::libraryPath looks beside the executable\) and gpu-build.json in Contents/Resources, which codesign seals as data. The macOS payload does not yet carry it \(\[payload.runtime\] gpu\_addon = false\).
+- Mesa's ir3 parser needs GNU Bison 3 or newer \(-Wcounterexamples\); Xcode's bison is 2.3. The builds take tools from .cache/mesa-tools/bin first.
 
 ### 完成条件
 
@@ -542,19 +577,19 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 下一步
 
 - Qualify concurrent Metal clients, repeated preemption, rendered pixels and frame pacing on sheng with iPadOS 27.
-- Run third-party Metal applications with cryptid 0 on the metal2vulkan 963f0e64 build. Find why backboardd stopped presenting with sheng-metal-flow=1 before enabling any of its three paths.
+- Run third-party Metal applications with cryptid 0 on the metal2vulkan 963f0e64 build. Find why backboardd stopped presenting with metal-flow=1 before enabling any of its three paths.
 
 ### 证据
 
-- `host`: [Address/undefined-behavior checks pass for ring packets, preemption power sequencing, per-ring tables, queue FIFO, fence-history rollover and CPU-table fallback. Kernel, board, Turnip and Metal bridge builds target arm64e iPadOS 27. Hardware qualification of these changes is pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-gpu.md)
+- `host`: [Address/undefined-behavior checks pass for ring packets, preemption power sequencing, per-ring tables, queue FIFO, fence-history rollover and CPU-table fallback. Kernel, board, Turnip and Metal bridge builds target arm64e iPadOS 27. Hardware qualification of these changes is pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-gpu.md)
   Command: <code>python3 scripts/check-native-adreno-scheduling.py</code>. Revision: `509bd695c4f58dab8d2d005d1b92f5ba85312595`.
-- `device`: [iPadOS 27 build 24A446, capture 532856a9, panicked while idle on the home screen. The interrupted stack reached lck\_mtx\_unlock\_contended from native\_adreno\_preempt\_irq via gpuIrq. The board now queues preemption completion on a serialized thread call.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/GpuPowerProbe.cpp)
+- `device`: [iPadOS 27 build 24A446, capture 532856a9, panicked while idle on the home screen. The interrupted stack reached lck\_mtx\_unlock\_contended from native\_adreno\_preempt\_irq via gpuIrq. The board now queues preemption completion on a serialized thread call.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot sch1.img</code>. Revision: `8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87`.
-- `device`: [Boot 5cfa7b18a recorded a responsive desktop through 360 s with deferred CP preemption and cross-core stack sampling disabled.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-touch-frame-gaps.md)
+- `device`: [Boot 5cfa7b18a recorded a responsive desktop through 360 s with deferred CP preemption and cross-core stack sampling disabled.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch2.img</code>. Revision: `8ec842f38c21ef1d73e12000fae16df7442e0c73`.
 - `host`: [The patch series check passes for 25 patches over metal2vulkan 963f0e64. The frontend host check passes through the scanout presenter on Apple M1 through MoltenVK with the lowering thread, commit submission and warm pass enabled. The Turnip host simulation does not link, so its driver cache and plugin bridge phases did not run.](https://github.com/UniXNU/AdrenoMetal/tree/c333f988df1196a19abbe756f6e199984300a487/bridge/patches)
   Command: <code>python3 scripts/check-metal2vulkan-pin.py --latest; python3 scripts/check-native-metal-frontend-host.py</code>. Revision: `642c4fef77c28c5f9f32a3eb862fe8bea9ed0339`.
-- `device`: [iPadOS 27 build 24A446, same manual sequence in each boot. sheng-metal-flow=0: fps average 72.1 and 68.2, low 41.5 and 35.2. sheng-metal-flow=1: fps average 67.4 and 73.2, low 30.5 and 32.3. No swap-to-GPU delay data. A further sheng-metal-flow=1 boot did not reach the desktop: backboardd stopped at 4 commits about 81 s after the boot marker, with the warm pass at 1271 records and no panic. No stacks were captured, so its cause is unknown. In all sheng-metal-flow=1 boots the warm pass added no driver data.](https://github.com/UniXNU/AdrenoMetal/blob/6d7f73437087c57ee54a41adceb1735daaea405e/bridge/NativeMetalObjects.rs)
+- `device`: [iPadOS 27 build 24A446, same manual sequence in each boot. metal-flow=0: fps average 72.1 and 68.2, low 41.5 and 35.2. metal-flow=1: fps average 67.4 and 73.2, low 30.5 and 32.3. No swap-to-GPU delay data. A further metal-flow=1 boot did not reach the desktop: backboardd stopped at 4 commits about 81 s after the boot marker, with the warm pass at 1271 records and no panic. No stacks were captured, so its cause is unknown. In all metal-flow=1 boots the warm pass added no driver data.](https://github.com/UniXNU/AdrenoMetal/blob/6d7f73437087c57ee54a41adceb1735daaea405e/bridge/NativeMetalObjects.rs)
   Command: <code>fastboot boot m2v-flow-off.img; fastboot boot m2v-flow-on.img</code>. Revision: `8d96e320996cdf33aa739ad8bf336cff0459a268`.
 
 ## bluetooth {#bluetooth}
@@ -574,7 +609,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - UART14 is QUP2 SE6 at 0x898000, GIC INTID 493, wrapper 0x8c0000 and apps-SMMU stream 0x423; CTS/RTS/TX/RX use GPIO 76/77/78/79 and BT\_EN uses GPIO 81.
 - The board's 3.2 Mbaud operating rate uses a 51.2 MHz serial source and 16x oversampling.
 - package/BluetoothFirmware.h and stage-bluetooth-firmware.py share firmware/qca under the Data addon.
-- sheng-bluetooth=1 starts the bound UART14 worker after Data addon installation; log-bluetooth=1 enables initialization messages. The drivers/QcaBluetooth submodule or an explicit --local-module checkout supplies kernel and runtime sources.
+- bluetooth=1 starts the bound UART14 worker after Data addon installation; log-bluetooth=1 enables initialization messages. The drivers/QcaBluetooth submodule or an explicit --local-module checkout supplies kernel and runtime sources.
 
 ### 操作步骤
 
@@ -585,6 +620,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The Bluetooth RX wake pin shares TLMM summary interrupt 240 with touch and keyboard and its raw status latches while the wake is disarmed; a wake acknowledgement queued behind a stopped UART clock made the worker spin, fixed in QcaBluetooth. Not yet run on hardware.
+- On macOS 27.3 the image carries the Bluetooth runtime: the serial device front end \(/dev/cu.BLTH\), the daemon patched by the 26C5035r adapter and BlueTool in the addon's sbin \(shown over /usr/sbin\), the capability library in the addon's lib \(shown over /usr/lib\), the firmware, and bluetooth=1. On the tablet the controller comes up, the system's job starts the patched daemon, it loads the library and opens the serial device; its initialization then failed on a Broadcom version command \(the daemon's default chipset\) and it restarted every ten seconds. The adapter now makes the third-party chipset the default; that has not run yet, so the Settings page and pairing are not confirmed.
 - On iPadOS 27.0.1 \(24A446\) the device pairs AirPods Pro, reconnects after reboot without pairing again, toggles power, plays A2DP at normal volume and quality, and shows noise control and battery. Music over Bluetooth during 2.4 and 5 GHz speed tests stays normal.
 - WcnPower records independent WLAN and Bluetooth ownership of the six shared supplies; the last owner releases them. Bluetooth-only startup omits the PCIe NoC vote. Wi-Fi startup uses this ownership interface.
 - The firmware VFS reader waits for Data addon installation, accepts controller firmware names, bounds file size and rejects short reads.
@@ -618,25 +655,25 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `host`: [Production ownership code passes ASan/UBSan for both startup orders, idempotent votes, independent release, Bluetooth-only PCIe exclusion and failed transitions. The power operations are simulated.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-wcn-power.py)
+- `host`: [Production ownership code passes ASan/UBSan for both startup orders, idempotent votes, independent release, Bluetooth-only PCIe exclusion and failed transitions. The power operations are simulated.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-wcn-power.py)
   Command: <code>python3 scripts/check-wcn-power.py</code>. Revision: `bea420e4520654670b95549fb4d3ecb6511ae8e1`.
-- `host`: [WifiProbe, BluetoothProbe, ArmCpu, touch, audio and boot-log sources compile using the selected iPadOS 27 arm64e kernel commands. The Bluetooth builder compiles eight protocol and SM8550 objects.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-bluetooth-board.py)
+- `host`: [WifiProbe, BluetoothProbe, ArmCpu, touch, audio and boot-log sources compile using the selected iPadOS 27 arm64e kernel commands. The Bluetooth builder compiles eight protocol and SM8550 objects.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-bluetooth-board.py)
   Command: <code>python3 scripts/check-bluetooth-board.py ASSEMBLED_TREE --extra-source ../UniXNU/drivers/ArmCpu/ArmCpu.cpp --extra-source package/TouchProbe.cpp --extra-source package/AudioProbe.cpp --extra-source package/BootLog.c</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/BluetoothFirmware.h)
-- `host`: [ASan/UBSan register models pass exact rate ratios, DFS handoff, native DMA page translation, ASID conflicts, bounded timeouts and preserved storage/touch routes.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-bluetooth-platform.py)
+- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/BluetoothFirmware.h)
+- `host`: [ASan/UBSan register models pass exact rate ratios, DFS handoff, native DMA page translation, ASID conflicts, bounded timeouts and preserved storage/touch routes.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-bluetooth-platform.py)
   Command: <code>python3 scripts/check-bluetooth-platform.py</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `host`: [Production GIC/GCC code passes ASan/UBSan for shared level IRQs, edge/exclusive checks, direct dispatch, masking, concurrent registration and shared clock lifetime.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-bluetooth-shared.py)
+- `host`: [Production GIC/GCC code passes ASan/UBSan for shared level IRQs, edge/exclusive checks, direct dispatch, masking, concurrent registration and shared clock lifetime.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-bluetooth-shared.py)
   Command: <code>python3 scripts/check-bluetooth-shared.py</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `host`: [The QcaBluetooth native adapter passes 144 AArch64 instruction cases at two ASLR slides and 58 ASan/UBSan HCI/policy cases. The arm64e library builds and passes signature verification. PAC operations are modeled without device keys; runtime installation and device checks are pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-bluetooth-native.md)
+- `host`: [The QcaBluetooth native adapter passes 144 AArch64 instruction cases at two ASLR slides and 58 ASan/UBSan HCI/policy cases. The arm64e library builds and passes signature verification. PAC operations are modeled without device keys; runtime installation and device checks are pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-bluetooth-native.md)
   Command: <code>cd drivers/QcaBluetooth &amp;&amp; out/native-venv/bin/python tools/test-native.py ORIGINAL_BLUETOOTHD &amp;&amp; python3 tools/test-type0.py ORIGINAL_BLUETOOTHD</code>. Revision: `97f48bf20bd47f233681668d50e5f5638e72384b`.
-- `host`: [The combined runtime verifies 45 files, three signed arm64e Bluetooth binaries, 716 launchd jobs, preserved native entitlements, 12 unchanged input trust modules and the original Data seed. Host libxpc accepts the cache. Bluetooth UART properties encode as little-endian values; platform sources and the executable/library mount patch compile for the target. Protocol simulation covers the Linux address conversion. Device execution and a complete image rebuild are pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-bluetooth-native.md)
+- `host`: [The combined runtime verifies 45 files, three signed arm64e Bluetooth binaries, 716 launchd jobs, preserved native entitlements, 12 unchanged input trust modules and the original Data seed. Host libxpc accepts the cache. Bluetooth UART properties encode as little-endian values; platform sources and the executable/library mount patch compile for the target. Protocol simulation covers the Linux address conversion. Device execution and a complete image rebuild are pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-bluetooth-native.md)
   Command: <code>python3 scripts/check-bluetooth-runtime.py --runtime RUNTIME --os-root ORIGINAL_OS --seed-record ORIGINAL_RUNTIME_INPUTS</code>. Revision: `1258c87da0cdbb0a25f59b030cd48997c2793548`.
-- `host`: [The complete kernel and fileset link; the 176 MiB FAT payload and temporary boot image build. Actual payload extraction verifies nine Bluetooth exports, six packed files, runtime/trust hashes, H4/3.2 Mbaud ADT, preserved Data seed and no automatic reset. Device operation is pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-bluetooth-native.md)
+- `host`: [The complete kernel and fileset link; the 176 MiB FAT payload and temporary boot image build. Actual payload extraction verifies nine Bluetooth exports, six packed files, runtime/trust hashes, H4/3.2 Mbaud ADT, preserved Data seed and no automatic reset. Device operation is pending.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-bluetooth-native.md)
   Command: <code>python3 drivers/QcaBluetooth/out/recovery-image/resume.py; python3 drivers/QcaBluetooth/out/recovery-image/verify-payload.py</code>. Revision: `b2c0146caafe7d23d57479ed401c7f4790e6c154`.
-- `device`: [Device log untagged-55f92f8343 records successful cache and Bluetooth overlays, an AMFI cache-hash query, PID 1 No service cache and Bluetooth DMA allocation ENOSPC before UART startup. The log writer reports zero write errors; device Bluetooth operation is not verified.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-bluetooth-startup.md)
+- `device`: [Device log untagged-55f92f8343 records successful cache and Bluetooth overlays, an AMFI cache-hash query, PID 1 No service cache and Bluetooth DMA allocation ENOSPC before UART startup. The log writer reports zero write errors; device Bluetooth operation is not verified.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-bluetooth-startup.md)
   Command: <code>fastboot boot UniXNU/out/sheng/inputs/sheng-linux-log.img; python3 UniXNU-sheng/scripts/read-sheng-log.py --wait 50 --out CAPTURE</code>. Revision: `8f2af527c7204b07535b9e015a53c05d8029c0ee`.
-- `device`: [AirPods Pro pair, reconnect after reboot and play A2DP at normal volume and quality; noise control and battery work; one bluetoothd process for the whole run with no panic and no UART errors. The images predate the kern.qbt\_\* rename and the board and driver were local checkouts.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
-  Command: <code>fastboot boot boot.img (sheng-bluetooth=1 log-bluetooth=2); pair and play AirPods Pro; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `cc895db196751e155831d58e23a6e33984360367`.
+- `device`: [AirPods Pro pair, reconnect after reboot and play A2DP at normal volume and quality; noise control and battery work; one bluetoothd process for the whole run with no panic and no UART errors. The images predate the kern.qbt\_\* rename and the board and driver were local checkouts.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (bluetooth=1 log-bluetooth=2); pair and play AirPods Pro; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `cc895db196751e155831d58e23a6e33984360367`.
 
 ## usb {#usb}
 
@@ -652,9 +689,9 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 配置
 
 - drivers/QcomDwc3 is a submodule of https://github.com/UniXNU/QcomDwc3.
-- sheng-usb=1 runs the driver; 2 adds register sampling; 3 also takes the controller off the bus and back once.
-- sheng-usb-host=&lt;s&gt; forces host mode after a delay; sheng-usb-back=&lt;s&gt; then returns to the cable's role.
-- sheng-aks-sls=3 reports no passcode.
+- usb=1 runs the driver; 2 adds register sampling; 3 also takes the controller off the bus and back once.
+- usb-host=&lt;s&gt; forces host mode after a delay; usb-back=&lt;s&gt; then returns to the cable's role.
+- aks-sls=3 reports no passcode.
 - board.toml adds the USB device and host stacks to the prelink roots for iPadOS 27 and leaves out AppleOnboardSerial and AppleSMC.
 - chip\_id 0x8142 comes from board.toml; board-id 0xc and security-domain 1 come from the OS profile.
 - The provider's configuration-string is standardMuxOnly.
@@ -667,7 +704,14 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
-- sheng-keyboard=1 in board.toml and the keyboard cover in LegacyDisplayProbe.cpp, BootLog.c and the iPadOS 27 board build start after the USB probe and do not change the USB stacks.
+- board.toml documents the adoption of the low DRAM bank, on by default; nothing of the USB controller depends on it.
+- The USB controller's buffers come from the VM, which on macOS 27.3 includes the adopted low DRAM bank; no USB memory sits at a fixed address there.
+- The \[usb ...\] board rows come from package/UsbProbe.cpp; package/BootLog.c, which prints them, belongs to the diagnostics area.
+- With log-power=1 the boot log has a \[pmic rtc\] row: the PMK8550 real-time clock's control register and seconds counter, read only. The counter runs but is not wall time, and the system has no real-time clock service yet; the calendar starts one day before the kernel build date until the network time arrives.
+- The macOS 27.3 override of board.toml keeps the Bluetooth runtime tool with target macos27 and adds bluetooth=1 to the kernel arguments \(864 bytes\); the iPadOS settings are unchanged.
+- ucsi-delay=&lt;seconds&gt; in ShengBattery.cpp holds the first UCSI command \(PPM\_RESET\) back after the channel comes up; it is a diagnosis of the missing USB input under this kernel and defaults to no delay.
+- The \[kernel cpu\] rows that boot-ui-trace=1 adds to the boot log in BootLog.c do not change the \[usb\] rows or the USB stacks.
+- keyboard=1 in board.toml and the keyboard cover in LegacyDisplayProbe.cpp, BootLog.c and the iPadOS 27 board build start after the USB probe and do not change the USB stacks.
 - The boot log's \[usb\] rows travel in the text slot, which UFS log version 5 writes only up to its last used block.
 - payload.runtime.appsync and appsync=1 in board.toml do not change the USB stacks; unsigned apps install over USB through installation\_proxy and the AppSync installation hook.
 - AppleUSBXDCI programs the DWC3 itself; a subclass supplies the register window at base + 0xc000, one interrupter, power and PHYs. AppleUSBXDCI has no personality, so it needs an explicit kext load before the subclass registers.
@@ -719,7 +763,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 配置
 
-- sheng-wifi=5 selects the mainline cfg80211/mac80211/ath12k runtime; wpa\_supplicant 2.12 owns userspace authentication.
+- wifi=5 selects the mainline cfg80211/mac80211/ath12k runtime; wpa\_supplicant 2.12 owns userspace authentication.
 - WifiProbe supplies power/PCIe/MSI and the 128 MiB DMA window; WifiNet exposes en0/Apple80211. The DTS exports /arm-io/wlan for wifid.
 - The signed service runs at /usr/libexec/unixnu-wpa\_supplicant. package/WifiFirmware.h defines the shared loader/packer directory /private/var/ngpu/firmware/ath12k/WCN7850/hw2.0/.
 
@@ -730,6 +774,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- wifi-aj=2 keeps the unattended-test join beside the wireless daemon: the kernel joins the network of join.txt, does not carry out the daemon's disconnect requests, and en0 gets its address by DHCP \(192.168.10.x on hardware, the router answers ping\). wifi-aj=1 stops once the daemon acts.
+- Apple80211 byte replies \(country code, SSID, BSSID\) to a request the kernel made are copied with memcpy: its buffer is a kernel buffer, which copyout refuses. With that the wireless daemon's scan and country requests succeed on macOS 27.3.
+- Receive path: packet metadata lives in heap memory instead of the uncached DMA window, the spare receive mbufs are kept between batches, and a frame is classified from its copy; log-wifi=1 adds per-stage times and TCP order counters. Not yet run on hardware.
+- With log-power=1 the boot log has a \[pmic rtc\] row: the PMK8550 real-time clock's control register and seconds counter, read only. The counter runs but is not wall time, and the system has no real-time clock service yet; the calendar starts one day before the kernel build date until the network time arrives.
+- WifiProbe.cpp also hosts the read-only charger PMIC survey for the power log \(sheng\_charger\_pmic\_sample\); the WiFi power sequence is unchanged.
+- On macOS 27.3 \(26C5035r\) the module's frames travel over en0, an IOEthernetController of the original IONetworkingFamily; the supplicant is built for macOS and its job is a plist in /Library/LaunchDaemons. Association, DHCP and traffic are verified on the device.
 - The supplicant job runs with -q -s and no StandardOutPath: warnings and errors go to syslog and logd's bounded store, and no Wi-Fi log file grows on Data. The Ath12kWifi pin builds the supplicant with CONFIG\_DEBUG\_SYSLOG.
 - Device verification covers Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery.
 - Accepted joins complete after port authorization, cancel once and time out after 30 seconds. Association and cached peer RSSI supply signal updates.
@@ -751,13 +801,13 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `host`: [The signed supplicant links openlog and vsyslog, and the staged job runs it with -q -s and no StandardOutPath or StandardErrorPath. Ath12kWifi tools/test-supplicant.py passes with the syslog build.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/build-wifi-userspace.py)
+- `host`: [The signed supplicant links openlog and vsyslog, and the staged job runs it with -q -s and no StandardOutPath or StandardErrorPath. Ath12kWifi tools/test-supplicant.py passes with the syslog build.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/build-wifi-userspace.py)
   Command: <code>python3 scripts/build-wifi-userspace.py OUT ios27</code>. Revision: `9938cf3015072035fc0e27eed76c6b474ff26846`.
-- `host`: [ASan/UBSan fixtures pass with simulated radio operations; the lifecycle releases 287 tracked allocations. Production audit: 125 objects, 13 XNU imports, zero missing imports and zero duplicate definitions. Kernel, payload and packed-image checks pass.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-wifi-mainline-migration.md)
+- `host`: [ASan/UBSan fixtures pass with simulated radio operations; the lifecycle releases 287 tracked allocations. Production audit: 125 objects, 13 XNU imports, zero missing imports and zero duplicate definitions. Kernel, payload and packed-image checks pass.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-wifi-mainline-migration.md)
   Command: <code>python3 scripts/check-wifi-association.py</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
-- `device`: [Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-wifi-association.md)
+- `device`: [Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-wifi-association.md)
   Command: <code>fastboot boot build/wifi-mainline/fix9/boot.img</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
-- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-wifi-launchd.py)
+- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-wifi-launchd.py)
 
 ## 音频 {#audio}
 
@@ -771,8 +821,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 配置
 
-- sheng-audio takes bits \(sheng-adsp=2 is required\): any nonzero value serves the audio service, 2 plays a 1.5 s 750 Hz test tone at boot, 4 brings up the microphone path and reads two seconds of capture, 8 runs the lock sound test.
-- sheng-audio-pa moves the DSP period buffer \(default 0xd0000000\); sheng-audio-tone-ms and sheng-audio-atten set the tone.
+- audio takes bits \(adsp=2 is required\): any nonzero value serves the audio service, 2 plays a 1.5 s 750 Hz test tone at boot, 4 brings up the microphone path and reads two seconds of capture, 8 runs the lock sound test.
+- audio-pa moves the DSP period buffer \(default 0xd0000000\); audio-tone-ms and audio-atten set the tone.
 - The payload addon carries hal/ShengAudio.driver under audio/; patches/xnu/zzyd-sheng-audio-addon-mount.patch mounts it over /System/Library/Audio/Plug-Ins/HAL. Its CDHash joins the owner trust cache.
 
 ### 操作步骤
@@ -783,6 +833,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The audio server plug-in keeps its image's segments resident \(mlock\): the audio server had counted I/O overloads with page faults on the I/O thread under memory pressure. Not yet run on hardware.
 - The GENI I2C core also moves buffered transfers of any length for the keyboard cover; the amplifier register transfers are unchanged.
 - The ADSP image loads in place from the split adsp and adsp\_dtb files in /image of the modem\_a FAT volume.
 - The DSP offers 24 intents of 128 bytes on adsp\_apps and grants a 4 KiB one on request; the GLINK remote intent table keeps it.
@@ -818,13 +869,13 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/AudioProbe.cpp)
-- `host`: [PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-audioreach-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/AudioProbe.cpp)
+- `host`: [PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py; python3 scripts/check-cs35l43-host.py; python3 scripts/check-geni-i2c-host.py</code>. Revision: `9e9971883be72b2fd76b8fb552367a9e4940aa63`.
-- `device`: [Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
-  Command: <code>fastboot boot boot.img (sheng-adsp=2 sheng-audio=6); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `9e2e6de1e63d9493e841d51c6b41108e75c7d537`.
-- `device`: [Playback and recording smooth from the start. Host clock set to 19200000 Hz, IO thread period 409600 ticks. 4822 of 4843 IO cycles 15 to 25 ms apart. Write-ahead 16501 to 19638 frames, skew -474 to 1 frames, 0 late periods.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
-  Command: <code>fastboot boot boot.img (sheng-adsp=2 sheng-audio=14); play music and record in Voice Memos; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `dea464ef093349dd746582691b0eaa3807fe1441`.
+- `device`: [Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (adsp=2 audio=6); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `9e2e6de1e63d9493e841d51c6b41108e75c7d537`.
+- `device`: [Playback and recording smooth from the start. Host clock set to 19200000 Hz, IO thread period 409600 ticks. 4822 of 4843 IO cycles 15 to 25 ms apart. Write-ahead 16501 to 19638 frames, skew -474 to 1 frames, 0 late periods.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (adsp=2 audio=14); play music and record in Voice Memos; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `dea464ef093349dd746582691b0eaa3807fe1441`.
 
 ## 电源 {#power}
 
@@ -839,12 +890,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 配置
 
-- CONFIG\_XNU\_SHENG\_PMGR=y; sheng-pmgr=2 selects the board integration.
+- CONFIG\_XNU\_SHENG\_PMGR=y; pmgr=2 selects the board integration.
 - AppleKeyStoreState is selected with the OS event integration.
-- sheng-adsp=2 publishes the battery as an IOPMPowerSource; sheng-battery=0 leaves it off.
-- sheng-usb-sdp-ma sets the input limit on a standard computer port \(default 900; 0 keeps the firmware limit\).
-- sheng-cpufreq=4 scales the CPU domains with load \(sheng-cpufreq-min sets a floor in MHz\); sheng-cpufreq=3 fixes the highest non-turbo level.
-- sheng-gpu-dcvs=1 scales the GPU clock with its busy time \(sheng-gpu-dcvs-min sets the floor level, default 3\); sheng-gpu-perf fixes a level instead.
+- adsp=2 publishes the battery as an IOPMPowerSource; battery=0 leaves it off.
+- usb-sdp-ma sets the input limit on a standard computer port \(default 900; 0 keeps the firmware limit\).
+- cpufreq=4 scales the CPU domains with load \(cpufreq-min sets a floor in MHz\); cpufreq=3 fixes the highest non-turbo level.
+- gpu-dcvs=1 scales the GPU clock with its busy time \(gpu-dcvs-min sets the floor level, default 3\); gpu-perf fixes a level instead.
 
 ### 操作步骤
 
@@ -854,6 +905,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- After a pause the GPU returns to the governor's floor \(348 MHz\) and the wake boost raises it at the first busy window; \[gpu dcvs\] boosts wake= and \[gpu dcvs why\] rests= count both.
+- package/GpuPowerProbe.cpp keeps every row the GPU power-up sets in order \(native\_gpu\_row\_log\) with its stage, so a power-up that stops shows the step it stopped at.
+- thermal-level=1 publishes the service thermalmonitord reads its pressure level from \(key mTPL, read once a second\); the level follows the CPU and GPU trip points of the device tree with hysteresis and is nominal for an unreadable sensor. Not yet run on hardware.
+- thermal=1 adds \[thermal\] rows: the three TSENS controllers' sensors and, per CPU frequency domain, the temperature of the samples in which the firmware limited a busy domain \(thermal-ms sets the period\). board-clock=&lt;bits&gt; runs the calendar from the PMK8550 counter plus the offset at 0xbc of the second SDAM: 1 measures, 2 starts the calendar from it, 4 stores it when the system sets the time. Not yet run on hardware.
+- At rest under macOS two things kept the load up with nobody using the tablet: the GPU governor boosted to the top level about once a second, and the touch thread read every frame of the touch controller after the first touch. The governor now needs an 80 ms rest before it calls the GPU idle, and the touch thread returns the controller to doze after three seconds without a finger. Both are confirmed on hardware.
+- Under this kernel the charger firmware reports no USB input \(online 0, 6 to 44 mV\) although the bootloader charges on the same cable; the cause is not known. With log-power=1 the boot log shows the charger PMIC's own registers, and ucsi-delay=&lt;seconds&gt; holds the first UCSI command back for the diagnosis.
 - The ADSP firmware runs charging and PD/PPS negotiation without host requests.
 - Battery properties after 11 are shifted by one: charge current 12, temperature 13, charge counter 15, cycles 16, design 17, full 18, time to full 20, time to empty 21.
 - Charge is the sum of both fuel gauges' remaining over full capacity. Battery current is reported discharge-positive.
@@ -865,9 +922,9 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - The GPU power probe hands the ring its register window without a GMU fence callback: only the GPU service checks fenced WPTR writes.
 - The CPU governor reads each CPU idle time through patches/xnu/zzye-sheng-cpu-idle.patch. Domain 0, the E cluster, scales with load like the other domains.
 - The GPU governor reads the GMU XO busy counter and votes over HFI with the level bandwidth.
-- A touch holds the P CPU domains and the GPU at their top level for sheng-cpufreq-boost-ms and sheng-gpu-dcvs-boost-ms \(1000\) after the last report. GPU submits in 2 of 4 windows keep every CPU domain at 60 percent of its top for 300 ms. A fence waiter sleeps up to sheng-gpu-pause-us \(1000\) and the fence interrupt wakes it.
+- A touch holds the P CPU domains and the GPU at their top level for cpufreq-boost-ms and gpu-dcvs-boost-ms \(1000\) after the last report. GPU submits in 2 of 4 windows keep every CPU domain at 60 percent of its top for 300 ms. A fence waiter sleeps up to gpu-pause-us \(1000\) and the fence interrupt wakes it.
 - The existing xnu-12377 migration uses kernel\_target.TRIPLE and DEPLOYMENT for platform-power binding assembly and the deployment audit instead of a fixed iOS 17 target. This compilation-target change does not provide new 23F84 power or charging device evidence.
-- GpuPowerProbe retries AHB-fenced context-switch writes for up to 2 ms while keepalive is held. The governor records accepted frequency votes and, with sheng-gpu-perf=1 and diagnostic export enabled, samples 19 A7XX BR counters approximately every 32 ms with selector, reset and preemption validity.
+- GpuPowerProbe retries AHB-fenced context-switch writes for up to 2 ms while keepalive is held. The governor records accepted frequency votes and, with gpu-perf=1 and diagnostic export enabled, samples 19 A7XX BR counters approximately every 32 ms with selector, reset and preemption validity.
 - package/WcnPower.h keeps independent Wi-Fi and Bluetooth votes over the six shared WCN supplies; the last owner releases them. scripts/check-wcn-power.py covers both startup orders, independent release, repeated votes and failed transitions.
 - ShengBattery routes GLINK owner 32779 to the UCSI client and passes the charger's USB online value to QcomDwc3.
 
@@ -890,14 +947,14 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/ShengBattery.cpp)
-- `host`: [PASS battery manager: 4074 checks](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-battery-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/ShengBattery.cpp)
+- `host`: [PASS battery manager: 4074 checks](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-battery-host.py)
   Command: <code>python3 scripts/check-battery-host.py</code>. Revision: `8719a19294bc79eed72366a19070acfd8e131737`.
-- `device`: [PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
+- `device`: [PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `8f5d921d7a3b71a20a97f551cad546dc8e2f3700`.
-- `device`: [CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
-  Command: <code>fastboot boot boot.img (sheng-cpufreq=4 sheng-gpu-dcvs=1); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `a338c71a6f83809c84686b4996478f1c4cd3f3ab`.
-- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/GpuPowerProbe.cpp)
+- `device`: [CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
+  Command: <code>fastboot boot boot.img (cpufreq=4 gpu-dcvs=1); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `a338c71a6f83809c84686b4996478f1c4cd3f3ab`.
+- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/GpuPowerProbe.cpp)
 
 ## 镜像组装 {#packaging}
 
@@ -921,10 +978,14 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The built-in arguments of package/BootWatchdogPolicy.c carry the defaults a run may override on the command line \(gpu-pool\); the adoption of the low DRAM bank is on without an argument and memory-outside=0 turns it off.
+- A run's extra kernel arguments are placed before the board's on the command line, so autoreset and the log switches are parsed first.
+- macOS 27.3: with boot-payload-release=1 the kernel returns the GPU addon blob and the packed Data seed inside the boot image to the VM once they are installed \(about 40 MiB\); loader\_inputs records where the payload RAM disk lies in the firmware's memory map \(sysctl kern.boot\_payload\_memory\). Not yet run on hardware.
+- The macOS 27.3 override of board.toml keeps the Bluetooth runtime tool with target macos27 and adds bluetooth=1 to the kernel arguments \(864 bytes\); the iPadOS settings are unchanged.
 - The iPadOS 27 kernel embeds the pinned keyboard controller image \(82524 bytes\).
 - The AppSync runtime applies native ad-hoc installation and FrontBoard trust to every user .app tree on Data. Rejected unsigned, fakesigned and expired bundles are repaired on device by the source-pinned ldid library inside installd, preserving entitlements, then revalidated. XNU registers validated CodeDirectory hashes on demand before AMFI checks, covering new apps, updates and nested code without per-app build inputs. Runtime hashes remain in the boot trust bundle; Data and original trust modules are preserved. Exec runs these apps without platform status. An unsigned arm64 app installs over USB, launches and stays installed across reboots; reports/ipados27-appsync.md describes the runtime.
 - Addon replacement sets va\_data\_size explicitly with va\_mode after a successful write, removing stale tails when kernel vnode\_open leaves an existing size. The host fixture reproduces and removes the observed 55-byte tail.
-- The cache-only export retains full plist bytes from the parser and filesystem; it is enabled by sheng-cache-log=1 and preserves the existing Data seed.
+- The cache-only export retains full plist bytes from the parser and filesystem; it is enabled by cache-log=1 and preserves the existing Data seed.
 - The 27 patch series includes the opt-in launchd cache-input diagnostic; payloads retain the panic screen with automatic reset disabled.
 - The next 24A446 device run passed the display branch but aborted in vfs\_fsadd+0x364: APFS still referenced an old vnop\_mknod descriptor address, which now held zone\_array data \(index 0xaaaaab\). XnuPrelink now pins 13 missing vnode descriptors, four metaclass pointer slots, gIODTPHandleKey and audio\_active by data identity and source consumers. A subsequent run mounted the OS root and SystemCryptex, then stopped because the payload omitted its Data seed. The payload now rejects CONFIG\_XNU\_OWNER\_DATA\_MOUNT without a seed; a persistent overlay also requires the original seed.
 - Fileset adapters contain N\_ABS function branches without split-segment records. XnuPrelink now retargets them after placement and rejects destinations outside retained executable code. The final packed 24A446 kernel passes checks for 266 branches and five absolute data symbols; the scan covers 317146 branch-shaped words, with two source-confirmed inline constants.
@@ -941,6 +1002,8 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - The runtime merges the signed Wi-Fi service/cache and firmware into the Data addon, preserves stock launchd jobs and Data identity, and packages the bounded IEEE80211 association-event transport.
 - Bluetooth and Wi-Fi share one signed launchd cache. The builder preserves existing trust modules and the Data seed, adds the service hashes, and installs the capability library before the executable overlay. Verified firmware downloads are cached after their hash check.
 - The device series adds a patch that relaxes the disabled-signal assertion once sheng\_sigp\_recover has run.
+- On macos-27.3-26C5035r the touch and keyboard firmware images \(0x5025c bytes\) are placed in \_\_DATA,\_\_firmware. Neither the kernel's \_\_TEXT nor its \_\_DATA\_CONST has room before the first retained kext segment of the macOS collection; native \_\_DATA has 0x9c000 bytes free. \_\_DATA,\_\_const is renamed to \_\_DATA\_CONST by the XNU link.
+- The macOS closure \(84 bundles\) excludes AppleOnboardSerial and AppleSMC as on iPadOS and leaves out com.apple.kec.pthread, which the board builds from source. AMFI's \_\_start does not register its policy; the profile names \_amfi\_register\_mac\_policy \(0xfffffe0009840dd4\) as early\_security\_init. Prelink reports 0 unresolved closure references and 0 stubbed functions.
 
 ### 完成条件
 
@@ -957,17 +1020,18 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/patches/xnu/series)
-- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/board.toml)
-- `source`: [Historical working-tree observation: sheng b714917c, iPadOS 27.0.1 24A446, boot-prelink-fixed.img: instruction fetch abort at 0xfffffff00dbb4c74 with LR 0xfffffff00b5a3340 in native\_legacy\_display\_allocate. Corecrypto and SourceStorage initialization had completed.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: 62 prelink regressions pass. The packed kernel has 266 fixed original-function branches \(205 mobile graphics, 51 HID, eight IOSurface, two GPU\), preserved absolute GOT values and no additional native external branch instructions. This is host evidence, not a desktop boot result.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: sheng b714917c, 24A446: NativeLegacyDisplay and NativeHidInput initialized, APFS mounted the root OS and SystemCryptex, then load\_init\_program stopped with offline scratch Data mount failed: 2. The payload lacked initrd and PackedRAMDisk.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: Recovered runtime inputs match boot-framepath.img: seed 1bde7901df3acd0e8a14cd89928bedc12c07ef2128c6bce18ffccf3611a666a3 equals the existing data-seed-215g-skipca/data.dbr. The payload includes the original owner trust cache and GPU addon, required ADT placeholders and 870-byte normal arguments without autoreset or data-reset. Checks cover 266 branches, five absolute data symbols and 189 vnode descriptor pointer sites. Local inputs are stored in the ignored UniXNU unixnu.local.toml.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: The repaired v4 kernel and restored runtime inputs ran to the 120-second auto-reset deadline: log state 2, 61 rounds, zero write errors and no panic. SpringBoard PID 30, backboardd PID 61 and wifid PID 49 are present. The diagnostic image differs from the normal payload only by sheng-autoreset=120. Visual presentation was not verified. Two unresolved data imports and 24 trap references remain outside this boot qualification.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/board.toml)
-- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/.github/workflows/package.yml)
-- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/board.toml)
-- `source`: [Global AppSync scope, on-device signature repair, dynamic kernel trust, native ABI observations and successful host/kernel/payload/boot-image builds with the concurrent backlight sources. Original Data is preserved. The combined image was accepted by fastboot boot on b714917c; desktop and application behavior remain to be observed.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/reports/ipados27-appsync.md)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/patches/xnu/series)
+- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `source`: [Historical working-tree observation: sheng b714917c, iPadOS 27.0.1 24A446, boot-prelink-fixed.img: instruction fetch abort at 0xfffffff00dbb4c74 with LR 0xfffffff00b5a3340 in native\_legacy\_display\_allocate. Corecrypto and SourceStorage initialization had completed.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: 62 prelink regressions pass. The packed kernel has 266 fixed original-function branches \(205 mobile graphics, 51 HID, eight IOSurface, two GPU\), preserved absolute GOT values and no additional native external branch instructions. This is host evidence, not a desktop boot result.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: sheng b714917c, 24A446: NativeLegacyDisplay and NativeHidInput initialized, APFS mounted the root OS and SystemCryptex, then load\_init\_program stopped with offline scratch Data mount failed: 2. The payload lacked initrd and PackedRAMDisk.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: Recovered runtime inputs match boot-framepath.img: seed 1bde7901df3acd0e8a14cd89928bedc12c07ef2128c6bce18ffccf3611a666a3 equals the existing data-seed-215g-skipca/data.dbr. The payload includes the original owner trust cache and GPU addon, required ADT placeholders and 870-byte normal arguments without autoreset or data-reset. Checks cover 266 branches, five absolute data symbols and 189 vnode descriptor pointer sites. Local inputs are stored in the ignored UniXNU unixnu.local.toml.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: The repaired v4 kernel and restored runtime inputs ran to the 120-second auto-reset deadline: log state 2, 61 rounds, zero write errors and no panic. SpringBoard PID 30, backboardd PID 61 and wifid PID 49 are present. The diagnostic image differs from the normal payload only by autoreset=120. Visual presentation was not verified. Two unresolved data imports and 24 trap references remain outside this boot qualification.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/.github/workflows/package.yml)
+- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/board.toml)
+- `source`: [Global AppSync scope, on-device signature repair, dynamic kernel trust, native ABI observations and successful host/kernel/payload/boot-image builds with the concurrent backlight sources. Original Data is preserved. The combined image was accepted by fastboot boot on b714917c; desktop and application behavior remain to be observed.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/reports/ipados27-appsync.md)
+- `source`: [On macOS the keyboard firmware image is placed in \_\_DATA,\_\_firmware.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/build-gop-legacy-display-27.py)
 
 ## 诊断 {#diagnostics}
 
@@ -980,7 +1044,7 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 ### 配置
 
 - boot-progress=2 enables checkpoints; source and image revisions accompany every log.
-- On the iPadOS 27 native source path, sheng-log=1 plus boot-ui-trace=1 starts a separate process-capture worker. boot-ui-focus3=chronod adds the display-query client to backboardd and SpringBoard. Arm64e return-address PAC is stripped for diagnostic stacks.
+- On the iPadOS 27 native source path, log=1 plus boot-ui-trace=1 starts a separate process-capture worker. boot-ui-focus3=chronod adds the display-query client to backboardd and SpringBoard. Arm64e return-address PAC is stripped for diagnostic stacks.
 
 ### 操作步骤
 
@@ -989,6 +1053,17 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- \[gpu dcvs why\] rests= counts the pauses the governor saw; 0 over a run with pauses means every idle window was taken as work.
+- \[gpu switch timeout\] keeps the CP state \(the \[gpu stall\] words and the ring progress words\) of the first two ring switches the CP never finished.
+- \[map met\] follows \[map fails\]: what the last refused GPU mapping asked \(address, bytes, 'again' where its handle was mapped already\) and the mapping at or past that address. A kernel memory allocation that fails prints a kmem\_alloc line in the message stream: size, flags, result, the free, reserved and wired page counts, the kernel map's bounds and its ranges. \[memory outside\] gives the pages the kernel adopted and left; \[gpu bring-up\] keeps the GPU probe's rows in the order they were set with its stage and the first failed kernel allocation; \[touch cost\] counts the touch thread's interrupts, wakes, reads and their time; \[cmdline\] shows what the kernel parses. autoreset marks the bootloader cell and arms the hypervisor watchdog as the first thing after the scheduler starts.
+- Every slot has a \[cmdline\] row: the length of the command line the kernel parses, whether autoreset parses, and its last 80 characters.
+- diag=1 keeps the normal board rows and the message stream and adds \[diag msgs\], the latency lines of the kernel messages new in each round. Every slot has \[log round\] \(last, longest and slowest step of a round\); a watch thread reports a round running over 10 s, and the panic flush names the step a round was in and marks a panic that left no text. New rows: \[gpu jobs\]/\[gpu long\]/\[gpu slow\], \[gpu kick\], \[gpu pool views\], \[edge queued\], \[cs sha\]. Not yet run on hardware.
+- macOS 27.3: gpu-bundle-system=1 \(the Metal plugin only through a union over /System/Library/Extensions, /Library/GPUBundles covered\) left WindowServer without a Metal device: IOGPU's trusted-bundle check refuses the plugin there, WindowServer aborted in WSSystemCanCompositeWithMetal \(run64\). It stays off.
+- The board log gained rows for fence wakes, GPU maintenance by kind, submission time, GPU priority requests, CPU wake and timer statistics, UFS command paths, code signature preparation, the Edge scheduler and stuck threads with the waited object and file. Rows that divide ticks by the counter frequency read 1.25 times high on macOS, whose timebase is scaled to 24 MHz.
+- With log-power=1 the boot log has a \[pmic rtc\] row: the PMK8550 real-time clock's control register and seconds counter, read only. The counter runs but is not wall time, and the system has no real-time clock service yet; the calendar starts one day before the kernel build date until the network time arrives.
+- The macOS 27.3 override of board.toml keeps the Bluetooth runtime tool with target macos27 and adds bluetooth=1 to the kernel arguments \(864 bytes\); the iPadOS settings are unchanged.
+- With log-power=1 the boot log has \[pmic chg\] rows: the charger PMIC's boost, charger, DC-DC, battery interface, USB input, Type-C and misc pages, registers 06 to 0d and 40 to 47, read through the arbiter's observer channel. The \[fb centre\] row prints the centre pixel of half-float frames in thousandths.
+- With boot-ui-trace=1 each boot log slot has a \[kernel cpu\] section: the CPU time of all kernel threads in the last 10 s and the eight threads that used the most, by name. On macOS 27.3 under memory pressure it showed VM\_swapout and VM\_cswap\_trigger at 12 s of CPU per 10 s.
 - The boot log K row shows the keyboard cover stage, boot ROM states, frames, reports, attach and hall state, I2C failures and the HID device counters; scripts/check-wn8030-host.py tests the controller codec.
 - HidInputProbe logs \[hid\] digitizer usage pair published at +N ms each time it restores the pair.
 - The device cache-only export contains five files and confirms identical parser, system-path and Data-path bytes with the packed cache as an exact prefix plus 55 stale bytes. GENI retains failed IRQ status for bounded error reports.
@@ -997,26 +1072,26 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 - A source implementation, a host check and a device observation establish different completion levels.
 - Keep an unresolved cause explicit and record the next measurement that can distinguish it.
 - The UFS log carries \[adsp\], \[qrtr\], \[battery\], \[battery-raw\] and \[charger\] lines for the DSP, the IPC router and the charger.
-- BatteryProbe starts the battery with sheng-adsp=2, so the \[battery\] and \[charger\] lines appear on every DSP image; a missing \[battery\] line on such an image means sheng-battery=0 or a failed start.
+- BatteryProbe starts the battery with adsp=2, so the \[battery\] and \[charger\] lines appear on every DSP image; a missing \[battery\] line on such an image means battery=0 or a failed start.
 - Host checks for the ADSP path: check-adsp-host.py, check-modem-fw-host.py, check-qrtr-host.py and check-battery-host.py.
 - The log carries \[audio\], \[amps\], \[audio-glink\], \[audio-buffer\], \[mic\] and \[mic regs\] for the audio path, and \[gpu wptr\] for fenced GPU write pointer writes.
-- GPU memory rows: \[vm map\], \[vm unmap\], \[vm kinds\] \(time per owned map, fast and full import, unmap by page and by ASID\) and \[bo memory\]. Governor rows: \[cpu gov\] with boost and frame-floor counts, \[cpu throttle\] and \[gpu dcvs\] with touch and wake boosts. Display rows \(sheng-dpu=2 or 3, sheng-dpu-scanout\): \[dpu vig0\], \[dpu vig1\], \[dpu ctl0\], \[swap surfaces\], \[direct scanout\] and \[dpu smmu\].
+- GPU memory rows: \[vm map\], \[vm unmap\], \[vm kinds\] \(time per owned map, fast and full import, unmap by page and by ASID\) and \[bo memory\]. Governor rows: \[cpu gov\] with boost and frame-floor counts, \[cpu throttle\] and \[gpu dcvs\] with touch and wake boosts. \[touch doze\] counts the doze requests sent to the touch controller, the refused ones and the frames read after the last request. Display rows \(dpu=2 or 3, dpu-scanout\): \[dpu vig0\], \[dpu vig1\], \[dpu ctl0\], \[swap surfaces\], \[direct scanout\] and \[dpu smmu\].
 - The 23F84 branch lock and source-driver report describe different stages: unixnu.lock covers the selected minimal build, while reports/ipados26-source-drivers.json records separate public-family compile inputs, object hashes, warning counts and unresolved imports. Neither report qualifies source-driver device execution.
 - unixnu.lock records the sm8550 source at the same commit as feeds.toml; fetch rewrites it, so a hand edit and a fetch must agree.
 - scripts/check-sheng.py reads the firmware checkout from UNIXNU\_UEFI, which the firmware step of unixnu sets for its preflight scripts.
 - The direct scanout log labels native\_legacy\_direct\[12\] as waits&gt;=250ms. This counter records a slow GPU wait; direct display retries busy queries and keeps the current frame until completion or swap cancellation.
 - kernel.latency.bin pairs IPC send attempts and receive completions by message cookie, records user exception registers, accepted GPU frequency votes and touch coordinates, and exports a bounded LAT1 ring before filesystem logs. Events 61-63 expose encoding batch waits, frontend phases and render-thread identities; client samples mark the selected render thread with state 0x1000, and CPU process names follow xpcproxy exec. The exporter prioritizes the complete backboardd frames.trace before optional CPU reports; framework files, unified logs, shader inventories and images are excluded.
-- Detailed capture records slow encoding operations, callback and destructor identities, outgoing IPC/reply ports, blocked-thread user/kernel stacks and Mach service peers. Faults retain registers, bounded worker-read stacks and image UUIDs; signal exits include reason descriptions. sheng-gpu-perf=1 enables the 19-counter A7XX BR plan with selector, reset and preemption validity. The source-storage archive includes the latency capture object.
+- Detailed capture records slow encoding operations, callback and destructor identities, outgoing IPC/reply ports, blocked-thread user/kernel stacks and Mach service peers. Faults retain registers, bounded worker-read stacks and image UUIDs; signal exits include reason descriptions. gpu-perf=1 enables the 19-counter A7XX BR plan with selector, reset and preemption validity. The source-storage archive includes the latency capture object.
 - LAT1 separates 32768 fault/identity records from 491519 ordinary events and one coverage summary. IPC keeps traced requests, matching receives and tracked replies, with unmatched or ambiguous traffic counted. Tracking tables are allocated when capture starts and do not occupy linked kernel data. Pending display queries retain state changes, a 100 ms heartbeat and omitted counts. Idle runtime stages and duplicate generic IOKit/GPU/IPC streams are excluded before recording. Fast unannounced resource spans below 250 microseconds are omitted; paired callback spans remain. Dispatch task tracing uses the optional introspection SPI.
 - The latency capture keeps only seven-issue evidence: the backboardd frame trace, kernel GPU submission and display records, large GPU allocations, CPU occupancy and process CPU time, 4 ms samples of the render server's render, encode and completion threads and SpringBoard's main thread, blocked-thread waits, faults with exit reasons, shared-region unnests with kernel and user callers, and touch report times that bound the analysed windows. Mach message flow, user-client calls, contiguous allocations, per-contact touch records and dispatch points are not collected, and their xnu hooks are removed from the series. The export reads the sampler rings at their allocated sizes.
 - scripts/sheng-latency-report.py prints the acceptance figures of a capture inside touch windows: frame intervals, large allocations, full-screen pass times, slow completions, encode thread priority and run-queue share, client crashes and Metal refusal texts.
-- sheng-shots=&lt;s&gt; adds bursts of six quarter-resolution screenshots 50 ms apart, one burst every 10 s, as screen-&lt;s&gt;-&lt;index&gt;.bgrx; they are compared by code with a system memory reference tile by tile. With SHENG\_GPU\_TRACE the render server's Turnip sends its GMEM passes \(36\), transfers between tile memory and memory \(37\) and attachments \(44\) to the GPU trace, decoded by decode-gpu-trace.py.
+- shots=&lt;s&gt; adds bursts of six quarter-resolution screenshots 50 ms apart, one burst every 10 s, as screen-&lt;s&gt;-&lt;index&gt;.bgrx; they are compared by code with a system memory reference tile by tile. With SHENG\_GPU\_TRACE the render server's Turnip sends its GMEM passes \(36\), transfers between tile memory and memory \(37\) and attachments \(44\) to the GPU trace, decoded by decode-gpu-trace.py.
 - Disabled GPU/display groups skip collection, formatting and register reads. Wi-Fi fixtures cover native control, association events, RX batching, DMA capacity, cache serialization and VFS firmware reads.
 - check-bluetooth-runtime.py validates the actual packed runtime, signatures, firmware, launchd jobs, preserved trust modules and Data seed. The bluetooth-runtime boot row records library and executable mount stages.
 - Full image extraction verifies the Bluetooth startup, protocol, DMA, transport, firmware and diagnostic exports. The panic screen remains enabled with no automatic reset.
-- Cache-loader capture uses the log writer's relative boot time and requires sheng-cache-log=1. On a 24A446 launchd cache failure this flag also records the parser input length, head, trailer and complete FNV-1a hash through bounded copyin reads. Bluetooth allocation failures emit one cached selection row without rescanning MMIO.
+- Cache-loader capture uses the log writer's relative boot time and requires cache-log=1. On a 24A446 launchd cache failure this flag also records the parser input length, head, trailer and complete FNV-1a hash through bounded copyin reads. Bluetooth allocation failures emit one cached selection row without rescanning MMIO.
 - The \[usb\] rows report QcomDwc3 state from native\_usb\_stats. The boot log allocates its large buffers at run time, including the 128 KiB message ring, because the kernel's \_\_DATA has no room with the USB stacks prelinked.
-- UFS log version 5 writes per 2 s round only the used blocks of the text slot, the message-area blocks that new kernel messages reached, and the header. The message area is a ring of the message stream \(msg\_mode 1, msg\_head bytes appended\); the panic flush and sheng-diag=1 write the linear form \(msg\_mode 0\). read-sheng-log.py decodes versions 1 to 5, and check-boot-log-host.py covers wrap, quiet rounds, a replaced kernel ring and a failed write.
+- UFS log version 5 writes per 2 s round only the used blocks of the text slot, the message-area blocks that new kernel messages reached, and the header. The message area is a ring of the message stream \(msg\_mode 1, msg\_head bytes appended\); the panic flush and diag=1 write the linear form \(msg\_mode 0\). read-sheng-log.py decodes versions 1 to 5, and check-boot-log-host.py covers wrap, quiet rounds, a replaced kernel ring and a failed write.
 - The \[data\] DIO row reports Data disk requests \(count, MiB, time, lock wait, longest\), synchronize calls, the store window's UFS commands, the command slots \(in use, peak, waits\) and the root window reads with their transport and integrity check time.
 - package/linux-log/ufsbench.c is a static aarch64 Linux program without libc: O\_DIRECT reads of a fixed-seed sequence of offsets at queue depths of forked processes, one line per test with IOPS, MB/s, mean, p50, p99 and longest latency.
 
@@ -1034,13 +1109,13 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 证据
 
-- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/read-sheng-log.py)
-- `host`: [151 rounds over 2254981 stream bytes write 635 message blocks; a quiet round writes none, a failed write is retried by the next round, a replaced kernel ring restarts the stream once, and read-sheng-log.py returns the newest 131072 bytes and every slot. The kernel arm64e command compiles BootLog.c.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-boot-log-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/read-sheng-log.py)
+- `host`: [151 rounds over 2254981 stream bytes write 635 message blocks; a quiet round writes none, a failed write is retried by the next round, a replaced kernel ring restarts the stream once, and read-sheng-log.py returns the newest 131072 bytes and every slot. The kernel arm64e command compiles BootLog.c.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-boot-log-host.py)
   Command: <code>python3 scripts/check-boot-log-host.py</code>. Revision: `2a7187d270fdb20244353e7b949e60fdb5cc960a`.
-- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/package/BootUiTraceProbe.c)
-- `host`: [The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH\_WAIT \| TH\_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/check-boot-ui-trace.py)
+- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/package/BootUiTraceProbe.c)
+- `host`: [The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH\_WAIT \| TH\_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/check-boot-ui-trace.py)
   Command: <code>python3 scripts/check-boot-ui-trace.py</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
-- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/scripts/sheng-springboard-profile.py)
+- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/scripts/sheng-springboard-profile.py)
 
 ## arm64e-os {#arm64e-os}
 
@@ -1065,11 +1140,13 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
 
 ### 开发经验
 
+- The xnu-12377 device series gained vmwait-dyld-pager-source-release.patch \(the dyld pager held its source page busy while it faulted the other three 4 KiB parts of a 16 KiB fixup page; APFS verified page-in then waited for the thread's own page, and on macOS every later private mapping of the file waited too\) and zzzzzzzzzzz-sheng-edge-matrix.patch \(a two-cluster Edge matrix the scheduler accepts\). Not yet run on hardware.
+- On macOS 27.3 the software AES accelerator is compiled against the 26C5035r class layout and started by its board probe; AppleImage4 finds it at boot.
 - The series ends with sheng-appsync-runtime.patch and sheng-appsync-user-trust.patch. appsync=0 disables their mounts and registration; trust\_cache\_rt\_storage stays writable in either case.
 - After load\_machfile, exec clears the platform status of an appsync user .app main executable, so the app runs without platform restrictions, the hardened IPC policy or the platform-only mapping rule.
 - The shared region slider and the dyld pager use the upstream per-process jop\_key checks, so arm64 processes \(key 0\) get unsigned pointers; the arm64e profile runs arm64 processes at EL0 with the PAC keys off.
 - The matched 24A446 failure frame publishes a bounded 4 MiB copyin snapshot through a weak board callback before process teardown.
-- The 24A446 cache failure diagnostic uses the selected launchd frame layout and bounded copyin reads to record parser input under sheng-cache-log=1.
+- The 24A446 cache failure diagnostic uses the selected launchd frame layout and bounded copyin reads to record parser input under cache-log=1.
 - The 23F84 kernelcache is xnu-12377.122.8; xnu-12377.121.6 is the closest public source.
 - SM8550 CPUs implement FEAT\_PAuth; signatures are created on the device, so the PAC algorithm need not match Apple's.
 - Public XNU programs PAC keys only for VMAPPLE through HVC; the arm64e profile provides native key programming.
@@ -1105,12 +1182,12 @@ Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input
   Command: <code>shasum -a 256 &lt;ipsw&gt;; ipsw extract --kernel &lt;ipsw&gt;; ipsw kernel version &lt;kernelcache&gt;</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
 - `host`: [dyld cache iOS 26.5, 4261 images, 83 subcaches; 1208 SMSTART SM and 1287 SMSTART ZA in 11 subcaches. Sampled functions with names include \_sme\_sgemm, \_sme\_strsm and \*\_SME2.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
   Command: <code>ipsw extract --dyld -a arm64e &lt;ipsw&gt;; scan 4-byte aligned words for SMSTART SM (0xd503437f) and SMSTART ZA (0xd503457f)</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
-- `host`: [27 patches on xnu-12377.121.6; mach.development.bcm2837 links, 19789128 bytes, arm64e MH\_EXECUTE with LC\_DYLD\_CHAINED\_FIXUPS \(pointer format 7\). The prelink step stops: the input is MH\_FILESET.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/configs/sheng_ipados26_defconfig)
+- `host`: [27 patches on xnu-12377.121.6; mach.development.bcm2837 links, 19789128 bytes, arm64e MH\_EXECUTE with LC\_DYLD\_CHAINED\_FIXUPS \(pointer format 7\). The prelink step stops: the input is MH\_FILESET.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/configs/sheng_ipados26_defconfig)
   Command: <code>./unixnu defconfig sheng_ipados26_defconfig -D ../UniXNU-sheng; ./unixnu kernel -D ../UniXNU-sheng</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
 - `host`: [298 entries, base 0xfffffe0007004000, 585131 fixups in pointer format 8, 0 symbols in every entry. For the 31 prelink roots \(30 with code, 7 kernel resources\): 1864 kernel targets, 47807 pointer sites, 42027 branch sites.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
   Command: <code>parse LC_FILESET_ENTRY, LC_DYLD_CHAINED_FIXUPS and kext __TEXT_EXEC branches of the decompressed kernelcache</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
-- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/patches/xnu-12377/sheng-main-thread-profile.patch)
-- `device`: [iPadOS 27.0.1 \(24A446\): the app installs over USB, launches and stays usable, with no EXC\_GUARD or SIGBUS.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d172bccb5a575188363534df5b5c269c8d27a77c/patches/xnu-12377/sheng-appsync-user-trust.patch)
+- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/patches/xnu-12377/sheng-main-thread-profile.patch)
+- `device`: [iPadOS 27.0.1 \(24A446\): the app installs over USB, launches and stays usable, with no EXC\_GUARD or SIGBUS.](https://github.com/DnuyaSha/UniXNU-sheng/blob/d6369a62ea5cc4c37c236e276a9d4e31dcfb49b8/patches/xnu-12377/sheng-appsync-user-trust.patch)
   Command: <code>ideviceinstaller -i &lt;unsigned, decrypted arm64 IPA&gt;; launch the app; idevicesyslog</code>. Revision: `f188b857dd6443e6f81ccebd69d99a3d133585a1`.
 
 </div>
