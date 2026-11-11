@@ -187,6 +187,8 @@ Types are `s` for string, `x` for hex cells, `i` for decimal cells, `u` for unsi
 | `owned_memory_size` | string | Contiguous window request |
 | `owned_memory_excluded_ranges` | integer | Size of the excluded-range table; the window may then span more than one run of free memory. Only for an OS profile whose XNU reads the table |
 | `loader_inputs` | boolean | Reserve the records in which DarwinBoot reports where the payload RAM disk and the initrd buffer lie |
+| `owned_memory_outside_ranges` | integer | Size of the table in which DarwinBoot lists the free memory outside the window. A kernel with `window-outside-memory-adoption.patch` adopts it as VM memory, one probed page at a time; `memory-outside=0` leaves it alone |
+| `owned_memory_outside_reserved` | array of strings | `"BASE:SIZE"` parts of that memory the kernel must not adopt: memory a board driver uses at a fixed address |
 | `root_match_volume_uuid` | string | Root volume UUID |
 | `cpu_regs` | string | CPU MPIDR values, comma separated |
 | `psci_method` | string | `smc` or `hvc` |
