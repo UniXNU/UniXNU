@@ -155,7 +155,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Motorola moto s30 pro](/devices/models/tundra) | tundra | SM8350 | 1 |
 | [OnePlus Ace 2 / 11R](/devices/models/udon) | udon | SM8475 | 1 |
 | [Xiaomi Pad 7 / POCO Pad X1](/devices/models/uke) | uke | SM7675 | 6 |
-| [Xiaomi Mi 10](/devices/models/umi) | umi | SM8250 | 5 |
+| [Xiaomi Mi 10](/devices/models/umi) | umi | SM8250 | 6 |
 | [Xiaomi 12S Pro \(unicorn, SM8475\): UniXNU UEFI bring-up](/devices/models/unicorn) | unicorn | SM8475 | 2 |
 | [Unisoc devices](/devices/models/unisoc) | unisoc | Unisoc | 1 |
 | [Build configuration \(device unspecified\)](/devices/models/unixnu-build) | unixnu-build | build tree | 1 |

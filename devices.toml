@@ -4433,6 +4433,19 @@ board = "umi"
 soc = "SM8250"
 
 [[device]]
+name = "umi-qcom-toolbox"
+repository = "qcom-toolbox/ios-umi"
+title = "Xiaomi Mi 10 — iOS 16 (qcom-toolbox)"
+title_zh = "小米 10 — iOS 16（qcom-toolbox）"
+format = 1
+legacy_page = "preserve"
+soc = "SM8250"
+summary = "iOS 16.7.16 home screen with stock apps; Adreno 650 Metal, Wi-Fi, Bluetooth, audio, battery"
+repository_id = 1427234457
+revision = "99a46bd6f1006092bfbe20f653390322f3056b5f"
+board = "umi"
+
+[[device]]
 name = "umi-jopangjovan"
 repository = "JopangJovan/UniXNU-umi"
 title = "Xiaomi Mi 10 standalone UniXNU bring-up (JopangJovan)"

@@ -155,7 +155,7 @@
 | [Motorola moto s30 pro](/zh/devices/models/tundra) | tundra | SM8350 | 1 |
 | [一加 Ace 2 / 11R](/zh/devices/models/udon) | udon | SM8475 | 1 |
 | [小米平板 7 / POCO Pad X1](/zh/devices/models/uke) | uke | SM7675 | 6 |
-| [小米 10](/zh/devices/models/umi) | umi | SM8250 | 5 |
+| [小米 10](/zh/devices/models/umi) | umi | SM8250 | 6 |
 | [Xiaomi 12S Pro \(unicorn, SM8475\): UniXNU UEFI bring-up](/zh/devices/models/unicorn) | unicorn | SM8475 | 2 |
 | [Unisoc 设备](/zh/devices/models/unisoc) | unisoc | Unisoc | 1 |
 | [构建配置（设备未注明）](/zh/devices/models/unixnu-build) | unixnu-build | build tree | 1 |
