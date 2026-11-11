@@ -112,9 +112,10 @@ def build(ctx, kernel=None):
     if not kernel.is_file():
         raise Error(f'kernel not found: {kernel}; run "unixnu build kernel" or pass --kernel FILE')
     extra = list(getattr(args, 'kernel_arg', None) or [])
-    # An extra NAME=VALUE replaces the board's argument of the same name.
+    # An extra NAME=VALUE replaces the board's argument of the same name. The extra arguments come first: a run's own switches
+    # (autoreset above all, which brings an unattended run back to fastboot) are the last to go if the line is ever cut short.
     names = {item.split('=', 1)[0] for item in extra}
-    arguments = [item for item in spec.get('kernel_args', []) if item.split('=', 1)[0] not in names] + extra
+    arguments = extra + [item for item in spec.get('kernel_args', []) if item.split('=', 1)[0] not in names]
     line = check_args(arguments)
     log(f'kernel args: {line}')
     check_native_root(kernel, arguments, bool(ctx.board.get('adt', {}).get('defaults', {}).get('u32', {}).get('vmm-present')))

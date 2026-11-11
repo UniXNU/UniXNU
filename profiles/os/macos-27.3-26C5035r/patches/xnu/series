@@ -50,3 +50,5 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/memwired-kc-segment-release.patch
 ../xnu-12377/memwired-booter-size-accounting.patch
 ../xnu-12377/memwired-cs-lazy-page-chunks.patch
+../xnu-12377/platform-error-name-address.patch
+../xnu-12377/window-outside-memory-adoption.patch

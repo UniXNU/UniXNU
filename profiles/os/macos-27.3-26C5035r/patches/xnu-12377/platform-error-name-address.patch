@@ -1,0 +1,22 @@
+Platform errors name their syndrome and address
+
+A synchronous external abort (a store into memory the hypervisor or the
+secure world keeps) panicked with a fixed text. The panic now carries
+the ESR and FAR, so the refused address can be read from the board log.
+
+Run on hardware.
+
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -551,8 +551,9 @@
+ static void
+ arm64_implementation_specific_error(arm_saved_state_t *state, uint64_t esr, vm_offset_t far)
+ {
+-#pragma unused (state, esr, far)
+-	panic_plain("Unhandled implementation specific error\n");
++#pragma unused (state)
++	/* The syndrome and the address name the access the system refused (an external abort: memory another owner keeps). */
++	panic_plain("Unhandled implementation specific error: esr 0x%llx far 0x%llx\n", (unsigned long long)esr, (unsigned long long)far);
+ }
+ 
+ #if CONFIG_KERNEL_INTEGRITY
