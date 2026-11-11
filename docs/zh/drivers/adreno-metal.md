@@ -22,13 +22,15 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 
 相同 UID 的客户端在可写时共用账户 home 下的 `Library/Caches/org.unixnu.metal`。沙箱限制写入时使用私有缓存。`NATIVE_METAL_SHARED_CACHE_DIR` 可指定共享目录，空值关闭共享。缓存覆盖 Apple 前端结果、runtime 产物和 Turnip IR3。并发导入使用独立临时文件，管线日志按进程分开。
 
-渲染编码器调用在调用时完成转换，commit 通过 runtime 的调度线程提交，管线不会提前生成。`metal-flow=1` 打开三条 metal2vulkan 路径，用于测试：
+三条 metal2vulkan 工作路径默认打开。`metal-flow=<位>` 用来选择：1 对应第一条，2 对应第二条，4 对应第三条，0 表示全部关闭：
 
 - 渲染编码器调用由 runtime 的 lowering 线程转换。转换时才发现的拒绝会让命令缓冲失败。
 - 没有其他提交流程运行时，commit 直接在提交线程上提交。
 - 每个程序把管线记录追加到缓存的 `pipeline-records-<name>.bin`。新设备在后台以 utility 优先级重新生成记录中的管线。
 
-这些路径默认关闭，因为它们在 sheng 上没有测出帧率提升，还有一次测试启动停在 logo 后不再出帧。`metal-flow=` 取任一值时，都会在 `FL` 计数变化后写入 os_log，每十秒最多一次。
+`metal-flow=` 取任一值时，都会在 `FL` 计数变化后写入 os_log，每十秒最多一次。
+
+Turnip 为每个渲染通道选择瓦片内存或系统内存，并发分箱默认打开。`tu-debug=<标志>` 为所有 Metal 进程设置 `TU_DEBUG`：`gmem` 让每个通道都在瓦片内存中渲染，`nocb` 关闭并发分箱。`tum=a` 每八秒在 Turnip 的选择和瓦片内存之间轮换，用于测量。
 
 同一进程的 Metal 逻辑队列共用一个 Vulkan 队列和内核队列。前端汇总存活队列的当前请求，采用其中最高的优先级；队列降级或销毁后撤回提升。getter 返回各队列自身的请求，setter 返回后端是否接受。内核根据任务的 GPU role 选择前台或后台优先级，策略不使用进程名。
 
