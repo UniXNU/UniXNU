@@ -1,0 +1,45 @@
+A failed kernel memory allocation reports what was asked
+
+kmem_alloc_guard_internal returned its error without a word. It now prints the size, the flags, the result and the
+free, reserved and wired page counts of the first 32 failures and of every 256th after them, with the kernel map's
+bounds, its mapped bytes and its ranges, and counts them in kmem_alloc_failures.
+
+Run on hardware: a refused 8 MiB allocation printed result 3 with 2.3 GiB of pages free and ranges of 396 MiB each.
+
+--- a/osfmk/vm/vm_kern.c	2026-11-11 12:45:49
++++ b/osfmk/vm/vm_kern.c	2026-11-11 13:26:14
+@@ -121,6 +121,8 @@
+ static SECURITY_READ_ONLY_LATE(struct mach_vm_range) kmem_ranges[KMEM_RANGE_COUNT - 1];
+ static struct vm_guard_object_slab kmem_slabs[KMEM_RANGE_ID_MAX][KMEM_DIRECTION_COUNT];
+ 
++/* Failed kmem_alloc_guard_internal() calls since boot. */
++uint32_t kmem_alloc_failures;
+ __startup_data static vm_map_size_t data_range_size;
+ __startup_data static vm_map_size_t shared_data_range_size;
+ __startup_data static vm_map_size_t ptr_range_size;
+@@ -1149,6 +1151,25 @@
+ 	if (flags & KMA_NOFAIL) {
+ 		__kmem_failed_panic(map, size, flags, kmr.kmr_return, "alloc");
+ 	}
++	/* A failed allocation: what was asked and what the VM had, for the caller's log (the first 32, then every 256th). */
++	{
++		const uint32_t nth = os_atomic_inc(&kmem_alloc_failures, relaxed);
++
++		if (nth <= 32 || (nth & 255) == 0) {
++			printf("kmem_alloc: failure %u: size 0x%lx flags 0x%x result %d map %s, free %u reserved %u wired %u\n",
++			    nth, (unsigned long)size, (unsigned)flags, kmr.kmr_return,
++			    map == kernel_map ? "kernel" : "other",
++			    vm_page_free_count, vm_page_free_reserved, vm_page_wire_count);
++			/* The kernel map and its ranges, for a failure of address space (KERN_NO_SPACE). */
++			printf("kmem_alloc: kernel map %p - %p, 0x%llx bytes mapped\n",
++			    (void *)vm_map_min(kernel_map), (void *)vm_map_max(kernel_map),
++			    (unsigned long long)kernel_map->size);
++			for (uint32_t id = 0; id < KMEM_RANGE_COUNT - 1; id++) {
++				printf("kmem_alloc: range %u: %p - %p\n", id + 1,
++				    (void *)kmem_ranges[id].min_address, (void *)kmem_ranges[id].max_address);
++			}
++		}
++	}
+ 	if (guard_left) {
+ 		guard_left->vmp_snext = wired_page_list;
+ 		wired_page_list = guard_left;
