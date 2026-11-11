@@ -6,7 +6,10 @@ the kernel's virtual address space cannot hold a span that reaches it. The loade
 list parts of them to leave alone. Without the first property nothing changes; memory-outside=0 ignores it.
 
 arm_vm_init.c keeps the runs and a twig-aligned span around them, gives the span one entry of the physical aperture's
-table and a range of the aperture's addresses behind the managed span's, and maps nothing there. The pmap's per-page
+table and maps nothing there. The span's addresses lie below the kernel's static region, in the part of the address
+space the kernel map reserves and never hands out: behind the managed span's aperture they came out of the addresses the
+kernel map's ranges share (2 GiB of about 3 GiB on sheng), the ranges were 396 MiB each and allocations failed with
+KERN_NO_SPACE. A fault there and a removal of its mappings are refused as in the aperture. The pmap's per-page
 tables get one entry per page of the span after those of the managed span, and a bitmap of adopted pages: pa_valid() is
 true for an adopted page only, pa_index() and the new pai_to_pa() translate both ranges, pmap_has_managed_page() looks at
 the bitmap below the span. A page table page's offset in the pmap's object is its index in those tables.
@@ -19,10 +22,12 @@ free) is a synchronous external abort: ml_memory_probe() makes the platform erro
 instead of panicking, the page stays unmapped and unmanaged, and the rest of its run is left alone.
 
 Run on hardware: 117264 pages (458 MiB) adopted on sheng, the rest of the listed runs refused by the probe; hw.memsize grows accordingly.
+With the addresses below the static region: two runs of 243 s and 461 s without a failed kernel allocation; with them
+behind the aperture a run failed one within 150 s.
 
 diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
---- a/osfmk/arm/pmap/pmap.c
-+++ b/osfmk/arm/pmap/pmap.c
+--- a/osfmk/arm/pmap/pmap.c	2026-11-11 06:35:53
++++ b/osfmk/arm/pmap/pmap.c	2026-11-11 13:50:42
 @@ -551,6 +551,11 @@
  
  SECURITY_READ_ONLY_LATE(pmap_paddr_t)   vm_first_phys = (pmap_paddr_t) 0;
@@ -76,7 +81,19 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  	pt_entry_t *pte_p = pmap_pte(kernel_pmap, kva);
  
  	pt_entry_t tmplate = *pte_p;
-@@ -7915,10 +7921,68 @@
+@@ -4280,6 +4286,11 @@
+ 	if (__improbable((pmap == kernel_pmap) && (va >= physmap_base) && (va < physmap_end))) {
+ 		panic("%s: attempt to remove mappings from the physical aperture for va: %p", __func__, (const void *) va);
+ 	}
++	/* The aperture's addresses of the memory outside the managed span (arm_vm_init.c) likewise. */
++	extern const vm_map_address_t arm_vm_outside_va, arm_vm_outside_va_end;
++	if (__improbable((pmap == kernel_pmap) && (va >= arm_vm_outside_va) && (va < arm_vm_outside_va_end))) {
++		panic("%s: attempt to remove mappings from the physical aperture for va: %p", __func__, (const void *) va);
++	}
+ 
+ 	num_removed = 0;
+ 	num_unwired = 0;
+@@ -7915,10 +7926,68 @@
  		return FALSE;
  	}
  	if (ptoa(last) < vm_first_phys) {
@@ -145,8 +162,9 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  }
  
  /*
---- a/osfmk/arm/pmap/pmap_data.c
-+++ b/osfmk/arm/pmap/pmap_data.c
+diff --color -ruN a/osfmk/arm/pmap/pmap_data.c b/osfmk/arm/pmap/pmap_data.c
+--- a/osfmk/arm/pmap/pmap_data.c	2026-11-11 06:35:53
++++ b/osfmk/arm/pmap/pmap_data.c	2026-11-11 06:58:54
 @@ -634,8 +634,11 @@
  	const uint32_t num_ptd_pages = ptd_root_table_n_ptds / ptd_per_page;
  	vm_size_t ptd_root_table_size = num_ptd_pages * PAGE_SIZE;
@@ -207,8 +225,9 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  	}
  
  	*is_internal_p = is_internal;
---- a/osfmk/arm/pmap/pmap_data.h
-+++ b/osfmk/arm/pmap/pmap_data.h
+diff --color -ruN a/osfmk/arm/pmap/pmap_data.h b/osfmk/arm/pmap/pmap_data.h
+--- a/osfmk/arm/pmap/pmap_data.h	2026-11-11 06:35:53
++++ b/osfmk/arm/pmap/pmap_data.h	2026-11-11 06:37:01
 @@ -63,6 +63,17 @@
  extern pmap_paddr_t vm_first_phys, vm_last_phys;
  
@@ -269,9 +288,10 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  }
  
  /* See the definition of pv_head_table for more information. */
---- a/osfmk/arm64/arm_vm_init.c
-+++ b/osfmk/arm64/arm_vm_init.c
-@@ -377,6 +377,25 @@
+diff --color -ruN a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c	2026-11-11 06:35:53
++++ b/osfmk/arm64/arm_vm_init.c	2026-11-11 13:50:42
+@@ -377,6 +377,29 @@
  SECURITY_READ_ONLY_LATE(static uint64_t)                  arm_vm_excluded_size;
  
  /*
@@ -282,14 +302,18 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
 + * pages once the VM is up (ml_adopt_outside_memory), the way pages below the page array do when ml_static_mfree
 + * returns them: a vm_page from the zone, found by page number through the radix tree. Until then the kernel does
 + * not touch them. The span [arm_vm_outside_base, arm_vm_outside_end) covers the runs, aligned to the twig size;
-+ * it has one entry in the physical aperture's table and a range of the aperture's addresses, mapped page by page
-+ * as pages are adopted, and one entry per page at the end of the pmap's per-page tables. memory-outside=0 leaves
-+ * the memory alone.
++ * it has one entry in the physical aperture's table, mapped page by page as pages are adopted, and one entry per
++ * page at the end of the pmap's per-page tables. Its addresses [arm_vm_outside_va, arm_vm_outside_va_end) lie below
++ * the kernel's static region, in the part of the kernel's address space the kernel map reserves and never hands out
++ * (VM_MIN_KERNEL_AND_KEXT_ADDRESS up to the first dynamic address): behind the managed span's aperture they came out
++ * of the addresses the kernel map's ranges share, 2 GiB of about 3 GiB on a board with 6 GiB, and allocations failed
++ * with KERN_NO_SPACE. memory-outside=0 leaves the memory alone.
 + */
 +#define ARM_VM_OUTSIDE_RANGES 16
 +SECURITY_READ_ONLY_LATE(pmap_paddr_t)                   arm_vm_outside_base;
 +SECURITY_READ_ONLY_LATE(pmap_paddr_t)                   arm_vm_outside_end;
-+SECURITY_READ_ONLY_LATE(static vm_map_address_t)        arm_vm_outside_va;
++SECURITY_READ_ONLY_LATE(vm_map_address_t)               arm_vm_outside_va;
++SECURITY_READ_ONLY_LATE(vm_map_address_t)               arm_vm_outside_va_end;
 +SECURITY_READ_ONLY_LATE(static arm_vm_excluded_range_t) arm_vm_outside_table[ARM_VM_OUTSIDE_RANGES];
 +SECURITY_READ_ONLY_LATE(static unsigned int)            arm_vm_outside_count;
 +
@@ -297,7 +321,7 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
   * Bounds of the kernelcache; used for accounting.
   */
  SECURITY_READ_ONLY_LATE(vm_offset_t) arm_vm_kernelcache_phys_start;
-@@ -585,6 +604,113 @@
+@@ -585,6 +608,113 @@
  	arm_vm_excluded_size = arm_vm_excluded_bytes(gPhysBase, span_end);
  }
  
@@ -411,9 +435,9 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  /* allocate a page for a page table: we support static and dynamic mappings.
   *
   * returns a virtual address for the allocated page
-@@ -1863,6 +1989,17 @@
- 	arm_vm_physmap_slide(temp_ptov_table, (args->topOfKernelData - gPhysBase + gVirtBase),
- 	    real_avail_end - args->topOfKernelData, AP_RWNA, ARM64_GRANULE_ALLOW_BLOCK | ARM64_GRANULE_ALLOW_HINT); // rest of physmem
+@@ -1865,6 +1995,17 @@
+ 
+ 	assert((temp_ptov_table[ptov_index - 1].va + temp_ptov_table[ptov_index - 1].len) <= physmap_end);
  
 +	if (arm_vm_outside_end != 0) {
 +		/* The span of memory outside: translated, mapped page by page when its pages are adopted. */
@@ -426,24 +450,34 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
 +		++ptov_index;
 +	}
 +
- 	assert((temp_ptov_table[ptov_index - 1].va + temp_ptov_table[ptov_index - 1].len) <= physmap_end);
- 
  	// Sort in descending order of segment length.  LUT traversal is linear, so largest (most likely used)
-@@ -2112,6 +2249,12 @@
+ 	// segments should be placed earliest in the table to optimize lookup performance.
+ 	qsort(temp_ptov_table, PTOV_TABLE_SIZE, sizeof(temp_ptov_table[0]), cmp_ptov_entries);
+@@ -2112,6 +2253,21 @@
  #else
  	static_memory_end = physmap_base + mem_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE); // worst possible case for block alignment
  	physmap_end = physmap_base + real_phys_size + (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE);
 +	arm_vm_outside_init();
 +	if (arm_vm_outside_end != 0) {
-+		/* The aperture's addresses for the memory outside the span follow the span's own. */
-+		arm_vm_outside_va = ROUND_TWIG(MAX(static_memory_end, physmap_end));
-+		static_memory_end = physmap_end = arm_vm_outside_va + (arm_vm_outside_end - arm_vm_outside_base);
++		/*
++		 * The aperture's addresses for the memory outside the span: below the static region, 4 GiB and the
++		 * span's own length (to a whole L1 entry) under it, far above the low globals' alias at the bottom.
++		 */
++		const vm_map_address_t under = (gVirtBase & ~((vm_map_address_t)ARM_TT_L1_OFFMASK)) - ((vm_map_address_t)4 << 30);
++		const vm_map_size_t length = arm_vm_outside_end - arm_vm_outside_base;
++
++		arm_vm_outside_va = under - ROUND_L1(length);
++		arm_vm_outside_va_end = arm_vm_outside_va + length;
++		if (arm_vm_outside_va < VM_MIN_KERNEL_AND_KEXT_ADDRESS + ((vm_map_address_t)4 << 30) || arm_vm_outside_va >= under) {
++			panic("%s: no addresses below the static region for the memory outside the span", __func__);
++		}
 +	}
  #endif // ARM_LARGE_MEMORY
  #endif
  
---- a/osfmk/arm64/machine_routines.c
-+++ b/osfmk/arm64/machine_routines.c
+diff --color -ruN a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+--- a/osfmk/arm64/machine_routines.c	2026-11-11 06:35:53
++++ b/osfmk/arm64/machine_routines.c	2026-11-11 06:38:34
 @@ -2278,6 +2278,94 @@
  }
  
@@ -539,8 +573,9 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
   *	Routine:        ml_static_mfree
   *	Function:
   */
---- a/osfmk/arm64/sleh.c
-+++ b/osfmk/arm64/sleh.c
+diff --color -ruN a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c	2026-11-11 06:37:49
++++ b/osfmk/arm64/sleh.c	2026-11-11 13:50:42
 @@ -606,6 +606,16 @@
  	kernel_integrity_error_handler(esr, far);
  #endif
@@ -558,8 +593,21 @@ diff --color -ruN a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
  	(void)source;
  	cpu_data_t *cdp = getCpuDatap();
  
---- a/osfmk/vm/pmap.h
-+++ b/osfmk/vm/pmap.h
+@@ -2655,6 +2665,11 @@
+ 		 */
+ 		if (__improbable(fault_addr >= physmap_base) && (fault_addr < physmap_end)) {
+ 			panic_with_thread_kernel_state("Unexpected fault in kernel physical aperture", state);
++		}
++		/* The aperture's addresses of the memory outside the managed span (arm_vm_init.c). */
++		extern const vm_map_address_t arm_vm_outside_va, arm_vm_outside_va_end;
++		if (__improbable(fault_addr >= arm_vm_outside_va) && (fault_addr < arm_vm_outside_va_end)) {
++			panic_with_thread_kernel_state("Unexpected fault in kernel physical aperture (memory outside)", state);
+ 		}
+ 		if (__improbable(fault_addr >= gVirtBase && fault_addr < static_memory_end)) {
+ 			panic_with_thread_kernel_state("Unexpected fault in kernel static region", state);
+diff --color -ruN a/osfmk/vm/pmap.h b/osfmk/vm/pmap.h
+--- a/osfmk/vm/pmap.h	2026-11-11 06:35:53
++++ b/osfmk/vm/pmap.h	2026-11-11 06:37:01
 @@ -125,6 +125,10 @@
  #endif /* HAS_MTE */
  
