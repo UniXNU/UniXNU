@@ -1,0 +1,52 @@
+The contiguous page search reports a search that found no run
+
+vm_page_find_contiguous returned NULL without a word. It now prints what the search saw: pages asked for, pages
+scanned, the free and reserved counts, the runs it gave up on an object lock or a relocation, and the pages stolen.
+
+Not run on hardware.
+
+diff --color -ruN a/osfmk/vm/vm_resident.c b/osfmk/vm/vm_resident.c
+--- a/osfmk/vm/vm_resident.c
++++ b/osfmk/vm/vm_resident.c
+@@ -7942,6 +7942,8 @@
+ 	int             dumped_run = 0;
+ 	int             stolen_pages = 0;
+ 	int             compressed_pages = 0;
++	unsigned int    aborts_lock = 0, aborts_relocate = 0;
++	kern_return_t   last_relocate = KERN_SUCCESS;
+ 
+ 
+ 	if (contig_pages == 0) {
+@@ -8222,6 +8224,7 @@
+ 						/* object must be locked to relocate its pages */
+ 						tmp_start_idx = cur_idx;
+ 						abort_run = true;
++						aborts_lock++;
+ 						continue;
+ 					}
+ 				}
+@@ -8234,6 +8237,8 @@
+ 					}
+ 					tmp_start_idx = cur_idx;
+ 					abort_run = true;
++					aborts_relocate++;
++					last_relocate = kr;
+ 					continue;
+ 				}
+ 
+@@ -8383,6 +8388,15 @@
+ 	c_page_replacement_allowed_end();
+ 
+ 	vm_page_unlock_queues();
++
++	if (list.vmpl_head == VM_PAGE_NULL) {
++		/* A search that found no run: what it saw, for the caller's log. */
++		printf("vm_page_find_contiguous: no run of %u pages (max 0x%x mask 0x%x): scanned %u, free %u reserved %u, "
++		    "aborted runs %u (object lock %u, relocate %u last %d), stolen %d, wrapped %d, array %u pages\n",
++		    contig_pages, max_pnum, pnum_mask, scanned, vm_page_free_count, vm_page_free_reserved,
++		    dumped_run + aborts_lock + aborts_relocate, aborts_lock, aborts_relocate, last_relocate, stolen_pages,
++		    wrapped, vm_pages_count);
++	}
+ 
+ #if DEBUG
+ 	clock_get_system_microtime(&tv_end_sec, &tv_end_usec);
