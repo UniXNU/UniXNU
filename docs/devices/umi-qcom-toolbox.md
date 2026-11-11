@@ -9,7 +9,6 @@ paths or root images.
 | Source | Contents |
 | --- | --- |
 | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | Upstream repository: boot shim, XNU patch series, host tools, notes |
-| [`ios-umi/`](https://github.com/qcom-toolbox/UniXNU/tree/main/ios-umi) in this repository | Imported copy with its full history |
 
 The project began on the Redmi Note 10 Pro (`sweet`), so many drivers, tools and
 boot-args still carry the `sweet` name. The kernel picks the board from the
@@ -42,6 +41,24 @@ every boot and decision is logged in
 
 Security is mostly off (permissive AMFI and sandbox, stub AppleKeyStore, no data
 protection). Do not put personal data on the phone.
+
+## Drivers
+
+The port's drivers are listed as [community drivers](/drivers/repositories#community-drivers); their source stays in the ios-umi repository.
+
+| Driver | Hardware |
+| --- | --- |
+| [SweetAdreno](/drivers/community-ios-umi-adreno650) | Adreno 650 GPU |
+| [QCA6390 Wi-Fi (umi)](/drivers/community-ios-umi-qca6390-wifi) | Wi-Fi |
+| [QCA6390 Bluetooth (umi)](/drivers/community-ios-umi-qca6390-bluetooth) | Bluetooth |
+| [SweetHIDTouch](/drivers/community-ios-umi-ftm5-touch) | Touch and keys |
+| [AppleCLCD / AppleARMBacklight (umi)](/drivers/community-ios-umi-display) | Display and brightness |
+| [SweetHIDALS](/drivers/community-ios-umi-slpi-als) | Ambient light sensor |
+| [SweetAudio](/drivers/community-ios-umi-adsp-audio) | Audio |
+| [SweetBattery](/drivers/community-ios-umi-pm8150b-battery) | Battery and charging |
+| [AppleBaseband (X55, umi)](/drivers/community-ios-umi-x55-baseband) | Cellular modem |
+| [SweetUfs](/drivers/community-ios-umi-ufs) | UFS storage |
+| [ios-umi boot shim](/drivers/community-ios-umi-boot-shim) | Boot loader |
 
 ## Board and system inputs
 

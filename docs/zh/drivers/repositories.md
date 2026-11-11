@@ -55,6 +55,17 @@
 | NativeDwc3 | 小米平板 5 | [Lux12138/NativeDwc3](https://github.com/Lux12138/NativeDwc3) | [NativeDwc3](/zh/drivers/community-native-dwc3) |
 | unixnu-nativefocaltechtouch | Galaxy Tab S7 FE Wi-Fi | [RigoLigoRLC/unixnu-nativefocaltechtouch](https://github.com/RigoLigoRLC/unixnu-nativefocaltechtouch) | [unixnu-nativefocaltechtouch](/zh/drivers/community-nativefocaltechtouch) |
 | Adreno830 | 一加 13T（SM8750） | [Shad0w23333/Adreno830](https://github.com/Shad0w23333/Adreno830) | [Adreno830](/zh/drivers/community-adreno830) |
+| SweetAdreno | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetAdreno](/zh/drivers/community-ios-umi-adreno650) |
+| QCA6390 Wi-Fi (umi) | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [QCA6390 Wi-Fi (umi)](/zh/drivers/community-ios-umi-qca6390-wifi) |
+| QCA6390 Bluetooth (umi) | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [QCA6390 Bluetooth (umi)](/zh/drivers/community-ios-umi-qca6390-bluetooth) |
+| SweetHIDTouch | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetHIDTouch](/zh/drivers/community-ios-umi-ftm5-touch) |
+| AppleCLCD / AppleARMBacklight (umi) | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [AppleCLCD / AppleARMBacklight (umi)](/zh/drivers/community-ios-umi-display) |
+| SweetHIDALS | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetHIDALS](/zh/drivers/community-ios-umi-slpi-als) |
+| SweetAudio | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetAudio](/zh/drivers/community-ios-umi-adsp-audio) |
+| SweetBattery | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetBattery](/zh/drivers/community-ios-umi-pm8150b-battery) |
+| AppleBaseband (X55, umi) | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [AppleBaseband (X55, umi)](/zh/drivers/community-ios-umi-x55-baseband) |
+| SweetUfs | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetUfs](/zh/drivers/community-ios-umi-ufs) |
+| ios-umi boot shim | 小米 10（umi，SM8250） | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [ios-umi boot shim](/zh/drivers/community-ios-umi-boot-shim) |
 
 ## 设备分支
 

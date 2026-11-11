@@ -55,6 +55,17 @@ These repositories are maintained by their owners. They are linked from the devi
 | NativeDwc3 | Xiaomi Pad 5 | [Lux12138/NativeDwc3](https://github.com/Lux12138/NativeDwc3) | [NativeDwc3](/drivers/community-native-dwc3) |
 | unixnu-nativefocaltechtouch | Galaxy Tab S7 FE Wi-Fi | [RigoLigoRLC/unixnu-nativefocaltechtouch](https://github.com/RigoLigoRLC/unixnu-nativefocaltechtouch) | [unixnu-nativefocaltechtouch](/drivers/community-nativefocaltechtouch) |
 | Adreno830 | OnePlus 13T (SM8750) | [Shad0w23333/Adreno830](https://github.com/Shad0w23333/Adreno830) | [Adreno830](/drivers/community-adreno830) |
+| SweetAdreno | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetAdreno](/drivers/community-ios-umi-adreno650) |
+| QCA6390 Wi-Fi (umi) | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [QCA6390 Wi-Fi (umi)](/drivers/community-ios-umi-qca6390-wifi) |
+| QCA6390 Bluetooth (umi) | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [QCA6390 Bluetooth (umi)](/drivers/community-ios-umi-qca6390-bluetooth) |
+| SweetHIDTouch | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetHIDTouch](/drivers/community-ios-umi-ftm5-touch) |
+| AppleCLCD / AppleARMBacklight (umi) | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [AppleCLCD / AppleARMBacklight (umi)](/drivers/community-ios-umi-display) |
+| SweetHIDALS | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetHIDALS](/drivers/community-ios-umi-slpi-als) |
+| SweetAudio | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetAudio](/drivers/community-ios-umi-adsp-audio) |
+| SweetBattery | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetBattery](/drivers/community-ios-umi-pm8150b-battery) |
+| AppleBaseband (X55, umi) | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [AppleBaseband (X55, umi)](/drivers/community-ios-umi-x55-baseband) |
+| SweetUfs | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [SweetUfs](/drivers/community-ios-umi-ufs) |
+| ios-umi boot shim | Xiaomi Mi 10 (umi, SM8250) | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | [ios-umi boot shim](/drivers/community-ios-umi-boot-shim) |
 
 ## Device forks
 

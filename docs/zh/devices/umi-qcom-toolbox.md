@@ -8,7 +8,6 @@
 | 来源 | 内容 |
 | --- | --- |
 | [qcom-toolbox/ios-umi](https://github.com/qcom-toolbox/ios-umi) | 上游仓库：启动 shim、XNU 补丁序列、主机工具、笔记 |
-| 本仓库的 [`ios-umi/`](https://github.com/qcom-toolbox/UniXNU/tree/main/ios-umi) | 保留完整历史的导入副本 |
 
 项目最初在红米 Note 10 Pro（`sweet`）上开始，因此许多驱动、工具和启动参数仍沿用
 `sweet` 名称。内核在运行时根据设备树选择机型。
@@ -38,6 +37,24 @@
 | 尚不可用 | 相机、视频解码、运动传感器、指纹、SEP / 面容 ID、NFC、振动、App Store / Apple ID |
 
 安全机制基本关闭（宽松的 AMFI 与沙盒、AppleKeyStore 桩、无数据保护）。请勿在手机上存放个人数据。
+
+## 驱动
+
+本移植的驱动以[社区驱动](/zh/drivers/repositories#社区驱动)形式列出，源码保留在 ios-umi 仓库中。
+
+| 驱动 | 硬件 |
+| --- | --- |
+| [SweetAdreno](/zh/drivers/community-ios-umi-adreno650) | Adreno 650 GPU |
+| [QCA6390 Wi-Fi (umi)](/zh/drivers/community-ios-umi-qca6390-wifi) | Wi-Fi |
+| [QCA6390 Bluetooth (umi)](/zh/drivers/community-ios-umi-qca6390-bluetooth) | 蓝牙 |
+| [SweetHIDTouch](/zh/drivers/community-ios-umi-ftm5-touch) | 触控与按键 |
+| [AppleCLCD / AppleARMBacklight (umi)](/zh/drivers/community-ios-umi-display) | 显示与亮度 |
+| [SweetHIDALS](/zh/drivers/community-ios-umi-slpi-als) | 环境光传感器 |
+| [SweetAudio](/zh/drivers/community-ios-umi-adsp-audio) | 音频 |
+| [SweetBattery](/zh/drivers/community-ios-umi-pm8150b-battery) | 电池与充电 |
+| [AppleBaseband (X55, umi)](/zh/drivers/community-ios-umi-x55-baseband) | 蜂窝调制解调器 |
+| [SweetUfs](/zh/drivers/community-ios-umi-ufs) | UFS 存储 |
+| [ios-umi boot shim](/zh/drivers/community-ios-umi-boot-shim) | 启动加载器 |
 
 ## 机型与系统输入
 
