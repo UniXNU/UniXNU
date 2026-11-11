@@ -95,7 +95,7 @@ CPU 读取结果前完成缓存同步；fence 超时时先停止队列并确认 
 
 ### 8 位 BGRA 帧缓冲的渲染模式 {#render-mode}
 
-`fb-bgra=1` 默认设置 `TU_DEBUG=sysmem,nocb`。带有尚未分配 backing 的 lazy transient 附件时，pass 在满足分块渲染条件后使用 GMEM；其余 pass 保持系统内存策略。`turnip-transient-attachments-in-gmem.patch` 在 SYSMEM 覆盖前作出此选择，让 memoryless 附件留在 tile 内存。
+默认设置 `TU_DEBUG=gmem,nocb`：凡是 Turnip 能分块的 pass 都在 tile 内存中渲染，不使用并发分箱。附件每个 tile 只加载和存储一次，memoryless 附件不占内存。GMEM 的加载和存储在内存一侧应用图像自身的 swap（`turnip-gmem-memory-side-swap.patch`）。无法分块的 pass 在系统内存中渲染。命令行上的 `tu-debug=` 可覆盖默认值。
 
 `turnip-gmem-mutable-swap.patch` 保持 GMEM 加载与存储的颜色字节序。附件大小、行填充、格式和 load/store 操作参与模式选择。`tu-debug=` 用于指定对照配置，并发 binning 保持关闭。
 

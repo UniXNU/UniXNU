@@ -107,7 +107,7 @@ Unused owned image backing serves later pooled and dedicated images. The room wo
 
 ### Render mode with an 8-bit BGRA framebuffer {#render-mode}
 
-With `fb-bgra=1`, the default is `TU_DEBUG=sysmem,nocb`. Passes with an unbacked, lazily allocated transient attachment use GMEM when the render-pass constraints allow it. Other passes keep the system-memory policy. The recorded `turnip-transient-attachments-in-gmem.patch` applies this choice before the SYSMEM override, so memoryless attachments can remain in tile memory.
+The default is `TU_DEBUG=gmem,nocb`: every pass renders in tile memory where Turnip can tile it, without concurrent binning. Attachments are loaded and stored once per tile, and memoryless attachments take no memory. GMEM loads and stores apply the image's own swap on the memory side (`turnip-gmem-memory-side-swap.patch`). A pass that cannot be tiled renders in system memory. `tu-debug=` on the command line overrides the default.
 
 `turnip-gmem-mutable-swap.patch` preserves colour byte order on GMEM loads and stores. Attachment sizes, row padding, formats and load/store actions remain part of render-mode selection. `tu-debug=` selects an explicit experiment. Concurrent binning stays disabled.
 
