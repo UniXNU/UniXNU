@@ -155,6 +155,11 @@
     "title_zh": "dizi"
   },
   {
+    "name": "models/dodge",
+    "title": "dodge",
+    "title_zh": "dodge"
+  },
+  {
     "name": "models/droidvm",
     "title": "droidvm",
     "title_zh": "droidvm"
@@ -368,6 +373,11 @@
     "name": "models/marble",
     "title": "marble",
     "title_zh": "marble"
+  },
+  {
+    "name": "models/meizu15",
+    "title": "meizu15",
+    "title_zh": "meizu15"
   },
   {
     "name": "models/meizu21",

@@ -1,0 +1,190 @@
+# Current summary. Pre-cleanup history is archived under docs/archive/.
+schema_version = 1
+
+[device]
+name = "elden"
+soc = "SM8750P"
+os_profile = "ipados-17.7.11-21H461"
+summary = "v91 reached populated Settings via software input. Physical input/performance/basic peripherals remain incomplete. Source migration and clean reproduction are in progress; device restored stock."
+
+[[area]]
+id = "configuration"
+status = "host-verified"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "soc/**", "configs/**", ".github/**", ".gitignore", "local.toml.example"]
+inputs = ["Use the ARM64 and iPadOS 17.7.11 profiles supplied by UniXNU.", "Select the shared platform, CPU and DarwinBoot components.", "Provide an SM8750 profile until an official shared SoC repository exists."]
+completion = ["board.toml resolves four ordered configuration layers.", "All selected components come from the UniXNU catalog and include their dependencies.", "No array field depends accidentally on inheritance.", "The SoC source is a reviewed remote commit and unixnu.lock records it."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Frozen v91 source profile imported and verified."]
+limits = ["Default board/lock remains the historical early profile; no clean final boot reproduction yet."]
+next_action = ["Finish clean full-kernel and packaging dependency closure."]
+evidence = [{ kind = "host", reference = "docs/REPRODUCIBILITY.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Frozen v91 source profile imported and verified. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "firmware"
+status = "device-verified"
+components = ["DarwinBoot"]
+paths = ["scripts/**", "drivers/**", "patches/overlays/**", "package/**", "proprietary-files.txt"]
+inputs = ["mu_wide_platforms lenovo-y700g4 UEFI source and patched PMIC binaries.", "UniXNU, UniXNUDxe, DarwinBoot and EldenRamDiskDxe firmware modules.", "A 4 MiB FAT16 payload containing package/unixnu.toml."]
+completion = ["Firmware contains UniXNU, UniXNUDxe, DarwinBoot and the RAM payload driver.", "The payload config is readable and the menu accepts volume-key input.", "Two RAM boots produce the same visible checkpoint and do not modify persistent partitions."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel."]
+limits = ["Not a claim that every firmware configuration or KShimC route is qualified."]
+next_action = ["Retain frozen firmware inputs and finish portable build mapping."]
+evidence = [{ kind = "device", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["soc/sm8750/dts/**", "dts/**"]
+inputs = ["SM8750 MPIDRs 0x0, 0x100, 0x200, 0x300, 0x400, 0x500, 0x10000 and 0x10100.", "GICv3 distributor 0x16000000, redistributor base 0x16080000 and stride 0x40000.", "19.2 MHz architectural timer and PSCI SMC conduit."]
+completion = ["The boot CPU reaches the ArmCpu checkpoint.", "GIC distributor and its own redistributor frame map successfully.", "Timer handling works before secondary cores or IPI transport are qualified."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91."]
+limits = ["Configured CPUs do not prove sustained online load or explain UI stalls."]
+next_action = ["Measure online CPUs, scheduler/IRQ progress and actual latency with the UI workload."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["dts/**", "soc/sm8750/dts/**", "scripts/phase2_1_audit.py"]
+inputs = ["The owner-captured live elden FDT, including the 12 GiB RAM map, initrd and reserved-memory nodes.", "The pinned Linux 16 GiB variant and the elden UEFI static memory map.", "A conservative 256 MiB XNU handoff window in UEFI DXE conventional memory."]
+completion = ["The ADT contains exactly one continuous memory range.", "The range is covered by live firmware RAM and avoids recorded reservations, initrd, GOP and UEFI FD.", "DarwinBoot and the UEFI exit map confirm that same range is conventional memory before XNU entry."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["v91 retains the validated high-address RAM configuration."]
+limits = ["Full 16GB adoption and memory stress are incomplete."]
+next_action = ["Keep frozen memory inputs during UI work; expand after map qualification."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "v91 retains the validated high-address RAM configuration. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["ShengUfs"]
+paths = ["drivers/**", "patches/xnu/**", "scripts/**", "soc/sm8750/dts/**", "dts/**", "configs/**", "package/**", "docs/PHASE3-STORAGE.md", "docs/UFS-STAGE2-20261106.md"]
+inputs = ["SM8750 UFS host at 0x1d84000 (+0x3000) and QMP PHY at 0x1d80000 (+0x2000), both described by the same-device Linux tree sm8750-lenovo-elden.dts and sm8750.dtsi pinned at bf96c3d4048973298ede78487177c6f1b4f6bc0f.", "Controller resources: GIC_SPI 265 level-high, 8 GCC/RPMh clocks, GCC_UFS_PHY_BCR, GCC_UFS_PHY_GDSC, apps_smmu stream 0x60, lanes-per-direction 2, ICE crypto@1d88000.", "PHY resources: RPMH_CXO_CLK, GCC_UFS_PHY_PHY_AUX_CLK, TCSR_UFS_CLKREF_EN, GCC_UFS_MEM_PHY_GDSC.", "Board supplies and reset: PHY vreg_l1j_0p91 and vreg_l3g_1p2, host vreg_l17b_2p5 (1.3 A) and vreg_l1d_1p2 (1.2 A), reset GPIO tlmm 215 active-low.", "4 KiB logical-sector partition geometry and a root-volume UUID, both owner-supplied and read-only."]
+completion = ["Controller and PHY initialize.", "Read-only capacity, GPT and known-block checks match the device.", "The configured OS volume mounts and launchd starts."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["UFS-backed iPadOS root, RAM Data, launchd and Settings have run."]
+limits = ["Persistent Data and UFS performance are not fully qualified."]
+next_action = ["Compare measured I/O with the pinned sheng success path; qualify persistence separately."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "UFS-backed iPadOS root, RAM Data, launchd and Settings have run. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "display"
+status = "implemented"
+components = ["GopFramebuffer", "AppleKeyStoreState"]
+paths = ["soc/sm8750/dts/**", "dts/**", "scripts/build-elden-gop.py", "scripts/audit-elden-gop.py", "scripts/driver-patches/EldenDisplayGlue.cpp", "scripts/driver-patches/EldenKeyEventsGlue.cpp", "scripts/driver-patches/EldenUserWaitProbe.c", "patches/xnu/elden-usb-graphics-console.patch", "patches/xnu/elden-console-physical-marker.patch", "patches/xnu/elden-display-mode-observer.patch"]
+inputs = ["1904x3040 bonded dual-DSI panel with DSC.", "UEFI GOP framebuffer and splash reservation.", "SM8750 DPU/DSI/PHY and backlight sequencing."]
+completion = ["XNU paints a known pattern through a declared framebuffer handoff.", "Userland presentation and backlight transitions work."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["v91 renders a populated Settings page with the owned CPU graphic-variant helper."]
+limits = ["Display fluidity and v92 framebuffer mapping remain unqualified."]
+next_action = ["Qualify v92 offline, then use one meaningful display/input function test."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "v91 renders a populated Settings page with the owned CPU graphic-variant helper. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "input"
+status = "implemented"
+components = ["ShengHidInput"]
+paths = ["drivers/EldenNvt36536/**", "scripts/build-elden-hid.py", "scripts/driver-patches/EldenHidGlue.cpp", "docs/**"]
+inputs = ["Novatek SPI touch on SPI4 and GPIO 162 interrupt.", "Volume and power keys used by the UEFI menu."]
+completion = ["Touch coordinates map to the display.", "Contact IDs, releases and multi-touch remain stable.", "Buttons produce expected HID events in XNU."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["One software swipe and one short Settings tap reached the real Settings UI in v91."]
+limits = ["Physical finger accuracy, ghost-touch rejection and consistent gestures remain incomplete."]
+next_action = ["Correlate a real touch with raw contact, HID event and UI response in one bounded session."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "One software swipe and one short Settings tap reached the real Settings UI in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["docs/**"]
+inputs = ["Adreno 830 / gen80000.", "GPU firmware, power votes, SMMU and display integration."]
+completion = ["GPU submissions, fences and mapping work.", "A known image renders and Metal presentation is visible."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Reference sources and inactive experimental components are preserved."]
+limits = ["No GPU daily-use qualification."]
+next_action = ["GPU last, after basic peripherals and CPU display are usable."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Reference sources and inactive experimental components are preserved. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "network"
+status = "implemented"
+components = []
+paths = ["proprietary-files.txt", "drivers/EldenBluetooth/**", "package/EldenBluetoothBoard.h", "soc/sm8750/include/EldenBluetoothResources.h", "scripts/build-elden-gop.py", "scripts/driver-patches/EldenBluetoothInspect.cpp", "scripts/build-elden-offline-cores.py", "scripts/audit-elden-offline-archives.py", "docs/NIGHT-OFFLINE-20261108.md", "docs/WCN7861-HCI-20261108.md", "docs/WCN-UART-20261108.md", "docs/WCN-POWER-20261108.md", "docs/WCN-NATIVE-20261108.md"]
+inputs = ["WCN7861 Wi-Fi/Bluetooth shared power, transport and firmware."]
+completion = ["Wi-Fi authentication/IP/traffic; Bluetooth pairing/audio/HID and persistent credentials."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist."]
+limits = ["Wi-Fi connectivity and Bluetooth pairing/continuous operation are not accepted."]
+next_action = ["Follow sheng-proven driver interfaces with TB322FC-specific ArmadaOS register evidence."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["proprietary-files.txt"]
+inputs = ["Original ADSP/DTB, WCD9395 and AW88461 board resources."]
+completion = ["Protected playback, microphone capture, system routing and sustained audio."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Reference work retained; no new speaker enablement."]
+limits = ["Speaker gain and electrical protection are not qualified."]
+next_action = ["Discuss attenuation and protection before enabling speaker output."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Reference work retained; no new speaker enablement. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "power"
+status = "implemented"
+components = []
+paths = ["soc/sm8750/**", "package/**", "drivers/EldenPmicGlink/**", "scripts/driver-patches/EldenPowerInspect.cpp", "scripts/driver-patches/EldenPowerStartup.inc", "scripts/driver-patches/EldenModemReader.inc", "docs/ADSP-PMIC-RUNTIME-20261108.md", "docs/UCSI-DUALPORT-20261108.md", "docs/BATTERY-TELEMETRY-20261108.md"]
+inputs = ["PM8550-class PMIC, RPMh resources and device power domains.", "Volume and power key behavior."]
+completion = ["Declared power controls match readings.", "Sleep/resume or shutdown transitions restore dependent peripherals."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence."]
+limits = ["Shared 500mA, complete fast charging, bypass, charge windows and all dual-port failure cases remain open."]
+next_action = ["Use decision-changing functional tests; do not repeat the rejected GLINK write path."]
+evidence = [{ kind = "host", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "packaging"
+status = "device-verified"
+components = []
+paths = ["scripts/**", "package/**", "patches/**", "out/build.json", "unixnu.lock"]
+inputs = ["iPad7,1 iPadOS 17.7.11 build 21H461 restore inputs.", "Target kernelcache, XNU 10063.141.1, DriverKit and TrustCache ABI inputs.", "Android v3 RAM-boot image, a 4 MiB phase 1 embedded FAT payload and a measured 56 MiB phase 2 candidate."]
+completion = ["All format 2 build steps run from the resolved output directory.", "The payload contains the kernel, ADT and declared optional inputs.", "The boot image matches the ABL header and size limits."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["v91 boot image ran; rollback floor and full-image identity are recorded."]
+limits = ["A clean source-to-final-boot rebuild is not yet validated."]
+next_action = ["Close source/external-input dependency graph before presenting a one-command build."]
+evidence = [{ kind = "device", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "v91 boot image ran; rollback floor and full-image identity are recorded. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = ["scripts/check-*", "scripts/verify_*", "scripts/phase2_1_audit.py", "docs/**", "out/build.json", "assets/**"]
+inputs = ["RAM-only owner-operated boot procedure.", "Build and artifact SHA-256 values.", "UEFI screen output and recovery path."]
+completion = ["Every claimed checkpoint has a reproducible command, image hash and visible result.", "Failures reach a diagnosable screen or log instead of a silent hang."]
+configuration = ["Frozen v91 inputs and explicit experimental v92 separation; see docs/REPRODUCIBILITY.md."]
+procedure = ["Follow docs/PLAN.md and retain identity, fresh power, floor and full SHA admission."]
+findings = ["USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work."]
+limits = ["v91 whole capture dropped 24 bytes; counted raster records and Settings frame CRC were retained."]
+next_action = ["Preserve the recovery path and measure rather than infer CPU/UFS stalls."]
+evidence = [{ kind = "device", reference = "docs/CURRENT-STATUS.md", command = "Read frozen source/hardware manifests; no new device operation during maintenance", revision = "c7fae2baaaad4be7406de3691a4e79cc5cc48664", result = "USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes." }]
