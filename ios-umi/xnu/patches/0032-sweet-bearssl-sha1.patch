@@ -1,0 +1,125 @@
+--- a/libkern/conf/files
++++ b/libkern/conf/files
+@@ -106,6 +106,9 @@
+ libkern/crypto/sweet_md5.c	optional crypto
+ libkern/crypto/sweet_dec32le.c	optional crypto
+ libkern/crypto/sweet_enc32le.c	optional crypto
++libkern/crypto/sweet_sha1.c	optional crypto
++libkern/crypto/sweet_dec32be.c	optional crypto
++libkern/crypto/sweet_enc32be.c	optional crypto
+ libkern/crypto/corecrypto_aesxts.c		optional crypto
+ libkern/crypto/corecrypto_rand.c		optional crypto
+ libkern/crypto/corecrypto_rsa.c		    optional crypto
+--- a/libkern/conf/Makefile.template
++++ b/libkern/conf/Makefile.template
+@@ -44,6 +44,15 @@
+ sweet_dec32le.o_CFLAGS_ADD += -mgeneral-regs-only
+ sweet_enc32le.o_CFLAGS_ADD += -mgeneral-regs-only
+ corecrypto_md5.o_CFLAGS_ADD += -mgeneral-regs-only
++# BearSSL SHA-1 behind the legacy SHA1Init/Update/Final API (corecrypto_sha1.c).
++sweet_sha1.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_dec32be.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_enc32be.o_INCFLAGS = $(SWEET_AES_INC)
++corecrypto_sha1.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_dec32be.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_enc32be.o_CFLAGS_ADD += -mgeneral-regs-only
++corecrypto_sha1.o_CFLAGS_ADD += -mgeneral-regs-only
+ endif
+ 
+ # Runtime support functions don't interact well with LTO (9294679)
+--- a/libkern/crypto/corecrypto_sha1.c
++++ b/libkern/crypto/corecrypto_sha1.c
+@@ -16,6 +16,62 @@
+ 	ctx->c.b64[0] = count;
+ }
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * SWEET has no corecrypto kext (g_crypto_funcs stays NULL). SHA-1 uses
++ * BearSSL's portable implementation (libkern/crypto/sweet_sha1.c), with
++ * SHA1_CTX carrying exactly its state: chaining value, byte count and the
++ * partial block, converted around each call like the corecrypto path does.
++ */
++#include "sweet_bearssl/inc/bearssl_hash.h"
++
++static void
++SHA1ToBr(SHA1_CTX *sha1_ctx, br_sha1_context *br_ctx)
++{
++	br_sha1_init(br_ctx);
++	memcpy(br_ctx->val, sha1_ctx->h.b32, sizeof(br_ctx->val));
++	br_ctx->count = getCount(sha1_ctx);
++	memcpy(br_ctx->buf, sha1_ctx->m.b8, sizeof(br_ctx->buf));
++}
++
++static void
++BrToSHA1(const br_sha1_context *br_ctx, SHA1_CTX *sha1_ctx)
++{
++	memcpy(sha1_ctx->h.b32, br_ctx->val, sizeof(sha1_ctx->h.b32));
++	setCount(sha1_ctx, br_ctx->count);
++	memcpy(sha1_ctx->m.b8, br_ctx->buf, sizeof(sha1_ctx->m.b8));
++}
++
++void
++SHA1Init(SHA1_CTX *ctx)
++{
++	br_sha1_context br_ctx;
++
++	br_sha1_init(&br_ctx);
++	BrToSHA1(&br_ctx, ctx);
++}
++
++void
++SHA1Update(SHA1_CTX *ctx, const void *data, size_t len)
++{
++	br_sha1_context br_ctx;
++
++	SHA1ToBr(ctx, &br_ctx);
++	br_sha1_update(&br_ctx, data, len);
++	BrToSHA1(&br_ctx, ctx);
++}
++
++void
++SHA1Final(void *digest, SHA1_CTX *ctx)
++{
++	br_sha1_context br_ctx;
++
++	SHA1ToBr(ctx, &br_ctx);
++	br_sha1_out(&br_ctx, digest);
++}
++
++#else /* !ARM64_BOARD_CONFIG_SWEET */
++
+ /* Copy a ccdigest ctx into a legacy SHA1 context */
+ static void
+ DiToSHA1(const struct ccdigest_info *di, struct ccdigest_ctx *di_ctx, SHA1_CTX *sha1_ctx)
+@@ -69,6 +125,8 @@
+ 	ccdigest_final(di, di_ctx, digest);
+ }
+ 
++#endif /* !ARM64_BOARD_CONFIG_SWEET */
++
+ /* This is not publicised in header, but exported in libkern.exports */
+ void SHA1Final_r(SHA1_CTX *context, void *digest);
+ void
+--- /dev/null
++++ b/libkern/crypto/sweet_sha1.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/hash/sha1.c"
++#endif
+--- /dev/null
++++ b/libkern/crypto/sweet_dec32be.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/codec/dec32be.c"
++#endif
+--- /dev/null
++++ b/libkern/crypto/sweet_enc32be.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/codec/enc32be.c"
++#endif

@@ -1,0 +1,64 @@
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -407,7 +407,7 @@
+ 	OSArray *fRefs;
+ 
+ 	SweetSurfaceRef *findRef(uint32_t id, unsigned int *index);
+-	IOReturn addRef(SweetSurface *s, SweetSurfaceRef **refOut);
++	IOReturn addRef(SweetSurface *s, SweetSurfaceRef **refOut, bool *existing);
+ 	IOReturn returnSurface(SweetSurface *s, IOExternalMethodArguments *args);
+ 	IOReturn create(IOExternalMethodArguments *args);
+ 
+@@ -495,17 +495,25 @@
+ /*
+  * Count one more create/lookup of s by this client, mapping it into the
+  * task the first time. Takes over the caller's user count on s.
++ *
++ * A lookup of a surface this client already has maps nothing and counts
++ * nothing (*existing): IOSurface.framework then gets base address -1 in the
++ * lock result and reuses its cached IOSurfaceClient. Counting it instead
++ * made the framework build a second client for the same id; releasing that
++ * one (traps 4 + 5) unmapped the memory under the first (backboardd
++ * snapshot crash in CGDataProviderCreateWithData).
+  */
+ IOReturn
+-IOSurfaceRootUserClient::addRef(SweetSurface *s, SweetSurfaceRef **refOut)
++IOSurfaceRootUserClient::addRef(SweetSurface *s, SweetSurfaceRef **refOut, bool *existing)
+ {
++	*existing = false;
+ 	IOLockLock(fLock);
+ 	SweetSurfaceRef *ref = findRef(s->id, NULL);
+ 	if (ref != NULL && ref->surface == s) {
+-		ref->count++;
+ 		IOLockUnlock(fLock);
+ 		sweet_surface_put(s);
+ 		*refOut = ref;
++		*existing = true;
+ 		return kIOReturnSuccess;
+ 	}
+ 	IOLockUnlock(fLock);
+@@ -615,7 +623,8 @@
+ IOSurfaceRootUserClient::returnSurface(SweetSurface *s, IOExternalMethodArguments *args)
+ {
+ 	SweetSurfaceRef *ref = NULL;
+-	IOReturn ret = addRef(s, &ref);
++	bool existing = false;
++	IOReturn ret = addRef(s, &ref, &existing);
+ 	if (ret != kIOReturnSuccess) {
+ 		return ret;
+ 	}
+@@ -624,10 +633,13 @@
+ 		ret = kIOReturnNoMemory;
+ 	} else {
+ 		sweet_surface_fill_result(s, ref, out);
++		if (existing) {
++			put64(out, 0x00, ~0ULL);        /* "already yours": use the cached client */
++		}
+ 		ret = sweet_struct_out(args, out, SWEET_SURFACE_RESULT_SIZE);
+ 		IOFreeData(out, SWEET_SURFACE_RESULT_SIZE);
+ 	}
+-	if (ret != kIOReturnSuccess) {
++	if (ret != kIOReturnSuccess && !existing) {
+ 		/* The caller never learns the id: undo this create/lookup. */
+ 		trapRelease((void *)(uintptr_t)s->id, NULL, NULL, NULL, NULL, NULL);
+ 	}

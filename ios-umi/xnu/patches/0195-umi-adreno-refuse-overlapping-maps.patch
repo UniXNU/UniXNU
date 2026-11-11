@@ -1,0 +1,106 @@
+From dbc1af314aa6be4d684525c68fb5b0ce6073ade9 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 20:15:16 +0100
+Subject: [PATCH] umi: refuse a GPU mapping over pages that are already mapped
+
+0194's submit check caught the hang's cause: fence 540's IB 13 called
+0x206448000 for 281 dwords, and at submit time that address held an
+image's pixels (0xfff2f2f7), a second call (fence 548) all zeros. The
+window is the task's - every connection and Turnip device of a process
+shares it - but each tu_device ran its own address allocator over it,
+so two devices in one process (backboardd and SpringBoard each make
+two) handed out the same iovas and the second BoMap silently replaced
+the first one's PTEs.
+
+sweet_adreno_map_at now refuses (EEXIST, logged) to map over a valid
+PTE and touches nothing; BoMap answers kIOReturnNoSpace and undoes only
+its own pieces, not the other BO's mapping. Turnip's darwin backend
+gets one process-wide allocator (phone/turnip/0001 in ios-sweet).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c           | 18 ++++++++++++++++++
+ iokit/Kernel/arm/SweetAdreno.cpp | 16 +++++++++++++---
+ 2 files changed, 31 insertions(+), 3 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 5d4a785..9639b21 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -2976,6 +2976,8 @@ sweet_adreno_window_free(uint64_t base)
+ 	(void)base;
+ }
+ 
++extern void IOLog(const char *, ...);
++
+ /* Map n physical pages (4K each) at iova, 4K at a time, as context 0's step-23 objects. */
+ int
+ sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n)
+@@ -2984,6 +2986,22 @@ sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n)
+ 		return EINVAL;
+ 	}
+ 	sa_service_take_lock();
++	/* Never over a page already mapped: the window is the task's, shared by all its
++	 * connections and devices, and a second allocator handing out the same address made
++	 * its BoMap silently replace the first one's pages (a command buffer then called into
++	 * another device's image - the CP_OPCODE_ERROR hangs, 0194). Refused, nothing touched. */
++	for (uint32_t i = 0; i < n; i++) {
++		uint64_t *pte = sa_space_pte(&sa_core_space, iova + 4096ull * i);
++		if (pte != NULL && (*pte & 3) == PTE_PAGE) {
++			static uint32_t told;
++			if (told++ < 16) {
++				IOLog("SWEET ADRENO: map refused: %#llx is already mapped (to %#llx); %u pages from %#llx\n",
++				    iova + 4096ull * i, *pte & PTE_ADDRESS, n, iova);
++			}
++			sa_service_drop_lock();
++			return EEXIST;
++		}
++	}
+ 	int err = 0;
+ 	for (uint32_t i = 0; i < n; i++) {
+ 		if (!sa_space_map(&sa_core_space, iova + 4096ull * i, pages[i], PTE_CORE)) {
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 9495972..2271202 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -627,7 +627,10 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 			    fWinBase, fWinBase + fWinSize, bo->bytes);
+ 			r = kIOReturnBadArgument;
+ 		}
+-		/* the pages in 4K steps, mapped in pieces of SWEET_ADRENO_V2_PAGEBUF */
++		/* the pages in 4K steps, mapped in pieces of SWEET_ADRENO_V2_PAGEBUF; `mapped` is how
++		 * far they went, so a refusal undoes only this BO's own pieces (a piece refused because
++		 * its pages are another BO's must leave that BO's mapping alone) */
++		uint64_t mapped = 0;
+ 		for (uint64_t off = 0; r == kIOReturnSuccess && off < bo->bytes;) {
+ 			uint32_t n = 0;
+ 			uint64_t start = off;
+@@ -640,8 +643,15 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 				}
+ 				fPageBuf[n] = pa;
+ 			}
+-			if (r == kIOReturnSuccess && sweet_adreno_map_at(rq->iova + start, fPageBuf, n) != 0) {
++			int mr = r == kIOReturnSuccess ? sweet_adreno_map_at(rq->iova + start, fPageBuf, n) : 0;
++			if (mr == EEXIST) {
++				IOLog("SWEET ADRENO: BoMap refused: handle %llu iova %#llx+%#llx overlaps a mapped range\n",
++				    rq->handle, rq->iova, bo->bytes);
++				r = kIOReturnNoSpace;
++			} else if (mr != 0) {
+ 				r = kIOReturnNoResources;
++			} else if (r == kIOReturnSuccess) {
++				mapped = off;
+ 			}
+ 		}
+ 		if (r == kIOReturnSuccess) {
+@@ -655,7 +665,7 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 				sweet_adreno_clean((vm_offset_t)bo->kmap->getVirtualAddress(), bo->bytes);
+ 			}
+ 		} else if (bo != NULL && bo->iova == 0 && r != kIOReturnBadArgument && r != kIOReturnBusy) {
+-			sweet_adreno_unmap_at(rq->iova, bo->bytes);
++			sweet_adreno_unmap_at(rq->iova, r == kIOReturnNoSpace ? mapped : bo->bytes);
+ 		}
+ 		return r;
+ 	}
+-- 
+2.54.0 (Apple Git-157)
+

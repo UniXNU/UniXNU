@@ -1,0 +1,129 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -361,6 +361,9 @@
+ bsd/security/audit/audit_worker.c		optional config_audit
+ 
+ bsd/pthread/pthread_shims.c		standard
++bsd/pthread/sweet_pthread_init.c	standard
++bsd/pthread/sweet_pthread_support.c	standard
++bsd/pthread/sweet_pthread_synch.c	standard
+ bsd/pthread/pthread_priority.c		standard
+ bsd/pthread/pthread_workqueue.c		standard
+ 
+diff --git a/bsd/conf/Makefile.template b/bsd/conf/Makefile.template
+--- a/bsd/conf/Makefile.template
++++ b/bsd/conf/Makefile.template
+@@ -43,6 +43,15 @@
+ 	-DBSD_KERNEL_PRIVATE -DLP64_DEBUG=0 \
+         -Warray-bounds-pointer-arithmetic
+ SFLAGS+= -include meta_features.h
++
++# This provider is built into SWEET; other boards use their normal kext.
++ifeq ($(CURRENT_MACHINE_CONFIG),SWEET)
++SWEET_PTHREAD_ROOT = $(SRCROOT)/bsd/pthread/sweet_libpthread
++SWEET_PTHREAD_INC = -I$(SWEET_PTHREAD_ROOT) -I$(SWEET_PTHREAD_ROOT)/private -I$(SWEET_PTHREAD_ROOT)/include
++sweet_pthread_init.o_INCFLAGS = $(SWEET_PTHREAD_INC)
++sweet_pthread_support.o_INCFLAGS = $(SWEET_PTHREAD_INC)
++sweet_pthread_synch.o_INCFLAGS = $(SWEET_PTHREAD_INC)
++endif
+ 
+ #
+ # Directories for mig generated files
+diff --git a/bsd/sys/pthread_internal.h b/bsd/sys/pthread_internal.h
+--- a/bsd/sys/pthread_internal.h
++++ b/bsd/sys/pthread_internal.h
+@@ -34,7 +34,12 @@
+ 
+ struct ksyn_waitq_element {
+ #if __LP64__
++	#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/* libpthread-514.100.2 includes the trailing kwe_uth pointer. */
++	char opaque[56];
++#else
+ 	char opaque[48];
++#endif
+ #else
+ 	char opaque[32];
+ #endif
+diff --git a/bsd/pthread/sweet_pthread_compat.h b/bsd/pthread/sweet_pthread_compat.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/pthread/sweet_pthread_compat.h
+@@ -0,0 +1,25 @@
++/*
++ * Compile the matching libpthread provider with its kext view of BSD headers.
++ * It owns its full ksyn_waitq_element layout; the kernel's opaque counterpart
++ * reserves this layout. All communication with private BSD state uses callbacks.
++ */
++#ifndef SWEET_PTHREAD_COMPAT_H
++#define SWEET_PTHREAD_COMPAT_H
++#undef BSD_KERNEL_PRIVATE
++#undef XNU_KERNEL_PRIVATE
++#define __PTHREAD_EXPOSE_INTERNALS__ 1
++#define NEEDS_SCHED_CALL_T 1
++
++/* The seven-argument kext API forwards to the eight-argument kernel vm_fault. */
++#define vm_fault vm_fault_external
++
++/* Avoid collisions with the kernel side of the callback interface. */
++#define pthread_kern sweet_pthread_kern
++#define current_uthread sweet_pthread_current_uthread
++#define pthread_start sweet_pthread_start
++#define pthread_stop sweet_pthread_stop
++
++/* os/log passes &__dso_handle as the containing Mach-O image address. */
++extern void *sweet_pthread_log_image __asm("__mh_execute_header");
++#define __dso_handle sweet_pthread_log_image
++#endif
+diff --git a/bsd/pthread/sweet_pthread_init.c b/bsd/pthread/sweet_pthread_init.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/pthread/sweet_pthread_init.c
+@@ -0,0 +1,26 @@
++/* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_pthread_compat.h"
++#include "sweet_libpthread/kern/kern_init.c"
++
++/* Keep the provider's full layout within the kernel's reserved storage. */
++_Static_assert(sizeof(struct ksyn_waitq_element) == 56,
++    "update SWEET ksyn storage in sys/pthread_internal.h");
++
++/* Restore the startup interface after compiling the provider's kext code. */
++#define XNU_KERNEL_PRIVATE 1
++#include <kern/startup.h>
++#include <pexpert/pexpert.h>
++
++__startup_func
++static void
++sweet_pthread_register(void)
++{
++    kern_return_t kr = sweet_pthread_start(NULL, NULL);
++    if (kr != KERN_SUCCESS || sweet_pthread_kern == NULL) {
++        panic("SWEET: pthread provider registration failed: %d", kr);
++    }
++    kprintf("SWEET pthread: libpthread-514.100.2 registered\n");
++}
++STARTUP(EARLY_BOOT, STARTUP_RANK_SECOND, sweet_pthread_register);
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/pthread/sweet_pthread_support.c b/bsd/pthread/sweet_pthread_support.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/pthread/sweet_pthread_support.c
+@@ -0,0 +1,5 @@
++/* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_pthread_compat.h"
++#include "sweet_libpthread/kern/kern_support.c"
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/pthread/sweet_pthread_synch.c b/bsd/pthread/sweet_pthread_synch.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/pthread/sweet_pthread_synch.c
+@@ -0,0 +1,5 @@
++/* Built-in provider: Apple libpthread-514.100.2, paired with xnu-8796.141.3. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_pthread_compat.h"
++#include "sweet_libpthread/kern/kern_synch.c"
++#endif /* ARM64_BOARD_CONFIG_SWEET */

@@ -1,0 +1,104 @@
+From c428ce84ba7eba6d6da594eedf8add2842019a86 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 22:10:26 +0200
+Subject: [PATCH] umi-0143
+
+---
+ bsd/dev/sweet_wlce.c | 13 ++++++++++++-
+ bsd/dev/sweet_wldp.c |  5 +++--
+ bsd/dev/sweet_wlip.c | 18 ++++++++++++++++++
+ 3 files changed, 33 insertions(+), 3 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 3b2b3e7..af201f1 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -333,7 +333,7 @@ static struct {
+ 	uint32_t bss_ch[32];
+ 	/* join (0140) */
+ 	uint8_t join_bssid[6];
+-	bool peer_mapped, vdev_started, tx_done, auth_rx, assoc_rx, assoc_conf;
++	bool peer_mapped, vdev_started, tx_done, auth_rx, assoc_rx, assoc_conf, joined;
+ 	uint32_t vdev_start_status, tx_status, auth_status, assoc_status, aid, ap_caps;
+ 	uint16_t peer_id;
+ } htc;
+@@ -592,6 +592,15 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 	if (f == NULL || fl < 24) {
+ 		return;
+ 	}
++	/* 0143: after association, every other management frame between us and the AP (deauth 0xc0 / disassoc 0xa0
++	 * with reason code, action 0xd0 with category) */
++	if (htc.joined && f[0] != 0x80 && f[0] != 0x50 && fl >= 24 &&
++	    (memcmp(f + 10, htc.join_bssid, 6) == 0 || memcmp(f + 16, htc.join_bssid, 6) == 0)) {
++		uint32_t code = fl >= 26 ? (uint32_t)(f[24] | f[25] << 8) : 0;
++		printf("SWEET WMI: mgmt from AP after join: subtype %#x, %u bytes, %s %u, to us %d\n", f[0], fl,
++		    f[0] == 0xd0 ? "category" : "reason", f[0] == 0xd0 ? (uint32_t)f[24] : code, memcmp(f + 4, wlce_mac, 6) == 0);
++		return;
++	}
+ 	/* 0140: authentication (0xb0) and association response (0x10) from the AP we join, to our address */
+ 	if ((f[0] == 0xb0 || f[0] == 0x10) && memcmp(f + 10, htc.join_bssid, 6) == 0 && memcmp(f + 4, wlce_mac, 6) == 0) {
+ 		if (f[0] == 0xb0 && fl >= 30) {         /* algorithm, transaction sequence, status */
+@@ -1250,6 +1259,8 @@ wmi_join(void)
+ 		delay(1000);
+ 	}
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
++	htc.joined = true;
++	htc.logged = 0;                 /* log every WMI event / HTT message from here on (up to 24) */
+ 	int ipr = sweet_wlip_run(wlce_mac, htc_poll);   /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 95f1fb0..14a91e3 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -659,7 +659,7 @@ sweet_wldp_tx(const void *frame, uint32_t len)
+ 	d[0] = 0x144u << 1 | 28u << 10;                 /* TLV: HAL_TCL_DATA_CMD, 28 bytes */
+ 	d[1] = pa;
+ 	d[2] = 3u << 8 | ((id & 0x1ffffu) << 2) << 11;  /* RBM SW0, cookie = msdu id << 2 (mac 0, pool 0) */
+-	d[3] = 2u << 2 | 2u << 14 | 1u << 16;           /* ETHERNET, ADDRY, metadata 1 */
++	d[3] = 2u << 2 | 7u << 4 | 2u << 14 | 1u << 16; /* ETHERNET, encrypt OPEN (7), ADDRY, metadata 1 */
+ 	d[4] = len;
+ 	d[5] = 1u << 21;                                /* TID_OVERWRITE, TID 0, LMAC 0 */
+ 	d[6] = 0;
+@@ -686,7 +686,8 @@ sweet_wldp_data_poll(void)
+ 		dd.tx_done++;
+ 		dd.tx_acked += (src == 0 && reason == 0);
+ 		if (dd.tx_logged++ < 6) {
+-			printf("SWEET WLDP: tx done: cookie %#x, release source %u, reason %u\n", e[1] >> 11, src, reason);
++			printf("SWEET WLDP: tx done: cookie %#x, release source %u, reason %u, raw %08x %08x %08x %08x %08x %08x\n",
++			    e[1] >> 11, src, reason, e[2], e[3], e[4], e[5], e[6], e[7]);
+ 		}
+ 		c->hp = (c->hp + c->esz) % csize;
+ 		cm = true;
+diff --git a/bsd/dev/sweet_wlip.c b/bsd/dev/sweet_wlip.c
+index 1610d6b..f8abba4 100644
+--- a/bsd/dev/sweet_wlip.c
++++ b/bsd/dev/sweet_wlip.c
+@@ -260,6 +260,24 @@ sweet_wlip_run(const uint8_t mac[6], void (*poll)(void))
+ 	}
+ 	if (!ip.offer) {
+ 		printf("SWEET WLIP: no DHCP OFFER (%u frames received, %u other)\n", ip.rx, ip.rx_other);
++		/*
++		 * Diagnostic (0143): ARP probes (sender 0.0.0.0) for common gateway addresses; any reply
++		 * is a unicast frame to us, proving receive works, and names the router.
++		 */
++		static const uint8_t gw[][4] = { { 192, 168, 0, 1 }, { 192, 168, 1, 1 }, { 192, 168, 43, 1 },
++			{ 172, 20, 10, 1 }, { 10, 0, 0, 1 } };
++		static const uint8_t zero[6];
++		for (unsigned g = 0; g < sizeof(gw) / sizeof(gw[0]) && !ip.arp_ok; ++g) {
++			memcpy(&ip.router, gw[g], 4);
++			(void)arp_send(1, zero, ip.router, bcast);
++			wait_until(&ip.arp_ok, 700, poll);
++		}
++		if (ip.arp_ok) {
++			const uint8_t *r = (const uint8_t *)&ip.router;
++			printf("SWEET WLIP: ARP probe answered: router %u.%u.%u.%u (DHCP still failed)\n", r[0], r[1], r[2], r[3]);
++		} else {
++			printf("SWEET WLIP: no ARP probe answered either (%u frames received)\n", ip.rx);
++		}
+ 		return 1;
+ 	}
+ 	for (unsigned tries = 0; tries < 3 && !ip.ack && !ip.nak; ++tries) {
+-- 
+2.54.0 (Apple Git-157)
+

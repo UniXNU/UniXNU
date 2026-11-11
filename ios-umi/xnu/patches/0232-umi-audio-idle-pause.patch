@@ -1,0 +1,112 @@
+From 2820d0007428a0bfb326d7ead4fda46e99db3f8b Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 20:58:50 +0100
+Subject: [PATCH] umi: pause the idle ASM session and resume it on data; 160 ms
+ start cushion
+
+Like Linux's msm-pcm-q6, the ASM session is paused (ASM_SESSION_CMD_PAUSE)
+once nothing has come for 1 s and nothing is in flight, and run again
+(ASM_SESSION_CMD_RUN_V2) when frames arrive; writes wait for its answer.
+Running on underruns made the ADSP log a message every ~5 ms between
+sounds. A stream now starts with 8 periods (160 ms) ready: with 3 the ADSP
+held 40-60 ms and the user heard small pops mid-tone; with 8, none.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 52 +++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 49 insertions(+), 3 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 3fff5a4..3760f34 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -65,6 +65,7 @@ static bool au_service_on(void);
+ static void au_begin(volatile uint32_t *pcm);
+ static void au_write_done(uint32_t addr);
+ static void au_poll(uint32_t ms);
++static void au_run_result(uint32_t opcode, uint32_t status);
+ static volatile int tone_state;                 /* 0 off, 1..7 setting up / playing, 8 done, -1 failed */
+ static volatile bool amp_live;                  /* the speaker amp's stream start is written */
+ static bool adsp_fr_on(void);
+@@ -659,6 +660,10 @@ tone_rx(uint8_t svc, uint32_t opcode, const uint32_t *p)
+ 		tone_step();
+ 		return true;
+ 	}
++	if (opcode == APR_BASIC_RSP_RESULT && tone_state == 9 && (p[0] == 0x00010bd3 || p[0] == 0x00010daa)) {
++		au_run_result(p[0], p[1]);
++		return true;
++	}
+ 	if (opcode == 0x00010d99 && tone_state == 9) {
+ 		au_write_done(p[0]);
+ 		return true;
+@@ -740,7 +745,8 @@ tone_poll(uint32_t ms)
+ #define AU_PERIOD_FRAMES        960u            /* 20 ms */
+ #define AU_PERIODS              64u             /* 64 x 3840 bytes in TONE_SIZE */
+ #define AU_PAD_MS               200u            /* a half period goes out padded only at the end of a sound */
+-#define AU_PREFILL              3u              /* periods ready before an idle stream starts again */
++#define AU_PREFILL              8u              /* periods ready before an idle stream starts (160 ms of cushion: with 3 the
++                                                   ADSP held 40-60 ms and the user heard small pops mid-tone) */
+ #define AU_INFLIGHT             8u              /* ASM buffers outstanding: with 24 the ASM refused writes (0x12) */
+ #define AU_MAX_QUEUED           24u             /* 480 ms: the audio server hands over up to 341 ms at once */
+ struct sweet_audio_stats {
+@@ -927,7 +933,31 @@ au_write_done(__unused uint32_t addr)
+ 	lck_mtx_unlock(&au_lock);
+ }
+ 
+-/* GLINK loop, every 10 ms: send the full periods, pad a stale half period */
++/*
++ * Idle: like Linux (msm-pcm-q6 pauses the session when playback stops), the ASM session is paused once nothing has
++ * come for AU_PAUSE_MS and nothing is in flight, and run again when frames arrive (writes wait for its answer).
++ * Running on underruns kept the ADSP logging one message every ~5 ms between sounds; the one ADSP crash seen
++ * (2026-11-03) came after such idle stretches.
++ */
++#define AU_PAUSE_MS             1000u
++enum { AU_RUNNING, AU_PAUSING, AU_PAUSED, AU_RESUMING };
++static int au_run = AU_RUNNING;
++static uint32_t au_run_sent_ms;
++
++static void
++au_run_result(uint32_t opcode, uint32_t status)
++{
++	static unsigned logged;
++	bool pause = opcode == 0x00010bd3;
++	if (status != 0 || logged++ < 10) {
++		printf("SWEET AUDIO: %s -> %#x\n", pause ? "paused (idle)" : "running again", status);
++	}
++	lck_mtx_lock(&au_lock);
++	au_run = pause && status == 0 ? AU_PAUSED : AU_RUNNING;
++	lck_mtx_unlock(&au_lock);
++}
++
++/* GLINK loop, every 10 ms: send the full periods, pad a stale half period, pause / run the idle session */
+ static void
+ au_poll(uint32_t ms)
+ {
+@@ -943,7 +973,23 @@ au_poll(uint32_t ms)
+ 		au_fill++;
+ 		au_fill_pos = 0;
+ 	}
+-	bool hold = au_sent == au_done && au_fill - au_sent < AU_PREFILL && !stale;
++	bool idle = au_sent == au_done && au_fill == au_sent && au_fill_pos == 0;
++	if (au_run == AU_RUNNING && idle && au_frames_in != 0 && ms - au_last_write_ms > AU_PAUSE_MS) {
++		uint32_t z[3] = { 0, 0, 0 };
++		apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010bd3, z, 0);    /* ASM_SESSION_CMD_PAUSE */
++		au_run = AU_PAUSING;
++		au_run_sent_ms = ms;
++	} else if (au_run == AU_PAUSED && (au_fill != au_sent || au_fill_pos != 0)) {
++		uint32_t w[3] = { 0, 0, 0 };    /* run now */
++		apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010daa, w, 12);   /* ASM_SESSION_CMD_RUN_V2 */
++		au_run = AU_RESUMING;
++		au_run_sent_ms = ms;
++	} else if ((au_run == AU_PAUSING || au_run == AU_RESUMING) && ms - au_run_sent_ms > 2000) {
++		printf("SWEET AUDIO: no answer to %s in 2 s; treating the stream as running\n",
++		    au_run == AU_PAUSING ? "pause" : "run");
++		au_run = AU_RUNNING;
++	}
++	bool hold = (au_sent == au_done && au_fill - au_sent < AU_PREFILL && !stale) || au_run != AU_RUNNING;
+ 	while (!hold && au_sent != au_fill && au_sent - au_done < AU_INFLIGHT) {
+ 		uint32_t idx = au_sent % AU_PERIODS;
+ 		uint32_t w[8] = { TONE_PA + idx * AU_PERIOD_FRAMES * 4, TONE_SID_BITS, tone_handle, AU_PERIOD_FRAMES * 4,
+-- 
+2.54.0 (Apple Git-157)
+

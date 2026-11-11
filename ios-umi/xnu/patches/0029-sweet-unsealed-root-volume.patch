@@ -1,0 +1,24 @@
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -927,9 +927,20 @@
+ 		if (require_rootauth) {
+ 			/* enforce sealedness */
+ 			int autherr = VNOP_IOCTL(rootvnode, FSIOC_KERNEL_ROOTAUTH, NULL, 0, vfs_context_kernel());
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++			/*
++			 * SWEET has no chain of trust to extend: the kernel itself is
++			 * booted unsigned and there is no Image4/AMFI, and its HFS root
++			 * cannot be a sealed volume. Report it instead of panicking.
++			 */
++			if (autherr) {
++				printf("SWEET: root volume is not authenticated (error %d); continuing unsealed\n", autherr);
++			}
++#else
+ 			if (autherr) {
+ 				panic("rootvp not authenticated after mounting");
+ 			}
++#endif
+ 		}
+ 	}
+ 

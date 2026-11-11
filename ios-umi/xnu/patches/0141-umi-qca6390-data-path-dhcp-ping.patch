@@ -1,0 +1,620 @@
+From b5fa50d989b9fee3034159df2ac63b9a408b378b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 21:35:12 +0200
+Subject: [PATCH] umi-0141
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_wlce.c |  50 +++++++-
+ bsd/dev/sweet_wldp.c | 193 +++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlip.c | 289 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 531 insertions(+), 2 deletions(-)
+ create mode 100644 bsd/dev/sweet_wlip.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 558b5db..669b0d4 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -120,6 +120,7 @@ bsd/dev/sweet_ipcr.c			standard
+ bsd/dev/sweet_wlfw.c			standard
+ bsd/dev/sweet_wlce.c			standard
+ bsd/dev/sweet_wldp.c			standard
++bsd/dev/sweet_wlip.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 191a8ef..22a1491 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -21,6 +21,10 @@ extern void sweet_wldp_rx_report(const char *when);
+ extern int sweet_wldp_mon_filter(void);
+ extern void sweet_wldp_mon_reap(void);
+ extern void sweet_wldp_mon_report(void);
++extern int sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa);
++extern void sweet_wldp_data_poll(void);
++extern void sweet_wldp_data_report(void);
++extern int sweet_wlip_run(const uint8_t mac[6], void (*poll)(void));
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ 
+@@ -456,6 +460,7 @@ htc_poll(void)
+ 	rx_poll(&ce.rx2, htc_rx);
+ 	rx_poll(&ce.rx5, htc_rx);
+ 	sweet_wldp_mon_reap();          /* monitor-status buffers (0139); a no-op before the receive rings exist */
++	sweet_wldp_data_poll();         /* transmit completions and received frames (0141) */
+ }
+ 
+ /* A control message to endpoint 0 over CE0 (no credit flow on the control endpoint). */
+@@ -887,6 +892,13 @@ wmi_scan(void)
+ 	if (wmi_cmd(0x5001u, b, 19 * 4, "VDEV_CREATE") != 0) {
+ 		return 11;
+ 	}
++	/* ath11k_mac_op_add_interface with encap/decap offload: TX_ENCAP_TYPE (0x30) and RX_DECAP_TYPE (0x5b) = ETHERNET (2) */
++	for (unsigned k = 0; k < 2; ++k) {
++		uint32_t sp[4] = { WMI_TLV(0x5f, 12), 0, k ? 0x5bu : 0x30u, 2 };
++		if (wmi_cmd(0x5008u, sp, sizeof(sp), "VDEV_SET_PARAM encap") != 0) {
++			return 11;
++		}
++	}
+ 
+ 	/*
+ 	 * ath11k_wmi_start_scan_init + hw_scan; 40-word fixed part. Active: one
+@@ -1064,6 +1076,38 @@ wmi_join(void)
+ 		printf("SWEET WMI: no HTT peer map in 1 s (continuing)\n");
+ 	}
+ 
++	/*
++	 * ath11k_dp_peer_setup (before the vdev starts): WMI_PEER_SET_DEFAULT_ROUTING (0x13) =
++	 * DP_RX_HASH_ENABLE | reo_dest 1 << 1, then a REO queue per TID 0-16 (REORDER_QUEUE_SETUP
++	 * 0x6013, tag 0x225: vdev, mac, tid, queue address, queue no = tid, window valid, window 1).
++	 */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x64, 5 * 4);
++	memcpy(&b[2], bssid, 6);
++	b[4] = 0x13;
++	b[5] = 1u | 1u << 1;
++	if (wmi_cmd(0x6004u, b, 6 * 4, "PEER_SET_PARAM routing") != 0) {
++		return 2;
++	}
++	for (unsigned tid = 0; tid <= 16; ++tid) {
++		uint32_t qpa;
++		if (sweet_wldp_rx_tid_qdesc(tid, &qpa) != 0) {
++			return 2;
++		}
++		bzero(b, sizeof(b));
++		b[0] = WMI_TLV(0x225, 9 * 4);
++		memcpy(&b[2], bssid, 6);
++		b[4] = tid;
++		b[5] = qpa;
++		b[7] = tid;
++		b[8] = 1;
++		b[9] = 1;
++		if (wmi_cmd(0x6013u, b, 10 * 4, "REORDER_QUEUE_SETUP") != 0) {
++			return 2;
++		}
++	}
++	printf("SWEET WMI: peer data setup: routing + 17 REO queues\n");
++
+ 	/* ath11k_mac_vdev_start for the STA (ath11k_start_vdev_delay): channel of the AP, 11g */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x58, 26 * 4);
+@@ -1182,7 +1226,9 @@ wmi_join(void)
+ 		delay(1000);
+ 	}
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
+-	return 0;
++	int ipr = sweet_wlip_run(wlce_mac, htc_poll);   /* DHCP, ARP, ping (0141) */
++	sweet_wldp_data_report();
++	return ipr ? 11 + ipr : 0;              /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
+ }
+ 
+ /*
+@@ -1262,6 +1308,6 @@ sweet_wlce_htc(void)
+ 		return r;
+ 	}
+ 	r = wmi_join();
+-	return r ? 17 + r : 0;          /* 18 network not heard ... 28 authorize failed */
++	return r ? 17 + r : 0;          /* 18 network not heard ... 28 authorize failed, 29-32 DHCP/ARP/ping */
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 72bbc5f..1a92cb5 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -566,4 +566,197 @@ sweet_wldp_rx_report(const char *when)
+ 	    *mem32(M_RDP + 133 * 4), *mem32(M_RDP + 148 * 4),
+ 	    *mem32(M_RDP + 132 * 4), *mem32(M_RDP + 147 * 4));
+ }
++
++/*
++ * Data path (0141), as ath11k for qca6390 in Ethernet mode (vdev TX_ENCAP /
++ * RX_DECAP = 2, set by sweet_wlce.c):
++ *  - REO queue descriptors per TID for the AP peer (ath11k_peer_rx_tid_setup +
++ *    ath11k_hal_reo_qdesc_setup): 128 bytes for the non-QoS TID 16, 512 for
++ *    QoS TIDs (3 extension descriptors), 128-aligned, at window +0x4c0000.
++ *  - transmit (ath11k_dp_tx + ath11k_hal_tx_cmd_desc_setup): one TCL data
++ *    entry = TLV word + hal_tcl_data_cmd {buf_addr_info (RBM SW0 = 3, cookie =
++ *    msdu id << 2), info0 encap ETHERNET | ADDRY search | metadata 1 (type 1,
++ *    vdev 0, pdev 0) << 16, info1 length, info2 TID_OVERWRITE, info3 0 (peer
++ *    map v1: AST hash / index 0)}; frames in 16 x 2 KiB buffers at +0x4c8000.
++ *  - transmit completion: WBM2SW0 (ring 106) entries, release source bits 2:0
++ *    (0 TQM, 3 FW), TQM release reason bits 16:13 (0 = acked).
++ *  - receive (ath11k_dp_process_rx): REO2SW1-4 entries {buffer addr + cookie
++ *    (buf id), mpdu info, msdu info (first/last/continuation, length 16:3), ...,
++ *    info0 push reason 10:9 (1 = routed), error 15:11}; the buffer starts with
++ *    hal_rx_desc_ipq8074 (384 bytes: MSDU_DONE bit 31 at +84, msdu length 13:0
++ *    at +96, decap format 9:8 at +100, L3 padding 27:26 at +24), the frame
++ *    follows at 384 + padding. Buffers go back into the refill ring.
++ */
++#define M_REO_QDESC     0x4c0000u
++#define M_TX_BUFS       0x4c8000u
++#define TX_NBUF         16u
++#define RX_DESC_SZ      384u
++
++int sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa);
++int sweet_wldp_tx(const void *frame, uint32_t len);
++void sweet_wldp_data_poll(void);
++void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++
++static struct {
++	uint32_t tx_id, tx_sent, tx_done, tx_acked, tx_logged;
++	uint32_t rx_frames, rx_dropped, rx_logged;
++	void (*rx_fn)(const uint8_t *frame, uint32_t len);
++} dd;
++
++void
++sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len))
++{
++	dd.rx_fn = fn;
++}
++
++static void
++qdesc_hdr(volatile uint32_t *w, uint32_t type, uint32_t magic)
++{
++	w[0] = 4u | type << 4 | magic << 8;     /* owner REO (4), buffer type, debug magic */
++}
++
++int
++sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa)
++{
++	static const uint8_t ac[8] = { 0, 1, 1, 0, 2, 2, 3, 3 };       /* ath11k_tid_to_ac: BE BK BK BE VI VI VO VO */
++	if (dp.mem == 0 || tid > 16) {
++		return EINVAL;
++	}
++	uint32_t off = M_REO_QDESC + (tid == 16 ? 16 * 512 : tid * 512);
++	volatile uint32_t *q = mem32(off);
++	bzero((void *)(dp.mem + off), tid == 16 ? 128 : 512);
++	qdesc_hdr(q, 8, 0xddbeef);
++	q[1] = tid;                                     /* rx_queue_num */
++	uint32_t ba = 1;                                /* ath11k_dp_peer_setup: window 1, ssn 0, no PN */
++	if (tid != 16) {
++		ba++;                                   /* window 1 on a QoS TID becomes 2 */
++	}
++	q[2] = 1u | 1u << 1 | (uint32_t)ac[tid & 7] << 5 | (ba == 1 ? 1u << 8 : 0) | (ba - 1) << 11 | 1u << 25;
++	q[3] = 0;                                       /* SSN 0, SVLD 0 */
++	if (tid != 16) {
++		qdesc_hdr(mem32(off + 128), 9, 0xadbeef);
++		qdesc_hdr(mem32(off + 256), 9, 0xbdbeef);
++		qdesc_hdr(mem32(off + 384), 9, 0xcdbeef);
++	}
++	*pa = dp.pa + off;
++	return 0;
++}
++
++int
++sweet_wldp_tx(const void *frame, uint32_t len)
++{
++	struct dpring *r = &dp_rings[4];                /* tcl_data0 */
++	uint32_t size = r->n * r->esz, next = (r->hp + r->esz) % size;
++	if (dp.mem == 0 || len > RXBUF_SZ) {
++		return EINVAL;
++	}
++	if (next == *mem32(M_RDP + r->id * 4)) {
++		return EBUSY;
++	}
++	uint32_t id = dd.tx_id++, slot = id % TX_NBUF, pa = dp.pa + M_TX_BUFS + slot * RXBUF_SZ;
++	memcpy((void *)(dp.mem + M_TX_BUFS + slot * RXBUF_SZ), frame, len);
++	volatile uint32_t *d = mem32(r->off + r->hp * 4);
++	d[0] = 0x144u << 1 | 28u << 10;                 /* TLV: HAL_TCL_DATA_CMD, 28 bytes */
++	d[1] = pa;
++	d[2] = 3u << 8 | ((id & 0x1ffffu) << 2) << 11;  /* RBM SW0, cookie = msdu id << 2 (mac 0, pool 0) */
++	d[3] = 2u << 2 | 2u << 14 | 1u << 16;           /* ETHERNET, ADDRY, metadata 1 */
++	d[4] = len;
++	d[5] = 1u << 21;                                /* TID_OVERWRITE, TID 0, LMAC 0 */
++	d[6] = 0;
++	d[7] = 0;
++	r->hp = next;
++	reg_wr(r->r2, r->hp);
++	dd.tx_sent++;
++	return 0;
++}
++
++/* Transmit completions (WBM2SW0) and received frames (REO2SW1-4), then refill. */
++void
++sweet_wldp_data_poll(void)
++{
++	if (!rx_ready) {
++		return;
++	}
++	struct dpring *c = &dp_rings[5];                /* tx_comp0: host TP kept in ->hp */
++	uint32_t csize = c->n * c->esz, chp = *mem32(M_RDP + c->id * 4);
++	bool cm = false;
++	while (c->hp != chp && chp < csize) {
++		volatile uint32_t *e = mem32(c->off + c->hp * 4);
++		uint32_t src = e[2] & 7u, reason = (e[2] >> 13) & 0xfu;
++		dd.tx_done++;
++		dd.tx_acked += (src == 0 && reason == 0);
++		if (dd.tx_logged++ < 6) {
++			printf("SWEET WLDP: tx done: cookie %#x, release source %u, reason %u\n", e[1] >> 11, src, reason);
++		}
++		c->hp = (c->hp + c->esz) % csize;
++		cm = true;
++	}
++	if (cm) {
++		reg_wr(c->r2 + 4, c->hp);
++	}
++	struct rxring *rf = &rx_rings[0];
++	uint32_t rfsize = rf->n * rf->esz;
++	bool refilled = false;
++	for (unsigned k = 11; k < 15; ++k) {            /* reo_dst0-3 */
++		struct dpring *r = &dp_rings[k];
++		uint32_t size = r->n * r->esz, hp = *mem32(M_RDP + r->id * 4);
++		bool moved = false;
++		while (r->hp != hp && hp < size) {
++			volatile uint32_t *e = mem32(r->off + r->hp * 4);
++			uint32_t paddr = e[0], cookie = e[1] >> 11, msdu = e[4], info0 = e[7];
++			uint32_t push = (info0 >> 9) & 3u, err = (info0 >> 11) & 0x1fu;
++			if (paddr >= dp.pa + M_RX_BUFS && paddr < dp.pa + M_RX_BUFS + rf->nbuf * RXBUF_SZ) {
++				const uint8_t *b = (const uint8_t *)(dp.mem + (paddr - dp.pa));
++				uint32_t w84, w96, w100, w24;
++				memcpy(&w84, b + 84, 4);
++				memcpy(&w96, b + 96, 4);
++				memcpy(&w100, b + 100, 4);
++				memcpy(&w24, b + 24, 4);
++				uint32_t len = w96 & 0x3fffu, pad = (w24 >> 26) & 3u, decap = (w100 >> 8) & 3u;
++				bool ok = push == 1 && (w84 >> 31) && (msdu & 3u) == 3u && RX_DESC_SZ + pad + len <= RXBUF_SZ;
++				if (dd.rx_logged++ < 6) {
++					printf("SWEET WLDP: rx ring %u: cookie %u, push %u err %u, msdu %s%s len %u, done %u, decap %u, pad %u\n",
++					    k - 11, cookie, push, err, msdu & 1u ? "first " : "", msdu & 2u ? "last" : "", len, w84 >> 31,
++					    decap, pad);
++				}
++				if (ok) {
++					dd.rx_frames++;
++					if (dd.rx_fn != NULL) {
++						dd.rx_fn(b + RX_DESC_SZ + pad, len);
++					}
++				} else {
++					dd.rx_dropped++;
++				}
++				/* give the buffer back (ath11k_dp_rxbufs_replenish) */
++				if ((rf->hp + rf->esz) % rfsize != *mem32(M_RDP + rf->id * 4)) {
++					volatile uint32_t *d = mem32(rf->off + rf->hp * 4);
++					d[0] = paddr;
++					d[1] = (cookie & 0x3ffffu) << 11 | 4u << 8;
++					rf->hp = (rf->hp + rf->esz) % rfsize;
++					refilled = true;
++				}
++			} else {
++				dd.rx_dropped++;
++			}
++			r->hp = (r->hp + r->esz) % size;
++			moved = true;
++		}
++		if (moved) {
++			reg_wr(r->r2 + 4, r->hp);
++		}
++	}
++	if (refilled) {
++		*mem32(M_WRP + 0) = rf->hp;
++	}
++}
++
++void sweet_wldp_data_report(void);
++
++void
++sweet_wldp_data_report(void)
++{
++	printf("SWEET WLDP: data: tx %u sent, %u done, %u acked; rx %u frames, %u dropped; rx release ring hp %u, "
++	    "reo exception hp %u\n", dd.tx_sent, dd.tx_done, dd.tx_acked, dd.rx_frames, dd.rx_dropped,
++	    *mem32(M_RDP + dp_rings[7].id * 4), *mem32(M_RDP + dp_rings[8].id * 4));
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlip.c b/bsd/dev/sweet_wlip.c
+new file mode 100644
+index 0000000..1610d6b
+--- /dev/null
++++ b/bsd/dev/sweet_wlip.c
+@@ -0,0 +1,289 @@
++/*
++ * umi Wi-Fi bring-up: a minimal IPv4 client over the QCA6390 data path
++ * (sweet_wldp.c, Ethernet frames both ways) to prove traffic flows before
++ * there is a network interface: DHCP (DISCOVER, OFFER, REQUEST, ACK), ARP for
++ * the router (and replies to ARP for our address), then 4 ICMP echoes to the
++ * router. Software checksums, polled through the caller's poll function.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++
++extern int sweet_wldp_tx(const void *frame, uint32_t len);
++extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++int sweet_wlip_run(const uint8_t mac[6], void (*poll)(void));
++
++static struct {
++	uint8_t mac[6], router_mac[6];
++	uint32_t xid, ip, server, router, mask;        /* network byte order kept as bytes in uint32_t (memcpy) */
++	bool offer, ack, nak, arp_ok;
++	uint32_t pings_back, rx, rx_other;
++	uint16_t ping_seq;
++	uint64_t ping_sent[8];
++	uint32_t rtt_us[8];
++} ip;
++
++static uint16_t
++csum(const uint8_t *p, uint32_t n)
++{
++	uint32_t s = 0;
++	for (uint32_t i = 0; i + 1 < n; i += 2) {
++		s += (uint32_t)p[i] << 8 | p[i + 1];
++	}
++	if (n & 1) {
++		s += (uint32_t)p[n - 1] << 8;
++	}
++	while (s >> 16) {
++		s = (s & 0xffffu) + (s >> 16);
++	}
++	return (uint16_t)~s;
++}
++
++static void
++put16(uint8_t *p, uint16_t v)
++{
++	p[0] = (uint8_t)(v >> 8);
++	p[1] = (uint8_t)v;
++}
++
++static uint16_t
++get16(const uint8_t *p)
++{
++	return (uint16_t)(p[0] << 8 | p[1]);
++}
++
++/* Ethernet + IPv4 header (20 bytes, no options); returns the IP payload offset. */
++static uint32_t
++ip_hdr(uint8_t *f, const uint8_t *dst_mac, uint8_t proto, uint32_t src, uint32_t dst, uint32_t payload)
++{
++	static uint16_t id;
++	memcpy(f, dst_mac, 6);
++	memcpy(f + 6, ip.mac, 6);
++	put16(f + 12, 0x0800);
++	uint8_t *h = f + 14;
++	bzero(h, 20);
++	h[0] = 0x45;
++	put16(h + 2, (uint16_t)(20 + payload));
++	put16(h + 4, ++id);
++	h[8] = 64;
++	h[9] = proto;
++	memcpy(h + 12, &src, 4);
++	memcpy(h + 16, &dst, 4);
++	put16(h + 10, csum(h, 20));
++	return 34;
++}
++
++static const uint8_t bcast[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
++
++/* BOOTP/DHCP from 0.0.0.0:68 to 255.255.255.255:67, broadcast flag set (we cannot take unicast yet). */
++static int
++dhcp_send(uint8_t type)
++{
++	static uint8_t f[400];
++	bzero(f, sizeof(f));
++	uint32_t o = ip_hdr(f, bcast, 17, 0, 0xffffffffu, 8 + 300);
++	put16(f + o, 68);
++	put16(f + o + 2, 67);
++	put16(f + o + 4, 8 + 300);                      /* UDP checksum 0: allowed for IPv4 */
++	uint8_t *b = f + o + 8;
++	b[0] = 1;                                       /* BOOTREQUEST */
++	b[1] = 1;
++	b[2] = 6;
++	memcpy(b + 4, &ip.xid, 4);
++	put16(b + 10, 0x8000);                          /* broadcast reply */
++	memcpy(b + 28, ip.mac, 6);
++	uint8_t *opt = b + 236;
++	opt[0] = 99; opt[1] = 130; opt[2] = 83; opt[3] = 99;
++	uint32_t n = 4;
++	opt[n++] = 53; opt[n++] = 1; opt[n++] = type;
++	opt[n++] = 61; opt[n++] = 7; opt[n++] = 1; memcpy(opt + n, ip.mac, 6); n += 6;
++	if (type == 3) {
++		opt[n++] = 50; opt[n++] = 4; memcpy(opt + n, &ip.ip, 4); n += 4;
++		opt[n++] = 54; opt[n++] = 4; memcpy(opt + n, &ip.server, 4); n += 4;
++	}
++	opt[n++] = 55; opt[n++] = 3; opt[n++] = 1; opt[n++] = 3; opt[n++] = 6;
++	opt[n++] = 255;
++	return sweet_wldp_tx(f, o + 8 + 300);
++}
++
++static void
++dhcp_rx(const uint8_t *b, uint32_t n)
++{
++	if (n < 240 || b[0] != 2 || memcmp(b + 4, &ip.xid, 4) != 0 || memcmp(b + 28, ip.mac, 6) != 0) {
++		return;
++	}
++	uint32_t yi, srv = 0, rtr = 0, msk = 0;
++	uint8_t type = 0;
++	memcpy(&yi, b + 16, 4);
++	for (uint32_t o = 240; o + 2 <= n && b[o] != 255;) {
++		if (b[o] == 0) {
++			o++;
++			continue;
++		}
++		uint8_t t = b[o], l = b[o + 1];
++		if (o + 2 + l > n) {
++			break;
++		}
++		if (t == 53 && l >= 1) {
++			type = b[o + 2];
++		} else if (t == 54 && l >= 4) {
++			memcpy(&srv, b + o + 2, 4);
++		} else if (t == 3 && l >= 4) {
++			memcpy(&rtr, b + o + 2, 4);
++		} else if (t == 1 && l >= 4) {
++			memcpy(&msk, b + o + 2, 4);
++		}
++		o += 2 + l;
++	}
++	const uint8_t *y = (const uint8_t *)&yi, *r = (const uint8_t *)&rtr;
++	if (type == 2 && !ip.offer) {
++		ip.ip = yi;
++		ip.server = srv;
++		ip.router = rtr;
++		ip.mask = msk;
++		ip.offer = true;
++		printf("SWEET WLIP: DHCP OFFER %u.%u.%u.%u, router %u.%u.%u.%u\n", y[0], y[1], y[2], y[3], r[0], r[1], r[2], r[3]);
++	} else if (type == 5) {
++		ip.ack = true;
++		printf("SWEET WLIP: DHCP ACK %u.%u.%u.%u\n", y[0], y[1], y[2], y[3]);
++	} else if (type == 6) {
++		ip.nak = true;
++		printf("SWEET WLIP: DHCP NAK\n");
++	}
++}
++
++static int
++arp_send(uint16_t op, const uint8_t *tha, uint32_t tpa, const uint8_t *dst)
++{
++	uint8_t f[60];
++	bzero(f, sizeof(f));
++	memcpy(f, dst, 6);
++	memcpy(f + 6, ip.mac, 6);
++	put16(f + 12, 0x0806);
++	put16(f + 14, 1);
++	put16(f + 16, 0x0800);
++	f[18] = 6;
++	f[19] = 4;
++	put16(f + 20, op);
++	memcpy(f + 22, ip.mac, 6);
++	memcpy(f + 28, &ip.ip, 4);
++	memcpy(f + 32, tha, 6);
++	memcpy(f + 38, &tpa, 4);
++	return sweet_wldp_tx(f, sizeof(f));
++}
++
++static int
++ping_send(uint16_t seq)
++{
++	uint8_t f[14 + 20 + 8 + 32];
++	uint32_t o = ip_hdr(f, ip.router_mac, 1, ip.ip, ip.router, 8 + 32);
++	uint8_t *icmp = f + o;
++	bzero(icmp, 8 + 32);
++	icmp[0] = 8;                                    /* echo request */
++	put16(icmp + 4, 0x5357);                        /* identifier "SW" */
++	put16(icmp + 6, seq);
++	for (unsigned i = 0; i < 32; ++i) {
++		icmp[8 + i] = (uint8_t)('a' + i % 26);
++	}
++	put16(icmp + 2, csum(icmp, 8 + 32));
++	clock_get_uptime(&ip.ping_sent[seq & 7]);
++	return sweet_wldp_tx(f, o + 8 + 32);
++}
++
++static void
++wlip_rx(const uint8_t *f, uint32_t n)
++{
++	ip.rx++;
++	if (n < 14) {
++		return;
++	}
++	uint16_t type = get16(f + 12);
++	if (type == 0x0806 && n >= 42 && get16(f + 20) == 2 && memcmp(f + 28, &ip.router, 4) == 0) {
++		memcpy(ip.router_mac, f + 22, 6);
++		ip.arp_ok = true;
++		printf("SWEET WLIP: ARP: router is at %02x:%02x:%02x:%02x:%02x:%02x\n", f[22], f[23], f[24], f[25], f[26], f[27]);
++	} else if (type == 0x0806 && n >= 42 && get16(f + 20) == 1 && ip.ack && memcmp(f + 38, &ip.ip, 4) == 0) {
++		uint32_t spa;
++		memcpy(&spa, f + 28, 4);
++		(void)arp_send(2, f + 22, spa, f + 22);        /* someone asks for our address */
++	} else if (type == 0x0800 && n >= 34 && (f[14] >> 4) == 4) {
++		uint32_t ihl = (f[14] & 0xfu) * 4;
++		const uint8_t *p = f + 14 + ihl;
++		uint32_t tot = get16(f + 16);
++		if (ihl < 20 || 14 + tot > n || tot < ihl) {
++			return;
++		}
++		uint32_t pl = tot - ihl;
++		if (f[23] == 17 && pl >= 8 && get16(p) == 67 && get16(p + 2) == 68) {
++			dhcp_rx(p + 8, pl - 8);
++		} else if (f[23] == 1 && pl >= 8 && p[0] == 0 && get16(p + 4) == 0x5357) {
++			uint16_t seq = get16(p + 6);
++			uint64_t now, ns;
++			clock_get_uptime(&now);
++			absolutetime_to_nanoseconds(now - ip.ping_sent[seq & 7], &ns);
++			ip.rtt_us[seq & 7] = (uint32_t)(ns / 1000);
++			ip.pings_back++;
++			printf("SWEET WLIP: echo reply seq %u from the router, %u us\n", seq, ip.rtt_us[seq & 7]);
++		} else {
++			ip.rx_other++;
++		}
++	} else {
++		ip.rx_other++;
++	}
++}
++
++static bool
++wait_until(volatile bool *flag, unsigned ms, void (*poll)(void))
++{
++	for (unsigned t = 0; t < ms && !*flag; ++t) {
++		poll();
++		delay(1000);
++	}
++	return *flag;
++}
++
++/* 0 = DHCP lease, router ARP and at least one echo reply; else the step that failed (1-4). */
++int
++sweet_wlip_run(const uint8_t mac[6], void (*poll)(void))
++{
++	uint64_t now;
++	bzero(&ip, sizeof(ip));
++	memcpy(ip.mac, mac, 6);
++	clock_get_uptime(&now);
++	ip.xid = (uint32_t)now ^ 0x53574545u;
++	sweet_wldp_set_rx_handler(wlip_rx);
++	for (unsigned tries = 0; tries < 3 && !ip.offer; ++tries) {
++		printf("SWEET WLIP: DHCP DISCOVER (send %d)\n", dhcp_send(1));
++		wait_until(&ip.offer, 3000, poll);
++	}
++	if (!ip.offer) {
++		printf("SWEET WLIP: no DHCP OFFER (%u frames received, %u other)\n", ip.rx, ip.rx_other);
++		return 1;
++	}
++	for (unsigned tries = 0; tries < 3 && !ip.ack && !ip.nak; ++tries) {
++		printf("SWEET WLIP: DHCP REQUEST (send %d)\n", dhcp_send(3));
++		wait_until(&ip.ack, 3000, poll);
++	}
++	if (!ip.ack) {
++		return 2;
++	}
++	for (unsigned tries = 0; tries < 3 && !ip.arp_ok; ++tries) {
++		static const uint8_t zero[6];
++		printf("SWEET WLIP: ARP who-has router (send %d)\n", arp_send(1, zero, ip.router, bcast));
++		wait_until(&ip.arp_ok, 1000, poll);
++	}
++	if (!ip.arp_ok) {
++		return 3;
++	}
++	for (uint16_t s = 1; s <= 4; ++s) {
++		(void)ping_send(s);
++		bool dummy = false;
++		wait_until(&dummy, 1000, poll);         /* 1 s per echo, replies counted as they come */
++	}
++	printf("SWEET WLIP: %u of 4 echo replies, %u frames received\n", ip.pings_back, ip.rx);
++	sweet_wldp_set_rx_handler(NULL);
++	return ip.pings_back ? 0 : 4;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,215 @@
+From ec661cabab142e6d99c862f6ca872dd946612edd Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 12:21:39 +0100
+Subject: [PATCH] umi-0176-adreno-metal-bringup-fixes
+
+Four fixes on the way to Metal on Turnip, all found on the phone:
+- GPU VA windows are per-TASK, not per-connection: Turnip learns its address
+  range once (GetDeviceInfo), closes the connection and reopens for the
+  device, so a later connection of the same process must get the same
+  window back (BoMap otherwise refused with kIOReturnBadArgument - the
+  'iova outside window' in the live log); SA_WINDOW_MAX 4 -> 32.
+- pmap_sync_page_attributes_phys: ptoa, not pp << PAGE_SHIFT - ppnum_t is
+  32 bits, so pages above 4 GB lost bit 32 and phystokv_range panicked on
+  the truncated low address (the Metal WC mapping of a high BO page hit
+  it; ios-flame's same fix, their patch 0115).
+- All phys-mode cache flushes in sweet_adreno.c are VA-based now
+  (sa_to_memory, the page-table flushes, the fence word, the zap header
+  page): the physical form only knows the kernel's own image pages plus
+  RAM from 4 GB up on this highmem kernel.
+- BoMap logs its request and which check refused (the instrument that
+  found the window bug).
+
+Result on the phone (umi-0176-metal.img, sweetgpu=23 sweetmtl=2):
+backboardd creates a real Metal device - 'device Turnip Adreno (TM) 650
+in 1805 ms' - and renders through it (69 BOs mapped in its window).
+Still open: the daemon's v2 test regressed this boot (fence signals but
+the CP_MEM_WRITE words read back 0) and SpringBoard's device attempt
+wedges - next steps in NOTES.md umi 0176 entry.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c           | 42 +++++++++++++++++++++++---------
+ iokit/Kernel/arm/SweetAdreno.cpp | 11 +++++++--
+ osfmk/arm/pmap/pmap.c            |  5 +++-
+ 3 files changed, 43 insertions(+), 15 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 79a1f48..22aa279 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -917,7 +917,7 @@ sa_zap_init(void)
+ 	}
+ 	memcpy((void *)sa_zap_header_page, header, size);
+ 	uint64_t phys = ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)sa_zap_header_page));
+-	flush_dcache64((addr64_t)phys, PAGE_SIZE, TRUE);        /* TrustZone reads memory, not our cache */
++	flush_dcache64((addr64_t)sa_zap_header_page, PAGE_SIZE, FALSE);  /* TrustZone reads memory, not our cache */
+ 
+ 	sa_announce("hand the header to TrustZone to check its signature (image 13)");
+ 	uint64_t answer = ~0ull;
+@@ -974,9 +974,9 @@ sa_phys(vm_offset_t va)
+ static void
+ sa_to_memory(vm_offset_t va, vm_size_t size)
+ {
+-	for (vm_size_t at = 0; at < size; at += PAGE_SIZE) {
+-		flush_dcache64((addr64_t)sa_phys(va + at), (unsigned)MIN((vm_size_t)PAGE_SIZE, size - at), TRUE);
+-	}
++	/* VA-based: the caches are physically indexed, so the same lines as the PA, and the
++	 * physical form only knows RAM from 4 GB up here (a low page panicked in phystokv_range). */
++	flush_dcache64((addr64_t)va, (unsigned)size, FALSE);
+ }
+ 
+ /* Wired, physically contiguous, zeroed kernel memory that is kept for good (the SMMU may point at it). */
+@@ -1152,7 +1152,7 @@ sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_
+ 	uint64_t root = space->table_phys[0] | (uint64_t)space->context << 48;
+ 
+ 	for (uint32_t i = 0; i < space->table_count; i++) {
+-		flush_dcache64((addr64_t)space->table_phys[i], 4096, TRUE);
++		flush_dcache64((addr64_t)(vm_offset_t)space->table[i], 4096, FALSE);
+ 	}
+ 	sa_put(cb, "sctlr", SMMU_CB_SCTLR, 0);
+ 	sa_put(&sa_smmu_cbar, "cba2r", SMMU_CBA2R(space->context), SMMU_CBA2R_64_BIT);
+@@ -1256,7 +1256,7 @@ sa_step_gmu_space(void)
+ 		return false;
+ 	}
+ 	for (uint32_t i = 0; i < sa_gmu_space.table_count; i++) {
+-		flush_dcache64((addr64_t)sa_gmu_space.table_phys[i], 4096, TRUE);
++		flush_dcache64((addr64_t)(vm_offset_t)sa_gmu_space.table[i], 4096, FALSE);
+ 	}
+ 
+ 	sa_announce("give SMMU context 1 these tables and send the GMU's stream 5 through it (the global registers through "
+@@ -2370,7 +2370,7 @@ sa_step_frame(void)
+ 		}
+ 	}
+ 	for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
+-		flush_dcache64((addr64_t)sa_core_space.table_phys[i], 4096, TRUE);
++		flush_dcache64((addr64_t)(vm_offset_t)sa_core_space.table[i], 4096, FALSE);
+ 	}
+ 	sa_put(&sa_smmu_cb0, "tlbiasid", SMMU_CB_TLBIASID, CORE_CONTEXT);
+ 	sa_put(&sa_smmu_cb0, "tlbsync", SMMU_CB_TLBSYNC, 1);
+@@ -2465,7 +2465,7 @@ static bool
+ sa_core_tlb_flush(void)
+ {
+ 	for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
+-		flush_dcache64((addr64_t)sa_core_space.table_phys[i], 4096, TRUE);
++		flush_dcache64((addr64_t)(vm_offset_t)sa_core_space.table[i], 4096, FALSE);
+ 	}
+ 	sa_wr(sa_smmu_cb0.base + SMMU_CB_TLBIASID, CORE_CONTEXT);
+ 	sa_wr(sa_smmu_cb0.base + SMMU_CB_TLBSYNC, 1);
+@@ -2532,7 +2532,7 @@ static uint32_t
+ sa_fence_read(void)
+ {
+ 	volatile uint32_t *fence = (volatile uint32_t *)(sa_core_scratch.memory + (CORE_FENCE_ADDRESS - CORE_SCRATCH_ADDRESS));
+-	flush_dcache64((addr64_t)sa_phys((vm_offset_t)fence), 64, TRUE);
++	flush_dcache64((addr64_t)(vm_offset_t)fence, 64, FALSE);
+ 	return *fence;
+ }
+ 
+@@ -2911,20 +2911,38 @@ sweet_adreno_fence_wait(uint32_t fence, uint32_t ms)
+  */
+ #define SA_WINDOW_BASE   0x200000000ull     /* first client window (8 GB in the 39-bit space) */
+ #define SA_WINDOW_SIZE   0x100000000ull     /* one window: 4 GB */
+-#define SA_WINDOW_MAX    4
++#define SA_WINDOW_MAX    32
+ 
+ static uint64_t sa_window_next = SA_WINDOW_BASE;
+ static uint32_t sa_window_count;
++static struct { task_t task; uint64_t base; } sa_window_task[SA_WINDOW_MAX];
+ static uint64_t sa_faults;                     /* SMMU or CP faults seen by the service */
+ 
++/*
++ * A window belongs to the TASK, not the connection: a client (Turnip) learns its GPU address
++ * range once and keeps using it after closing and reopening the connection, so a later
++ * connection of the same process must get the same window back.
++ */
+ int
+-sweet_adreno_window_alloc(uint64_t *base, uint64_t *size)
++sweet_adreno_window_alloc(task_t task, uint64_t *base, uint64_t *size)
+ {
+-	if (!sweet_adreno_service_ready() || sa_window_count >= SA_WINDOW_MAX) {
++	if (!sweet_adreno_service_ready()) {
++		return ENXIO;
++	}
++	for (uint32_t i = 0; i < sa_window_count; i++) {
++		if (sa_window_task[i].task == task) {
++			*base = sa_window_task[i].base;
++			*size = SA_WINDOW_SIZE;
++			return 0;
++		}
++	}
++	if (sa_window_count >= SA_WINDOW_MAX) {
+ 		return ENOMEM;
+ 	}
+ 	*base = sa_window_next;
+ 	*size = SA_WINDOW_SIZE;
++	sa_window_task[sa_window_count].task = task;
++	sa_window_task[sa_window_count].base = sa_window_next;
+ 	sa_window_next += SA_WINDOW_SIZE;
+ 	sa_window_count++;
+ 	return 0;
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index e47b5d6..c2946ad 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -45,7 +45,7 @@ extern "C" {
+ 	uint32_t sweet_adreno_fence_value(void);
+ 	bool sweet_adreno_fence_wait(uint32_t fence, uint32_t ms);
+ 	bool sweet_board_is_umi(void);           /* bsd/dev/sweet_rpmh.c */
+-	int sweet_adreno_window_alloc(uint64_t *base, uint64_t *size);
++	int sweet_adreno_window_alloc(task_t task, uint64_t *base, uint64_t *size);
+ 	void sweet_adreno_window_free(uint64_t base);
+ 	int sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n);
+ 	void sweet_adreno_unmap_at(uint64_t iova, uint64_t len);
+@@ -233,7 +233,7 @@ SweetAdrenoUserClient::initWithTask(task_t owningTask, void *securityID, UInt32
+ 		fBO = IONewZero(BO, fBOCap);
+ 		fPageBuf = IONew(uint64_t, SWEET_ADRENO_V2_PAGEBUF);
+ 		if (fBO == NULL || fPageBuf == NULL ||
+-		    sweet_adreno_window_alloc(&fWinBase, &fWinSize) != 0) {
++		    sweet_adreno_window_alloc(fTask, &fWinBase, &fWinSize) != 0) {
+ 			IOLog("SWEET ADRENO: v2 client: no window or no memory\n");
+ 			return false;
+ 		}
+@@ -584,17 +584,24 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 	case NativeAdrenoMethodBoMap: {
+ 		V2_IN(NativeAdrenoAbiBoMap);
+ 		V2_OUT(NativeAdrenoAbiBoMapReply);
++		IOLog("SWEET ADRENO: BoMap(handle %llu, iova %#llx, perms %u, wb %u, share %u, reserved %u)\n",
++		    rq->handle, rq->iova, rq->permissions, rq->writeback, rq->shareability, rq->reserved);
+ 		if (!(rq->permissions & 1) || (rq->permissions & ~3u) || (rq->iova & 4095) || rq->reserved) {
++			IOLog("SWEET ADRENO: BoMap refused: header checks\n");
+ 			return kIOReturnBadArgument;
+ 		}
+ 		BO *bo = v2Find(rq->handle);
+ 		IOReturn r = kIOReturnSuccess;
+ 		if (bo == NULL) {
++			IOLog("SWEET ADRENO: BoMap refused: handle %llu not found\n", rq->handle);
+ 			r = kIOReturnBadArgument;
+ 		} else if (bo->iova != 0) {
++			IOLog("SWEET ADRENO: BoMap refused: already mapped at %#llx\n", bo->iova);
+ 			r = kIOReturnBusy;
+ 		} else if (rq->iova < fWinBase || rq->iova + bo->bytes > fWinBase + fWinSize ||
+ 		    rq->iova + bo->bytes < rq->iova) {
++			IOLog("SWEET ADRENO: BoMap refused: iova outside window %#llx..%#llx (%llu bytes)\n",
++			    fWinBase, fWinBase + fWinSize, bo->bytes);
+ 			r = kIOReturnBadArgument;
+ 		}
+ 		/* the pages in 4K steps, mapped in pieces of SWEET_ADRENO_V2_PAGEBUF */
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+index 00568d3..7118eaf 100644
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -6881,7 +6881,10 @@ void
+ pmap_sync_page_attributes_phys(
+ 	ppnum_t pp)
+ {
+-	flush_dcache((vm_offset_t) (pp << PAGE_SHIFT), PAGE_SIZE, TRUE);
++	/* ptoa, not pp << PAGE_SHIFT: ppnum_t is 32 bits, so pages above 4 GB lost bit 32
++	 * and phystokv_range panicked on the truncated low address (as ios-flame's
++	 * phone-size patch put it; flame 0115). */
++	flush_dcache((vm_offset_t) ptoa(pp), PAGE_SIZE, TRUE);
+ }
+ 
+ #if CONFIG_COREDUMP
+-- 
+2.54.0 (Apple Git-157)
+

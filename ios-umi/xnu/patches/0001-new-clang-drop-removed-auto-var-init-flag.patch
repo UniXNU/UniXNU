@@ -1,0 +1,12 @@
+diff --git a/makedefs/MakeInc.def b/makedefs/MakeInc.def
+index 5bd6f23..8460893 100644
+--- a/makedefs/MakeInc.def
++++ b/makedefs/MakeInc.def
+@@ -306,7 +306,6 @@ CFLAGS_GEN = $(DEBUG_CFLAGS) -nostdinc \
+ 	-fno-builtin \
+ 	-fno-common \
+ 	-ftrivial-auto-var-init=zero \
+-	-enable-trivial-auto-var-init-zero-knowing-it-will-be-removed-from-clang \
+ 	-fsigned-bitfields \
+ 	-fmerge-all-constants \
+ 	-fno-c++-static-destructors \

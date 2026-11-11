@@ -1,0 +1,251 @@
+From dd10435c7ff1ae4b134ad402ffcb4cb44bb02a9f Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 11:45:24 +0100
+Subject: [PATCH] umi-0151
+
+---
+ bsd/dev/sweet_wlce.c |   3 +-
+ bsd/dev/sweet_wlif.c | 162 +++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 160 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 4773fb2..08bbc2c 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -1293,7 +1293,8 @@ wmi_join(void)
+ 	uint32_t addr, mask, router;
+ 	sweet_wlip_lease(&addr, &mask, &router);
+ 	int ifr = sweet_wlif_attach(wlce_mac, addr, mask, router, htc_poll);
+-	return ifr ? 15 + ifr : 0;              /* 16 no DNS reply over wl0, 17-19 wl0 not created / attached / addressed */
++	return ifr ? 15 + ifr : 0;              /* 16 no DNS reply, 17-19 wl0 not created / attached / addressed,
++	                                         * 20 no default route, 21 no A record, 22 no HTTP reply (0151) */
+ }
+ 
+ /*
+diff --git a/bsd/dev/sweet_wlif.c b/bsd/dev/sweet_wlif.c
+index e3a4840..2865db7 100644
+--- a/bsd/dev/sweet_wlif.c
++++ b/bsd/dev/sweet_wlif.c
+@@ -8,6 +8,9 @@
+  * same mutex that transmit takes. The address comes from sweet_wlip.c's DHCP
+  * lease (no renewal yet); a DNS query to the router over an ordinary UDP
+  * socket checks that the BSD stack sends and receives through wl0.
++ * 0151: a default route via the router (scoped to wl0 if another default
++ * route exists, e.g. over ue0), then HTTP HEAD to the address DNS gave for
++ * apple.com over a kernel TCP socket: the first traffic beyond the hotspot.
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+@@ -29,6 +32,8 @@
+ #include <net/kpi_protocol.h>
+ #include <net/if_media.h>
+ #include <net/dlil.h>
++#include <net/route.h>
++#include <net/route_private.h>
+ #include <netinet/in.h>
+ #include <sys/kern_event.h>
+ 
+@@ -40,6 +45,7 @@ int sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32
+ 
+ static struct {
+ 	ifnet_t ifp;
++	unsigned int bound_if;          /* wl0's index when its default route is scoped (0151), else 0 */
+ 	lck_mtx_t *lock;
+ 	void (*poll)(void);
+ 	uint8_t frame[WLIF_FRAME_MAX];  /* transmit staging, under lock */
+@@ -165,8 +171,47 @@ wlif_sin(struct sockaddr *sa, uint32_t addr)
+  * ordinary kernel UDP socket: the reply has to come back through ARP, IP and
+  * UDP on wl0. 0 = answer received (rcode and answer count logged).
+  */
++static void
++wlif_bind(socket_t so)
++{
++	if (wl.bound_if != 0) {
++		unsigned int idx = wl.bound_if;
++		(void)sock_setsockopt(so, IPPROTO_IP, IP_BOUND_IF, &idx, sizeof(idx));
++	}
++}
++
++/* First A record of a DNS reply (network order), 0 if none. */
++static uint32_t
++wlif_dns_a(const uint8_t *r, size_t n)
++{
++	size_t o = 12;
++	unsigned qd = (unsigned)(r[4] << 8 | r[5]), an = (unsigned)(r[6] << 8 | r[7]);
++	for (unsigned i = 0; i < qd + an && o < n; ++i) {
++		while (o < n && r[o] != 0 && (r[o] & 0xc0) != 0xc0) {
++			o += r[o] + 1u;
++		}
++		o += (o < n && r[o] != 0) ? 2 : 1;      /* compression pointer or root label */
++		if (i < qd) {
++			o += 4;
++			continue;
++		}
++		if (o + 10 > n) {
++			break;
++		}
++		unsigned type = (unsigned)(r[o] << 8 | r[o + 1]), rdlen = (unsigned)(r[o + 8] << 8 | r[o + 9]);
++		o += 10;
++		if (type == 1 && rdlen == 4 && o + 4 <= n) {
++			uint32_t a;
++			memcpy(&a, r + o, 4);
++			return a;
++		}
++		o += rdlen;
++	}
++	return 0;
++}
++
+ static int
+-wlif_dns_test(uint32_t router)
++wlif_dns_test(uint32_t router, uint32_t *answer)
+ {
+ 	static const uint8_t q[] = {
+ 		0x53, 0x57, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+@@ -179,6 +224,7 @@ wlif_dns_test(uint32_t router)
+ 	to.sin_port = htons(53);
+ 	errno_t e = sock_socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, NULL, &so);
+ 	if (e == 0) {
++		wlif_bind(so);
+ 		e = sock_connect(so, (struct sockaddr *)&to, 0);
+ 	}
+ 	for (unsigned tries = 0; e == 0 && tries < 3; ++tries) {
+@@ -202,6 +248,7 @@ wlif_dns_test(uint32_t router)
+ 			if (re == 0 && n >= 12 && r[0] == 0x53 && r[1] == 0x57) {
+ 				printf("SWEET WLIF: DNS reply over wl0: %u bytes, rcode %u, %u answers\n", (unsigned)n, r[3] & 0xfu,
+ 				    (unsigned)(r[6] << 8 | r[7]));
++				*answer = wlif_dns_a(r, n);
+ 				sock_close(so);
+ 				return 0;
+ 			}
+@@ -218,10 +265,106 @@ wlif_dns_test(uint32_t router)
+ 	return 1;
+ }
+ 
++/*
++ * Default route via the router (rtrequest RTM_ADD 0/0, RTF_GATEWAY | RTF_STATIC);
++ * if one already exists (EEXIST), the same route scoped to wl0 and the test
++ * sockets bound to wl0 with IP_BOUND_IF.
++ */
++static int
++wlif_default_route(uint32_t router)
++{
++	struct sockaddr_in dst, gw, mask;
++	bzero(&dst, sizeof(dst));
++	bzero(&gw, sizeof(gw));
++	bzero(&mask, sizeof(mask));
++	wlif_sin((struct sockaddr *)&dst, 0);
++	wlif_sin((struct sockaddr *)&gw, router);
++	wlif_sin((struct sockaddr *)&mask, 0);
++	int flags = RTF_UP | RTF_GATEWAY | RTF_STATIC;
++	int e = rtrequest(RTM_ADD, (struct sockaddr *)&dst, (struct sockaddr *)&gw, (struct sockaddr *)&mask, flags, NULL);
++	const char *how = "default route";
++	if (e == EEXIST) {
++		unsigned int idx = ifnet_index(wl.ifp);
++		e = rtrequest_scoped(RTM_ADD, (struct sockaddr *)&dst, (struct sockaddr *)&gw, (struct sockaddr *)&mask,
++		    flags | RTF_IFSCOPE, NULL, idx);
++		if (e == 0 || e == EEXIST) {
++			wl.bound_if = idx;
++		}
++		how = "default route scoped to wl0 (another default exists)";
++	}
++	const uint8_t *g = (const uint8_t *)&router;
++	printf("SWEET WLIF: %s via %u.%u.%u.%u: err %d\n", how, g[0], g[1], g[2], g[3], e);
++	return e;
++}
++
++/* HTTP HEAD / to addr:80 over a kernel TCP socket; logs the status line. 0 = a status line came back. */
++static int
++wlif_http_test(uint32_t addr)
++{
++	static const char req[] = "HEAD / HTTP/1.0\r\nHost: apple.com\r\nUser-Agent: sweet-wl0\r\n\r\n";
++	const uint8_t *a = (const uint8_t *)&addr;
++	socket_t so = NULL;
++	struct sockaddr_in to;
++	bzero(&to, sizeof(to));
++	wlif_sin((struct sockaddr *)&to, addr);
++	to.sin_port = htons(80);
++	errno_t e = sock_socket(PF_INET, SOCK_STREAM, IPPROTO_TCP, NULL, NULL, &so);
++	if (e == 0) {
++		wlif_bind(so);
++		e = sock_connect(so, (struct sockaddr *)&to, MSG_DONTWAIT);
++		if (e == EINPROGRESS) {
++			struct timeval tv = { .tv_sec = 10, .tv_usec = 0 };
++			e = sock_connectwait(so, &tv);
++		}
++	}
++	printf("SWEET WLIF: TCP connect to %u.%u.%u.%u:80: err %d\n", a[0], a[1], a[2], a[3], e);
++	if (e == 0) {
++		struct iovec iov = { .iov_base = (void *)(uintptr_t)req, .iov_len = sizeof(req) - 1 };
++		struct msghdr msg;
++		size_t n = 0;
++		bzero(&msg, sizeof(msg));
++		msg.msg_iov = &iov;
++		msg.msg_iovlen = 1;
++		e = sock_send(so, &msg, 0, &n);
++	}
++	for (unsigned t = 0; e == 0 && t < 1000; ++t) {         /* 10 s */
++		char r[128];
++		struct iovec iov = { .iov_base = r, .iov_len = sizeof(r) - 1 };
++		struct msghdr msg;
++		size_t n = 0;
++		bzero(&msg, sizeof(msg));
++		msg.msg_iov = &iov;
++		msg.msg_iovlen = 1;
++		errno_t re = sock_receive(so, &msg, MSG_DONTWAIT, &n);
++		if (re == 0 && n > 0) {
++			size_t k = 0;
++			while (k < n && k < 60 && r[k] != '\r' && r[k] != '\n' && r[k] >= 0x20 && r[k] < 0x7f) {
++				k++;
++			}
++			r[k] = 0;
++			printf("SWEET WLIF: HTTP reply over wl0: \"%s\"\n", r);
++			sock_close(so);
++			return 0;
++		}
++		if (re != 0 && re != EWOULDBLOCK) {
++			e = re;
++		} else if (re == 0) {
++			e = ECONNRESET;         /* closed without data */
++		}
++		delay(10000);
++	}
++	printf("SWEET WLIF: no HTTP reply over wl0 (err %d)\n", e);
++	if (so != NULL) {
++		sock_close(so);
++	}
++	return 1;
++}
++
+ /*
+  * wl0 with the DHCP lease (all addresses in network byte order), then the poll
+- * thread and the DNS check. 0 = DNS answered, 1 = no DNS reply, 2-4 = the
+- * interface could not be created, attached or addressed.
++ * thread, the DNS check, the default route and the HTTP check. 0 = HTTP status
++ * line received, 1 = no DNS reply, 2-4 = the interface could not be created,
++ * attached or addressed, 5 = no default route, 6 = no A record, 7 = no HTTP reply.
+  */
+ int
+ sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void))
+@@ -304,6 +447,17 @@ sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t r
+ 		return 2;
+ 	}
+ 	thread_deallocate(thread);
+-	return wlif_dns_test(router);
++	if (wlif_default_route(router) != 0 && wl.bound_if == 0) {
++		return 5;
++	}
++	uint32_t host = 0;
++	if (wlif_dns_test(router, &host) != 0) {
++		return 1;
++	}
++	if (host == 0) {
++		printf("SWEET WLIF: no A record in the DNS reply\n");
++		return 6;
++	}
++	return wlif_http_test(host) ? 7 : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,65 @@
+From e20b31385fe485ceca39bbeee349424e2b1de34b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 22:48:52 +0200
+Subject: [PATCH] umi-0146
+
+---
+ bsd/dev/sweet_wlce.c | 14 ++++++++++++++
+ bsd/dev/sweet_wlfw.c | 16 ++++++++++++++++
+ 2 files changed, 30 insertions(+)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 219dec8..a6f564d 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -865,6 +865,20 @@ wmi_scan(void)
+ 		}
+ 	}
+ 
++	/*
++	 * 0146: WMI_PDEV_SET_BASE_MACADDR (0x400d, tag 0xac: pdev_id, mac) = the vdev MAC, before the vdev
++	 * exists. ath11k never sends it (laptop chips have an OTP MAC); this chip's firmware reports a zero
++	 * MAC, which data frames built by the hardware may use as transmitter address. Layout from the
++	 * QCA WMI definition {tlv, pdev_id, wmi_mac_addr}.
++	 */
++	{
++		uint32_t bm[4] = { WMI_TLV(0xac, 12), 0, 0, 0 };
++		memcpy(&bm[2], wlce_mac, 6);
++		if (wmi_cmd(0x400du, bm, sizeof(bm), "PDEV_SET_BASE_MACADDR") != 0) {
++			printf("SWEET WMI: base MAC not sent (continuing)\n");
++		}
++	}
++
+ 	/* ath11k_reg_update_chan_list for 2.4 GHz channels 1-13 (all usable actively in the EU): 11G, HE allowed, 20 dBm */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x4f, 12);
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 03fc1d0..9a1ae77 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -650,6 +650,22 @@ sweet_wlfw_run(void)
+ 		return 9;
+ 	}
+ 	printf("SWEET WLFW: firmware ready\n");
++	/*
++	 * 0146: give the firmware a MAC address. The OTP has none (WMI_READY reports 00:00:00:00:00:00);
++	 * Android's cnss2 sends QMI WLFW_MAC_ADDR_REQ (0x33, TLV 0x10 = 6 bytes) after the firmware is
++	 * ready. Not part of ath11k (laptop chips have an OTP MAC): message from cnss2, so a refusal is
++	 * only logged. Same locally administered MAC as the vdev (sweet_wlce.c).
++	 */
++	{
++		static struct qmsg mm;
++		static const uint8_t mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };
++		wf_begin(&mm, 0x33);
++		uint8_t *p = q_tlv(&mm, 0x10, 6);
++		if (p != NULL) {
++			memcpy(p, mac, 6);
++			(void)wf_request(&mm, "MAC_ADDR", 2000);
++		}
++	}
+ 	if (sweet_wlce_init() != 0) {   /* copy-engine rings before WLAN_CFG, as ath11k */
+ 		return 13;
+ 	}
+-- 
+2.54.0 (Apple Git-157)
+

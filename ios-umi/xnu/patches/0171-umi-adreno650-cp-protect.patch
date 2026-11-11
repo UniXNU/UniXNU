@@ -1,0 +1,131 @@
+From 7c274fb99f0c2991f9f130e2a8a638cffe4c1bf3 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 21:32:31 +0100
+Subject: [PATCH] umi-0171-adreno-a650-protect
+
+Set up the A650 CP protect table in step 20, where Linux's a6xx_hw_init
+calls a6xx_set_cp_protect before the command processor starts, so no
+command stream (the coming user-space client above all) can write GPU
+registers. The table is Linux v6.12 a6xx_catalog.c a650_protect_regs - 39
+entries, count_max 48 - with the NORDWR/RDONLY encodings of a6xx_gpu.h;
+CP_PROTECT_CNTL 0x84f (bits 0/1/3) and CP_PROTECT 0x850..0x87f are from
+a6xx.xml. Entries 0..37 go into CP_PROTECT(0..37) and the infinite-range
+entry into CP_PROTECT(47), exactly as a6xx_set_cp_protect does; the first
+attempt wrote all 39 consecutively, and the zero in the last register made
+LAST_SPAN_INF_RANGE extend an empty span at register 0, so every command
+register write faulted (0171 boot: step 22 stopped on RB_CCU_CNTL, CP
+protection status 0x608e07). Steps 21-23 then run with protection on:
+every register the 2D fill and the indirect-buffer submit write (0x8400s,
+0x8c00s, 0x8e04/0x8e07, 0xacc0) is outside the protected spans, so the
+sweetgpu=23 self-test doubles as the proof that protection does not stop
+our own commands.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 62 +++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 58 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index a91ed63..21e3287 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -55,8 +55,9 @@
+  *              iommus 0 / 0x401; the hypervisor refuses other pairs)
+  *  19  asks    TrustZone to load the zap shader: header again, place (pil_gpu_region@8681a000),
+  *              a650_zap.b02 copied there, authenticate and run
+- *  20  writes  the 3D core's registers (Linux a6xx_gpu.c hw_init for the A650, without clock gating,
+- *              register protection and interrupts), starts its command processor, CP_ME_INIT
++ *  20  writes  the 3D core's registers (Linux a6xx_gpu.c hw_init for the A650, without clock gating
++ *              or interrupts), protects its registers from command streams (a6xx_set_cp_protect,
++ *              table a650_protect), starts its command processor, CP_ME_INIT
+  *  21  commands the 3D core out of secure mode, then to write a known word into the scratch page
+  *  22  draws   with the 2D engine: red, green and blue bands straight into the panel's boot
+  *              framebuffer, which the framebuffer driver shows alone for sweetgpuhold ms
+@@ -1945,6 +1946,8 @@ sa_step_zap_load(void)
+ #define CP_PROTECT_STATUS       GPU_WORD(0x0824)
+ #define CP_SQE_INSTR_BASE       GPU_WORD(0x0830)
+ #define CP_APRIV_CNTL           GPU_WORD(0x0844)
++#define CP_PROTECT_CNTL         GPU_WORD(0x084f)
++#define CP_PROTECT              GPU_WORD(0x0850)
+ #define CP_ROQ_THRESHOLDS_1     GPU_WORD(0x08c1)
+ #define CP_ROQ_THRESHOLDS_2     GPU_WORD(0x08c2)
+ #define CP_MEM_POOL_SIZE        GPU_WORD(0x08c3)
+@@ -2051,6 +2054,44 @@ sa_put64(struct sa_block *b, const char *name, uint32_t offset, uint64_t value)
+ 	sa_put(b, name, offset + 4, (uint32_t)(value >> 32));
+ }
+ 
++/*
++ * a650_protect (Linux v6.12 a6xx_catalog.c a650_protect_regs, 39 entries, count_max 48): the
++ * register ranges a non-privileged command stream may not touch, written into the CP_PROTECT
++ * registers by a6xx_set_cp_protect (a6xx_gpu.c) while the hardware init runs. NORDWR blocks
++ * reads and writes, RDONLY allows reads (the encodings are a6xx_gpu.h's). Entries 0..37 go into
++ * CP_PROTECT(0..37); the last one (0x1f8c0, len 0) goes into CP_PROTECT(47), the last of the 48
++ * registers, because CP_PROTECT_CNTL's LAST_SPAN_INF_RANGE makes the last span protect from its
++ * start to the end of the register space - CP_PROTECT(38..46) are left untouched, and a zero in
++ * the last register would extend an empty span at 0 instead (0171's first boot: every command
++ * register write faulted, protection status 0x608e07).
++ */
++#define SA_PROTECT_NORDWR(reg, len) (0x80000000u | ((len) & 0x3fff) << 18 | (reg) & 0x3ffff)
++#define SA_PROTECT_RDONLY(reg, len) (((len) & 0x3fff) << 18 | (reg) & 0x3ffff)
++#define SA_A650_PROTECT_COUNT        39
++#define SA_A650_PROTECT_LAST          47
++static const uint32_t sa_a650_protect[SA_A650_PROTECT_COUNT] = {
++	SA_PROTECT_RDONLY(0x00000, 0x04ff), SA_PROTECT_RDONLY(0x00501, 0x0005),
++	SA_PROTECT_RDONLY(0x0050b, 0x02f4), SA_PROTECT_NORDWR(0x0050e, 0x0000),
++	SA_PROTECT_NORDWR(0x00510, 0x0000), SA_PROTECT_NORDWR(0x00534, 0x0000),
++	SA_PROTECT_NORDWR(0x00800, 0x0082), SA_PROTECT_NORDWR(0x008a0, 0x0008),
++	SA_PROTECT_NORDWR(0x008ab, 0x0024), SA_PROTECT_RDONLY(0x008de, 0x00ae),
++	SA_PROTECT_NORDWR(0x00900, 0x004d), SA_PROTECT_NORDWR(0x0098d, 0x0272),
++	SA_PROTECT_NORDWR(0x00e00, 0x0001), SA_PROTECT_NORDWR(0x00e03, 0x000c),
++	SA_PROTECT_NORDWR(0x03c00, 0x00c3), SA_PROTECT_RDONLY(0x03cc4, 0x1fff),
++	SA_PROTECT_NORDWR(0x08630, 0x01cf), SA_PROTECT_NORDWR(0x08e00, 0x0000),
++	SA_PROTECT_NORDWR(0x08e08, 0x0000), SA_PROTECT_NORDWR(0x08e50, 0x001f),
++	SA_PROTECT_NORDWR(0x08e80, 0x027f), SA_PROTECT_NORDWR(0x09624, 0x01db),
++	SA_PROTECT_NORDWR(0x09e60, 0x0011), SA_PROTECT_NORDWR(0x09e78, 0x0187),
++	SA_PROTECT_NORDWR(0x0a630, 0x01cf), SA_PROTECT_NORDWR(0x0ae02, 0x0000),
++	SA_PROTECT_NORDWR(0x0ae50, 0x032f), SA_PROTECT_NORDWR(0x0b604, 0x0000),
++	SA_PROTECT_NORDWR(0x0b608, 0x0007), SA_PROTECT_NORDWR(0x0be02, 0x0001),
++	SA_PROTECT_NORDWR(0x0be20, 0x17df), SA_PROTECT_NORDWR(0x0f000, 0x0bff),
++	SA_PROTECT_RDONLY(0x0fc00, 0x1fff), SA_PROTECT_NORDWR(0x18400, 0x1fff),
++	SA_PROTECT_NORDWR(0x1a800, 0x1fff), SA_PROTECT_NORDWR(0x1f400, 0x0443),
++	SA_PROTECT_RDONLY(0x1f844, 0x007b), SA_PROTECT_NORDWR(0x1f887, 0x001b),
++	SA_PROTECT_NORDWR(0x1f8c0, 0x0000),     /* to the end of the register space */
++};
++
+ static bool
+ sa_step_core_start(void)
+ {
+@@ -2062,8 +2103,7 @@ sa_step_core_start(void)
+ 	if (!sa_cx_ready() || !sa_core_space_on) {
+ 		return false;
+ 	}
+-	sa_announce("write the 3D core's registers as Linux hw_init does for the A650 (no clock gating, register protection "
+-	    "or interrupts)");
++	sa_announce("write the 3D core's registers as Linux hw_init does for the A650 (no clock gating or interrupts)");
+ 	sa_put(&sa_gbif, "halt", GBIF_HALT, 0);
+ 	sa_put(&sa_gpu, "rbbm_gbif_halt", RBBM_GBIF_HALT, 0);
+ 	sa_put(&sa_gpu, "rbbm_secvid_tsb_cntl", RBBM_SECVID_TSB_CNTL, 0);
+@@ -2110,6 +2150,20 @@ sa_step_core_start(void)
+ 	sa_get(&sa_gpu, "cp_rb_wptr", CP_RB_WPTR);
+ 	sa_get(&sa_gpu, "rbbm_status", RBBM_STATUS);
+ 
++	sa_announce("protect the 3D core's registers from command streams (Linux a6xx_set_cp_protect, table a650_protect)");
++	/* ACCESS_PROT_EN | ACCESS_FAULT_ON_VIOL_EN | LAST_SPAN_INF_RANGE (a6xx.xml CP_PROTECT_CNTL bits 0, 1, 3) */
++	sa_put(&sa_gpu, "cp_protect_cntl", CP_PROTECT_CNTL, 1u << 3 | 1u << 1 | 1u);
++	for (uint32_t i = 0; i < SA_A650_PROTECT_COUNT - 1; i++) {
++		sa_put(&sa_gpu, "cp_protect", CP_PROTECT + 4 * i, sa_a650_protect[i]);
++	}
++	/* the infinite-range entry into the last of the 48 registers; 38..46 stay untouched */
++	sa_put(&sa_gpu, "cp_protect last", CP_PROTECT + 4 * SA_A650_PROTECT_LAST,
++	    sa_a650_protect[SA_A650_PROTECT_COUNT - 1]);
++	sa_get(&sa_gpu, "cp_protect_cntl", CP_PROTECT_CNTL);
++	sa_get(&sa_gpu, "cp_protect first", CP_PROTECT);
++	sa_get(&sa_gpu, "cp_protect untouched", CP_PROTECT + 4 * 40);
++	sa_get(&sa_gpu, "cp_protect last", CP_PROTECT + 4 * SA_A650_PROTECT_LAST);
++
+ 	sa_announce("start the 3D core's command processor (cp_sqe_cntl 1)");
+ 	sa_core_runs = true;
+ 	sa_put(&sa_gpu, "cp_sqe_cntl", CP_SQE_CNTL, 1);
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,18 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 13ea8ce..165449b 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -697,11 +697,10 @@ touch_umi_start(void)
+ 	 * Linux (i2c-qcom-geni GSI_ONLY) moves every byte through the GPI DMA engine.
+ 	 */
+ 	if (touch_rd(st.se, 0x64) & 1u) {
+-		int use_gpi = 0;
++		int use_gpi = 1;
+ 		(void)PE_parse_boot_argn("sweettouchgpi", &use_gpi, sizeof(use_gpi));
+ 		if (!use_gpi && !st.test_stage) {
+-			/* 0093/0094: transfers fail (code 16) and the phone resets ~1 s later; opt-in until fixed */
+-			printf("SWEET TOUCH: SE5 FIFO disabled; GPI path is experimental (sweettouchgpi=1); stopping\n");
++			printf("SWEET TOUCH: SE5 FIFO disabled; GPI path off (sweettouchgpi=0); stopping\n");
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));

@@ -1,0 +1,187 @@
+From 013cb3382d982ed815156a5d39c1b7d5444994c8 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 21:14:24 +0100
+Subject: [PATCH] umi-0163-adreno-zap-signature
+
+---
+ bsd/dev/sweet_adreno.c | 112 +++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 108 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index bd1c11c..c589116 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -29,6 +29,10 @@
+  *  11  asks    TrustZone questions that pass no memory: whether it takes calls from this kernel,
+  *              whether it has the image-authentication calls, which images it "supports" (13 is
+  *              the GPU's zap shader)
++ *  12  asks    TrustZone to check the zap shader's signature: the header a650_zap.mdt (ELF header
++ *              + hash segment, from the ADT node /sweet-gpufw, tools/mkadt.py) goes into a page of
++ *              ours that TrustZone is pointed at (pas_init_image, image 13); released again at
++ *              the end of the run (pas_shutdown)
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -44,11 +48,16 @@
+ #include <kern/clock.h>
+ #include <kern/thread.h>
+ #include <machine/machine_routines.h>
++#include <arm/caches_internal.h>
++#include <vm/pmap.h>
++#include <vm/vm_kern.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
+ extern kern_return_t thread_terminate(thread_t);
++extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
+ extern bool sweet_board_is_umi(void);
+ void sweet_adreno_init(void);
+ 
+@@ -735,11 +744,12 @@ sa_step_gmu_memory(void)
+ #define PAS_GPU                 13
+ 
+ static int32_t
+-sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t *answer)
++sa_scm2(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t second, uint64_t *answer)
+ {
+ 	uint64_t session = 0;
+ 
+-	printf("SWEET GPU: %u: about to ask TrustZone %s: smc %#llx, argument %#llx\n", sa_step, what, function, first);
++	printf("SWEET GPU: %u: about to ask TrustZone %s: smc %#llx, arguments %#llx, %#llx\n", sa_step, what, function, first,
++	    second);
+ 	if (sa_step == sa_steps && sa_pause_ms) {
+ 		sa_sleep_ms(sa_pause_ms);
+ 	}
+@@ -747,7 +757,7 @@ sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first,
+ 		register uint64_t x0 __asm__("x0") = i == 0 ? function : SCM_INTERRUPTED;
+ 		register uint64_t x1 __asm__("x1") = arguments;
+ 		register uint64_t x2 __asm__("x2") = first;
+-		register uint64_t x3 __asm__("x3") = 0;
++		register uint64_t x3 __asm__("x3") = second;
+ 		register uint64_t x4 __asm__("x4") = 0;
+ 		register uint64_t x5 __asm__("x5") = 0;
+ 		register uint64_t x6 __asm__("x6") = session;
+@@ -766,6 +776,12 @@ sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first,
+ 	return -1;
+ }
+ 
++static int32_t
++sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t *answer)
++{
++	return sa_scm2(what, function, arguments, first, 0, answer);
++}
++
+ static bool
+ sa_step_trustzone(void)
+ {
+@@ -799,9 +815,96 @@ sa_step_trustzone(void)
+ 	return true;
+ }
+ 
++/* ---- step 12: the zap shader's signature ---- */
++
++#define SCM_PAS_SHUTDOWN        SCM_CALL(2, 6)
++#define SCM_VALUE_AND_BUFFER    (2 | 2 << 6)    /* two arguments: a value and a read-write buffer (qcom_scm.h) */
++static bool sa_zap_initialised;
++
++/* A firmware file from the ADT node /sweet-gpufw (tools/mkadt.py), or NULL. */
++static const uint8_t *
++sa_firmware(const char *name, unsigned int *size)
++{
++	DTEntry node;
++	void const *data = NULL;
++
++	if (SecureDTLookupEntry(NULL, "/sweet-gpufw", &node) != kSuccess ||
++	    SecureDTGetProperty(node, name, &data, size) != kSuccess) {
++		printf("SWEET GPU: %u: no %s in the ADT (/sweet-gpufw: research/gpu-fw/umi/ when the ADT was made)\n",
++		    sa_step, name);
++		return NULL;
++	}
++	printf("SWEET GPU: %u: %s: %u bytes from the ADT\n", sa_step, name, *size);
++	return data;
++}
++
++/*
++ * Linux mdt_loader.c qcom_mdt_pas_init -> qcom_scm_pas_init_image: TrustZone is given the image's
++ * header (ELF header + program headers + the hash segment = all of a650_zap.mdt) in physically
++ * contiguous memory and checks the signature. TrustZone may protect that memory while it works,
++ * so the page is kept for good (KMA_PERMANENT) and not touched again.
++ */
++static bool
++sa_step_zap_signature(void)
++{
++	unsigned int size = 0;
++	vm_offset_t page = 0;
++	uint32_t segments, hashes;
++
++	sa_announce("find the zap shader's header (a650_zap.mdt) in the ADT");
++	const uint8_t *header = sa_firmware("a650_zap.mdt", &size);
++	if (header == NULL) {
++		return false;
++	}
++	segments = size >= 52 + 2 * 32 ? (uint32_t)(header[44] | header[45] << 8) : 0;
++	if (memcmp(header, "\177ELF\1", 5) != 0 || segments < 2 || size > PAGE_SIZE) {
++		printf("SWEET GPU: %u: not such a header (%02x %02x %02x %02x, %u segments, %u bytes)\n", sa_step, header[0],
++		    header[1], header[2], header[3], segments, size);
++		return false;
++	}
++	memcpy(&hashes, header + 52 + 32 + 16, sizeof(hashes));
++	printf("SWEET GPU: %u: ELF header of %u segments (%u bytes), hash segment %u bytes\n", sa_step, segments,
++	    52 + 32 * segments, hashes);
++	if (52 + 32 * segments + (uint64_t)hashes != size) {
++		printf("SWEET GPU: %u: the file is not the header followed by the hashes alone\n", sa_step);
++		return false;
++	}
++	if (kmem_alloc_contig(kernel_map, &page, PAGE_SIZE, PAGE_MASK, 0, 0, KMA_DATA | KMA_ZERO | KMA_PERMANENT,
++	    VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		printf("SWEET GPU: %u: no memory\n", sa_step);
++		return false;
++	}
++	memcpy((void *)page, header, size);
++	uint64_t phys = ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)page));
++	flush_dcache64((addr64_t)phys, PAGE_SIZE, TRUE);        /* TrustZone reads memory, not our cache */
++
++	sa_announce("hand the header to TrustZone to check its signature (image 13)");
++	uint64_t answer = ~0ull;
++	int32_t result = sa_scm2("to take the zap shader's signature", SCM_64 | SCM_SIP | SCM_PAS_INIT_IMAGE,
++	    SCM_VALUE_AND_BUFFER, PAS_GPU, phys, &answer);
++	if (result == 0 && answer == 0) {
++		sa_zap_initialised = true;
++		printf("SWEET GPU: %u: TRUSTZONE ACCEPTS THE ZAP SHADER'S SIGNATURE FROM THIS KERNEL\n", sa_step);
++		return true;
++	}
++	printf("SWEET GPU: %u: TrustZone does not take it: returns %d, answer %#llx\n", sa_step, result, answer);
++	return false;
++}
++
++/* What TrustZone holds for image 13 is let go at the end of a run (Linux: qcom_scm_pas_shutdown). */
++static void
++sa_zap_release(void)
++{
++	uint64_t answer = ~0ull;
++	if (sa_zap_initialised) {
++		sa_scm("to let go of the zap shader", SCM_64 | SCM_SIP | SCM_PAS_SHUTDOWN, SCM_ONE_VALUE, PAS_GPU, &answer);
++		sa_zap_initialised = false;
++	}
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+-	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone,
++	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+ };
+ 
+ static void
+@@ -818,6 +921,7 @@ sa_thread(__unused void *arg, __unused wait_result_t wr)
+ 			break;
+ 		}
+ 	}
++	sa_zap_release();
+ 	sa_undo_all();
+ 	printf("SWEET GPU: done\n");
+ 	(void)thread_terminate(current_thread());
+-- 
+2.54.0 (Apple Git-157)
+

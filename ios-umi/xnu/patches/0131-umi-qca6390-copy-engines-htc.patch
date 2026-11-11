@@ -1,0 +1,564 @@
+From be4af9b9c7bc098d370d9a532e048130e78afbc0 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 15:31:35 +0200
+Subject: [PATCH] umi-0131
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_wlan.c |   2 +-
+ bsd/dev/sweet_wlce.c | 429 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlfw.c |  35 +++-
+ 4 files changed, 461 insertions(+), 6 deletions(-)
+ create mode 100644 bsd/dev/sweet_wlce.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 1140a6e..3938edc 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -118,6 +118,7 @@ bsd/dev/sweet_wlan.c			standard
+ bsd/dev/sweet_mhi.c			standard
+ bsd/dev/sweet_ipcr.c			standard
+ bsd/dev/sweet_wlfw.c			standard
++bsd/dev/sweet_wlce.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 7408964..027eea4 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI: 21-32 = step 1-12 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC: 21-38 = step 1-18 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+new file mode 100644
+index 0000000..ddbc3fa
+--- /dev/null
++++ b/bsd/dev/sweet_wlce.c
+@@ -0,0 +1,429 @@
++/*
++ * umi QCA6390: copy engines and HTC (Linux ath11k ce.c, hal.c, htc.c for
++ * "qca6390 hw2.0", v6.6). Polled, no interrupts, no shadow registers yet:
++ * ring pointers are written straight to the CE registers through the PCIe
++ * register window (BAR0 + 0x80000, window select at 0x310c).
++ *   CE0 host->target HTC control, CE3 host->target WMI (source rings);
++ *   CE1 HTT/HTC, CE2 WMI/HTC control, CE5 pktlog (destination + status rings).
++ * Memory: the copy-engine area of sweet_wlfw.c's window (0xd1800000).
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++
++extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
++extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
++int sweet_wlce_init(void);
++int sweet_wlce_htc(void);
++
++/* qca6390_regs (ath11k hw.c): CE n source R0 at 0xa00000 + n * 0x2000, destination at +0x1000 */
++#define CE_SRC_REG(n)           (0x00a00000u + (n) * 0x2000u)
++#define CE_DST_REG(n)           (0x00a01000u + (n) * 0x2000u)
++#define CE_R2                   0x400u          /* HAL_CE_DST_RING_HP */
++#define CE_STS_R0               0x58u           /* HAL_CE_DST_STATUS_RING_BASE_LSB */
++#define CE_STS_R2               0x408u          /* HAL_CE_DST_STATUS_RING_HP */
++#define CE_DST_CTRL             0xb0u           /* HAL_CE_DST_RING_CTRL: bits 15:0 max buffer length */
++
++/* Source-direction rings use the TCL1 layout, destination-direction the REO1 layout (offsets from R0) */
++#define SRC_BASE_MSB            0x04u
++#define SRC_ID                  0x08u
++#define SRC_MISC                0x10u
++#define SRC_TP_ADDR_LSB         0x1cu
++#define SRC_TP_ADDR_MSB         0x20u
++#define SRC_INT_IX0             0x30u
++#define SRC_INT_IX1             0x34u
++#define DST_BASE_MSB            0x04u
++#define DST_ID                  0x08u
++#define DST_MISC                0x10u
++#define DST_HP_ADDR_LSB         0x14u
++#define DST_HP_ADDR_MSB         0x18u
++#define DST_INT                 0x24u
++#define MISC_LOOPCNT_DISABLE    (1u << 1)
++#define MISC_SRNG_ENABLE        (1u << 6)
++
++/* HAL ring ids: CE n source 32 + n, destination 56 + n, status 80 + n */
++#define RID_SRC(n)              (32u + (n))
++#define RID_DST(n)              (56u + (n))
++#define RID_STS(n)              (80u + (n))
++
++/* Layout in the copy-engine area */
++#define M_RDP                   0x00000u        /* u32 per ring id: TP (source) / HP (status) written by the chip */
++#define M_RINGS                 0x01000u        /* 0x400 per ring */
++#define M_RXBUF                 0x10000u        /* 3 pipes x RX_N x BUF_SZ */
++#define M_TXBUF                 0x40000u        /* 2 pipes x 32 x BUF_SZ */
++#define BUF_SZ                  0x800u          /* src_sz_max 2048 */
++#define RX_N                    32u
++#define RING_SLOT               0x400u
++
++struct ring {
++	uint32_t off, pa;               /* in the copy-engine area */
++	uint32_t n, esz;                /* entries, entry size in words */
++	uint32_t id, r0, r2;            /* HAL ring id, register groups */
++	uint32_t hp, tp;                /* in words */
++};
++
++struct pipe {
++	unsigned ce;
++	struct ring src;                /* host->target: buffers to send; or target->host: empty buffers */
++	struct ring sts;                /* target->host: completions */
++	uint32_t buf;                   /* buffer area offset */
++	unsigned head;                  /* next buffer to complete (in order) */
++};
++
++static struct {
++	vm_offset_t bar0, mem;
++	uint32_t pa;
++	unsigned nring;
++	struct pipe tx0, tx3, rx1, rx2, rx5;
++} ce;
++
++static uint32_t
++rd(uint32_t off)
++{
++	return *(volatile uint32_t *)(ce.bar0 + off);
++}
++
++static void
++wr(uint32_t off, uint32_t v)
++{
++	*(volatile uint32_t *)(ce.bar0 + off) = v;
++}
++
++/* ath11k_pci_window_read32/write32 (qca6390: dynamic window) */
++static uint32_t
++reg_rd(uint32_t off)
++{
++	if (off < 0x80000u) {
++		return rd(off);
++	}
++	wr(0x310cu, 0x40000000u | ((off >> 19) & 0x3fu));
++	(void)rd(0x310cu);
++	return rd(0x80000u + (off & 0x7ffffu));
++}
++
++static void
++reg_wr(uint32_t off, uint32_t v)
++{
++	if (off < 0x80000u) {
++		wr(off, v);
++		return;
++	}
++	wr(0x310cu, 0x40000000u | ((off >> 19) & 0x3fu));
++	(void)rd(0x310cu);
++	wr(0x80000u + (off & 0x7ffffu), v);
++}
++
++static volatile uint32_t *
++mem32(uint32_t off)
++{
++	return (volatile uint32_t *)(ce.mem + off);
++}
++
++/*
++ * ath11k_hal_srng_setup + src_hw_init / dst_hw_init, without MSI or shadow
++ * registers. int0/int1: the interrupt setup words ath11k_ce_init_ring picks
++ * for this ring type (nothing raises an interrupt here, kept for fidelity).
++ */
++static void
++ring_setup(struct ring *r, bool src_dir, uint32_t id, uint32_t r0, uint32_t r2, uint32_t n, uint32_t esz,
++    uint32_t int0, uint32_t int1)
++{
++	r->off = M_RINGS + ce.nring++ * RING_SLOT;
++	r->pa = ce.pa + r->off;
++	r->n = n;
++	r->esz = esz;
++	r->id = id;
++	r->r0 = r0;
++	r->r2 = r2;
++	r->hp = r->tp = 0;
++	bzero((void *)(ce.mem + r->off), n * esz * 4);
++	*mem32(M_RDP + id * 4) = 0;
++	uint32_t rdp = ce.pa + M_RDP + id * 4;
++	reg_wr(r0, r->pa);
++	reg_wr(r0 + SRC_BASE_MSB, (n * esz) << 8);      /* ring size in words, address bits 39:32 = 0 */
++	if (src_dir) {
++		reg_wr(r0 + SRC_ID, esz);
++		reg_wr(r0 + SRC_INT_IX0, int0);
++		reg_wr(r0 + SRC_INT_IX1, int1);
++		reg_wr(r0 + SRC_TP_ADDR_LSB, rdp);
++		reg_wr(r0 + SRC_TP_ADDR_MSB, 0);
++		reg_wr(r2, 0);
++		reg_wr(r2 + 4, 0);
++		reg_wr(r0 + SRC_MISC, MISC_LOOPCNT_DISABLE | MISC_SRNG_ENABLE);
++	} else {
++		reg_wr(r0 + DST_ID, id << 8 | esz);
++		reg_wr(r0 + DST_INT, int0);
++		reg_wr(r0 + DST_HP_ADDR_LSB, rdp);
++		reg_wr(r0 + DST_HP_ADDR_MSB, 0);
++		reg_wr(r2, 0);
++		reg_wr(r2 + 4, 0);
++		reg_wr(r0 + DST_MISC, MISC_SRNG_ENABLE);
++	}
++}
++
++/* Host->target pipe: one source ring (ath11k_ce_init_ring HAL_CE_SRC: batch threshold 1 entry). */
++static void
++pipe_tx_init(struct pipe *p, unsigned id, uint32_t n, uint32_t buf)
++{
++	p->ce = id;
++	p->buf = buf;
++	ring_setup(&p->src, true, RID_SRC(id), CE_SRC_REG(id), CE_SRC_REG(id) + CE_R2, n, 4, 4, 0);
++}
++
++/* Give the buffer at ring position pos back to the target (CE destination descriptor: address only). */
++static void
++rx_post(struct pipe *p)
++{
++	struct ring *r = &p->src;
++	uint32_t pos = r->hp / r->esz;
++	volatile uint32_t *d = mem32(r->off + r->hp * 4);
++	d[0] = ce.pa + p->buf + pos * BUF_SZ;
++	d[1] = 0;
++	r->hp = (r->hp + r->esz) % (r->n * r->esz);
++	reg_wr(r->r2, r->hp);
++}
++
++/*
++ * Target->host pipe: destination ring (source direction, HAL_CE_DST: timer 1024,
++ * low threshold n - 3), max length 2048, status ring (HAL_CE_DST_STATUS: batch 1,
++ * timer 0x1000), then all but one buffer posted (a full ring would look empty).
++ */
++static void
++pipe_rx_init(struct pipe *p, unsigned id, uint32_t buf)
++{
++	p->ce = id;
++	p->buf = buf;
++	p->head = 0;
++	ring_setup(&p->src, true, RID_DST(id), CE_DST_REG(id), CE_DST_REG(id) + CE_R2, RX_N, 2,
++	    1024u << 16, (RX_N - 3) * 2);
++	uint32_t v = reg_rd(CE_DST_REG(id) + CE_DST_CTRL);
++	reg_wr(CE_DST_REG(id) + CE_DST_CTRL, (v & ~0xffffu) | BUF_SZ);
++	ring_setup(&p->sts, false, RID_STS(id), CE_DST_REG(id) + CE_STS_R0, CE_DST_REG(id) + CE_STS_R2, RX_N, 4,
++	    (0x1000u >> 3) << 16 | 4, 0);
++	for (unsigned i = 0; i + 1 < RX_N; ++i) {
++		rx_post(p);
++	}
++}
++
++/* Queue one buffer on a host->target pipe; transfer id = HTC endpoint (ath11k_ce_send). */
++static int
++ce_send(struct pipe *p, const void *data, uint32_t len, uint32_t xfer_id)
++{
++	struct ring *r = &p->src;
++	uint32_t size = r->n * r->esz, next = (r->hp + r->esz) % size;
++	if (len > BUF_SZ) {
++		return EMSGSIZE;
++	}
++	if (next == *mem32(M_RDP + r->id * 4)) {
++		return EBUSY;
++	}
++	uint32_t pos = r->hp / r->esz, pa = ce.pa + p->buf + pos * BUF_SZ;
++	memcpy((void *)(ce.mem + p->buf + pos * BUF_SZ), data, len);
++	volatile uint32_t *d = mem32(r->off + r->hp * 4);
++	d[0] = pa;
++	d[1] = len << 16;               /* bits 7:0 address 39:32, 9 byte swap, 31:16 length */
++	d[2] = xfer_id & 0xffffu;
++	d[3] = 0;
++	r->hp = next;
++	reg_wr(r->r2, r->hp);
++	return 0;
++}
++
++/* Handle every completed receive on a pipe, then repost its buffer. */
++static void
++rx_poll(struct pipe *p, void (*fn)(unsigned ce, const uint8_t *buf, uint32_t len))
++{
++	struct ring *s = &p->sts;
++	uint32_t hp = *mem32(M_RDP + s->id * 4), size = s->n * s->esz;
++	bool any = false;
++	while (s->tp != hp && hp < size) {
++		volatile uint32_t *d = mem32(s->off + s->tp * 4);
++		uint32_t len = d[0] >> 16;
++		d[0] &= 0xffffu;
++		fn(p->ce, (const uint8_t *)(ce.mem + p->buf + p->head * BUF_SZ), MIN(len, BUF_SZ));
++		p->head = (p->head + 1) % RX_N;
++		rx_post(p);
++		s->tp = (s->tp + s->esz) % size;
++		any = true;
++	}
++	if (any) {
++		reg_wr(s->r2 + 4, s->tp);
++	}
++}
++
++/*
++ * Before WLAN_CFG / WLAN_MODE (ath11k_ce_init_pipes runs before
++ * ath11k_qmi_firmware_start): keep the chip awake (MHI wake doorbell,
++ * channel doorbell 127, as mhi_device_get_sync), set up the rings.
++ */
++int
++sweet_wlce_init(void)
++{
++	vm_offset_t mem;
++	uint32_t pa, size, er0;
++	sweet_mhi_info(&ce.bar0, &mem, &pa, &er0);
++	if (ce.bar0 == 0 || sweet_wlfw_ce_mem(&ce.mem, &ce.pa, &size) != 0 || size < 0x60000u) {
++		return ENXIO;
++	}
++	uint32_t wake = rd(0x18) + 127u * 8u;          /* CHDBOFF */
++	wr(wake + 4, 0);
++	wr(wake, 1);
++	ce.nring = 0;
++	bzero((void *)(ce.mem + M_RDP), 0x1000);
++	pipe_tx_init(&ce.tx0, 0, 16, M_TXBUF);
++	pipe_tx_init(&ce.tx3, 3, 32, M_TXBUF + 32 * BUF_SZ);
++	pipe_rx_init(&ce.rx1, 1, M_RXBUF);
++	pipe_rx_init(&ce.rx2, 2, M_RXBUF + RX_N * BUF_SZ);
++	pipe_rx_init(&ce.rx5, 5, M_RXBUF + 2 * RX_N * BUF_SZ);
++	uint32_t b0 = reg_rd(CE_SRC_REG(0)), b2 = reg_rd(CE_DST_REG(2)), hp2 = reg_rd(CE_DST_REG(2) + CE_R2);
++	printf("SWEET WLCE: rings at %#x: CE0 base %#x (want %#x), CE2 dst base %#x hp %u, %u rings\n",
++	    ce.pa, b0, ce.tx0.src.pa, b2, hp2, ce.nring);
++	return b0 == ce.tx0.src.pa && b2 == ce.rx2.src.pa ? 0 : EIO;
++}
++
++/*
++ * HTC (ath11k htc.c): 8-byte header {u8 endpoint, u8 flags, u16 payload length;
++ * u8 trailer length, u8 sequence, u16 0}, then the payload; flag 2 = a credit
++ * trailer at the end of the payload. Endpoint 0 carries control messages
++ * (u16 message id first): READY 1, CONNECT_SERVICE 2, its response 3,
++ * SETUP_COMPLETE_EX 5. WMI messages start with u32 id (bits 23:0).
++ */
++#define HTC_READY               1u
++#define HTC_CONNECT             2u
++#define HTC_CONNECT_RESP        3u
++#define HTC_SETUP_COMPLETE_EX   5u
++#define HTC_SVC_WMI_CONTROL     0x100u
++
++static struct {
++	bool ready, conn;
++	uint16_t credits, credit_size, max_msg;
++	uint8_t max_ep, status, wmi_ep, seq0;
++	unsigned wmi_events, logged;
++	uint32_t first_wmi;
++} htc;
++
++static uint32_t
++get32(const uint8_t *p)
++{
++	uint32_t v;
++	memcpy(&v, p, 4);
++	return v;
++}
++
++static void
++htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
++{
++	if (len < 8) {
++		printf("SWEET HTC: CE%u: %u-byte packet\n", pipe, len);
++		return;
++	}
++	uint32_t info = get32(b), ctrl = get32(b + 4);
++	unsigned eid = info & 0xffu, flags = (info >> 8) & 0xffu, plen = info >> 16;
++	if (8 + plen > len) {
++		printf("SWEET HTC: CE%u ep %u: payload %u > %u\n", pipe, eid, plen, len - 8);
++		return;
++	}
++	if ((flags & 2u) && (ctrl & 0xffu) <= plen) {
++		plen -= ctrl & 0xffu;
++	}
++	const uint8_t *m = b + 8;
++	if (eid == 0 && plen >= 4) {
++		uint32_t w0 = get32(m), w1 = plen >= 8 ? get32(m + 4) : 0;
++		switch (w0 & 0xffffu) {
++		case HTC_READY:
++			htc.credits = (uint16_t)(w0 >> 16);
++			htc.credit_size = (uint16_t)w1;
++			htc.max_ep = (uint8_t)(w1 >> 16);
++			htc.ready = true;
++			printf("SWEET HTC: READY on CE%u: %u credits of %u bytes, %u endpoints\n",
++			    pipe, htc.credits, htc.credit_size, htc.max_ep);
++			break;
++		case HTC_CONNECT_RESP:
++			htc.status = (uint8_t)w1;
++			htc.wmi_ep = (uint8_t)(w1 >> 8);
++			htc.max_msg = (uint16_t)(w1 >> 16);
++			htc.conn = true;
++			printf("SWEET HTC: service %#x connect status %u endpoint %u max message %u\n",
++			    w0 >> 16, htc.status, htc.wmi_ep, htc.max_msg);
++			break;
++		default:
++			printf("SWEET HTC: control message %u, %u bytes\n", w0 & 0xffffu, plen);
++			break;
++		}
++	} else if (htc.conn && eid == htc.wmi_ep) {
++		uint32_t id = plen >= 4 ? get32(m) & 0xffffffu : 0;
++		if (htc.wmi_events++ == 0) {
++			htc.first_wmi = id;
++		}
++		if (htc.logged++ < 16) {
++			printf("SWEET HTC: WMI event %#x, %u bytes (CE%u)\n", id, plen, pipe);
++		}
++	} else {
++		printf("SWEET HTC: CE%u endpoint %u, %u bytes, flags %#x\n", pipe, eid, plen, flags);
++	}
++}
++
++static void
++htc_poll(void)
++{
++	rx_poll(&ce.rx1, htc_rx);
++	rx_poll(&ce.rx2, htc_rx);
++	rx_poll(&ce.rx5, htc_rx);
++}
++
++/* A control message to endpoint 0 over CE0 (no credit flow on the control endpoint). */
++static int
++htc_send_ctrl(const uint32_t *msg, uint32_t len)
++{
++	uint8_t b[8 + 16];
++	uint32_t info = len << 16, ctrl = (uint32_t)htc.seq0++ << 8;
++	if (len > 16) {
++		return EMSGSIZE;
++	}
++	memcpy(b, &info, 4);
++	memcpy(b + 4, &ctrl, 4);
++	memcpy(b + 8, msg, len);
++	return ce_send(&ce.tx0, b, 8 + len, 0);
++}
++
++/* After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, first WMI events. 0 or step 1-5. */
++int
++sweet_wlce_htc(void)
++{
++	bzero(&htc, sizeof(htc));
++	for (unsigned t = 0; t < 3000 && !htc.ready; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	if (!htc.ready) {
++		printf("SWEET HTC: no READY in 3 s (CE1 hp %u, CE2 hp %u)\n",
++		    *mem32(M_RDP + ce.rx1.sts.id * 4), *mem32(M_RDP + ce.rx2.sts.id * 4));
++		return 1;
++	}
++	/* ath11k_htc_connect_service: WMI control, credit flow on, all credits (qca6390: 1) */
++	uint32_t conn[2] = { HTC_CONNECT | HTC_SVC_WMI_CONTROL << 16, 1u << 8 };
++	if (htc_send_ctrl(conn, sizeof(conn)) != 0) {
++		return 2;
++	}
++	for (unsigned t = 0; t < 3000 && !htc.conn; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	printf("SWEET HTC: CE0 sent hp %u tp %u\n", ce.tx0.src.hp, *mem32(M_RDP + ce.tx0.src.id * 4));
++	if (!htc.conn || htc.status != 0) {
++		return 3;
++	}
++	uint32_t setup[3] = { HTC_SETUP_COMPLETE_EX, 0, 0 };
++	if (htc_send_ctrl(setup, sizeof(setup)) != 0) {
++		return 4;
++	}
++	for (unsigned t = 0; t < 3000; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	printf("SWEET HTC: %u WMI events, first %#x\n", htc.wmi_events, htc.first_wmi);
++	return htc.wmi_events ? 0 : 5;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 341f87e..93d8060 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -21,6 +21,8 @@ extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern int sweet_ipcr_send(const void *qmi, uint32_t len);
+ extern void sweet_ipcr_service(unsigned ms);
+ extern int sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size);
++extern int sweet_wlce_init(void);
++extern int sweet_wlce_htc(void);
+ void sweet_wlfw_rx(const uint8_t *qmi, uint32_t len);
+ int sweet_wlfw_run(void);
+ 
+@@ -308,6 +310,22 @@ wf_wait_ind(uint16_t id, const char *name, unsigned ms)
+  */
+ #define WLFW_MEM_PA     0xd1000000u
+ #define WLFW_MEM_SIZE   0x01000000u
++#define WLFW_CE_OFF     0x00800000u     /* upper 8 MiB: copy-engine rings and buffers (sweet_wlce.c) */
++
++/* The copy-engine area of the window (after wf_place_segments mapped it). */
++int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
++
++int
++sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size)
++{
++	if (wf.mem == 0) {
++		return ENXIO;
++	}
++	*va = wf.mem + WLFW_CE_OFF;
++	*pa = wf.mem_pa + WLFW_CE_OFF;
++	*size = WLFW_MEM_SIZE - WLFW_CE_OFF;
++	return 0;
++}
+ 
+ static int
+ wf_place_segments(void)
+@@ -329,7 +347,7 @@ wf_place_segments(void)
+ 			a <<= 1;
+ 		}
+ 		off = (off + a - 1) & ~(a - 1);
+-		if (wf.seg[i].size > WLFW_MEM_SIZE - off) {
++		if (wf.seg[i].size > WLFW_CE_OFF - off) {
+ 			printf("SWEET WLFW: segment %u (%#x) does not fit at +%#x\n", i, wf.seg[i].size, off);
+ 			return ENOMEM;
+ 		}
+@@ -473,10 +491,10 @@ wf_m3(void)
+ {
+ 	static struct qmsg m;
+ 	uint32_t off = (wf.mem_used + 0xfffffu) & ~0xfffffu, size = 0;
+-	if (wf.mem == 0 || off >= WLFW_MEM_SIZE) {
++	if (wf.mem == 0 || off >= WLFW_CE_OFF) {
+ 		return ENOMEM;
+ 	}
+-	int r = sweet_wlan_read_file("m3.bin", (void *)(wf.mem + off), WLFW_MEM_SIZE - off, &size);
++	int r = sweet_wlan_read_file("m3.bin", (void *)(wf.mem + off), WLFW_CE_OFF - off, &size);
+ 	if (r != 0) {
+ 		return r;
+ 	}
+@@ -595,7 +613,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-12) that failed. */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-18) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -631,12 +649,19 @@ sweet_wlfw_run(void)
+ 		return 9;
+ 	}
+ 	printf("SWEET WLFW: firmware ready\n");
++	if (sweet_wlce_init() != 0) {   /* copy-engine rings before WLAN_CFG, as ath11k */
++		return 13;
++	}
+ 	int r = wf_firmware_start();
+ 	if (r != 0) {
+ 		return r;
+ 	}
+ 	printf("SWEET WLFW: mission mode requested\n");
+-	sweet_ipcr_service(1000);       /* log whatever follows */
++	r = sweet_wlce_htc();
++	if (r != 0) {
++		return 13 + r;          /* 14 no HTC READY ... 18 no WMI event */
++	}
++	sweet_ipcr_service(500);        /* log whatever QMI says after that */
+ 	return 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

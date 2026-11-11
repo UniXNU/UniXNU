@@ -1,0 +1,351 @@
+diff --git a/config/MASTER b/config/MASTER
+--- a/config/MASTER
++++ b/config/MASTER
+@@ -113,6 +113,7 @@
+ #	4.4 filesystems
+ #
+ options		MOCKFS		# Boot from an executable	# <mockfs>
++options		SWEET_HFS	# Built-in Apple OSS HFS (SWEET)	# <sweet_hfs>
+ options		FIFO		# fifo support			# <fifo>
+ options		FDESC		# fdesc_fs support		# <fdesc>
+ options		DEVFS		# devfs support			# <devfs>
+diff --git a/config/MASTER.arm64.sweet b/config/MASTER.arm64.sweet
+--- a/config/MASTER.arm64.sweet
++++ b/config/MASTER.arm64.sweet
+@@ -31,7 +31,7 @@
+ #  BSD_RELEASE =    [ BSD_BASE ]
+ #  BSD_DEV =        [ BSD_BASE config_vnguard ]
+ #  BSD_DEBUG =      [ BSD_BASE config_vnguard ]
+-#  FILESYS_BASE =   [ devfs fdesc fifo mockfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
++#  FILESYS_BASE =   [ devfs fdesc fifo mockfs sweet_hfs fs_compression config_protect config_mnt_rootsnap config_rosv_startup config_mount_vm config_mount_prebootrecovery config_basesystemroot config_fse quota namedstreams config_imgsrc_access config_triggers config_ext_resolver config_searchfs config_volfs config_appledouble nullfs config_mnt_suid config_firmlinks config_dataless_files config_union_mounts config_file_leases ]
+ #  FILESYS_RELEASE= [ FILESYS_BASE ]
+ #  FILESYS_DEV =    [ FILESYS_BASE config_iocount_trace ]
+ #  FILESYS_DEBUG =  [ FILESYS_BASE config_iocount_trace ]
+diff --git a/bsd/conf/files b/bsd/conf/files
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -382,6 +382,49 @@
+ bsd/kern/kern_crossarch.c		standard
+ bsd/kern/kern_cs.c			standard
+ bsd/kern/sweet_amfi.c			standard
++
++# Apple OSS hfs-627.100.6, staged by xnu/patches/0026-stage-hfs.sh
++bsd/sweet_hfs/core/BTree.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeAllocate.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeMiscOps.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeNodeOps.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeNodeReserve.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeScanner.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeTreeOps.c		optional sweet_hfs
++bsd/sweet_hfs/core/BTreeWrapper.c		optional sweet_hfs
++bsd/sweet_hfs/core/CatalogUtilities.c		optional sweet_hfs
++bsd/sweet_hfs/core/FileExtentMapping.c		optional sweet_hfs
++bsd/sweet_hfs/core/FileIDsServices.c		optional sweet_hfs
++bsd/sweet_hfs/core/MacOSStubs.c		optional sweet_hfs
++bsd/sweet_hfs/core/UnicodeWrappers.c		optional sweet_hfs
++bsd/sweet_hfs/core/VolumeAllocation.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_attrlist.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_btreeio.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_catalog.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_chash.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_cnode.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_cprotect.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_endian.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_extents.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_fsinfo.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_hotfiles.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_journal.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_link.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_lookup.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_notification.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_quota.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_readwrite.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_resize.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_search.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_vfsops.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_vfsutils.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_vnops.c		optional sweet_hfs
++bsd/sweet_hfs/core/hfs_xattr.c		optional sweet_hfs
++bsd/sweet_hfs/core/rangelist.c		optional sweet_hfs
++bsd/sweet_hfs/hfs_encodings/hfs_encodinghint.c		optional sweet_hfs
++bsd/sweet_hfs/hfs_encodings/hfs_encodings.c		optional sweet_hfs
++bsd/sweet_hfs/sweet_hfs_iokit.c		optional sweet_hfs
++
+ bsd/kern/kern_csr.c			optional config_csr
+ bsd/kern/kern_debug.c			standard
+ bsd/kern/kern_symfile.c			standard
+diff --git a/bsd/conf/Makefile.template b/bsd/conf/Makefile.template
+--- a/bsd/conf/Makefile.template
++++ b/bsd/conf/Makefile.template
+@@ -51,6 +51,15 @@
+ sweet_pthread_init.o_INCFLAGS = $(SWEET_PTHREAD_INC)
+ sweet_pthread_support.o_INCFLAGS = $(SWEET_PTHREAD_INC)
+ sweet_pthread_synch.o_INCFLAGS = $(SWEET_PTHREAD_INC)
++
++# Apple OSS HFS built in (bsd/sweet_hfs): compiled like the kext, see sweet_hfs_compat.h.
++# The compat header must come after the kernel's -D options, hence _CFLAGS_ADD.
++SWEET_HFS_ROOT = $(SRCROOT)/bsd/sweet_hfs
++SWEET_HFS_OBJS = BTree.o BTreeAllocate.o BTreeMiscOps.o BTreeNodeOps.o BTreeNodeReserve.o BTreeScanner.o BTreeTreeOps.o BTreeWrapper.o CatalogUtilities.o FileExtentMapping.o FileIDsServices.o MacOSStubs.o UnicodeWrappers.o VolumeAllocation.o hfs_attrlist.o hfs_btreeio.o hfs_catalog.o hfs_chash.o hfs_cnode.o hfs_cprotect.o hfs_endian.o hfs_extents.o hfs_fsinfo.o hfs_hotfiles.o hfs_journal.o hfs_link.o hfs_lookup.o hfs_notification.o hfs_quota.o hfs_readwrite.o hfs_resize.o hfs_search.o hfs_vfsops.o hfs_vfsutils.o hfs_vnops.o hfs_xattr.o rangelist.o hfs_encodinghint.o hfs_encodings.o sweet_hfs_iokit.o
++$(foreach o,$(SWEET_HFS_OBJS),$(eval $(o)_CFLAGS_ADD += -include $(SWEET_HFS_ROOT)/sweet_hfs_compat.h -I$(SWEET_HFS_ROOT) -I$(SWEET_HFS_ROOT)/core))
++# HFSEncodings is a separate kext on Apple with its own allocation counter.
++hfs_encodings.o_CFLAGS_ADD += -Dhfs_allocated=hfs_encodings_allocated
++hfs_encodinghint.o_CFLAGS_ADD += -Dhfs_allocated=hfs_encodings_allocated
+ endif
+ 
+ #
+diff --git a/bsd/kern/bsd_init.c b/bsd/kern/bsd_init.c
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -691,6 +691,12 @@
+ 	bsd_init_kprintf("calling vfsinit\n");
+ 	vfsinit();
+ 
++#if SWEET_HFS
++	/* HFS is built in on SWEET: register it like its kext would, before mounting root. */
++	extern void sweet_hfs_register(void);
++	sweet_hfs_register();
++#endif
++
+ #if CONFIG_PROC_UUID_POLICY
+ 	/* Initial proc_uuid_policy subsystem */
+ 	bsd_init_kprintf("calling proc_uuid_policy_init()\n");
+diff --git a/bsd/miscfs/mockfs/mockfs_vfsops.c b/bsd/miscfs/mockfs/mockfs_vfsops.c
+--- a/bsd/miscfs/mockfs/mockfs_vfsops.c
++++ b/bsd/miscfs/mockfs/mockfs_vfsops.c
+@@ -38,6 +38,9 @@
+ #include <sys/malloc.h>
+ #include <sys/mount_internal.h>
+ #include <sys/vnode_internal.h>
++#include <sys/buf.h>
++#include <mach-o/loader.h>
++#include <mach-o/fat.h>
+ 
+ static LCK_GRP_DECLARE(mockfs_mtx_grp, "mockfs-mutex");
+ 
+@@ -61,6 +64,43 @@
+  *
+  * Returns 0 on success, or an error.
+  */
++/*
++ * mockfs_check_macho:
++ *   mockfs serves the whole root device as one executable, so it would claim
++ *   any device. Accept only a Mach-O (thin or fat) image, so that a device
++ *   holding a real filesystem is left to the next filesystem in mountroot.
++ */
++static int
++mockfs_check_macho(vnode_t rvp)
++{
++	buf_t bp = NULL;
++	uint32_t magic = 0;
++	int error;
++
++	error = (int)buf_meta_bread(rvp, 0, DEV_BSIZE, NOCRED, &bp);
++	if (!error) {
++		memcpy(&magic, (const void *)buf_dataptr(bp), sizeof(magic));
++		switch (magic) {
++		case MH_MAGIC:
++		case MH_CIGAM:
++		case MH_MAGIC_64:
++		case MH_CIGAM_64:
++		case FAT_MAGIC:
++		case FAT_CIGAM:
++			break;
++		default:
++			error = EINVAL;
++			break;
++		}
++	}
++	if (bp) {
++		/* Do not leave a DEV_BSIZE block cached for the next filesystem's reads. */
++		buf_markinvalid(bp);
++		buf_brelse(bp);
++	}
++	return error;
++}
++
+ int
+ mockfs_mountroot(mount_t mp, vnode_t rvp, __unused vfs_context_t ctx)
+ {
+@@ -72,9 +112,12 @@
+ 	dk_memdev_info_t memdev_info;
+ 
+ 	/*
+-	 * TODO: Validate that the device at least LOOKS like a mach-o (has a sane header); this would prevent us
+-	 *   from causing EBADMACHO panics further along the boot path.
++	 * Validate that the device at least LOOKS like a mach-o (has a sane header); this prevents us from
++	 *   claiming devices that hold real filesystems, and from causing EBADMACHO panics further along the boot path.
+ 	 */
++	if ((rvalue = mockfs_check_macho(rvp))) {
++		return rvalue;
++	}
+ 
+ 	/*
+ 	 * There are no M_MOCKFS* definitions at the moment, just use M_TEMP.
+diff --git a/bsd/sweet_hfs/sweet_hfs_compat.h b/bsd/sweet_hfs/sweet_hfs_compat.h
+new file mode 100644
+--- /dev/null
++++ b/bsd/sweet_hfs/sweet_hfs_compat.h
+@@ -0,0 +1,26 @@
++/*
++ * Compile Apple's HFS kext sources inside SWEET the way the kext is built:
++ * with the kext (KPI) view of the kernel headers, and with only HFS's own
++ * kext-config.h deciding features. The kernel's -DCONFIG_* options are not
++ * visible to a kext build, so the ones HFS tests are cleared first. SWEET
++ * has no AppleKeyStore, so content protection stays off.
++ */
++#ifndef SWEET_HFS_COMPAT_H
++#define SWEET_HFS_COMPAT_H
++#undef BSD_KERNEL_PRIVATE
++#undef XNU_KERNEL_PRIVATE
++#undef CONFIG_PROTECT
++#undef CONFIG_SEARCHFS
++#undef CONFIG_HFS_DIRLINK
++#undef CONFIG_SECLUDED_RENAME
++#undef CONFIG_MACF
++#undef CONFIG_HFS_RBTREE
++#undef QUOTA
++#undef NAMEDSTREAMS
++#undef FIFO
++#undef HFS_COMPRESSION
++#include "core/kext-config.h"
++
++/* Built in, not a loadable kext (see sweet_hfs_iokit.c). */
++#define OSKextGetCurrentLoadTag sweet_hfs_current_load_tag
++#endif
+diff --git a/bsd/sweet_hfs/sweet_hfs_iokit.c b/bsd/sweet_hfs/sweet_hfs_iokit.c
+new file mode 100644
+--- /dev/null
++++ b/bsd/sweet_hfs/sweet_hfs_iokit.c
+@@ -0,0 +1,132 @@
++/*
++ * Built-in replacement for HFS's IOKit glue (core/hfs_iokit.cpp and
++ * hfs_encodings/hfs_encodings_kext.cpp) on SWEET.
++ *
++ * On Apple platforms HFS is a kext: IOKit matches its IOService on
++ * IOResources and start() registers the filesystem. SWEET links HFS into
++ * the kernel instead, so bsd_init calls sweet_hfs_register() right after
++ * vfsinit(), before the root filesystem is mounted. The registration is the
++ * kext's start() sequence.
++ *
++ * The helpers that query IOKit storage keep their answers for SWEET, which
++ * has no IOStorageFamily and therefore no IOMedia objects: nothing is
++ * ejectable and no media carries an external journal. The platform expert
++ * publishes no serial number. Content protection (AppleKeyStore) is not
++ * built (sweet_hfs_compat.h).
++ */
++#include <libkern/OSKextLib.h>
++#include <pexpert/pexpert.h>
++#include <sys/sysctl.h>
++
++#include "hfs.h"
++#include "hfs_cnode.h"
++#include "hfs_dbg.h"
++#include "hfs_iokit.h"
++#include "hfs_encodings/hfs_encodings_internal.h"
++
++#ifndef panic_on_assert
++bool panic_on_assert;
++#endif
++
++#if DEBUG
++bool hfs_corruption_panics = true;
++#endif
++
++extern struct vnodeopv_desc hfs_vnodeop_opv_desc;
++extern struct vnodeopv_desc hfs_specop_opv_desc;
++extern struct vnodeopv_desc hfs_fifoop_opv_desc;
++extern struct vfsops hfs_vfsops;
++
++void sweet_hfs_register(void);
++
++static vfstable_t sweet_hfs_vfs_handle;
++
++void
++sweet_hfs_register(void)
++{
++#ifndef panic_on_assert
++	panic_on_assert = PE_i_can_has_kernel_configuration() & kPEICanHasAssertions;
++#endif
++
++#if DEBUG
++	PE_parse_boot_argn("hfs_corruption_panics", &hfs_corruption_panics, sizeof(hfs_corruption_panics));
++#endif
++
++	/* The HFSEncodings kext's start(): its converters must exist before any mount. */
++	hfs_converterinit();
++
++	struct vnodeopv_desc *op_descs[] = {
++		&hfs_vnodeop_opv_desc,
++		&hfs_specop_opv_desc,
++#if FIFO
++		&hfs_fifoop_opv_desc,
++#endif
++	};
++
++#ifndef VFS_TBLVNOP_SECLUDE_RENAME
++#define VFS_TBLVNOP_SECLUDE_RENAME 0
++#endif
++
++	struct vfs_fsentry vfe = {
++		.vfe_vfsops = &hfs_vfsops,
++		.vfe_vopcnt = sizeof(op_descs) / sizeof(op_descs[0]),
++		.vfe_opvdescs = op_descs,
++		.vfe_fsname = "hfs",
++		.vfe_flags = (VFS_TBLNOTYPENUM | VFS_TBLLOCALVOL | VFS_TBLREADDIR_EXTENDED
++		    | VFS_TBL64BITREADY | VFS_TBLVNOP_PAGEOUTV2 | VFS_TBLVNOP_PAGEINV2
++		    | VFS_TBLTHREADSAFE | VFS_TBLCANMOUNTROOT | VFS_TBLVNOP_SECLUDE_RENAME
++		    | VFS_TBLNATIVEXATTR)
++	};
++
++	int ret = vfs_fsadd(&vfe, &sweet_hfs_vfs_handle);
++	if (ret) {
++		panic("SWEET HFS: vfs_fsadd failed: %d", ret);
++	}
++
++	hfs_init_zones();
++	hfs_sysctl_register();
++
++	uint32_t num_cpus;
++	size_t sz = sizeof(num_cpus);
++
++	if (sysctlbyname("hw.physicalcpu", &num_cpus, &sz, NULL, 0) == 0) {
++		if ((2 * num_cpus) > MAX_CACHED_ORIGINS_DEFAULT) {
++			_hfs_max_origins = 2 * num_cpus;
++			_hfs_max_file_origins = 2 * num_cpus;
++		} else if ((2 * num_cpus) > MAX_CACHED_FILE_ORIGINS_DEFAULT) {
++			_hfs_max_file_origins = 2 * num_cpus;
++		}
++	}
++
++	printf("SWEET HFS: hfs-627.100.6 registered\n");
++}
++
++/* Built in, not a loadable kext: there is no kext to retain per mount. */
++OSKextLoadTag
++sweet_hfs_current_load_tag(void)
++{
++	return kOSKextInvalidLoadTag;
++}
++
++int
++hfs_is_ejectable(__unused const char *cdev_name)
++{
++	return 0;
++}
++
++void
++hfs_iterate_media_with_content(__unused const char *content_uuid_cstring,
++    __unused int (*func)(const char *bsd_name, const char *uuid_str, void *arg),
++    __unused void *arg)
++{
++}
++
++kern_return_t
++hfs_get_platform_serial_number(char *serial_number_str, uint32_t len)
++{
++	if (len < 1) {
++		return 0;
++	}
++	serial_number_str[0] = '\0';
++	return KERN_NOT_SUPPORTED;
++}

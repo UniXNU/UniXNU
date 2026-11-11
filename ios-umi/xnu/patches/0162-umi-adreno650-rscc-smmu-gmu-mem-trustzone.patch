@@ -1,0 +1,295 @@
+From 602b32f6a9eb040031a310e3a5657387dbdf05b4 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 20:58:27 +0100
+Subject: [PATCH] umi-0162-adreno-rscc-smmu-tz
+
+---
+ bsd/dev/sweet_adreno.c | 263 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 263 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 15d186b..bd1c11c 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -20,6 +20,15 @@
+  *              register bus, crystal and SMMU-vote clocks in the GPU's clock controller
+  *   6  reads   the first words of the GMU (reset, firmware result, the always-on counter, which
+  *              should be seen counting)
++ *   7  reads   the GMU's own RPMh channel (RSCC, dt "rscc" 0x3de0000)
++ *   8  reads   the GPU's SMMU (dt kgsl-smmu@3da0000, an MMU-500): ID registers, stream table,
++ *              the kinds of its contexts
++ *   9  reads   that SMMU's translation context 0 (the GPU's)
++ *  10  writes  two words into the GMU's data memory and reads them back (the way its firmware is
++ *              loaded), then puts back what was there
++ *  11  asks    TrustZone questions that pass no memory: whether it takes calls from this kernel,
++ *              whether it has the image-authentication calls, which images it "supports" (13 is
++ *              the GPU's zap shader)
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -537,8 +546,262 @@ sa_step_gmu_read(void)
+ 	return true;
+ }
+ 
++/* ---- step 7: the GMU's channel to RPMh ---- */
++
++/* dt: qcom,kgsl-3d0 "rscc" 0x3de0000 (0x10000); offsets in words, a6xx_gmu.xml domain A6XX_RSCC. */
++static struct sa_block sa_rscc = { "rscc", 0x03de0000, 0x10000 };
++#define RSCC_RSC_STATUS0_DRV0   (4 * 0x004)
++#define RSCC_PDC_SLAVE_ID_DRV0  (4 * 0x00b)
++#define RSCC_SEQ_BUSY_DRV0      (4 * 0x101)
++#define RSCC_SEQ_MEM_0_DRV0     (4 * 0x180)
++#define RSCC_TCS0_DRV0_STATUS   (4 * 0x346)
++#define GMU_RSCC_CONTROL_ACK    GMU_WORD(0x9308)
++
++static bool
++sa_cx_ready(void)
++{
++	if (!sa_gpucc_answers() || !sa_cx_is_on() ||
++	    (sa_rd(sa_gpucc.base + GPUCC_CX_GMU_CBCR) & (CBCR_ENABLE | CBCR_OFF)) != CBCR_ENABLE ||
++	    (sa_rd(sa_gpucc.base + GPUCC_AHB_CBCR) & CBCR_OFF)) {
++		printf("SWEET GPU: %u: needs CX on and the GMU and register bus clocks running: steps 4 and 5\n", sa_step);
++		return false;
++	}
++	return true;
++}
++
++static bool
++sa_step_rscc(void)
++{
++	if (!sa_cx_ready()) {
++		return false;
++	}
++	sa_announce("read the GMU's RPMh channel (0x3de0000)");
++	sa_get(&sa_rscc, "rsc_status0_drv0", RSCC_RSC_STATUS0_DRV0);
++	sa_get(&sa_rscc, "pdc_slave_id_drv0", RSCC_PDC_SLAVE_ID_DRV0);
++	sa_get(&sa_rscc, "seq_busy_drv0", RSCC_SEQ_BUSY_DRV0);
++	sa_get(&sa_rscc, "seq_mem_0_drv0", RSCC_SEQ_MEM_0_DRV0);
++	sa_get(&sa_rscc, "tcs0_drv0_status", RSCC_TCS0_DRV0_STATUS);
++	sa_get(&sa_gmu, "rscc_control_ack", GMU_RSCC_CONTROL_ACK);
++	return true;
++}
++
++/* ---- steps 8 and 9: the SMMU ---- */
++
++/*
++ * dt: kgsl-smmu@3da0000 (qcom,qsmmu-v500 = Arm MMU-500), "base" 0x10000. Global registers (some
++ * answered by the hypervisor) in the first page, the kinds of the contexts (CBAR) in the second,
++ * the contexts' own pages after the global half; the ID registers say where (arm-smmu.h). The
++ * pages are mapped one by one, so nothing outside what the SMMU itself describes is touched.
++ */
++#define SMMU_PHYS               0x03da0000u
++static struct sa_block sa_smmu = { "smmu", SMMU_PHYS, 0x1000 };
++static struct sa_block sa_smmu_cbar = { "smmu cbar", 0, 0x1000 };
++static struct sa_block sa_smmu_cb0 = { "smmu cb0", 0, 0x1000 };
++#define SMMU_SCR0               0x000
++#define SMMU_IDR0               0x020           /* [7:0] stream match registers */
++#define SMMU_IDR1               0x024           /* bit 31: 64K pages, [30:28] log2(pages)-1, [7:0] contexts */
++#define SMMU_IDR2               0x028
++#define SMMU_IDR7               0x03c
++#define SMMU_SGFSR              0x048
++#define SMMU_SMR(n)             (0x800 + 4 * (n))
++#define SMMU_S2CR(n)            (0xc00 + 4 * (n))
++#define SMMU_CBAR(n)            (4 * (n))
++#define SMMU_CB_SCTLR           0x00
++#define SMMU_CB_TTBR0           0x20
++#define SMMU_CB_TCR             0x30
++#define SMMU_CB_FSR             0x58
++
++static uint32_t sa_smmu_page, sa_smmu_pages, sa_smmu_contexts, sa_smmu_matches;
++
++static bool
++sa_smmu_layout(void)
++{
++	uint32_t idr0 = sa_get(&sa_smmu, "idr0", SMMU_IDR0), idr1 = sa_get(&sa_smmu, "idr1", SMMU_IDR1);
++
++	sa_smmu_page = idr1 >> 31 ? 0x10000 : 0x1000;
++	sa_smmu_pages = 2u << (idr1 >> 28 & 7);
++	sa_smmu_contexts = idr1 & 0xff;
++	sa_smmu_matches = idr0 & 0xff;
++	printf("SWEET GPU: %u: SMMU: %u stream match registers, %u contexts, %u pages of %#x before the contexts' own "
++	    "(%#x of registers; dt base region 0x10000)\n", sa_step, sa_smmu_matches, sa_smmu_contexts, sa_smmu_pages,
++	    sa_smmu_page, 2 * sa_smmu_pages * sa_smmu_page);
++	if (sa_smmu_page != 0x1000 || sa_smmu_pages > 64 || sa_smmu_contexts == 0 || sa_smmu_contexts > 128) {
++		printf("SWEET GPU: %u: not a layout to read further\n", sa_step);
++		return false;
++	}
++	sa_smmu_cbar.phys = SMMU_PHYS + sa_smmu_page;
++	sa_smmu_cb0.phys = SMMU_PHYS + sa_smmu_pages * sa_smmu_page;
++	return true;
++}
++
++static bool
++sa_step_smmu(void)
++{
++	if (!sa_cx_ready()) {
++		return false;
++	}
++	sa_announce("read the ID registers of the GPU's SMMU (0x3da0000): global registers, which the hypervisor answers for");
++	if (!sa_smmu_layout()) {
++		return false;
++	}
++	sa_get(&sa_smmu, "idr2", SMMU_IDR2);
++	sa_get(&sa_smmu, "idr7", SMMU_IDR7);
++	sa_get(&sa_smmu, "scr0", SMMU_SCR0);
++	sa_get(&sa_smmu, "sgfsr", SMMU_SGFSR);
++	sa_announce("read the SMMU's stream table and the kinds of its contexts, as the boot loader and hypervisor left them");
++	for (uint32_t i = 0; i < sa_smmu_matches && i < 16; i++) {
++		sa_get(&sa_smmu, "smr", SMMU_SMR(i));
++		sa_get(&sa_smmu, "s2cr", SMMU_S2CR(i));
++	}
++	for (uint32_t i = 0; i < sa_smmu_contexts && i < 16; i++) {
++		sa_get(&sa_smmu_cbar, "cbar", SMMU_CBAR(i));
++	}
++	return true;
++}
++
++/* Only context 0, the GPU's (the others include TrustZone's for secure content). */
++static bool
++sa_step_smmu_context(void)
++{
++	if (!sa_cx_ready()) {
++		return false;
++	}
++	if (sa_smmu_cb0.phys == 0 && !sa_smmu_layout()) {
++		return false;
++	}
++	sa_announce("read translation context 0 of the SMMU: registers of the hardware itself");
++	sa_get(&sa_smmu_cb0, "sctlr", SMMU_CB_SCTLR);
++	sa_get(&sa_smmu_cb0, "ttbr0 low", SMMU_CB_TTBR0);
++	sa_get(&sa_smmu_cb0, "ttbr0 high", SMMU_CB_TTBR0 + 4);
++	sa_get(&sa_smmu_cb0, "tcr", SMMU_CB_TCR);
++	sa_get(&sa_smmu_cb0, "fsr", SMMU_CB_FSR);
++	return true;
++}
++
++/* ---- step 10: the GMU's memory ---- */
++
++#define GMU_DTCM                GMU_WORD(0x1c00)        /* the processor's data memory (code: 0x0c00) */
++
++static bool
++sa_step_gmu_memory(void)
++{
++	static const uint32_t pattern[2] = { 0x600d0001, 0x0a110002 };
++	uint32_t was[2], back[2];
++
++	if (!sa_cx_ready()) {
++		return false;
++	}
++	sa_announce("with the GMU's processor in reset, write two words into its data memory (0x3d71000), read them back");
++	if (sa_get(&sa_gmu, "cm3_fw_init_result", GMU_CM3_FW_INIT_RESULT) == 0xbabeface) {
++		printf("SWEET GPU: %u: firmware is running in the GMU: leaving its memory alone\n", sa_step);
++		return false;
++	}
++	if (sa_get(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET) != 1) {
++		sa_put(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET, 1);
++	}
++	for (int i = 0; i < 2; i++) {
++		was[i] = sa_get(&sa_gmu, "dtcm", GMU_DTCM + 4 * i);
++	}
++	for (int i = 0; i < 2; i++) {
++		sa_put(&sa_gmu, "dtcm", GMU_DTCM + 4 * i, pattern[i]);
++	}
++	for (int i = 0; i < 2; i++) {
++		back[i] = sa_get(&sa_gmu, "dtcm", GMU_DTCM + 4 * i);
++	}
++	(void)was;      /* put back by the undo log at the end of the run */
++	bool ok = back[0] == pattern[0] && back[1] == pattern[1];
++	printf("SWEET GPU: %u: the GMU's memory %s\n", sa_step, ok ? "TAKES WHAT IS WRITTEN: its firmware can be loaded"
++	    : "does not hold what was written");
++	return ok;
++}
++
++/* ---- step 11: TrustZone ---- */
++
++/*
++ * The 3D core comes out of reset in secure mode and only TrustZone lets it out, after
++ * authenticating the vendor's signed zap shader (image 13; Linux a6xx_gpu.c, qcom_scm.c). These
++ * questions pass no memory. SMC calling convention: Linux qcom_scm-smc.c.
++ */
++#define SCM_FAST                (1ull << 31)
++#define SCM_64                  (1ull << 30)
++#define SCM_SIP                 (2ull << 24)
++#define SCM_CALL(service, command) ((uint64_t)(service) << 8 | (command))
++#define SCM_IS_CALL_AVAILABLE   SCM_CALL(6, 1)
++#define SCM_PAS_INIT_IMAGE      SCM_CALL(2, 1)
++#define SCM_PAS_AUTH_AND_RESET  SCM_CALL(2, 5)
++#define SCM_PAS_IS_SUPPORTED    SCM_CALL(2, 7)
++#define SCM_ONE_VALUE           1
++#define SCM_INTERRUPTED         1
++#define PAS_GPU                 13
++
++static int32_t
++sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t *answer)
++{
++	uint64_t session = 0;
++
++	printf("SWEET GPU: %u: about to ask TrustZone %s: smc %#llx, argument %#llx\n", sa_step, what, function, first);
++	if (sa_step == sa_steps && sa_pause_ms) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++	for (int i = 0; i < 100; i++) {
++		register uint64_t x0 __asm__("x0") = i == 0 ? function : SCM_INTERRUPTED;
++		register uint64_t x1 __asm__("x1") = arguments;
++		register uint64_t x2 __asm__("x2") = first;
++		register uint64_t x3 __asm__("x3") = 0;
++		register uint64_t x4 __asm__("x4") = 0;
++		register uint64_t x5 __asm__("x5") = 0;
++		register uint64_t x6 __asm__("x6") = session;
++		register uint64_t x7 __asm__("x7") = 0;
++
++		__asm__ volatile ("smc #0" : "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5), "+r" (x6),
++		    "+r" (x7) : : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
++		session = x6;
++		if (x0 != SCM_INTERRUPTED) {
++			printf("SWEET GPU: %u: TrustZone returns %d, answer %#llx\n", sa_step, (int32_t)x0, x1);
++			*answer = x1;
++			return (int32_t)x0;
++		}
++	}
++	printf("SWEET GPU: %u: TrustZone keeps saying the call was interrupted\n", sa_step);
++	return -1;
++}
++
++static bool
++sa_step_trustzone(void)
++{
++	static const struct {
++		const char *name;
++		uint32_t id;
++	} images[] = { { "audio", 1 }, { "modem", 4 }, { "video", 9 }, { "GPU zap shader", PAS_GPU } };
++	uint64_t answer = 0, how = SCM_FAST | SCM_64 | SCM_SIP;
++	uint32_t yes[4] = { 0 };
++
++	sa_announce("ask TrustZone whether the call \"is this call available\" is available (what Linux asks first)");
++	if (sa_scm("whether it can be asked", how | SCM_IS_CALL_AVAILABLE, SCM_ONE_VALUE, SCM_SIP | SCM_IS_CALL_AVAILABLE,
++	    &answer) != 0 || answer != 1) {
++		how = SCM_FAST | SCM_SIP;
++		if (sa_scm("the same, the 32-bit way", how | SCM_IS_CALL_AVAILABLE, SCM_ONE_VALUE,
++		    SCM_SIP | SCM_IS_CALL_AVAILABLE, &answer) != 0 || answer != 1) {
++			printf("SWEET GPU: %u: TrustZone does not answer the way it answers Linux\n", sa_step);
++			return false;
++		}
++	}
++	sa_announce("ask TrustZone whether it has the image-authentication calls");
++	sa_scm("for pas_init_image", how | SCM_IS_CALL_AVAILABLE, SCM_ONE_VALUE, SCM_SIP | SCM_PAS_INIT_IMAGE, &answer);
++	sa_scm("for pas_auth_and_reset", how | SCM_IS_CALL_AVAILABLE, SCM_ONE_VALUE, SCM_SIP | SCM_PAS_AUTH_AND_RESET, &answer);
++	sa_announce("ask TrustZone which images it \"supports\" (audio, modem, video for comparison, and the GPU's)");
++	for (unsigned i = 0; i < 4; i++) {
++		answer = 0;
++		yes[i] = sa_scm(images[i].name, (how & ~SCM_FAST) | SCM_PAS_IS_SUPPORTED, SCM_ONE_VALUE, images[i].id,
++		    &answer) == 0 && answer;
++	}
++	printf("SWEET GPU: %u: \"supported\": audio %u, modem %u, video %u, GPU %u\n", sa_step, yes[0], yes[1], yes[2], yes[3]);
++	return true;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
++	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone,
+ };
+ 
+ static void
+-- 
+2.54.0 (Apple Git-157)
+

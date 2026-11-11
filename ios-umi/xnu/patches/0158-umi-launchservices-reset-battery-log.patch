@@ -1,0 +1,212 @@
+From 866b316ead6a759ccff907282fa4fdce11dbc4f9 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 16:43:19 +0100
+Subject: [PATCH] umi-0158-lsreset-battery-log
+
+---
+ bsd/kern/kern_exec.c              |   2 +
+ bsd/vfs/vfs_syscalls.c            | 116 ++++++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetBattery.cpp |  12 +++-
+ 3 files changed, 128 insertions(+), 2 deletions(-)
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 00b1672..c49f15e 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1166,6 +1166,7 @@ SYSCTL_PROC(_vm, OID_AUTO, shared_region_control,
+  * /private/var is on the root volume here (no data volume), writable with rootrw=1.
+  */
+ extern int sweet_rename_path(const char *from, const char *to);   /* vfs_syscalls.c */
++extern void sweet_ls_reset(void);                                  /* vfs_syscalls.c, sweetlsreset=1 */
+ 
+ static void
+ sweet_mg_reset(void)
+@@ -7442,6 +7443,7 @@ process_signature(proc_t p, struct image_params *imgp)
+ 			printf("exec %s\n", p->p_name);
+ 			if (proc_getpid(p) == 1) {
+ 				sweet_mg_reset();
++				sweet_ls_reset();
+ 			}
+ #else
+ 			printf("Allowing spawn of iOS binary %s since it has "
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+index bf1c467..842ea3b 100644
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -8936,6 +8936,122 @@ sweet_rename_path(const char *from, const char *to)
+ 	return renameat_internal(vfs_context_kernel(), AT_FDCWD, CAST_USER_ADDR_T(from),
+ 	           AT_FDCWD, CAST_USER_ADDR_T(to), UIO_SYSSPACE, 0);
+ }
++
++/*
++ * Names in directory path (not "." / ".."), each at most len - 1 bytes, into out[max][len];
++ * only directories when dirs_only. Returns the count, or -errno.
++ */
++static int
++sweet_dir_names(const char *path, bool dirs_only, char *out, int max, int len)
++{
++	vfs_context_t ctx = vfs_context_kernel();
++	vnode_t vp = NULLVP;
++	const size_t bufsize = 8192;
++	char uio_buf[UIO_SIZEOF(1)];
++	int count = 0, eof = 0, error;
++
++	if ((error = vnode_lookup(path, 0, &vp, ctx)) != 0) {
++		return -error;
++	}
++	if (!vnode_isdir(vp)) {
++		vnode_put(vp);
++		return -ENOTDIR;
++	}
++	char *buf = kalloc_data(bufsize, Z_WAITOK);
++	off_t off = 0;
++	while (buf != NULL && !eof && count < max) {
++		int n = 0;
++		uio_t auio = uio_createwithbuffer(1, off, UIO_SYSSPACE, UIO_READ, &uio_buf[0], sizeof(uio_buf));
++		uio_addiov(auio, CAST_USER_ADDR_T(buf), bufsize);
++		if ((error = VNOP_READDIR(vp, auio, 0, &eof, &n, ctx)) != 0) {
++			break;
++		}
++		size_t got = bufsize - (size_t)uio_resid(auio);
++		if (got == 0) {
++			break;
++		}
++		off = uio_offset(auio);
++		for (size_t at = 0; at + offsetof(struct dirent, d_name) < got && count < max;) {
++			struct dirent *dep = (struct dirent *)(void *)(buf + at);
++			if (dep->d_reclen == 0) {
++				break;
++			}
++			at += dep->d_reclen;
++			if (dep->d_ino == 0 || dep->d_namlen == 0 || dep->d_namlen >= len ||
++			    (dirs_only && dep->d_type != DT_DIR) ||
++			    strcmp(dep->d_name, ".") == 0 || strcmp(dep->d_name, "..") == 0) {
++				continue;
++			}
++			strlcpy(out + count * len, dep->d_name, len);
++			count++;
++		}
++	}
++	if (buf != NULL) {
++		kfree_data(buf, bufsize);
++	}
++	vnode_put(vp);
++	return error ? -error : count;
++}
++
++/*
++ * Boot-arg sweetlsreset=1 (kern_exec.c, when launchd starts): rename LaunchServices' database
++ * (InternalDaemon/<container>/Library/Caches/com.apple.LaunchServices*) to *.sweet-old, so lsd
++ * seeds a new one. A database seeded while app extensions failed validation is kept forever
++ * (flagged seeded + complete) and lists none of them: the wallpaper picker stays empty.
++ */
++void
++sweet_ls_reset(void)
++{
++	static const char base[] = "/private/var/mobile/Containers/Data/InternalDaemon";
++	static const char prefix[] = "com.apple.LaunchServices";
++	const int ndirs = 64, dlen = 64, nfiles = 16, flen = 128, plen = 512;
++	uint32_t on = 0;
++
++	if (!PE_parse_boot_argn("sweetlsreset", &on, sizeof(on)) || on == 0) {
++		return;
++	}
++	char *dirs = kalloc_data(ndirs * dlen, Z_WAITOK);
++	char *files = kalloc_data(nfiles * flen, Z_WAITOK);
++	char *from = kalloc_data(plen, Z_WAITOK);
++	char *to = kalloc_data(plen, Z_WAITOK);
++	if (dirs == NULL || files == NULL || from == NULL || to == NULL) {
++		goto out;
++	}
++	int nd = sweet_dir_names(base, true, dirs, ndirs, dlen);
++	printf("SWEET LS: %s: %d containers\n", base, nd);
++	int moved = 0;
++	for (int d = 0; d < nd; d++) {
++		snprintf(from, plen, "%s/%s/Library/Caches", base, dirs + d * dlen);
++		int nf = sweet_dir_names(from, false, files, nfiles, flen);
++		for (int f = 0; f < nf; f++) {
++			const char *name = files + f * flen;
++			size_t nl = strlen(name);
++			if (strncmp(name, prefix, sizeof(prefix) - 1) != 0 ||
++			    (nl > 10 && strcmp(name + nl - 10, ".sweet-old") == 0)) {
++				continue;
++			}
++			snprintf(from, plen, "%s/%s/Library/Caches/%s", base, dirs + d * dlen, name);
++			snprintf(to, plen, "%s.sweet-old", from);
++			int r = sweet_rename_path(from, to);
++			printf("SWEET LS: %s/.../%s moved aside: %d\n", dirs + d * dlen, name, r);
++			moved += r == 0;
++		}
++	}
++	printf("SWEET LS: %d LaunchServices files moved aside\n", moved);
++out:
++	if (dirs != NULL) {
++		kfree_data(dirs, ndirs * dlen);
++	}
++	if (files != NULL) {
++		kfree_data(files, nfiles * flen);
++	}
++	if (from != NULL) {
++		kfree_data(from, plen);
++	}
++	if (to != NULL) {
++		kfree_data(to, plen);
++	}
++}
+ #endif
+ 
+ /* ARGSUSED */
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+index 285821a..49ead8e 100644
+--- a/iokit/Kernel/arm/SweetBattery.cpp
++++ b/iokit/Kernel/arm/SweetBattery.cpp
+@@ -33,6 +33,7 @@ private:
+ 	IOTimerEventSource *fTimer;
+ 	bool fTimerAdded, fRunning, fReal, fUmi, fUmiLogged;
+ 	int fLastMode;
++	unsigned fLastState;
+ 	void putNumber(const char *key, UInt32 value);
+ 	void putBool(const char *key, bool value);
+ 	void publish(unsigned percent, unsigned mv, int ma, bool external,
+@@ -78,6 +79,7 @@ SweetBattery::init(OSDictionary *dictionary)
+ 		}
+ 	}
+ 	fLastMode = -1;
++	fLastState = ~0u;
+ 	return true;
+ }
+ 
+@@ -158,6 +160,12 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
+ 	}
+ 	updateStatus(); /* Flush PS properties and send 0xe0024100 on change. */
+ 	int mode = measured ? 1 : 0;
++	unsigned state = percent | (external ? 0x100u : 0) | (charging ? 0x200u : 0) | (full ? 0x400u : 0);
++	if (mode == fLastMode && state != fLastState) {
++		IOLog("SWEET BATTERY: now %u%% %umV %dmA external=%d charging=%d full=%d\n", percent, mv, ma,
++		    external, charging, full);
++	}
++	fLastState = state;
+ 	if (mode != fLastMode) {
+ 		IOLog("SWEET BATTERY: %s, %u%% %umV external=%d charging=%d\n",
+ 		    measured ? (fUmi ? "PM8150B fuel gauge SOC" : "PM6150 / estimated SOC") : "static fallback",
+@@ -310,7 +318,7 @@ SweetBattery::timerFired(OSObject *owner, IOTimerEventSource *sender)
+ 	SweetBattery *self = OSDynamicCast(SweetBattery, owner);
+ 	if (self && self->fRunning) {
+ 		self->poll();
+-		sender->setTimeoutMS(30000);
++		sender->setTimeoutMS(self->fUmi ? 10000 : 30000);
+ 	}
+ }
+ 
+@@ -332,7 +340,7 @@ SweetBattery::start(IOService *provider)
+ 		if (fLoop && fTimer && fLoop->addEventSource(fTimer) == kIOReturnSuccess) {
+ 			fTimerAdded = true;
+ 			fRunning = true;
+-			fTimer->setTimeoutMS(30000);
++			fTimer->setTimeoutMS(fUmi ? 10000 : 30000);
+ 		} else {
+ 			fReal = false;
+ 			poll();
+-- 
+2.54.0 (Apple Git-157)
+

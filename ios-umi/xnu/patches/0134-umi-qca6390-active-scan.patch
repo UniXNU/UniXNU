@@ -1,0 +1,159 @@
+From 7c835ac44dcf07323a0fee0d4b742f32873a9614 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 16:22:36 +0200
+Subject: [PATCH] umi-0134
+
+---
+ bsd/dev/sweet_wlce.c | 60 ++++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 52 insertions(+), 8 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 9772409..847cff4 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -12,6 +12,7 @@
+ #include <sys/systm.h>
+ #include <sys/errno.h>
+ #include <kern/clock.h>
++#include <pexpert/pexpert.h>
+ 
+ extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
+ extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
+@@ -322,6 +323,7 @@ static struct {
+ #define WMI_EV_SCAN             0x3001u
+ #define WMI_EV_MGMT_RX          0x7001u
+ #define WMI_EV_SET_HW_MODE_RESP 0x4010u
++#define WMI_EV_REG_CHAN_LIST    0x3a001u        /* REG_CHAN_LIST_CC */
+ 
+ static void wmi_rx(uint32_t id, const uint8_t *m, uint32_t len);
+ static void wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len);
+@@ -492,6 +494,16 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+ 		}
+ 	} else if (id == WMI_EV_MGMT_RX && (v = wmi_tlv_find(m, len, 0x2c, &l)) != NULL && l >= 68) {
+ 		wmi_mgmt_rx(v, m, len);
++	} else if (id == WMI_EV_REG_CHAN_LIST && (v = wmi_tlv_find(m, len, 0x261, &l)) != NULL && l >= 24) {
++		/* wmi_reg_chan_list_cc_event: status, phy_id, alpha2, num_phy, country_id, domain_code */
++		char cc[4] = { (char)v[8], (char)v[9], (char)v[10], 0 };
++		for (unsigned i = 0; i < 3; ++i) {
++			if (cc[i] && (cc[i] < 0x20 || cc[i] > 0x7e)) {
++				cc[i] = '?';
++			}
++		}
++		printf("SWEET WMI: regulatory phy %u: country \"%s\" id %u domain %#x\n",
++		    get32(v + 4), cc, get32(v + 16), get32(v + 20));
+ 	} else if (id == WMI_EV_SET_HW_MODE_RESP) {
+ 		printf("SWEET WMI: SET_HW_MODE response, %u bytes\n", len);
+ 	}
+@@ -505,6 +517,8 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+  * rssi_ctl[4], flags, rssi, tsf_delta, tsf l/u, pdev_id, chan_freq at +64),
+  * then TLV 0x11 (bytes) with the 802.11 frame. Beacons (0x80) and probe
+  * responses (0x50): BSSID at +16, SSID IE after the 24-byte header and 12 fixed bytes.
++ * This firmware leaves chan_freq 0 (0133); ath11k also derives 2.4 GHz frequencies
++ * from the channel number at +0.
+  */
+ static void
+ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+@@ -534,8 +548,14 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 			}
+ 		}
+ 	}
+-	printf("SWEET WMI: BSS %02x:%02x:%02x:%02x:%02x:%02x %u MHz snr %u \"%s\"\n", bssid[0], bssid[1], bssid[2],
+-	    bssid[3], bssid[4], bssid[5], get32(hdr + 64), get32(hdr + 4), ssid);
++	uint32_t ch = get32(hdr), mhz = get32(hdr + 64);
++	if (mhz == 0 && ch >= 1 && ch <= 13) {
++		mhz = 2407 + 5 * ch;
++	} else if (mhz == 0 && ch == 14) {
++		mhz = 2484;
++	}
++	printf("SWEET WMI: BSS %02x:%02x:%02x:%02x:%02x:%02x ch %u %u MHz snr %u %s \"%s\"\n", bssid[0], bssid[1],
++	    bssid[2], bssid[3], bssid[4], bssid[5], ch, mhz, get32(hdr + 4), f[0] == 0x50 ? "probe-resp" : "beacon", ssid);
+ }
+ 
+ /* One WMI command on CE3: HTC header (credit flow: flag 1 = need credit update), u32 id, body. */
+@@ -653,7 +673,11 @@ wmi_scan(void)
+ {
+ 	static uint32_t b[64 + 7 * SCAN_NCHAN];
+ 	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
++	unsigned active = 1;            /* sweetwlanscan=0: passive (0133), 1: probe requests with a wildcard SSID */
+ 	int r;
++	/* Probe request IEs (mac80211 adds these; the firmware adds the SSID): supported + extended rates */
++	static const uint8_t ies[] = { 1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 50, 4, 0x30, 0x48, 0x60, 0x6c };
++	(void)PE_parse_boot_argn("sweetwlanscan", &active, sizeof(active));
+ 
+ 	/* ath11k_wmi_set_hw_mode(WMI_HOST_HW_MODE_DBS): pdev_id 0, mode 1, no band_to_mac */
+ 	bzero(b, sizeof(b));
+@@ -667,7 +691,7 @@ wmi_scan(void)
+ 		delay(1000);
+ 	}
+ 
+-	/* ath11k_reg_update_chan_list for 2.4 GHz channels 1-13: 11G, HE allowed, passive, 20 dBm */
++	/* ath11k_reg_update_chan_list for 2.4 GHz channels 1-13 (all usable actively in the EU): 11G, HE allowed, 20 dBm */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x4f, 12);
+ 	b[1] = SCAN_NCHAN;              /* num_scan_chans; flags 0, pdev_id 0 */
+@@ -677,7 +701,7 @@ wmi_scan(void)
+ 		c[0] = WMI_TLV(0x50, 24);
+ 		c[1] = mhz;
+ 		c[2] = mhz;
+-		c[4] = 1u | 1u << 7 | 1u << 17;         /* MODE_11G, PASSIVE, ALLOW_HE */
++		c[4] = 1u | (active ? 0 : 1u << 7) | 1u << 17;  /* MODE_11G, PASSIVE for a passive scan, ALLOW_HE */
+ 		c[5] = 40u << 8 | 40u << 16;            /* max power, max reg power (0.5 dBm units) */
+ 		c[6] = 40u << 8;                        /* max tx power */
+ 	}
+@@ -705,7 +729,10 @@ wmi_scan(void)
+ 		return 11;
+ 	}
+ 
+-	/* ath11k_wmi_start_scan_init + hw_scan without SSIDs = passive; 40-word fixed part */
++	/*
++	 * ath11k_wmi_start_scan_init + hw_scan; 40-word fixed part. Active: one
++	 * wildcard SSID (as mac80211 asks), the rate IEs; passive: no SSIDs.
++	 */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x4d, 39 * 4);
+ 	b[1] = 0xa000;                  /* scan_id (ATH11K_SCAN_ID) */
+@@ -719,9 +746,11 @@ wmi_scan(void)
+ 	b[9] = 500;                     /* max rest */
+ 	b[13] = 20000;                  /* max scan time */
+ 	b[14] = 5;                      /* probe delay */
+-	b[15] = 0x1 | 0x10;             /* PASSIVE | CHAN_STAT_EVENT */
++	b[15] = (active ? 0 : 0x1) | 0x10;      /* PASSIVE, CHAN_STAT_EVENT */
+ 	b[17] = SCAN_NCHAN;
+ 	b[18] = 1;                      /* num_bssid */
++	b[19] = active ? 1 : 0;         /* num_ssids */
++	b[20] = active ? sizeof(ies) : 0;       /* ie_len */
+ 	b[37] = 40;                     /* dwell active 6G */
+ 	b[38] = 30;                     /* dwell passive 6G */
+ 	uint32_t *p = b + 40;
+@@ -729,11 +758,26 @@ wmi_scan(void)
+ 	for (unsigned i = 0; i < SCAN_NCHAN; ++i) {
+ 		*p++ = 2412 + 5 * i;
+ 	}
+-	*p++ = WMI_TLV(0x13, 0);        /* no SSIDs */
++	if (active) {
++		*p++ = WMI_TLV(0x13, 36);       /* wmi_ssid: u32 length 0 (wildcard), 32 bytes */
++		bzero(p, 36);
++		p += 9;
++	} else {
++		*p++ = WMI_TLV(0x13, 0);
++	}
+ 	*p++ = WMI_TLV(0x13, 8);        /* one BSSID: broadcast */
+ 	*p++ = 0xffffffffu;
+ 	*p++ = 0x0000ffffu;
+-	*p++ = WMI_TLV(0x11, 0);        /* no extra IEs */
++	if (active) {
++		*p++ = WMI_TLV(0x11, (sizeof(ies) + 3) & ~3u);
++		bzero(p, (sizeof(ies) + 3) & ~3u);
++		memcpy(p, ies, sizeof(ies));
++		p += (sizeof(ies) + 3) / 4;
++	} else {
++		*p++ = WMI_TLV(0x11, 0);
++	}
++	printf("SWEET WMI: %s scan of 2412-2472 MHz from %02x:%02x:%02x:%02x:%02x:%02x\n", active ? "active" : "passive",
++	    wlce_mac[0], wlce_mac[1], wlce_mac[2], wlce_mac[3], wlce_mac[4], wlce_mac[5]);
+ 	r = wmi_cmd(0x3001u, b, (uint32_t)((uint8_t *)p - (uint8_t *)b), "START_SCAN");
+ 	if (r != 0) {
+ 		return 12;
+-- 
+2.54.0 (Apple Git-157)
+

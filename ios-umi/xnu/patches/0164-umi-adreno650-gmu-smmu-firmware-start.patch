@@ -1,0 +1,547 @@
+From e3c9a53cec3af32c57735fe251823e025eb48678 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 22:00:39 +0100
+Subject: [PATCH] umi-0164-adreno-gmu-start
+
+---
+ bsd/dev/sweet_adreno.c | 514 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 514 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index c589116..1058a04 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -33,6 +33,15 @@
+  *              + hash segment, from the ADT node /sweet-gpufw, tools/mkadt.py) goes into a page of
+  *              ours that TrustZone is pointed at (pas_init_image, image 13); released again at
+  *              the end of the run (pas_shutdown)
++ *  13  writes  page tables (4K granule, 39 bits) for the memory a650_gmu.bin asks for, plus the
++ *              GMU's log (0x60001000) and message page (0x60005000, as Linux places them for the
++ *              A650), and SMMU context 1 with the GMU's stream 5 through it (dt: iommus 5 / 0x400)
++ *  14  writes  a650_gmu.bin: its code and data memory through the GMU's registers, the other
++ *              blocks into the memory of step 13; the GMU's memory is read back
++ *  15  writes  the GMU's configuration (Linux a6xx_gmu_fw_start / power_config for the A650:
++ *              chip ID 0x06050200, fence range 0xa / 0xa0), wakes its RPMh channel
++ *              (a6xx_rpmh_start), and lets its processor out of reset: the firmware runs when
++ *              fw_init_result says so
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -902,9 +911,514 @@ sa_zap_release(void)
+ 	}
+ }
+ 
++/* ---- memory the GMU reaches through the SMMU ---- */
++
++/*
++ * Page tables of ours, in the format of a processor's MMU (Linux io-pgtable-arm.c): three
++ * levels of 4K pages, 39 bits of address. XNU's pages are 16K, so one of ours holds four tables.
++ */
++#define PTE_TABLE               3ull
++#define PTE_PAGE                3ull
++#define PTE_SHARED              (2ull << 8)
++#define PTE_ACCESSED            (1ull << 10)
++#define PTE_NOT_GLOBAL          (1ull << 11)
++#define PTE_ADDRESS             0x0000fffffffff000ull
++#define PTE_GMU                 (PTE_SHARED | PTE_ACCESSED | PTE_NOT_GLOBAL)    /* privileged, uncached (MAIR 0) */
++#define SA_TABLES_MAX           64
++
++static uint64_t
++sa_phys(vm_offset_t va)
++{
++	return ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)va)) | (va & PAGE_MASK);
++}
++
++static void
++sa_to_memory(vm_offset_t va, vm_size_t size)
++{
++	for (vm_size_t at = 0; at < size; at += PAGE_SIZE) {
++		flush_dcache64((addr64_t)sa_phys(va + at), (unsigned)MIN((vm_size_t)PAGE_SIZE, size - at), TRUE);
++	}
++}
++
++/* Wired, physically contiguous, zeroed kernel memory that is kept for good (the SMMU may point at it). */
++static vm_offset_t
++sa_alloc(vm_size_t size)
++{
++	vm_offset_t va = 0;
++	if (kmem_alloc_contig(kernel_map, &va, round_page(size), PAGE_MASK, 0, 0, KMA_DATA | KMA_ZERO | KMA_PERMANENT,
++	    VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		return 0;
++	}
++	return va;
++}
++
++struct sa_space {
++	const char *name;
++	uint32_t context;
++	uint32_t table_count;
++	uint64_t *table[SA_TABLES_MAX];
++	uint64_t table_phys[SA_TABLES_MAX];
++};
++
++static uint64_t *
++sa_space_table(struct sa_space *space)
++{
++	static vm_offset_t spare;
++	static unsigned spare_left;
++	if (space->table_count == SA_TABLES_MAX) {
++		return NULL;
++	}
++	if (spare_left == 0) {
++		if ((spare = sa_alloc(PAGE_SIZE)) == 0) {
++			return NULL;
++		}
++		spare_left = PAGE_SIZE / 4096;
++	}
++	uint64_t *table = (uint64_t *)(spare + PAGE_SIZE - 4096 * spare_left--);
++	space->table[space->table_count] = table;
++	space->table_phys[space->table_count++] = sa_phys((vm_offset_t)table);
++	return table;
++}
++
++static uint64_t *
++sa_space_next(struct sa_space *space, uint64_t *entry)
++{
++	if (*entry & 1) {
++		for (uint32_t i = 0; i < space->table_count; i++) {
++			if (space->table_phys[i] == (*entry & PTE_ADDRESS)) {
++				return space->table[i];
++			}
++		}
++		return NULL;
++	}
++	uint64_t *table = sa_space_table(space);
++	if (table != NULL) {
++		*entry = sa_phys((vm_offset_t)table) | PTE_TABLE;
++	}
++	return table;
++}
++
++static bool
++sa_space_map(struct sa_space *space, uint64_t address, uint64_t phys, uint64_t attributes)
++{
++	if (address >> 39 || (space->table_count == 0 && sa_space_table(space) == NULL)) {
++		return false;
++	}
++	uint64_t *level2 = sa_space_next(space, &space->table[0][address >> 30 & 0x1ff]);
++	uint64_t *level3 = level2 == NULL ? NULL : sa_space_next(space, &level2[address >> 21 & 0x1ff]);
++	if (level3 == NULL) {
++		return false;
++	}
++	level3[address >> 12 & 0x1ff] = phys | attributes | PTE_PAGE;
++	return true;
++}
++
++/* Memory of ours that the GMU sees at an address of its own. */
++struct sa_gpu_block {
++	uint64_t address;
++	uint32_t size;
++	vm_offset_t memory;
++};
++
++static bool
++sa_block_new(struct sa_space *space, struct sa_gpu_block *block, uint64_t address, uint32_t size, uint64_t attributes)
++{
++	block->address = address;
++	block->size = (size + 4095) & ~4095u;
++	if ((block->memory = sa_alloc(block->size)) == 0) {
++		return false;
++	}
++	for (uint32_t offset = 0; offset < block->size; offset += 4096) {
++		if (!sa_space_map(space, address + offset, sa_phys(block->memory + offset), attributes)) {
++			return false;
++		}
++	}
++	sa_to_memory(block->memory, round_page(block->size));
++	printf("SWEET GPU: %u: %s sees %#llx..%#llx in memory of ours (%#llx)\n", sa_step, space->name, address,
++	    address + block->size - 1, sa_phys(block->memory));
++	return true;
++}
++
++/* ---- the SMMU context for the GMU ---- */
++
++#define SMMU_CB_TCR2            0x10
++#define SMMU_CB_TTBR1           0x28
++#define SMMU_CB_MAIR0           0x38
++#define SMMU_CB_MAIR1           0x3c
++#define SMMU_CB_FAR             0x60
++#define SMMU_CB_FSYNR0          0x68
++#define SMMU_CB_TLBIASID        0x610
++#define SMMU_CB_TLBSYNC         0x7f0
++#define SMMU_CB_TLBSTATUS       0x7f4
++#define SMMU_CBA2R(n)           (0x800 + 4 * (n))       /* in the CBAR page */
++#define SMMU_CBA2R_64_BIT       1
++#define SMMU_CBAR_STAGE_1       (1u << 16 | 3u << 8 | 0xfu << 12)
++#define SMMU_SMR_VALID          (1u << 31)
++#define SMMU_STREAM_MASK        0x400
++#define SMMU_SCTLR_ON           (1u << 0 | 1u << 1 | 1u << 2 | 1u << 5 | 1u << 12)
++#define SMMU_TCR_39_BITS        (25u | 1u << 8 | 1u << 10 | 3u << 12 | 1u << 23)
++#define SMMU_TCR2               (1u | 1u << 4 | 7u << 15)
++#define SMMU_MAIR0              0xf404ff44      /* Linux's: 0 uncached, 1 cached, 2 device */
++#define SMMU_FSR_ALL            0xc00001fe
++
++static struct sa_block sa_smmu_gmu_cb = { "smmu cb1", 0, 0x1000 };
++
++static bool
++sa_space_faulted(struct sa_block *cb, const char *who)
++{
++	uint32_t status = sa_rd(cb->base + SMMU_CB_FSR);
++	if ((status & SMMU_FSR_ALL) == 0) {
++		return false;
++	}
++	printf("SWEET GPU: %u: THE SMMU REFUSED %s: status %#x, address %#llx, syndrome %#x\n", sa_step, who, status,
++	    (uint64_t)sa_rd(cb->base + SMMU_CB_FAR + 4) << 32 | sa_rd(cb->base + SMMU_CB_FAR),
++	    sa_rd(cb->base + SMMU_CB_FSYNR0));
++	return true;
++}
++
++static bool
++sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_t stream)
++{
++	uint64_t root = space->table_phys[0] | (uint64_t)space->context << 48;
++
++	for (uint32_t i = 0; i < space->table_count; i++) {
++		flush_dcache64((addr64_t)space->table_phys[i], 4096, TRUE);
++	}
++	sa_put(cb, "sctlr", SMMU_CB_SCTLR, 0);
++	sa_put(&sa_smmu_cbar, "cba2r", SMMU_CBA2R(space->context), SMMU_CBA2R_64_BIT);
++	sa_put(&sa_smmu_cbar, "cbar", SMMU_CBAR(space->context), SMMU_CBAR_STAGE_1);
++	sa_put(cb, "tcr2", SMMU_CB_TCR2, SMMU_TCR2);
++	sa_put(cb, "tcr", SMMU_CB_TCR, SMMU_TCR_39_BITS);
++	sa_put(cb, "ttbr0 low", SMMU_CB_TTBR0, (uint32_t)root);
++	sa_put(cb, "ttbr0 high", SMMU_CB_TTBR0 + 4, (uint32_t)(root >> 32));
++	sa_put(cb, "ttbr1 low", SMMU_CB_TTBR1, 0);
++	sa_put(cb, "ttbr1 high", SMMU_CB_TTBR1 + 4, 0);
++	sa_put(cb, "mair0", SMMU_CB_MAIR0, SMMU_MAIR0);
++	sa_put(cb, "mair1", SMMU_CB_MAIR1, 0);
++	sa_put(cb, "fsr", SMMU_CB_FSR, SMMU_FSR_ALL);
++	sa_put(cb, "tlbiasid", SMMU_CB_TLBIASID, space->context);
++	sa_put(cb, "tlbsync", SMMU_CB_TLBSYNC, 1);
++	if (!sa_wait_for(cb, SMMU_CB_TLBSTATUS, 1, 0, 100)) {
++		printf("SWEET GPU: %u: the SMMU does not finish its TLB sync (%#x)\n", sa_step, sa_rd(cb->base + SMMU_CB_TLBSTATUS));
++		return false;
++	}
++	sa_put(cb, "sctlr", SMMU_CB_SCTLR, SMMU_SCTLR_ON);
++	sa_put(&sa_smmu, "s2cr", SMMU_S2CR(match), space->context);
++	sa_put(&sa_smmu, "smr", SMMU_SMR(match), SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream);
++	/* the global registers are the hypervisor's to grant: see what it made of them */
++	if (sa_get(&sa_smmu, "smr", SMMU_SMR(match)) != (SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream) ||
++	    (sa_get(&sa_smmu, "s2cr", SMMU_S2CR(match)) & 0x300ff) != space->context ||
++	    (sa_get(&sa_smmu_cbar, "cbar", SMMU_CBAR(space->context)) & 0x30000) != (SMMU_CBAR_STAGE_1 & 0x30000) ||
++	    !(sa_get(cb, "sctlr", SMMU_CB_SCTLR) & 1) ||
++	    sa_get(cb, "ttbr0 low", SMMU_CB_TTBR0) != (uint32_t)root ||
++	    sa_get(cb, "ttbr0 high", SMMU_CB_TTBR0 + 4) != (uint32_t)(root >> 32)) {
++		printf("SWEET GPU: %u: the SMMU did not take what was written: stream %u is not going through context %u\n",
++		    sa_step, stream, space->context);
++		return false;
++	}
++	sa_get(cb, "tcr", SMMU_CB_TCR);
++	sa_get(cb, "fsr", SMMU_CB_FSR);
++	sa_get(&sa_smmu, "sgfsr", SMMU_SGFSR);
++	return true;
++}
++
++/* ---- step 13: memory for the GMU ---- */
++
++#define GMU_ITCM_ADDRESS        0x00000000u
++#define GMU_DTCM_ADDRESS        0x10004000u     /* the 650 family's (Linux a6xx_gmu_fw_load) */
++#define GMU_TCM_SIZE            0x4000u
++#define GMU_LOG_ADDRESS         0x60001000u     /* Linux for the A650: after the page at 0x60000000 */
++#define GMU_LOG_SIZE            0x4000u
++#define GMU_HFI_ADDRESS         0x60005000u
++#define GMU_HFI_SIZE            0x4000u
++#define GMU_STREAM              5               /* dt qcom,gmu kernel context bank: iommus <5 0x400> */
++#define GMU_MATCH               1               /* entry 0 is kept for the 3D core */
++#define GMU_CONTEXT             1
++
++struct sa_fw_block {
++	uint32_t address, size, type, value;
++};
++#define GMU_FW_NEEDS            1               /* blocks with no data: memory wanted, value = bytes */
++#define GMU_FW_NEEDS_KEPT       7
++
++static struct sa_space sa_gmu_space = { .name = "the GMU", .context = GMU_CONTEXT };
++static struct sa_gpu_block sa_gmu_blocks[12], sa_gmu_log, sa_gmu_hfi;
++static unsigned sa_gmu_block_count;
++static const uint8_t *sa_gmu_fw;
++static unsigned int sa_gmu_fw_size;
++static bool sa_gmu_space_on;
++
++static bool
++sa_in_tcm(uint32_t address)
++{
++	return address - GMU_ITCM_ADDRESS < GMU_TCM_SIZE || address - GMU_DTCM_ADDRESS < GMU_TCM_SIZE;
++}
++
++static bool
++sa_step_gmu_space(void)
++{
++	if (!sa_cx_ready()) {
++		return false;
++	}
++	sa_announce("find a650_gmu.bin in the ADT and make the memory it asks for");
++	if ((sa_gmu_fw = sa_firmware("a650_gmu.bin", &sa_gmu_fw_size)) == NULL) {
++		return false;
++	}
++	for (unsigned int at = 0; at + sizeof(struct sa_fw_block) <= sa_gmu_fw_size;) {
++		struct sa_fw_block block;
++		memcpy(&block, sa_gmu_fw + at, sizeof(block));
++		at += sizeof(block) + block.size;
++		if (at > sa_gmu_fw_size) {
++			printf("SWEET GPU: %u: the file ends inside a block\n", sa_step);
++			return false;
++		}
++		if (block.size != 0 || (block.type != GMU_FW_NEEDS && block.type != GMU_FW_NEEDS_KEPT) || sa_in_tcm(block.address)) {
++			continue;
++		}
++		if (sa_gmu_block_count == sizeof(sa_gmu_blocks) / sizeof(sa_gmu_blocks[0]) || (block.address & 4095) ||
++		    block.value > 0x100000 ||
++		    !sa_block_new(&sa_gmu_space, &sa_gmu_blocks[sa_gmu_block_count++], block.address, block.value, PTE_GMU)) {
++			printf("SWEET GPU: %u: cannot make %#x bytes at %#x for the firmware\n", sa_step, block.value, block.address);
++			return false;
++		}
++	}
++	if (!sa_block_new(&sa_gmu_space, &sa_gmu_log, GMU_LOG_ADDRESS, GMU_LOG_SIZE, PTE_GMU) ||
++	    !sa_block_new(&sa_gmu_space, &sa_gmu_hfi, GMU_HFI_ADDRESS, GMU_HFI_SIZE, PTE_GMU)) {
++		return false;
++	}
++	for (uint32_t i = 0; i < sa_gmu_space.table_count; i++) {
++		flush_dcache64((addr64_t)sa_gmu_space.table_phys[i], 4096, TRUE);
++	}
++
++	sa_announce("give SMMU context 1 these tables and send the GMU's stream 5 through it (the global registers through "
++	    "the hypervisor)");
++	if (sa_smmu_cb0.phys == 0 && !sa_smmu_layout()) {
++		return false;
++	}
++	sa_smmu_gmu_cb.phys = SMMU_PHYS + (sa_smmu_pages + GMU_CONTEXT) * sa_smmu_page;
++	sa_gmu_space_on = true;
++	return sa_space_on(&sa_gmu_space, &sa_smmu_gmu_cb, GMU_MATCH, GMU_STREAM);
++}
++
++/* ---- step 14: the GMU's firmware ---- */
++
++#define GMU_ITCM                GMU_WORD(0x0c00)
++#define GMU_DTCM_VERSIONS       GMU_WORD(0x1c00 + 0xff8)
++
++static bool
++sa_step_gmu_firmware(void)
++{
++	uint32_t wrong = 0;
++
++	if (!sa_cx_ready() || sa_gmu_fw == NULL || !sa_gmu_space_on) {
++		return false;
++	}
++	sa_announce("load a650_gmu.bin: code and data memory through the GMU's registers, the rest into the memory made");
++	if (sa_rd(sa_gmu.base + GMU_CM3_SYSRESET) != 1) {
++		sa_put(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET, 1);
++	}
++	for (int pass = 0; pass < 2; pass++) {
++		for (unsigned int at = 0; at + sizeof(struct sa_fw_block) <= sa_gmu_fw_size;) {
++			struct sa_fw_block block;
++			memcpy(&block, sa_gmu_fw + at, sizeof(block));
++			const uint8_t *data = sa_gmu_fw + at + sizeof(block);
++			at += sizeof(block) + block.size;
++			if (block.size == 0) {
++				continue;
++			}
++			if (sa_in_tcm(block.address) && sa_in_tcm(block.address + block.size - 1)) {
++				uint32_t regs = block.address < GMU_DTCM_ADDRESS ? GMU_ITCM + block.address - GMU_ITCM_ADDRESS
++				    : GMU_DTCM + block.address - GMU_DTCM_ADDRESS;
++				for (uint32_t off = 0; off + 4 <= block.size; off += 4) {
++					uint32_t word;
++					memcpy(&word, data + off, sizeof(word));
++					if (pass == 0) {
++						sa_wr(sa_gmu.base + regs + off, word);
++					} else if (sa_rd(sa_gmu.base + regs + off) != word) {
++						wrong++;
++					}
++				}
++				if (pass == 1) {
++					printf("SWEET GPU: %u: %#x bytes at the GMU's %#x, through its registers\n", sa_step, block.size,
++					    block.address);
++				}
++				continue;
++			}
++			for (unsigned i = 0; pass == 0 && i <= sa_gmu_block_count; i++) {
++				if (i == sa_gmu_block_count) {
++					printf("SWEET GPU: %u: the firmware has %#x bytes for %#x, where it asked for no memory\n", sa_step,
++					    block.size, block.address);
++					return false;
++				}
++				struct sa_gpu_block *b = &sa_gmu_blocks[i];
++				if (block.address >= b->address && block.address + block.size <= b->address + b->size) {
++					memcpy((void *)(b->memory + (block.address - b->address)), data, block.size);
++					sa_to_memory(b->memory, round_page(b->size));
++					printf("SWEET GPU: %u: %#x bytes at the GMU's %#x, in memory\n", sa_step, block.size, block.address);
++					break;
++				}
++			}
++		}
++	}
++	if (wrong) {
++		printf("SWEET GPU: %u: %u words of the GMU's own memory do not read back as written\n", sa_step, wrong);
++		return false;
++	}
++	printf("SWEET GPU: %u: THE GMU'S FIRMWARE IS LOADED; versions (dtcm 0xff8..): %#x %#x %#x %#x %#x\n", sa_step,
++	    sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS), sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS + 4),
++	    sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS + 8), sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS + 12),
++	    sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS + 16));
++	return true;
++}
++
++/* ---- step 15: start the GMU ---- */
++
++#define GMU_ICACHE_CONFIG       GMU_WORD(0x4c00)
++#define GMU_DCACHE_CONFIG       GMU_WORD(0x4c01)
++#define GMU_SYS_BUS_CONFIG      GMU_WORD(0x4c0f)
++#define GMU_PWR_COL_INTER_FRAME_CTRL GMU_WORD(0x50c0)
++#define GMU_RPMH_CTRL           GMU_WORD(0x50e8)
++#define GMU_RPMH_CTRL_ALL       0xf11           /* interface enable + LLC, DDR, MX, CX, GFX votes */
++#define GMU_CX_FAL_INTF         GMU_WORD(0x50f0)
++#define GMU_CX_FALNEXT_INTF     GMU_WORD(0x50f1)
++#define GMU_PWR_COL_CP_MSG      GMU_WORD(0x5100)
++#define GMU_PWR_COL_CP_RESP     GMU_WORD(0x5101)
++#define GMU_HFI_VERSION_INFO    GMU_WORD(0x5181)
++#define GMU_HFI_SFR_ADDR        GMU_WORD(0x5182)
++#define GMU_HFI_QTBL_INFO       GMU_WORD(0x5184)
++#define GMU_HFI_QTBL_ADDR       GMU_WORD(0x5185)
++#define GMU_GMU2HOST_INTR_CLR   GMU_WORD(0x5191)
++#define GMU_GMU2HOST_INTR_INFO  GMU_WORD(0x5192)
++#define GMU_GENERAL_7           GMU_WORD(0x51cc)
++#define GMU_AO_HOST_INTERRUPT_STATUS GMU_WORD(0x9305)
++#define GMU_RSCC_CONTROL_REQ    GMU_WORD(0x9307)
++#define GMU_AHB_FENCE_RANGE_0   GMU_WORD(0x9311)
++#define GMU_CM3_CFG             GMU_WORD(0x502d)
++#define GMU_CHIP_A650           0x06050200u     /* dt qcom,chipid 0x06050002, packed as Linux does for the GMU */
++#define GMU_FENCE_RANGE_A650    (1u << 31 | 0xau << 18 | 0xa0u)
++
++/* dt qcom,kgsl-3d0 at 0x3d00000: only the bus interface (GBIF, words 0x3c00..) is in the CX half. */
++static struct sa_block sa_gbif = { "gbif", 0x03d00000 + 4 * 0x3c00, 0x1000 };
++#define GBIF_HALT               (4 * 0x45)
++
++/* The table at the head of the HFI page and its three queues (vendor / Linux a6xx_hfi.c layout). */
++struct sa_hfi_queue {
++	uint32_t status, start, type, words, message_words, unused[5], read, write;
++};
++struct sa_hfi_table {
++	uint32_t version, words, first_queue, queue_words, queues, active_queues;
++	struct sa_hfi_queue queue[17];
++};
++#define HFI_QUEUES              3
++#define HFI_QUEUE_WORDS         1024
++#define HFI_QUEUE_AT(n)         (((uint32_t)sizeof(struct sa_hfi_table) + 15) / 16 * 16 + 4096 * (n))
++
++static volatile struct sa_hfi_table *sa_hfi;
++
++static void
++sa_gmu_post_mortem(void)
++{
++	sa_get(&sa_gmu, "cm3_fw_init_result", GMU_CM3_FW_INIT_RESULT);
++	sa_get(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET);
++	sa_get(&sa_gmu, "gmu2host_intr_info", GMU_GMU2HOST_INTR_INFO);
++	sa_get(&sa_gmu, "ao_host_interrupt_status", GMU_AO_HOST_INTERRUPT_STATUS);
++	sa_get(&sa_gmu, "hfi_ctrl_status", GMU_HFI_CTRL_STATUS);
++	sa_get(&sa_gmu, "rpmh_power_state", GMU_RPMH_POWER_STATE);
++	(void)sa_space_faulted(&sa_smmu_gmu_cb, "the GMU");
++	const uint32_t *log = (const uint32_t *)sa_gmu_log.memory;
++	if (log != NULL) {
++		sa_to_memory(sa_gmu_log.memory, round_page(sa_gmu_log.size));  /* the GMU wrote memory, not our cache */
++		printf("SWEET GPU: %u: GMU log head: %#x %#x %#x %#x %#x %#x %#x %#x\n", sa_step, log[0], log[1], log[2], log[3],
++		    log[4], log[5], log[6], log[7]);
++	}
++}
++
++static bool
++sa_step_gmu_start(void)
++{
++	static const uint8_t priority[HFI_QUEUES] = { 10, 10, 40 };
++	uint32_t result = 0;
++
++	if (!sa_cx_ready() || !sa_gmu_space_on) {
++		return false;
++	}
++	sa_hfi = (volatile struct sa_hfi_table *)ml_io_map_wcomb(sa_phys(sa_gmu_hfi.memory), GMU_HFI_SIZE);
++	if (sa_hfi == NULL) {
++		return false;
++	}
++	sa_hfi->words = sizeof(struct sa_hfi_table) / 4;
++	sa_hfi->first_queue = 6;
++	sa_hfi->queue_words = sizeof(struct sa_hfi_queue) / 4;
++	sa_hfi->queues = sa_hfi->active_queues = HFI_QUEUES;
++	for (unsigned i = 0; i < HFI_QUEUES; i++) {
++		sa_hfi->queue[i].start = GMU_HFI_ADDRESS + HFI_QUEUE_AT(i);
++		sa_hfi->queue[i].type = i | (uint32_t)priority[i] << 8;
++		sa_hfi->queue[i].words = HFI_QUEUE_WORDS;
++		sa_hfi->queue[i].status = 1;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++
++	sa_announce("configure the GMU (HFI table, log, chip ID, fence, caches, RPMh), wake its RPMh channel, then let its "
++	    "processor out of reset");
++	if (sa_get(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET) != 1) {
++		printf("SWEET GPU: %u: the GMU's processor is not held in reset\n", sa_step);
++		return false;
++	}
++	sa_put(&sa_gmu, "cx_falnext_intf", GMU_CX_FALNEXT_INTF, 1);
++	sa_put(&sa_gmu, "cx_fal_intf", GMU_CX_FAL_INTF, 1);
++	sa_put(&sa_gmu, "general_7", GMU_GENERAL_7, 1);
++	/* a6xx_rpmh_start */
++	sa_put(&sa_gmu, "rscc_control_req", GMU_RSCC_CONTROL_REQ, 2);
++	if (!sa_wait_for(&sa_gmu, GMU_RSCC_CONTROL_ACK, 2, 2, 10) || !sa_wait_for(&sa_rscc, RSCC_SEQ_BUSY_DRV0, ~0u, 0, 10)) {
++		printf("SWEET GPU: %u: the GMU's RPMh channel does not wake (ack %#x, seq busy %#x)\n", sa_step,
++		    sa_rd(sa_gmu.base + GMU_RSCC_CONTROL_ACK), sa_rd(sa_rscc.base + RSCC_SEQ_BUSY_DRV0));
++	}
++	sa_get(&sa_gmu, "rscc_control_ack", GMU_RSCC_CONTROL_ACK);
++	sa_put(&sa_gmu, "rscc_control_req", GMU_RSCC_CONTROL_REQ, 0);
++	/* a6xx_gmu_fw_start */
++	sa_put(&sa_gmu, "cm3_fw_init_result", GMU_CM3_FW_INIT_RESULT, 0);
++	sa_put(&sa_gmu, "cm3_boot_config", GMU_CM3_BOOT_CONFIG, 2);
++	sa_put(&sa_gmu, "hfi_qtbl_addr", GMU_HFI_QTBL_ADDR, GMU_HFI_ADDRESS);
++	sa_put(&sa_gmu, "hfi_qtbl_info", GMU_HFI_QTBL_INFO, 1);
++	sa_put(&sa_gmu, "ahb_fence_range_0", GMU_AHB_FENCE_RANGE_0, GMU_FENCE_RANGE_A650);
++	sa_put(&sa_gmu, "cm3_cfg", GMU_CM3_CFG, 0x4052);
++	sa_put(&sa_gmu, "hfi_sfr_addr", GMU_HFI_SFR_ADDR, GMU_CHIP_A650);
++	sa_put(&sa_gmu, "pwr_col_cp_msg", GMU_PWR_COL_CP_MSG, GMU_LOG_ADDRESS | (GMU_LOG_SIZE / 4096 - 1));
++	/* a6xx_gmu_power_config (idle level: none) */
++	sa_put(&sa_gmu, "sys_bus_config", GMU_SYS_BUS_CONFIG, 1);
++	sa_put(&sa_gmu, "icache_config", GMU_ICACHE_CONFIG, 1);
++	sa_put(&sa_gmu, "dcache_config", GMU_DCACHE_CONFIG, 1);
++	sa_put(&sa_gmu, "pwr_col_inter_frame_ctrl", GMU_PWR_COL_INTER_FRAME_CTRL, 0x9c40400);
++	sa_set(&sa_gmu, "rpmh_ctrl", GMU_RPMH_CTRL, GMU_RPMH_CTRL_ALL);
++	sa_put(&sa_gbif, "halt", GBIF_HALT, 0);
++	sa_put(&sa_gmu, "gmu2host_intr_clr", GMU_GMU2HOST_INTR_CLR, 0xffffffff);
++	/* a6xx_gmu_start: firmware newer than 0x20010004 reports 0x100 in bits 8:0 */
++	uint32_t version = sa_rd(sa_gmu.base + GMU_DTCM_VERSIONS);
++	uint32_t mask = version <= 0x20010004 ? 0xffffffffu : 0x1ffu;
++	uint32_t started = version <= 0x20010004 ? 0xbabefaceu : 0x100u;
++	printf("SWEET GPU: %u: firmware version %#x: started means init result & %#x == %#x\n", sa_step, version, mask, started);
++	sa_put(&sa_gmu, "pwr_col_cp_resp", GMU_PWR_COL_CP_RESP, 0);
++	sa_put(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET, 0);
++	for (int i = 0; i < 1000 && (result & mask) != started; i++) {
++		delay_for_interval(100, NSEC_PER_USEC);
++		result = sa_rd(sa_gmu.base + GMU_CM3_FW_INIT_RESULT);
++	}
++	sa_get(&sa_gmu, "cm3_fw_init_result", GMU_CM3_FW_INIT_RESULT);
++	sa_get(&sa_gmu, "hfi_version_info", GMU_HFI_VERSION_INFO);
++	if (sa_space_faulted(&sa_smmu_gmu_cb, "the GMU") || (result & mask) != started) {
++		printf("SWEET GPU: %u: the GMU's firmware does not come up\n", sa_step);
++		sa_gmu_post_mortem();
++		return false;
++	}
++	printf("SWEET GPU: %u: THE GMU'S FIRMWARE RUNS\n", sa_step);
++	sa_gmu_post_mortem();
++	return true;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
++	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start,
+ };
+ 
+ static void
+-- 
+2.54.0 (Apple Git-157)
+

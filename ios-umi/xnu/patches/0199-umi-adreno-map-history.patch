@@ -1,0 +1,121 @@
+From 9213a96e244e7b66b213c430a06191f842ac8498 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 21:57:54 +0100
+Subject: [PATCH] umi: log every context-0 map and unmap for the bad-word
+ report
+
+0198 classified the hang's bad command BOs as "PTE rewritten after
+BoMap": the BO kept its pages, but its GPU address later held another
+page, with no refused map - so an unmap and a map went over a live BO.
+Keep the last 2048 map_at/unmap_at calls (iova, length, first page,
+process, newest fence) and print, at a bad word, every record that
+covered its address: the call that rewrote it, and from which process.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c           | 47 ++++++++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetAdreno.cpp |  2 ++
+ 2 files changed, 49 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index ec553fe..5318479 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -86,6 +86,7 @@
+ #include <vm/vm_kern.h>
+ #include <pexpert/pexpert.h>
+ #include <pexpert/device_tree.h>
++#include <sys/proc.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ /* Internal pmap declarations are hidden from the BSD build. */
+@@ -2978,6 +2979,48 @@ sweet_adreno_window_free(uint64_t base)
+ 
+ extern void IOLog(const char *, ...);
+ 
++/* Every map and unmap of context 0 (0199): which call wrote a GPU address, with what page, from
++ * which process - 0198 found command BOs whose PTE was rewritten after their own BoMap without a
++ * refused map, so some unmap + map pair went over a live BO. The bad-word report looks its
++ * address up here. */
++#define SA_MAPLOG 2048
++struct sa_maplog {
++	uint64_t iova, len, pa;
++	uint32_t fence;
++	char proc[12];
++};
++static struct sa_maplog sa_maplog[SA_MAPLOG];
++static uint32_t sa_maplog_next;
++
++static void
++sa_maplog_add(uint64_t iova, uint64_t len, uint64_t pa)
++{
++	struct sa_maplog *m = &sa_maplog[sa_maplog_next++ % SA_MAPLOG];
++	m->iova = iova;
++	m->len = len;
++	m->pa = pa;
++	m->fence = sa_fence_seqno;
++	proc_selfname(m->proc, sizeof(m->proc));
++}
++
++/* Print every recorded map (pa != 0) and unmap (pa == 0) that covered iova, oldest first. */
++void
++sweet_adreno_maplog_lookup(uint64_t iova)
++{
++	sa_service_take_lock();
++	for (uint32_t k = 0; k < SA_MAPLOG; k++) {
++		uint32_t at = sa_maplog_next + k;
++		struct sa_maplog *m = &sa_maplog[at % SA_MAPLOG];
++		if (m->len == 0 || iova < m->iova || iova >= m->iova + m->len) {
++			continue;
++		}
++		IOLog("SWEET ADRENO: maplog %#llx: %s %#llx+%#llx%s%#llx by %s at fence %u (%u records ago)\n",
++		    iova, m->pa ? "map" : "unmap", m->iova, m->len, m->pa ? " first page " : "",
++		    m->pa ? m->pa + ((iova - m->iova) & ~4095ull) : 0, m->proc, m->fence, SA_MAPLOG - k);
++	}
++	sa_service_drop_lock();
++}
++
+ /* Map n physical pages (4K each) at iova, 4K at a time, as context 0's step-23 objects. */
+ int
+ sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n)
+@@ -3020,6 +3063,9 @@ sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n)
+ 	if (!sa_core_tlb_flush()) {
+ 		err = err ? err : EIO;
+ 	}
++	if (err == 0) {
++		sa_maplog_add(iova, 4096ull * n, pages[0]);
++	}
+ 	sa_service_drop_lock();
+ 	return err;
+ }
+@@ -3050,6 +3096,7 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ 	f->len = len;
+ 	f->submitted = sa_fence_seqno;
+ 	f->done = sa_fence_read();
++	sa_maplog_add(iova, len, 0);
+ 	for (uint64_t at = 0; at < len; at += 4096) {
+ 		uint64_t *pte = sa_space_pte(&sa_core_space, iova + at);
+ 		if (pte != NULL) {
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 7c2eca8..f37b358 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -52,6 +52,7 @@ extern "C" {
+ 	extern uint64_t sweet_adreno_bad_iova;
+ 	extern uint32_t sweet_adreno_bad_word;
+ 	uint64_t sweet_adreno_pte_phys(uint64_t iova);
++	void sweet_adreno_maplog_lookup(uint64_t iova);
+ 	uint32_t sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n, bool *busy);
+ 	bool sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns);
+ 	uint64_t sweet_adreno_timestamp(void);
+@@ -789,6 +790,7 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 				    (uint64_t)md_pa == at_map ? "PTE REWRITTEN after BoMap" : "all three differ",
+ 				    kread ? "it reads" : "no map", kword);
+ 			}
++			sweet_adreno_maplog_lookup(bad);
+ 			if (!found) {
+ 				IOLog("SWEET ADRENO: bad word %#x at %#llx (fence %u) is in no BO of this client (GPU PTE page "
+ 				    "%#llx)\n", sweet_adreno_bad_word, bad, fence, sweet_adreno_pte_phys(bad));
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,500 @@
+diff --git a/crates/metal2vulkan-air/src/canon/devirt_tests.rs b/crates/metal2vulkan-air/src/canon/devirt_tests.rs
+index f3da82a..3ecb047 100644
+--- a/crates/metal2vulkan-air/src/canon/devirt_tests.rs
++++ b/crates/metal2vulkan-air/src/canon/devirt_tests.rs
+@@ -230,6 +230,7 @@ fn candidates() -> LinkedModule {
+             .zip(2..)
+             .map(|(name, word)| LinkedName {
+                 name: name.as_bytes().into(),
++                source_name: None,
+                 constants: Ok(BTreeMap::new()),
+                 handle: Some(word),
+             })
+@@ -385,6 +386,7 @@ fn an_unimportable_candidate_is_refused_at_a_surviving_call() {
+     let broken = || LinkedModule {
+         functions: vec![LinkedName {
+             name: b"inc".as_slice().into(),
++            source_name: None,
+             constants: Ok(BTreeMap::new()),
+             handle: Some(2),
+         }],
+@@ -466,6 +468,7 @@ fn a_candidate_calling_through_its_table_recurses_on_a_call_stack() {
+     let linked = LinkedModule {
+         functions: vec![LinkedName {
+             name: b"rec".as_slice().into(),
++            source_name: None,
+             constants: Ok(BTreeMap::new()),
+             handle: Some(2),
+         }],
+@@ -737,6 +740,7 @@ fn pointer_candidates() -> LinkedModule {
+             .zip(2..)
+             .map(|(name, word)| LinkedName {
+                 name: name.as_bytes().into(),
++                source_name: None,
+                 constants: Ok(BTreeMap::new()),
+                 handle: Some(word),
+             })
+@@ -1401,6 +1405,7 @@ fn inlining_candidates_at_every_table_call_is_capped() {
+     let linked = LinkedModule {
+         functions: vec![LinkedName {
+             name: b"big".as_slice().into(),
++            source_name: None,
+             constants: Ok(BTreeMap::new()),
+             handle: Some(2),
+         }],
+diff --git a/crates/metal2vulkan-air/src/canon/link.rs b/crates/metal2vulkan-air/src/canon/link.rs
+index 9c0c08f..12d6238 100644
+--- a/crates/metal2vulkan-air/src/canon/link.rs
++++ b/crates/metal2vulkan-air/src/canon/link.rs
+@@ -76,6 +76,9 @@ pub struct LinkedModule {
+ pub struct LinkedName {
+     /// The Metal function name it links under.
+     pub name: Box<[u8]>,
++    /// The function's name in its own AIR module (`!air.visible`) when renamed by
++    /// `MTLFunctionDescriptor.specializedName`; `None` when equal to `name`.
++    pub source_name: Option<Box<[u8]>>,
+     /// The function-constant values it was specialized with, by index, or why they do not apply
+     /// to its module.
+     pub constants: Result<BTreeMap<u32, ConstValue>, Error>,
+@@ -517,7 +520,8 @@ fn link_in(
+                         Ok(def) => Ok(def),
+                         Err(error) => Err(Unimported {
+                             error,
+-                            ty: source_type(l, &f.name, m)?.map(|t| (i, t)),
++                            ty: source_type(l, f.source_name.as_deref().unwrap_or(&f.name), m)?
++                                .map(|t| (i, t)),
+                         }),
+                     };
+                     m.charge(std::mem::size_of::<Candidate>() + f.name.len())?;
+@@ -806,11 +810,12 @@ fn plan(
+     if static_initializer(l) {
+         return Ok(Err(not_implemented(name, "air.static_init")));
+     }
++    let def_name = f.source_name.as_deref().unwrap_or(name);
+     let visible = l.abi.visible_functions.iter().find(|v| {
+         l.module
+             .func(v.func)
+             .and_then(|f| l.module.symbols().get(f.name))
+-            == Some(name)
++            == Some(def_name)
+     });
+     let Some(func) = visible.map(|v| v.func) else {
+         return Ok(Err(link_problem(name, LinkProblem::NotVisible)));
+diff --git a/crates/metal2vulkan-air/src/canon/link_tests.rs b/crates/metal2vulkan-air/src/canon/link_tests.rs
+index f669435..6c9fa67 100644
+--- a/crates/metal2vulkan-air/src/canon/link_tests.rs
++++ b/crates/metal2vulkan-air/src/canon/link_tests.rs
+@@ -233,6 +233,7 @@ fn linked(name: &str, module: Module, abi: AirAbi) -> LinkedModule {
+     LinkedModule {
+         functions: vec![LinkedName {
+             name: name.as_bytes().into(),
++            source_name: None,
+             constants: Ok(BTreeMap::new()),
+             handle: None,
+         }],
+diff --git a/crates/metal2vulkan-runtime/src/binary_archive/metal_key.rs b/crates/metal2vulkan-runtime/src/binary_archive/metal_key.rs
+index f2846e6..4541b8a 100644
+--- a/crates/metal2vulkan-runtime/src/binary_archive/metal_key.rs
++++ b/crates/metal2vulkan-runtime/src/binary_archive/metal_key.rs
+@@ -444,6 +444,12 @@ impl Key {
+             .map(|linked| {
+                 let mut member = Key(Sha256::new());
+                 member.function(&linked.function, &linked.constants);
++                if let Some(specialized) = linked.specialized_name.as_deref().filter(|s| !s.is_empty()) {
++                    member.flag(true);
++                    member.bytes(specialized.as_bytes());
++                } else {
++                    member.flag(false);
++                }
+                 member.finish()
+             })
+             .collect();
+diff --git a/crates/metal2vulkan-runtime/src/function_table.rs b/crates/metal2vulkan-runtime/src/function_table.rs
+index 7b98a24..ab5f74a 100644
+--- a/crates/metal2vulkan-runtime/src/function_table.rs
++++ b/crates/metal2vulkan-runtime/src/function_table.rs
+@@ -364,7 +364,10 @@ fn metal_numbering(
+ ) -> Option<(usize, Vec<metal2vulkan::pipeline::FunctionHandle>)> {
+     let same = |a: &LinkedFunction, b: &LinkedFunction| {
+         let (x, y) = (a.function.info(), b.function.info());
+-        x.name == y.name && x.air_hash == y.air_hash && a.constants == b.constants
++        a.linked_name() == b.linked_name()
++            && x.name == y.name
++            && x.air_hash == y.air_hash
++            && a.constants == b.constants
+     };
+     let private = &linked.private_functions;
+     let numbered = || linked.functions.iter().chain(&linked.binary_functions);
+diff --git a/crates/metal2vulkan-runtime/src/library.rs b/crates/metal2vulkan-runtime/src/library.rs
+index 499f323..0b10bff 100644
+--- a/crates/metal2vulkan-runtime/src/library.rs
++++ b/crates/metal2vulkan-runtime/src/library.rs
+@@ -47,6 +47,8 @@ pub struct Function {
+     /// Whether the function was made with constant values (`newFunctionWithName:constantValues:`),
+     /// whose `MTLFunction` properties are the specialized function's.
+     specialized: bool,
++    /// `specializedName`: an external name (`MTLFunctionDescriptor.specializedName`), if set.
++    specialized_name: Option<String>,
+     /// The layouts of the argument buffers the function takes, by buffer index, decoded when an
+     /// argument encoder first asks (`argument_encoder.rs`).
+     argument_layouts: Arc<Mutex<BTreeMap<u32, Arc<ArgumentBufferLayout>>>>,
+@@ -65,6 +67,8 @@ pub struct Function {
+ pub struct FunctionDescriptor {
+     /// `name`.
+     pub name: String,
++    /// `specializedName`: `None` for nil (keeps `name`).
++    pub specialized_name: Option<String>,
+     /// `constantValues`: `None` for nil, the function as `newFunctionWithName:` makes it.
+     pub constant_values: Option<FunctionConstantValues>,
+     /// `options`. `COMPILE_TO_BINARY` makes a function a stage's `binary_functions` and a made
+@@ -78,6 +82,7 @@ impl FunctionDescriptor {
+     pub fn new(name: &str) -> FunctionDescriptor {
+         FunctionDescriptor {
+             name: name.to_string(),
++            specialized_name: None,
+             constant_values: None,
+             options: FunctionOptions::NONE,
+         }
+@@ -225,6 +230,11 @@ impl Library {
+             )?,
+         };
+         function.options = descriptor.options;
++        function.specialized_name = descriptor
++            .specialized_name
++            .as_deref()
++            .filter(|s| !s.is_empty())
++            .map(str::to_owned);
+         Ok(function)
+     }
+ 
+@@ -247,6 +257,7 @@ impl Library {
+             function,
+             constants: constants.clone(),
+             specialized,
++            specialized_name: None,
+             argument_layouts: Arc::default(),
+             options: FunctionOptions::NONE,
+             _holds: holds,
+@@ -279,7 +290,9 @@ impl Function {
+ 
+     /// `name`.
+     pub fn name(&self) -> &str {
+-        self.function.info().name
++        self.specialized_name
++            .as_deref()
++            .unwrap_or_else(|| self.function.info().name)
+     }
+ 
+     /// `options`: the options a [`FunctionDescriptor`] made the function with; none for a
+@@ -393,8 +406,12 @@ impl Function {
+     ///
+     /// [`LinkedFunctions`]: metal2vulkan::pipeline::LinkedFunctions
+     pub fn linked_function(&self) -> LinkedFunction {
+-        LinkedFunction::new(self.function.clone())
++        let mut linked = LinkedFunction::new(self.function.clone())
+             .with_constants(self.constants.clone())
+-            .with_precompiled(self.precompiled())
++            .with_precompiled(self.precompiled());
++        if let Some(specialized_name) = &self.specialized_name {
++            linked = linked.with_specialized_name(specialized_name.clone());
++        }
++        linked
+     }
+ }
+diff --git a/crates/metal2vulkan-runtime/src/pipeline/additions.rs b/crates/metal2vulkan-runtime/src/pipeline/additions.rs
+index f7cd0c3..2b25320 100644
+--- a/crates/metal2vulkan-runtime/src/pipeline/additions.rs
++++ b/crates/metal2vulkan-runtime/src/pipeline/additions.rs
+@@ -230,7 +230,7 @@ fn not_precompiled(call: &'static str, f: &LinkedFunction) -> Error {
+     invalid(
+         call,
+         Problem::BinaryFunctions(BinaryFunctionProblem::NotPrecompiled {
+-            name: f.function.info().name.to_owned(),
++            name: f.linked_name().to_owned(),
+         }),
+     )
+ }
+@@ -272,7 +272,8 @@ fn added(
+             return Err(not_precompiled(call, &linked));
+         }
+         let same = |f: &LinkedFunction| {
+-            f.function.info().name == linked.function.info().name
++            f.linked_name() == linked.linked_name()
++                && f.function.info().name == linked.function.info().name
+                 && f.function.info().air_hash == linked.function.info().air_hash
+                 && f.constants == linked.constants
+         };
+diff --git a/crates/metal2vulkan-runtime/src/pipeline/mod.rs b/crates/metal2vulkan-runtime/src/pipeline/mod.rs
+index 788ac5e..38d684d 100644
+--- a/crates/metal2vulkan-runtime/src/pipeline/mod.rs
++++ b/crates/metal2vulkan-runtime/src/pipeline/mod.rs
+@@ -652,7 +652,7 @@ impl ComputePipelineState {
+ /// left to it.
+ pub(super) fn duplicate_linked_name(linked: &LinkedFunctions) -> Option<String> {
+     fn name(f: &LinkedFunction) -> &str {
+-        f.function.info().name
++        f.linked_name()
+     }
+     fn repeated(list: &[LinkedFunction]) -> Option<&str> {
+         let mut seen = HashSet::new();
+@@ -660,6 +660,7 @@ pub(super) fn duplicate_linked_name(linked: &LinkedFunctions) -> Option<String>
+     }
+     let same = |a: &LinkedFunction, b: &LinkedFunction| {
+         name(a) == name(b)
++            && a.function.info().name == b.function.info().name
+             && a.function.info().air_hash == b.function.info().air_hash
+             && a.constants == b.constants
+     };
+diff --git a/crates/metal2vulkan/src/pipeline/compile.rs b/crates/metal2vulkan/src/pipeline/compile.rs
+index c448dca..7038f7d 100644
+--- a/crates/metal2vulkan/src/pipeline/compile.rs
++++ b/crates/metal2vulkan/src/pipeline/compile.rs
+@@ -234,6 +234,7 @@ impl<'a> LinkedSource<'a> {
+             key: LinkedKey {
+                 list: crate::pipeline::descriptor::LinkedList::Functions,
+                 name,
++                source_name: name,
+                 air_hash: container::sha256(bitcode),
+                 constants,
+             },
+@@ -250,7 +251,8 @@ pub(crate) fn linked_keys(linked: &LinkedFunctions) -> Vec<LinkedKey<'_>> {
+             let info = f.function.info();
+             LinkedKey {
+                 list,
+-                name: info.name,
++                name: f.linked_name(),
++                source_name: info.name,
+                 air_hash: info.air_hash,
+                 constants: &f.constants,
+             }
+@@ -1183,7 +1185,7 @@ pub(crate) fn linked_modules(
+     let keys: Vec<LinkedKey<'_>> = linked.iter().map(|s| s.key).collect();
+     let handles = crate::pipeline::table::handles(&keys);
+     let mut out: Vec<(Hash256, LinkedModule)> = Vec::new();
+-    let mut listed: Vec<(Hash256, &str, &FunctionConstantValues)> = Vec::new();
++    let mut listed: Vec<(Hash256, &str, &str, &FunctionConstantValues)> = Vec::new();
+     let mut seen: BTreeSet<Box<[u8]>> = BTreeSet::new();
+     let mut queue: VecDeque<Box<[u8]>> = VecDeque::new();
+     let tables = abi.entries.iter().any(|e| {
+@@ -1222,14 +1224,21 @@ pub(crate) fn linked_modules(
+                 continue;
+             }
+             // The same function listed twice (in two lists, or twice in one) is one function.
+-            if listed
+-                .iter()
+-                .any(|(h, n, c)| *h == key.air_hash && *n == key.name && *c == key.constants)
+-            {
++            if listed.iter().any(|(h, n, sn, c)| {
++                *h == key.air_hash
++                    && *n == key.name
++                    && *sn == key.source_name
++                    && *c == key.constants
++            }) {
+                 continue;
+             }
+-            m.charge(std::mem::size_of::<(Hash256, &str, &FunctionConstantValues)>())?;
+-            listed.push((key.air_hash, key.name, key.constants));
++            m.charge(std::mem::size_of::<(
++                Hash256,
++                &str,
++                &str,
++                &FunctionConstantValues,
++            )>())?;
++            listed.push((key.air_hash, key.name, key.source_name, key.constants));
+             let at = match out.iter().position(|(h, _)| *h == key.air_hash) {
+                 Some(at) => at,
+                 None => {
+@@ -1261,9 +1270,16 @@ pub(crate) fn linked_modules(
+                 // Refused for the module's code first.
+                 Err(_) => Ok(BTreeMap::new()),
+             };
++            let source_name = if key.source_name != key.name {
++                m.charge(key.source_name.len())?;
++                Some(key.source_name.as_bytes().into())
++            } else {
++                None
++            };
+             m.charge(std::mem::size_of::<LinkedName>())?;
+             l.functions.push(LinkedName {
+                 name: name.clone(),
++                source_name,
+                 constants,
+                 handle: handle.map(|h| h.word()),
+             });
+@@ -1277,9 +1293,12 @@ pub(crate) fn linked_modules(
+     for (s, handle) in linked.iter().zip(&handles) {
+         m.tick(1)?;
+         let key = &s.key;
+-        let reached = listed
+-            .iter()
+-            .any(|(h, n, c)| *h == key.air_hash && *n == key.name && *c == key.constants);
++        let reached = listed.iter().any(|(h, n, sn, c)| {
++            *h == key.air_hash
++                && *n == key.name
++                && *sn == key.source_name
++                && *c == key.constants
++        });
+         if handle.is_none() || reached {
+             continue;
+         }
+@@ -1312,11 +1331,23 @@ pub(crate) fn linked_modules(
+             }
+             _ => continue,
+         };
+-        m.charge(std::mem::size_of::<(Hash256, &str, &FunctionConstantValues)>())?;
+-        listed.push((key.air_hash, key.name, key.constants));
++        m.charge(std::mem::size_of::<(
++            Hash256,
++            &str,
++            &str,
++            &FunctionConstantValues,
++        )>())?;
++        listed.push((key.air_hash, key.name, key.source_name, key.constants));
++        let source_name = if key.source_name != key.name {
++            m.charge(key.source_name.len())?;
++            Some(key.source_name.as_bytes().into())
++        } else {
++            None
++        };
+         m.charge(std::mem::size_of::<LinkedName>() + key.name.len())?;
+         l.functions.push(LinkedName {
+             name: key.name.as_bytes().into(),
++            source_name,
+             constants,
+             handle: handle.map(|h| h.word()),
+         });
+diff --git a/crates/metal2vulkan/src/pipeline/compile/key.rs b/crates/metal2vulkan/src/pipeline/compile/key.rs
+index 835f77e..c389190 100644
+--- a/crates/metal2vulkan/src/pipeline/compile/key.rs
++++ b/crates/metal2vulkan/src/pipeline/compile/key.rs
+@@ -33,6 +33,7 @@ use crate::pipeline::descriptor::{
+ pub struct LinkedKey<'a> {
+     pub list: LinkedList<'a>,
+     pub name: &'a str,
++    pub source_name: &'a str,
+     pub air_hash: Hash256,
+     pub constants: &'a FunctionConstantValues,
+ }
+@@ -408,12 +409,22 @@ pub fn function_key(
+     if !linked.is_empty() {
+         h.bytes(b"linked-functions").u64(linked.len() as u64);
+         for l in linked {
+-            match l.list {
+-                LinkedList::Functions => h.u64(0),
+-                LinkedList::PrivateFunctions => h.u64(1),
+-                LinkedList::BinaryFunctions => h.u64(2),
+-                LinkedList::Group(name) => h.u64(3).bytes(name.as_bytes()),
+-            };
++            if l.source_name == l.name {
++                match l.list {
++                    LinkedList::Functions => h.u64(0),
++                    LinkedList::PrivateFunctions => h.u64(1),
++                    LinkedList::BinaryFunctions => h.u64(2),
++                    LinkedList::Group(name) => h.u64(3).bytes(name.as_bytes()),
++                };
++            } else {
++                match l.list {
++                    LinkedList::Functions => h.u64(4),
++                    LinkedList::PrivateFunctions => h.u64(5),
++                    LinkedList::BinaryFunctions => h.u64(6),
++                    LinkedList::Group(name) => h.u64(7).bytes(name.as_bytes()),
++                };
++                h.bytes(l.source_name.as_bytes());
++            }
+             h.bytes(&l.air_hash).bytes(l.name.as_bytes());
+             constants(&mut h, l.constants);
+         }
+diff --git a/crates/metal2vulkan/src/pipeline/descriptor.rs b/crates/metal2vulkan/src/pipeline/descriptor.rs
+index 4271176..d5040a2 100644
+--- a/crates/metal2vulkan/src/pipeline/descriptor.rs
++++ b/crates/metal2vulkan/src/pipeline/descriptor.rs
+@@ -247,6 +247,9 @@ impl LinkedList<'_> {
+ pub struct LinkedFunction {
+     pub function: Function,
+     pub constants: FunctionConstantValues,
++    /// `MTLFunctionDescriptor.specializedName`: the symbol name this function links under when
++    /// renamed from its library entry's name (`None` keeps `function.info().name`).
++    pub specialized_name: Option<String>,
+     /// The function was made compiled to a binary (`MTLFunctionOptionCompileToBinary`), as
+     /// Metal requires of a function in `binary_functions` and of a binary function added to a
+     /// made pipeline state; the runtime checks it, refusing one that is not as Metal does. The
+@@ -260,6 +263,7 @@ impl LinkedFunction {
+         LinkedFunction {
+             function,
+             constants: FunctionConstantValues::defaults(),
++            specialized_name: None,
+             precompiled: false,
+         }
+     }
+@@ -270,6 +274,22 @@ impl LinkedFunction {
+         self
+     }
+ 
++    /// This function linked under `name` (`MTLFunctionDescriptor.specializedName`) instead of its
++    /// library entry's name.
++    pub fn with_specialized_name(mut self, name: impl Into<String>) -> LinkedFunction {
++        self.specialized_name = Some(name.into()).filter(|s| !s.is_empty());
++        self
++    }
++
++    /// The symbol name this function links under: `specialized_name` when set, else its library
++    /// entry's name.
++    pub fn linked_name(&self) -> &str {
++        self.specialized_name
++            .as_deref()
++            .filter(|s| !s.is_empty())
++            .unwrap_or_else(|| self.function.info().name)
++    }
++
+     /// This function, compiled to a binary when `precompiled` (`precompiled`).
+     pub fn with_precompiled(mut self, precompiled: bool) -> LinkedFunction {
+         self.precompiled = precompiled;
+diff --git a/crates/metal2vulkan/src/pipeline/table.rs b/crates/metal2vulkan/src/pipeline/table.rs
+index 4154b74..b431a35 100644
+--- a/crates/metal2vulkan/src/pipeline/table.rs
++++ b/crates/metal2vulkan/src/pipeline/table.rs
+@@ -66,9 +66,9 @@ fn callable(list: LinkedList<'_>) -> bool {
+ /// numbered in order, one function (its AIR hash, name, and constants) listed twice having one
+ /// handle. A function no callable list has has none.
+ pub(crate) fn handles(keys: &[LinkedKey<'_>]) -> Vec<Option<FunctionHandle>> {
+-    let mut callable_keys: Vec<(&[u8; 32], &str, &FunctionConstantValues)> = Vec::new();
++    let mut callable_keys: Vec<(&[u8; 32], &str, &str, &FunctionConstantValues)> = Vec::new();
+     for k in keys.iter().filter(|k| callable(k.list)) {
+-        let id = (&k.air_hash, k.name, k.constants);
++        let id = (&k.air_hash, k.name, k.source_name, k.constants);
+         if !callable_keys.contains(&id) {
+             callable_keys.push(id);
+         }
+@@ -77,7 +77,9 @@ pub(crate) fn handles(keys: &[LinkedKey<'_>]) -> Vec<Option<FunctionHandle>> {
+         .map(|k| {
+             let at = callable_keys
+                 .iter()
+-                .position(|&(h, n, c)| h == &k.air_hash && n == k.name && c == k.constants)?;
++                .position(|&(h, n, sn, c)| {
++                    h == &k.air_hash && n == k.name && sn == k.source_name && c == k.constants
++                })?;
+             FunctionHandle::nth(at)
+         })
+         .collect()
+@@ -91,10 +93,12 @@ impl LinkedFunctions {
+     pub fn function_handle(&self, f: &LinkedFunction) -> Option<FunctionHandle> {
+         let keys = crate::pipeline::compile::linked_keys(self);
+         let info = f.function.info();
++        let link_name = f.linked_name();
+         let at = keys.iter().position(|k| {
+             callable(k.list)
+                 && k.air_hash == info.air_hash
+-                && k.name == info.name
++                && k.name == link_name
++                && k.source_name == info.name
+                 && *k.constants == f.constants
+         })?;
+         handles(&keys).get(at).copied().flatten()
+@@ -115,6 +119,7 @@ mod tests {
+         LinkedKey {
+             list,
+             name,
++            source_name: name,
+             air_hash: [hash; 32],
+             constants,
+         }

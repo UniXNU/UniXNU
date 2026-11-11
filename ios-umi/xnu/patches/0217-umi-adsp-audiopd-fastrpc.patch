@@ -1,0 +1,600 @@
+From 1feab9778a7509b5a48ebc310160c2c021c1fe57 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 14:11:04 +0100
+Subject: [PATCH] umi: the ADSP's audio PD over FastRPC; 64 MiB I/O map
+
+FastRPC on the ADSP edge (third GLINK channel fastrpcglink-apps-dsp, pool
+0xd3100000, SMMU streams 0x1803-0x1805, user PD): the 12 MiB remote heap at
+0xd4000000 is zeroed and hyp-assigned (SCM MP_ASSIGN, HLOS -> LPASS +
+ADSP_HEAP), createstaticpd "audiopd", then the listener the SLPI already had
+(remotectl, apps_std) with files from /private/var/sweet/adsp-rpc/, before
+the AFE steps. apps_std gains ftell, flen, rewind and feof; /vendor/lib/rfsa
+paths map to the adsp dir; apps_mem is opened but only logged.
+
+IO_MAP_SIZE is 64 MiB on SWEET: the 8 MiB submap ran out late in the boot and
+io_map's KMA_NOFAIL panicked (0215c; the screen-off freezes of 0216c/0217).
+The GLINK remote intent table holds 512 entries: the ADSP advertises dozens
+of 0x80 intents per channel and 128 filled up before FastRPC got one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 169 ++++++++++++++++++++++++++++++++++++++++---
+ bsd/dev/sweet_slpi.c | 139 +++++++++++++++++++++++++++++------
+ osfmk/arm/io_map.c   |   9 +++
+ 3 files changed, 286 insertions(+), 31 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 14e5479..dc28d59 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -56,6 +56,10 @@ static void afe_next(void);
+ static void afe_result(uint32_t opcode, uint32_t status);
+ static void afe_poll(uint32_t ms);
+ static void amp_start(void);
++static bool adsp_fr_on(void);
++static uint32_t afe_now_ms;                     /* GLINK loop time (ms since boot) */
++static uint32_t apr_ready_ms;                   /* when the core listed its services */
++static bool fr_listening;                       /* the audio PD's FastRPC listener is registered */
+ static uint32_t apr_asked_ms, apr_token = 1;
+ static unsigned apr_logged;
+ 
+@@ -81,7 +85,7 @@ apr_send(uint8_t svc, uint32_t opcode, const void *payload, uint16_t plen)
+ 	if (plen) {
+ 		memcpy(m + 20, payload, plen);
+ 	}
+-	(void)gl_send(GL_LCID_RPC, m, size);
++	(void)gl_send(GL_LCID_APR, m, size);
+ }
+ 
+ static void
+@@ -118,8 +122,11 @@ apr_rx(const uint8_t *m, uint32_t len)
+ 			printf("SWEET ADSP: APR    service %#x version %#x\n", sv[0], sv[1]);
+ 		}
+ 		apr_core_state = 2;
+-		afe_next();
+-		amp_start();                    /* independent of the AFE (whose answers did not come, 0216b) */
++		apr_ready_ms = afe_now_ms;
++		if (!adsp_fr_on()) {
++			afe_next();             /* no FastRPC: straight on (0216: then the AFE does not answer) */
++		}
++		amp_start();                    /* independent of the AFE */
+ 		return;
+ 	}
+ 	case APR_BASIC_RSP_RESULT:
+@@ -143,16 +150,21 @@ apr_rx(const uint8_t *m, uint32_t len)
+ 
+ /* Every GLINK tick (10 ms): open "apr_audio_svc" if the ADSP has not, ask the core once a second. */
+ static void
+-apr_poll(uint32_t ms)
++apr_poll(uint32_t now)
+ {
++	static uint32_t t0;
++	if (t0 == 0) {
++		t0 = now;
++	}
++	uint32_t ms = now - t0;                 /* since the first poll */
+ 	static bool opened;
+-	if (!opened && gl_ch[GL_LCID_RPC - 1].rcid == 0 && ms >= 5000) {
++	if (!opened && gl_ch[GL_LCID_APR - 1].rcid == 0 && ms >= 5000) {
+ 		opened = true;
+ 		printf("SWEET ADSP: GLINK: the ADSP has not opened \"apr_audio_svc\" in 5 s; opening it\n");
+-		gl_open(GL_LCID_RPC);
++		gl_open(GL_LCID_APR);
+ 	}
+-	afe_poll(ms);
+-	if (apr_core_state != 0 || !gl_ch[GL_LCID_RPC - 1].acked || ms - apr_asked_ms < 1000) {
++	afe_poll(now);
++	if (apr_core_state != 0 || !gl_ch[GL_LCID_APR - 1].acked || ms - apr_asked_ms < 1000) {
+ 		return;
+ 	}
+ 	apr_asked_ms = ms;
+@@ -180,7 +192,7 @@ apr_poll(uint32_t ms)
+ #define AFE_BITS                        16u     /* 2 x 16-bit slots: SCLK 1.536 MHz, a CS35L41 PLL reference */
+ 
+ static int afe_state;                           /* 0 idle, 1 clock, 2 i2s config, 3 start, 4 running, -1 failed */
+-static uint32_t afe_now_ms, afe_sent_ms;        /* GLINK loop time; when the pending step went out */
++static uint32_t afe_sent_ms;                    /* when the pending step went out */
+ static unsigned afe_tries;
+ static bool audio_pd_up;                        /* servreg: msm/adsp/audio_pd is up */
+ 
+@@ -287,6 +299,12 @@ static void
+ afe_poll(uint32_t ms)
+ {
+ 	afe_now_ms = ms;
++	if (afe_state == 0 && apr_core_state == 2 && adsp_fr_on() && !fr_listening && apr_ready_ms != 0 &&
++	    ms - apr_ready_ms > 20000) {
++		printf("SWEET ADSP: FastRPC listener not up 20 s after core ready; AFE anyway\n");
++		afe_next();
++		return;
++	}
+ 	if (afe_state < 1 || afe_state > 3 || ms - afe_sent_ms < 3000) {
+ 		return;
+ 	}
+@@ -690,4 +708,137 @@ servreg_rx(uint32_t node, uint32_t port, const uint8_t *q, uint32_t len)
+ 		audio_pd_up = state == SERVREG_UP;
+ 	}
+ }
++
++/* ---- the audio PD over FastRPC (Android: adsprpcd audiopd; Linux fastrpc_init_create_static_process) ---- */
++
++static bool
++adsp_fr_on(void)
++{
++	uint32_t secs = 180;
++	PE_parse_boot_argn(SL_ARG "rpc", &secs, sizeof(secs));
++	return secs != 0;
++}
++
++static bool
++adsp_fr_wanted(void)
++{
++	return apr_core_state >= 2;             /* after the core is ready, as adsprpcd starts with the HAL */
++}
++
++static void
++adsp_fr_ready(void)
++{
++	fr_listening = true;
++	printf("SWEET ADSP: audio PD listener registered; AFE next\n");
++	if (afe_state == 0) {
++		afe_next();
++	}
++}
++
++/* sl_scm with a fourth register argument (x5: the extra-argument buffer when there are more than 4). */
++static int
++adsp_scm(const char *what, uint64_t function, uint64_t arginfo, uint64_t a, uint64_t b, uint64_t c, uint64_t d)
++{
++	uint64_t session = 0;
++	for (int i = 0; i < 1000; i++) {
++		register uint64_t x0 __asm__("x0") = i == 0 ? (SCM_64 | SCM_SIP | function) : SCM_INTERRUPTED;
++		register uint64_t x1 __asm__("x1") = arginfo;
++		register uint64_t x2 __asm__("x2") = a;
++		register uint64_t x3 __asm__("x3") = b;
++		register uint64_t x4 __asm__("x4") = c;
++		register uint64_t x5 __asm__("x5") = d;
++		register uint64_t x6 __asm__("x6") = session;
++		register uint64_t x7 __asm__("x7") = 0;
++		__asm__ volatile ("smc #0" : "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5), "+r" (x6),
++		    "+r" (x7) : : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
++		session = x6;
++		if (x0 != SCM_INTERRUPTED) {
++			printf("SWEET ADSP: TrustZone %s -> %d, answer %#llx\n", what, (int32_t)x0, x1);
++			return (int32_t)x0 != 0 ? (int32_t)x0 : (int32_t)x1;
++		}
++	}
++	printf("SWEET ADSP: TrustZone %s: still interrupted\n", what);
++	return -1;
++}
++
++/* Zero low RAM that XNU does not manage, through the loader's 2 MiB window. */
++static bool
++adsp_phys_zero(uint64_t pa, uint32_t size)
++{
++	if (sl_window == 0) {
++		return false;
++	}
++	for (uint32_t b = 0; b < size; b += SL_WINDOW) {
++		uint32_t n = MIN(SL_WINDOW, size - b);
++		for (uint32_t o = 0; o < n; o += PAGE_SIZE) {
++			if (pmap_enter(kernel_pmap, sl_window + o, (ppnum_t)atop_64(pa + b + o), VM_PROT_READ | VM_PROT_WRITE,
++			    VM_PROT_NONE, VM_WIMG_WCOMB_SL, TRUE) != KERN_SUCCESS) {
++				pmap_remove(kernel_pmap, sl_window, sl_window + o);
++				return false;
++			}
++		}
++		for (uint32_t o = 0; o < n; o += 8) {
++			*(volatile uint64_t *)(sl_window + o) = 0;
++		}
++		__asm__ volatile ("dsb sy" ::: "memory");
++		pmap_remove(kernel_pmap, sl_window, sl_window + n);
++	}
++	return true;
++}
++
++#define SCM_MP_ASSIGN           SCM_CALL(0x0c, 0x16)
++#define SCM_ARGS_MP_ASSIGN      0x1117u         /* 7 args: RO, VAL, RO, VAL, RO, VAL, VAL */
++#define VMID_HLOS               3
++#define VMID_LPASS              22
++#define VMID_ADSP_HEAP          37
++#define PERM_RWX                7
++#define FR_SCM_OFF              0xf0000u        /* hyp-assign tables in the pool's last 64 KiB */
++
++static int
++fr_create_audio_pd(void)
++{
++	uint32_t heap = 1;
++	PE_parse_boot_argn(SL_ARG "heap", &heap, sizeof(heap));
++	if (!fr_map_pool()) {
++		return -1;
++	}
++	if (heap) {
++		if (!adsp_phys_zero(FR_HEAP_PA, FR_HEAP_SIZE)) {
++			printf("SWEET ADSP: audio PD heap: zeroing failed\n");
++			return -1;
++		}
++		/* qcom_scm_assign_mem: src vmids, mem_to_map {addr, size}, dest {vmid, perm, ctx, ctx_size}, 64-aligned */
++		uint32_t base = FR_SCM_OFF;
++		for (uint32_t i = 0; i < 0x200; i += 4) {
++			fr_put32(base + i, 0);
++		}
++		fr_put32(base + 0x00, VMID_HLOS);
++		fr_put64(base + 0x40, FR_HEAP_PA);
++		fr_put64(base + 0x48, FR_HEAP_SIZE);
++		fr_put32(base + 0x80, VMID_LPASS);
++		fr_put32(base + 0x84, PERM_RWX);
++		fr_put32(base + 0x98, VMID_ADSP_HEAP);  /* 24-byte entries */
++		fr_put32(base + 0x9c, PERM_RWX);
++		/* extra arguments 3..6: src_sz, dest phys, dest_sz, 0 */
++		fr_put64(base + 0x100, 4);
++		fr_put64(base + 0x108, (uint64_t)FR_POOL_PA + base + 0x80);
++		fr_put64(base + 0x110, 2 * 24);
++		fr_put64(base + 0x118, 0);
++		__asm__ volatile ("dsb sy" ::: "memory");
++		int a = adsp_scm("mp_assign(audio PD heap -> LPASS, ADSP_HEAP)", SCM_MP_ASSIGN, SCM_ARGS_MP_ASSIGN,
++		    (uint64_t)FR_POOL_PA + base + 0x40, 16, (uint64_t)FR_POOL_PA + base, (uint64_t)FR_POOL_PA + base + 0x100);
++		printf("SWEET ADSP: audio PD heap %#x + %#x hyp-assign -> %d\n", FR_HEAP_PA, FR_HEAP_SIZE, a);
++		if (a != 0) {
++			return -1;
++		}
++	}
++	/* createstaticpd: in {pgid, namelen, pageslen}, name, phy_page {addr, size}; method 8 on handle 1, pid 0 */
++	static const char name[] = "audiopd";
++	uint32_t inbuf[3] = { FR_TGID, sizeof(name), 0 };
++	uint64_t page[2] = { FR_HEAP_PA, heap ? FR_HEAP_SIZE : 0 };
++	struct fr_buf in[3] = { { inbuf, 12 }, { (void *)(uintptr_t)name, sizeof(name) }, { page, 16 } };
++	int r = fr_invoke(0, FR_HANDLE_INIT, FR_SC(8, 3, 0), in, NULL, 5000);
++	printf("SWEET ADSP: FastRPC createstaticpd \"audiopd\" -> %d\n", r);
++	return r;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index 23419f6..e1d6615 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -73,6 +73,9 @@ static void apr_rx(const uint8_t *m, uint32_t len);   /* sweet_adsp.c */
+ static void apr_poll(uint32_t ms);
+ static void servreg_found(uint32_t service, uint32_t instance, uint32_t node, uint32_t port);
+ static void servreg_rx(uint32_t node, uint32_t port, const uint8_t *q, uint32_t len);
++static bool adsp_fr_wanted(void);                       /* sweet_adsp.c: start FastRPC now? */
++static void adsp_fr_ready(void);                        /* the audio PD's listener is registered */
++static int fr_create_audio_pd(void);                    /* heap hyp-assign + createstaticpd "audiopd" */
+ #define SERVREG_PORT            0x4001          /* our QRTR client port for the servreg notifier */
+ #endif
+ #define SL_MDT_MAX              (64 * 1024)
+@@ -123,6 +126,14 @@ sl_sleep_ms(unsigned ms)
+ 	IOSleep(ms);
+ }
+ 
++static __unused uint32_t
++sl_ms(void)
++{
++	uint64_t ns = 0;
++	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
++	return (uint32_t)(ns / 1000000);
++}
++
+ /* ---- IPCC doorbell (Linux qcom-ipcc.c) ---- */
+ 
+ static volatile uint32_t *sl_ipcc;
+@@ -501,8 +512,14 @@ sl_smp2p_create(void)
+ #define GL_SIGNALS              15
+ #define GL_FEATURE_INTENT_REUSE 1
+ #define GL_LCID                 1               /* "IPCRTR" */
+-#define GL_LCID_RPC             2               /* "fastrpcglink-apps-dsp" (ADSP: "apr_audio_svc") */
++#if SL_EDGE_ADSP
++#define GL_LCID_APR             2               /* "apr_audio_svc" */
++#define GL_LCID_RPC             3               /* "fastrpcglink-apps-dsp" */
++#define GL_CHANNELS             3
++#else
++#define GL_LCID_RPC             2               /* "fastrpcglink-apps-dsp" */
+ #define GL_CHANNELS             2
++#endif
+ 
+ static uint32_t gl_desc, gl_tx, gl_tx_len, gl_rx, gl_rx_len;
+ static uint32_t gl_next_iid = 1;
+@@ -519,9 +536,8 @@ static struct {
+ 	{ .name = "IPCRTR", .intents = { { 0x800, 5 }, { 0x2000, 3 }, { 0x4400, 2 } } },
+ #if SL_EDGE_ADSP
+ 	{ .name = "apr_audio_svc", .intents = { { 0x200, 20 } } },  /* dt qcom,apr_tal_rpmsg */
+-#else
+-	{ .name = "fastrpcglink-apps-dsp", .intents = { { 0x64, 64 } } },
+ #endif
++	{ .name = "fastrpcglink-apps-dsp", .intents = { { 0x64, 64 } } },
+ };
+ 
+ static int
+@@ -628,7 +644,7 @@ gl_open(uint16_t lcid)
+ }
+ 
+ /* The SLPI's receive intents, per channel (its cid): what we may send into. */
+-#define GL_REMOTE_INTENTS       128
++#define GL_REMOTE_INTENTS       512             /* the ADSP advertises dozens of 0x80 intents per channel (0217c: 128 full) */
+ static struct {
+ 	uint32_t cid, size, iid;
+ 	bool used, valid;
+@@ -674,7 +690,14 @@ gl_send(uint16_t lcid, const uint8_t *data, uint32_t len)
+ 		}
+ 	}
+ 	if (best < 0) {
+-		printf("SWEET " SL_TAG ": GLINK: no SLPI intent on %s for %u bytes; asking for one\n", gl_ch[lcid - 1].name, len);
++		unsigned valid = 0, mine = 0, mine_free = 0;
++		for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
++			valid += gl_ri[i].valid;
++			mine += gl_ri[i].valid && gl_ri[i].cid == cid;
++			mine_free += gl_ri[i].valid && gl_ri[i].cid == cid && !gl_ri[i].used;
++		}
++		printf("SWEET " SL_TAG ": GLINK: no remote intent on %s (rcid %u) for %u bytes (table %u/%u valid, %u for it, "
++		    "%u free); asking for one\n", gl_ch[lcid - 1].name, cid, len, valid, GL_REMOTE_INTENTS, mine, mine_free);
+ 		gl_cmd(GL_RX_INTENT_REQ, lcid, len);
+ 		return false;
+ 	}
+@@ -1250,7 +1273,6 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ }
+ 
+ 
+-#if !SL_EDGE_ADSP
+ /* ---- FastRPC (Linux drivers/misc/fastrpc.c message format) ---- */
+ 
+ /*
+@@ -1268,11 +1290,29 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+  * is low RAM that highmem XNU does not manage: 1 MiB at 0xd3000000 (after the
+  * Wi-Fi pools, sweet_wlan.c / sweet_wlfw.c).
+  */
++#if SL_EDGE_ADSP
++/*
++ * ADSP: the static audio PD (Android: adsprpcd audiopd -> createstaticpd:audiopd). Buffers via
++ * APPS SMMU streams 0x1803-0x1805 (dt adsprpc-smd compute cbs, cb 3 in address bits 32+), pool
++ * after the SLPI's; the PD's remote heap = dt adsp_mem (12 MiB, any address below 4 GB) at
++ * 0xd4000000, hyp-assigned to LPASS + ADSP_HEAP (dt qcom,adsp-remoteheap-vmid 0x16 0x25).
++ */
++#define FR_POOL_PA              0xd3100000u
++#define FR_SID                  3ull
++#define FR_PD                   1               /* USER_PD, as fastrpc_init_create_static_process sets */
++#define FR_DIR                  "/private/var/sweet/adsp-rpc/"
++#define FR_HEAP_PA              0xd4000000u
++#define FR_HEAP_SIZE            0xc00000u
++static const uint32_t fr_sids[] = { 0x1803, 0x1804, 0x1805 };
++#else
+ #define FR_POOL_PA              0xd3000000u
+-#define FR_POOL_SIZE            0x100000u
+ #define FR_SID                  1ull
++#define FR_PD                   2               /* SENSORS_PD */
++#define FR_DIR                  "/private/var/sweet/sensors/"
++static const uint32_t fr_sids[] = { 0x541, 0x542, 0x543 };
++#endif
++#define FR_POOL_SIZE            0x100000u
+ #define FR_TGID                 0x100
+-#define FR_PD_SENSORS           2
+ #define FR_HANDLE_REMOTECTL     0
+ #define FR_HANDLE_INIT          1
+ #define FR_HANDLE_LISTENER      3
+@@ -1284,7 +1324,6 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ #define AEE_EFAILED             1
+ #define AEE_EBADPARM            14
+ #define AEE_EUNSUPPORTED        20
+-#define FR_DIR                  "/private/var/sweet/sensors/"
+ 
+ extern bool sweet_smmu_route_sid(uint32_t sid);
+ extern kern_return_t pmap_enter(pmap_t, vm_map_offset_t, ppnum_t, vm_prot_t, vm_prot_t, unsigned int, boolean_t);
+@@ -1407,7 +1446,7 @@ fr_invoke(uint32_t pid, uint32_t handle, uint32_t sc, struct fr_buf *in, struct
+ 	}
+ 	__asm__ volatile ("dsb sy" ::: "memory");
+ 	fr_ctxid = (fr_ctxid % 255) + 1;
+-	uint64_t ctx = ((uint64_t)fr_ctxid << 4) | FR_PD_SENSORS;
++	uint64_t ctx = ((uint64_t)fr_ctxid << 4) | FR_PD;
+ 	uint8_t msg[40];
+ 	uint64_t addr = (uint64_t)FR_POOL_PA | (FR_SID << 32), size = (at + 0xfff) & ~0xfffull;
+ 	int32_t ipid = (int32_t)pid, itid = FR_TGID;
+@@ -1435,7 +1474,11 @@ fr_invoke(uint32_t pid, uint32_t handle, uint32_t sc, struct fr_buf *in, struct
+ 	for (unsigned t = 0; wait_ms == 0 || t < wait_ms; t++) {   /* 0: until the reply */
+ 		while (gl_rx_one()) {
+ 		}
++#if SL_EDGE_ADSP
++		apr_poll(sl_ms());
++#else
+ 		see_poll();
++#endif
+ 		if (fr_reply && fr_reply_ctx == ctx) {
+ 			for (uint32_t i = 0; i < nout; i++) {
+ 				if (out[i].len) {
+@@ -1482,6 +1525,10 @@ fr_path(const char *dsp, const char *env, char *out, size_t outlen)
+ 		{ "/vendor/etc/acdbdata", "acdb" },
+ 		{ "/sys/devices/soc0", "soc0" },                        /* sysfs soc0 as read in TWRP */
+ 		{ "/usr/lib/qcom/adsp", "adsp" },
++		{ "/vendor/lib/rfsa/adsp", "adsp" },                    /* ADSP_LIBRARY_PATH (libadsprpc) */
++		{ "/system/vendor/lib/rfsa/adsp", "adsp" },
++		{ "/vendor/lib/rfsa/dsp", "adsp" },
++		{ "/vendor/dsp", "adsp" },
+ 	};
+ 	char clean[256];
+ 	size_t j = 0;
+@@ -1645,6 +1692,10 @@ fr_serve(uint32_t handle, uint32_t sc, struct fr_buf *in, uint32_t nin, uint8_t
+ 		uint32_t h = 0, e = 0;
+ 		if (name != NULL && strcmp(name, "apps_std") == 0) {
+ 			h = 1;
++#if SL_EDGE_ADSP
++		} else if (name != NULL && strcmp(name, "apps_mem") == 0) {
++			h = 2;                  /* opened, but every request fails and is logged (0217e: what it wants) */
++#endif
+ 		} else {
+ 			e = (uint32_t)-5;
+ 		}
+@@ -1655,7 +1706,8 @@ fr_serve(uint32_t handle, uint32_t sc, struct fr_buf *in, uint32_t nin, uint8_t
+ 		out[1].p = outmem + 64;
+ 		out[1].len = MIN(w[1], 256u);
+ 		memset(out[1].p, 0, out[1].len);
+-		printf("SWEET " SL_TAG ": FastRPC <- remotectl open \"%s\" -> %s\n", name ? name : "?", h ? "apps_std" : "refused");
++		printf("SWEET " SL_TAG ": FastRPC <- remotectl open \"%s\" -> %s\n", name ? name : "?",
++		    h == 1 ? "apps_std" : h == 2 ? "apps_mem (logging only)" : "refused");
+ 		return e;
+ 	}
+ 	if (handle == FR_HANDLE_REMOTECTL && method == 1 && nout >= 2) {                   /* close */
+@@ -1667,6 +1719,11 @@ fr_serve(uint32_t handle, uint32_t sc, struct fr_buf *in, uint32_t nin, uint8_t
+ 		memset(out[1].p, 0, out[1].len);
+ 		return 0;
+ 	}
++	if (handle == 2) {
++		printf("SWEET " SL_TAG ": FastRPC <- apps_mem method %u (sc %#x, in %u out %u): %#x %#x %#x %#x %#x %#x %#x %#x; "
++		    "failing it\n", method, sc, nin, nout, w[0], w[1], w[2], w[3], w[4], w[5], w[6], w[7]);
++		return AEE_EFAILED;
++	}
+ 	if (handle != 1) {
+ 		printf("SWEET " SL_TAG ": FastRPC <- handle %u method %u: unknown interface\n", handle, method);
+ 		return AEE_EUNSUPPORTED;
+@@ -1707,6 +1764,31 @@ fr_serve(uint32_t handle, uint32_t sc, struct fr_buf *in, uint32_t nin, uint8_t
+ 		fr_fd[fd].pos = (uint32_t)np;
+ 		return 0;
+ 	}
++	case 8:                                 /* ftell(fd) -> pos (the ADSP's audio PD, 0217d) */
++	case 10:                                /* flen(fd) -> u64 length */
++	case 12: {                              /* feof(fd) -> eof */
++		uint32_t fd = w[0];
++		if (fd >= FR_FDS || !fr_fd[fd].used || fr_fd[fd].dir || nout < 1) {
++			return AEE_EFAILED;
++		}
++		uint64_t v = method == 8 ? fr_fd[fd].pos : method == 10 ? fr_fd[fd].len : fr_fd[fd].pos >= fr_fd[fd].len;
++		memcpy(prim, &v, 8);
++		out[0].p = prim;
++		out[0].len = method == 10 ? 8 : 4;
++		if (log) {
++			printf("SWEET " SL_TAG ": FastRPC <- %s(%u) -> %llu\n", method == 8 ? "ftell" : method == 10 ? "flen" : "feof",
++			    fd, v);
++		}
++		return 0;
++	}
++	case 11: {                              /* rewind(fd) */
++		uint32_t fd = w[0];
++		if (fd >= FR_FDS || !fr_fd[fd].used) {
++			return AEE_EFAILED;
++		}
++		fr_fd[fd].pos = 0;
++		return 0;
++	}
+ 	case 19: {                              /* fopen_with_env(env, delim, name, mode) -> fd */
+ 		const char *env = nin >= 5 ? fr_str(&in[1]) : NULL, *name = nin >= 5 ? fr_str(&in[3]) : NULL;
+ 		const char *mode = nin >= 5 ? fr_str(&in[4]) : NULL;
+@@ -1810,13 +1892,17 @@ fr_run(unsigned seconds)
+ 	struct fr_buf in[4], out[4];
+ 	uint32_t prim[8], oprim[8];
+ 	char err[256];
+-	(void)sweet_smmu_route_sid(0x541);
+-	(void)sweet_smmu_route_sid(0x542);
+-	(void)sweet_smmu_route_sid(0x543);
++	for (unsigned i = 0; i < sizeof(fr_sids) / sizeof(fr_sids[0]); i++) {
++		(void)sweet_smmu_route_sid(fr_sids[i]);
++	}
++#if SL_EDGE_ADSP
++	int r = fr_create_audio_pd();
++#else
+ 	int32_t tgid = FR_TGID;
+ 	in[0] = (struct fr_buf){ &tgid, 4 };
+ 	int r = fr_invoke(0, FR_HANDLE_INIT, FR_SC(0, 1, 0), in, out, 3000);
+ 	printf("SWEET " SL_TAG ": FastRPC INIT_ATTACH (sensors PD) -> %d\n", r);
++#endif
+ 	if (r != 0) {
+ 		return;
+ 	}
+@@ -1840,6 +1926,9 @@ fr_run(unsigned seconds)
+ 	if (r != 0) {
+ 		return;
+ 	}
++#if SL_EDGE_ADSP
++	adsp_fr_ready();
++#endif
+ 	static uint8_t reply_enc[0x10200], nested[256], outmem[0x10400];
+ 	struct fr_buf rq_in[FR_MAX_BUFS], rq_out[FR_MAX_BUFS];
+ 	uint8_t inmem[256];
+@@ -1901,7 +1990,6 @@ fr_run(unsigned seconds)
+ 		}
+ 	}
+ }
+-#endif /* !SL_EDGE_ADSP */
+ 
+ /* Handle what the SLPI sent; false when the FIFO holds an incomplete message. */
+ static bool
+@@ -1975,6 +2063,11 @@ gl_rx_one(void)
+ 			uint32_t sz[2];
+ 			gl_peek(sz, 8 + 8 * i, 8);
+ 			gl_remote_intent_add(p1, sz[0], sz[1]);
++			static unsigned intents_logged;
++			if (intents_logged++ < 40) {
++				printf("SWEET " SL_TAG ": GLINK <- INTENT cid %u size %#x id %u (%u in this message)\n", p1, sz[0],
++				    sz[1], p2);
++			}
+ 		}
+ 		gl_advance(len);
+ 		return true;
+@@ -2019,12 +2112,12 @@ gl_rx_one(void)
+ 			gl_cmd(GL_RX_DONE_W_REUSE, (uint16_t)(ch + 1), p2);     /* the intent is ours again */
+ 			if (ch + 1 == GL_LCID) {
+ 				qr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
+-			} else {
+ #if SL_EDGE_ADSP
++			} else if (ch + 1 == GL_LCID_APR) {
+ 				apr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
+-#else
+-				fr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
+ #endif
++			} else {
++				fr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
+ 			}
+ 		}
+ 		return true;
+@@ -2039,7 +2132,7 @@ gl_rx_one(void)
+ #if SL_EDGE_ADSP
+ 		{
+ 			static unsigned done_logged;
+-			if (gl_ch_by_rcid(p1) == GL_LCID_RPC - 1 && done_logged++ < 12) {
++			if (gl_ch_by_rcid(p1) == GL_LCID_APR - 1 && done_logged++ < 12) {
+ 				printf("SWEET ADSP: GLINK <- RX_DONE apr_audio_svc intent %u (the ADSP took our packet)\n", p2);
+ 			}
+ 		}
+@@ -2075,18 +2168,20 @@ sl_glink(void)
+ 	gl_cmd(GL_VERSION, 1, GL_FEATURE_INTENT_REUSE);
+ 	printf("SWEET " SL_TAG ": GLINK -> VERSION 1\n");
+ 	uint32_t last = ~0u;
+-#if !SL_EDGE_ADSP
+ 	bool fr_done = false;
+ 	uint32_t fr_secs = 180;
+ 	PE_parse_boot_argn(SL_ARG "rpc", &fr_secs, sizeof(fr_secs));
+-#endif
+ 	uint32_t secs = SL_GLINK_SECS;
+ 	PE_parse_boot_argn(SL_ARG "secs", &secs, sizeof(secs));
+ 	for (uint32_t t = 0; t < secs * 100; t++) {
+ 		while (gl_rx_one()) {
+ 		}
+ #if SL_EDGE_ADSP
+-		apr_poll(t * 10);
++		apr_poll(sl_ms());
++		if (!fr_done && fr_secs && gl_ch[GL_LCID_RPC - 1].acked && adsp_fr_wanted()) {
++			fr_done = true;         /* the audio PD: create it, then its FastRPC listener (blocks, pumps GLINK) */
++			fr_run(fr_secs);
++		}
+ #else
+ 		if (!fr_done && fr_secs && gl_ch[GL_LCID_RPC - 1].acked) {
+ 			fr_done = true;         /* the sensor PD's configuration: FastRPC listener (blocks, pumps GLINK) */
+diff --git a/osfmk/arm/io_map.c b/osfmk/arm/io_map.c
+index 18ef2f0..9b35454 100644
+--- a/osfmk/arm/io_map.c
++++ b/osfmk/arm/io_map.c
+@@ -62,7 +62,16 @@
+ 
+ extern vm_offset_t virtual_space_start;     /* Next available kernel VA */
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * The port maps every Qualcomm block it drives with ml_io_map (SMEM alone is 2 MiB, every map rounds
++ * to 16 KiB pages): 8 MiB ran out late in the boot, and io_map's KMA_NOFAIL then panics
++ * ("kmem_alloc(.., 0x100021): failed with 3", umi 0215c; the screen-off "freezes" of 0216c / 0217).
++ */
++#define IO_MAP_SIZE            (64ul << 20)
++#else
+ #define IO_MAP_SIZE            (8ul << 20)
++#endif
+ 
+ __startup_data static struct mach_vm_range io_range;
+ static SECURITY_READ_ONLY_LATE(vm_map_t) io_submap;
+-- 
+2.54.0 (Apple Git-157)
+

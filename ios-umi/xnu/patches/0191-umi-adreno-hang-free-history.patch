@@ -1,0 +1,76 @@
+From 9f098fe571b59b1bef9b9a6d63063cb8eaad15fa Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 19:39:55 +0100
+Subject: [PATCH] umi: hang dump says when the stuck IB's range was freed
+
+The 0190 hang: CP_OPCODE_ERROR, possible opcode 0, IB2 0x206470000 with
+0 dwords left and all-zero memory; the live log shows that iova mapped
+by three BOs in turn, the last (a fresh, zeroed read-only command BO)
+about 200 lines before the hang. A command stream pointed into a range
+that had been freed and reallocated.
+
+Keep the last 256 unmaps of GPU ranges (iova, length, newest submitted
+fence, fence word) and have the dump print every recorded free covering
+the IB1/IB2 base: a free before the stuck submission was submitted is a
+stale pointer in user space, one after it an in-flight free.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 27 +++++++++++++++++++++++++++
+ 1 file changed, 27 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 9ad0ff3..1914637 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3006,6 +3006,19 @@ sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n)
+ 	return err;
+ }
+ 
++/* The last frees (unmaps) of GPU ranges: which range left context 0 when, against the newest
++ * fence submitted and the fence word then. A hang inside memory that holds no commands (0187,
++ * 0190: CP_OPCODE_ERROR on a zero dword, the IB2 pointing at a just-reallocated range) is a
++ * buffer freed while a command stream still pointed into it; the dump looks its address up
++ * here to say whether the free came before or after the stuck submission. */
++#define SA_FREE_HISTORY 256
++struct sa_free {
++	uint64_t iova, len;
++	uint32_t submitted, done;
++};
++static struct sa_free sa_free_hist[SA_FREE_HISTORY];
++static uint32_t sa_free_next;
++
+ /* Drop [iova, iova+len) out of context 0 and forget its translations. */
+ void
+ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+@@ -3014,6 +3027,11 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ 		return;
+ 	}
+ 	sa_service_take_lock();
++	struct sa_free *f = &sa_free_hist[sa_free_next++ % SA_FREE_HISTORY];
++	f->iova = iova;
++	f->len = len;
++	f->submitted = sa_fence_seqno;
++	f->done = sa_fence_read();
+ 	for (uint64_t at = 0; at < len; at += 4096) {
+ 		uint64_t *pte = sa_space_pte(&sa_core_space, iova + at);
+ 		if (pte != NULL) {
+@@ -3193,6 +3211,15 @@ sa_hang_dump(uint32_t fence)
+ 			from = pos >= start + 256 ? pos - 256 : start;
+ 			count = 64;
+ 		}
++		for (uint32_t k = 0; start != 0 && k < SA_FREE_HISTORY; k++) {
++			struct sa_free *f = &sa_free_hist[(sa_free_next + k) % SA_FREE_HISTORY];   /* oldest first */
++			if (f->len != 0 && start >= f->iova && start < f->iova + f->len) {
++				IOLog("SWEET ADRENO: fence %u IB%u %#llx was in a range freed %#llx+%#llx when fence %u "
++				    "was the newest submitted and %u done (%u frees ago)\n", fence, l + 1,
++				    (unsigned long long)start, (unsigned long long)f->iova, (unsigned long long)f->len,
++				    f->submitted, f->done, SA_FREE_HISTORY - k);
++			}
++		}
+ 		IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left (stuck submission's IB %d of %u "
+ 		    "dwords); words from %#llx:\n", fence, l + 1, (unsigned long long)start, ib_rem[l],
+ 		    which == ~0u ? -1 : (int)which, size, (unsigned long long)from);
+-- 
+2.54.0 (Apple Git-157)
+

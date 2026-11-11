@@ -1,0 +1,366 @@
+From 85cf21f68247c00d542b148661f89d2ae3bc6e6c Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Fri, 23 Oct 2026 21:17:20 +0200
+Subject: [PATCH] umi-0115
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_mon.c  | 159 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_pcie.c |  97 ++++++++++++++++++++++----
+ bsd/dev/sweet_usb.c  |   4 ++
+ 4 files changed, 246 insertions(+), 15 deletions(-)
+ create mode 100644 bsd/dev/sweet_mon.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index a593609..c04e54e 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -113,6 +113,7 @@ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/sweet_pcie.c			standard
++bsd/dev/sweet_mon.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_mon.c b/bsd/dev/sweet_mon.c
+new file mode 100644
+index 0000000..9285a0b
+--- /dev/null
++++ b/bsd/dev/sweet_mon.c
+@@ -0,0 +1,159 @@
++/*
++ * Debug monitor over USB Ethernet (sweetusb=2): text commands as UDP datagrams
++ * to 192.168.7.2:5141, the reply goes back to the sender. For hardware bring-up
++ * without a reboot per experiment:
++ *   r PA [N]        read N (1..64) 32-bit words at physical address PA
++ *   w PA VAL        write one 32-bit word
++ *   wlan STAGE      run the umi PCIe/QCA6390 bring-up (sweet_pcie.c) up to STAGE
++ * Numbers are C literals (0x...). Reading a register whose clock is off can stall
++ * the bus and reset the SoC. Boot-arg sweetmon=0 disables it.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/thread.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++#include <sys/kpi_socket.h>
++#include <netinet/in.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern void ml_io_unmap(vm_offset_t, vm_size_t);
++extern int sweet_pcie_run(unsigned stage);
++extern void IOSleep(unsigned int milliseconds);
++void sweet_mon_start(void);
++
++#define MON_PORT        5141
++#define MON_WINDOW      0x10000u
++
++static struct {
++	vm_offset_t va;
++	uint64_t pa;            /* window base, MON_WINDOW aligned */
++} mon;
++
++static volatile uint32_t *
++mon_reg(uint64_t pa)
++{
++	uint64_t base = pa & ~(uint64_t)(MON_WINDOW - 1);
++	if (mon.va == 0 || mon.pa != base) {
++		if (mon.va) {
++			ml_io_unmap(mon.va, MON_WINDOW);
++		}
++		mon.va = ml_io_map((vm_offset_t)base, MON_WINDOW);
++		mon.pa = base;
++	}
++	return mon.va ? (volatile uint32_t *)(mon.va + (pa - base)) : NULL;
++}
++
++static const char *
++mon_num(const char *p, uint64_t *out)
++{
++	while (*p == ' ') {
++		p++;
++	}
++	char *end;
++	unsigned long long v = strtouq(p, &end, 0);
++	if (end == p) {
++		return NULL;
++	}
++	*out = v;
++	return end;
++}
++
++static size_t
++mon_command(char *cmd, char *out, size_t max)
++{
++	uint64_t a = 0, b = 0;
++	const char *p;
++	size_t n = 0;
++	if (cmd[0] == 'r' && cmd[1] == ' ' && (p = mon_num(cmd + 2, &a)) != NULL) {
++		if (mon_num(p, &b) == NULL || b == 0) {
++			b = 1;
++		}
++		if (b > 64) {
++			b = 64;
++		}
++		a &= ~3ull;
++		for (uint64_t i = 0; i < b && n + 32 < max; ++i) {
++			if (((a + 4 * i) & (MON_WINDOW - 1)) == 0 || i == 0) {
++				if (mon_reg(a + 4 * i) == NULL) {
++					return snprintf(out, max, "map failed\n");
++				}
++			}
++			uint32_t v = *mon_reg(a + 4 * i);
++			__asm__ volatile("dmb oshld" ::: "memory");
++			n += snprintf(out + n, max - n, "%s%08x", i % 8 ? " " : (i ? "\n" : ""), v);
++		}
++		n += snprintf(out + n, max - n, "\n");
++	} else if (cmd[0] == 'w' && cmd[1] == ' ' && (p = mon_num(cmd + 2, &a)) != NULL && mon_num(p, &b) != NULL) {
++		volatile uint32_t *r = mon_reg(a & ~3ull);
++		if (r == NULL) {
++			return snprintf(out, max, "map failed\n");
++		}
++		__asm__ volatile("dmb oshst" ::: "memory");
++		*r = (uint32_t)b;
++		__asm__ volatile("dsb osh" ::: "memory");
++		n = snprintf(out, max, "%08x\n", *r);
++	} else if (!strncmp(cmd, "wlan ", 5) && mon_num(cmd + 5, &a) != NULL) {
++		n = snprintf(out, max, "wlan stage %llu -> %d\n", a, sweet_pcie_run((unsigned)a));
++	} else {
++		n = snprintf(out, max, "commands: r PA [N] | w PA VAL | wlan STAGE\n");
++	}
++	return n;
++}
++
++static void
++mon_thread(void *arg __unused, wait_result_t wr __unused)
++{
++	static char cmd[256], reply[1400];
++	socket_t so = NULL;
++	struct sockaddr_in me;
++	for (;;) {
++		if (so == NULL) {
++			if (sock_socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, NULL, &so) != 0) {
++				so = NULL;
++				IOSleep(1000);
++				continue;
++			}
++			bzero(&me, sizeof(me));
++			me.sin_len = sizeof(me);
++			me.sin_family = AF_INET;
++			me.sin_port = htons(MON_PORT);
++			if (sock_bind(so, (struct sockaddr *)&me) != 0) {
++				sock_close(so);
++				so = NULL;
++				IOSleep(1000);
++				continue;
++			}
++			printf("SWEET MON: listening on udp/%u\n", MON_PORT);
++		}
++		struct sockaddr_in from;
++		struct iovec iov = { .iov_base = cmd, .iov_len = sizeof(cmd) - 1 };
++		struct msghdr msg = { .msg_name = &from, .msg_namelen = sizeof(from), .msg_iov = &iov, .msg_iovlen = 1 };
++		size_t len = 0;
++		if (sock_receive(so, &msg, 0, &len) != 0 || len == 0) {
++			continue;
++		}
++		cmd[len] = 0;
++		while (len && (cmd[len - 1] == '\n' || cmd[len - 1] == '\r')) {
++			cmd[--len] = 0;
++		}
++		size_t n = mon_command(cmd, reply, sizeof(reply));
++		struct iovec riov = { .iov_base = reply, .iov_len = n };
++		struct msghdr rmsg = { .msg_name = &from, .msg_namelen = sizeof(from), .msg_iov = &riov, .msg_iovlen = 1 };
++		size_t sent = 0;
++		(void)sock_send(so, &rmsg, 0, &sent);
++	}
++}
++
++void
++sweet_mon_start(void)
++{
++	int enabled = 1;
++	thread_t thread;
++	(void)PE_parse_boot_argn("sweetmon", &enabled, sizeof(enabled));
++	if (enabled && kernel_thread_start(mon_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+index f13e170..fdadd19 100644
+--- a/bsd/dev/sweet_pcie.c
++++ b/bsd/dev/sweet_pcie.c
+@@ -19,6 +19,7 @@ extern kern_return_t thread_terminate(thread_t);
+ extern bool sweet_board_is_umi(void);
+ extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ void sweet_pcie_init(void);
++int sweet_pcie_run(unsigned stage);
+ 
+ #define PCIE_GCC_PA      0x00100000u
+ #define PCIE_GCC_SIZE    0x000a0000u
+@@ -30,6 +31,9 @@ void sweet_pcie_init(void);
+ #define PCIE_ELBI_PA     0x60000f20u
+ #define PCIE_IATU_PA     0x60001000u
+ #define PCIE_CONF_PA     0x60100000u
++#define PCIE_MEM_PA      0x60300000u     /* DT ranges: 32-bit MEM 0x60300000 + 0x3d00000 */
++#define PCIE_MEM_SIZE    0x03d00000u
++#define PCIE_BAR0_PA     0x60400000u
+ 
+ /* gcc-kona / gcc-sm8250 */
+ #define GCC_PCIE0_BCR        0x6b000u
+@@ -178,7 +182,8 @@ static const struct pcie_phy_step pcie_phy_seq[] = {
+ };
+ 
+ static struct {
+-	vm_offset_t gcc, tlmm, parf, phy, dbi, elbi, iatu, conf;
++	vm_offset_t gcc, tlmm, parf, phy, dbi, elbi, iatu, conf, bar0;
++	volatile int busy;
+ 	unsigned stage;
+ 	bool started;
+ 	int sleep_chan;
+@@ -282,22 +287,68 @@ pcie_map(void)
+ 	return sp.gcc && sp.tlmm && sp.parf && sp.phy && sp.dbi && sp.iatu && sp.conf;
+ }
+ 
+-/* iATU outbound region 0 (unrolled layout): CFG0 window at PCIE_CONF_PA -> bus 1 dev 0 fn 0. */
++/* iATU outbound region idx (unrolled layout, 0x200 per region). */
+ static void
+-pcie_cfg_window(void)
++pcie_iatu(unsigned idx, uint32_t type, uint32_t base, uint32_t size, uint32_t target)
+ {
+-	vm_offset_t r = sp.iatu;
++	vm_offset_t r = sp.iatu + 0x200u * idx;
+ 	pcie_wr(r, 0x04, 0);                         /* CTRL2: disable while programming */
+-	pcie_wr(r, 0x08, PCIE_CONF_PA);              /* LWR_BASE */
++	pcie_wr(r, 0x08, base);                      /* LWR_BASE */
+ 	pcie_wr(r, 0x0c, 0);                         /* UPPER_BASE */
+-	pcie_wr(r, 0x10, PCIE_CONF_PA + 0xfffu);     /* LIMIT */
+-	pcie_wr(r, 0x14, 1u << 24);                  /* LWR_TARGET: bus 1 */
++	pcie_wr(r, 0x10, base + size - 1);           /* LIMIT */
++	pcie_wr(r, 0x14, target);                    /* LWR_TARGET */
+ 	pcie_wr(r, 0x18, 0);
+-	pcie_wr(r, 0x00, 4);                         /* CTRL1: type CFG0 */
++	pcie_wr(r, 0x00, type);                      /* CTRL1: 0 MEM, 4 CFG0 */
+ 	pcie_wr(r, 0x04, 1u << 31);                  /* enable */
+ 	(void)pcie_poll(r, 0x04, 1u << 31, 1u << 31, 5);
+ }
+ 
++/* CFG0 window at PCIE_CONF_PA -> bus 1 dev 0 fn 0 */
++static void
++pcie_cfg_window(void)
++{
++	pcie_iatu(0, 4, PCIE_CONF_PA, 0x1000, 1u << 24);
++}
++
++/* Stage 4: size and place BAR0, open the MEM window, look at the MHI registers. */
++static int
++pcie_bar0(void)
++{
++	pcie_wr(sp.conf, 0x10, 0xffffffffu);
++	uint32_t mask = pcie_rd(sp.conf, 0x10);
++	uint32_t size = ~(mask & ~0xfu) + 1;
++	printf("SWEET PCIE: BAR0 mask %#x -> %u KiB, BAR1 %#x\n", mask, size >> 10, pcie_rd(sp.conf, 0x14));
++	if (size == 0 || size > PCIE_MEM_SIZE - (PCIE_BAR0_PA - PCIE_MEM_PA)) {
++		return 5;
++	}
++	pcie_wr(sp.conf, 0x10, PCIE_BAR0_PA);
++	if (mask & 4u) {
++		pcie_wr(sp.conf, 0x14, 0);           /* 64-bit BAR: upper half */
++	}
++	/* Root port memory window (base/limit in 1 MiB units) and the iATU MEM region. */
++	pcie_wr(sp.dbi, 0x20, ((PCIE_MEM_PA + PCIE_MEM_SIZE - 1) & 0xfff00000u) | (PCIE_MEM_PA >> 16));
++	pcie_iatu(1, 0, PCIE_MEM_PA, PCIE_MEM_SIZE, PCIE_MEM_PA);
++	pcie_wr(sp.conf, 0x04, pcie_rd(sp.conf, 0x04) | 0x6u);   /* memory + bus master */
++	if (sp.bar0 == 0) {
++		sp.bar0 = ml_io_map(PCIE_BAR0_PA, size < 0x100000u ? size : 0x100000u);
++	}
++	if (sp.bar0 == 0) {
++		return 6;
++	}
++	printf("SWEET PCIE: MHI regs: len %#x ver %#x cfg %#x chdboff %#x erdboff %#x bhioff %#x bhieoff %#x ctrl %#x status %#x\n",
++	    pcie_rd(sp.bar0, 0x00), pcie_rd(sp.bar0, 0x08), pcie_rd(sp.bar0, 0x10), pcie_rd(sp.bar0, 0x18),
++	    pcie_rd(sp.bar0, 0x20), pcie_rd(sp.bar0, 0x28), pcie_rd(sp.bar0, 0x2c), pcie_rd(sp.bar0, 0x38),
++	    pcie_rd(sp.bar0, 0x68));
++	uint32_t bhi = pcie_rd(sp.bar0, 0x28);
++	if (bhi && bhi < 0x100000u) {
++		/* BHI_EXECENV 0x28, BHI_STATUS 0x2c, BHI_ERRCODE 0x34, BHI_SERIALNU 0x40 */
++		printf("SWEET PCIE: BHI at %#x: execenv %#x status %#x errcode %#x serial %#x\n", bhi,
++		    pcie_rd(sp.bar0, bhi + 0x28), pcie_rd(sp.bar0, bhi + 0x2c), pcie_rd(sp.bar0, bhi + 0x34),
++		    pcie_rd(sp.bar0, bhi + 0x40));
++	}
++	return 0;
++}
++
+ static int
+ pcie_bringup(void)
+ {
+@@ -414,7 +465,28 @@ pcie_bringup(void)
+ 	uint32_t cls = pcie_rd(sp.conf, 0x08);
+ 	printf("SWEET PCIE: bus 1 dev 0: id %#x class/rev %#x %s\n", id, cls,
+ 	    id == 0x110117cbu ? "(QCA6390)" : "");
+-	return id == 0x110117cbu ? 0 : 4;
++	if (id != 0x110117cbu) {
++		return 4;
++	}
++	return sp.stage >= 4 ? pcie_bar0() : 0;
++}
++
++int
++sweet_pcie_run(unsigned stage)
++{
++	if (!sweet_board_is_umi() || __atomic_exchange_n(&sp.busy, 1, __ATOMIC_ACQUIRE)) {
++		return -1;
++	}
++	int r = -2;
++	if (sp.gcc || pcie_map()) {
++		sp.stage = stage;
++		r = pcie_bringup();
++	} else {
++		printf("SWEET PCIE: mapping failed\n");
++	}
++	printf("SWEET PCIE: stage %u done, result %d\n", stage, r);
++	__atomic_store_n(&sp.busy, 0, __ATOMIC_RELEASE);
++	return r;
+ }
+ 
+ static void
+@@ -423,12 +495,7 @@ pcie_thread(void *arg __unused, wait_result_t wr __unused)
+ 	unsigned delay_s = 20;
+ 	(void)PE_parse_boot_argn("sweetwlandelay", &delay_s, sizeof(delay_s));
+ 	pcie_wait(delay_s * 1000u);
+-	if (!pcie_map()) {
+-		printf("SWEET PCIE: mapping failed\n");
+-	} else {
+-		int r = pcie_bringup();
+-		printf("SWEET PCIE: stage %u done, result %d\n", sp.stage, r);
+-	}
++	(void)sweet_pcie_run(sp.stage);
+ 	(void)thread_terminate(current_thread());
+ 	thread_block(THREAD_CONTINUE_NULL);
+ }
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+index 26e73b0..5604a4c 100644
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -77,6 +77,7 @@ static const struct usb_clk usb_cbcr_umi[] = {
+ };
+ extern bool sweet_board_is_umi(void);
+ extern bool sweet_smmu_route_sid(uint32_t sid);
++extern void sweet_mon_start(void);
+ /* umi DT usb0 iommus = <&apps_smmu 0x0 0x0>: the DWC3 masters DRAM as stream 0. */
+ #define UMI_USB_SID             0x0
+ 
+@@ -995,5 +996,8 @@ sweet_usb_gadget_start(vm_offset_t dwc)
+ 	if (livelog && ud.ifp != NULL && kernel_thread_start(ud_log_thread, NULL, &thread) == KERN_SUCCESS) {
+ 		thread_deallocate(thread);
+ 	}
++	if (ud.ifp != NULL) {
++		sweet_mon_start();
++	}
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

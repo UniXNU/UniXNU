@@ -1,0 +1,58 @@
+From 18102adb85feeb03c45ffda5b72639d895897bc0 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 21:39:47 +0100
+Subject: [PATCH] umi: say whether a bad IB's BO pages moved or its PTE was
+ rewritten
+
+0197 (pageable WC buffers) still shows command BOs whose GPU PTE and
+descriptor page differ. Record the page BoMap wrote for offset 0 and
+print it next to the PTE and the descriptor's current page, so the
+dump names the case: the BO's pages moved after BoMap (PTE = page at
+BoMap) or the PTE was rewritten after BoMap (descriptor = page at BoMap).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 3d059cb..7c2eca8 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -180,6 +180,7 @@ class SweetAdrenoUserClient : public IOUserClient {
+ 		uint64_t           bytes;
+ 		uint64_t           iova;        /* GPU address while mapped, else 0 */
+ 		bool               imported;    /* the client's own pages (no CPU-map token) */
++		uint64_t           mapped_pa;   /* the page BoMap wrote for offset 0 (0197 diagnostics) */
+ 	};
+ 
+ 	SweetAdrenoUserClient::BO *v2Find(uint64_t handle);
+@@ -667,6 +668,8 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		if (r == kIOReturnSuccess) {
+ 			bo->iova = rq->iova;
+ 			rp->iova = rq->iova;
++			IOByteCount seg0 = 0;
++			bo->mapped_pa = bo->md->getPhysicalSegment(0, &seg0, kIOMemoryMapperNone);
+ 			/* an import's pages carry whatever the CPU wrote (the decoded image, the client's
+ 			 * drawing) - pushed out to memory here, before the GPU can sample them, because
+ 			 * the GPU's window mapping is uncached and reads what memory holds, not what the
+@@ -776,10 +779,14 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 					kword = *(volatile uint32_t *)kva;
+ 					kread = true;
+ 				}
++				uint64_t at_map = b->mapped_pa + (off & ~4095ull);    /* 16K BOs: one page, 4K steps */
+ 				IOLog("SWEET ADRENO: bad word %#x at %#llx (fence %u) is in handle %u (%s, iova %#llx+%#llx, "
+-				    "offset %#llx): GPU PTE page %#llx, BO page %#llx%s; through the kernel map %s %#x\n",
++				    "offset %#llx): GPU PTE page %#llx, BO page now %#llx, BO page at BoMap %#llx (%s); "
++				    "through the kernel map %s %#x\n",
+ 				    sweet_adreno_bad_word, bad, fence, i + 1, b->imported ? "import" : "alloc", b->iova,
+-				    b->bytes, off, pte_pa, (uint64_t)md_pa, pte_pa == (uint64_t)md_pa ? " (same)" : " (DIFFERENT)",
++				    b->bytes, off, pte_pa, (uint64_t)md_pa, at_map,
++				    pte_pa == (uint64_t)md_pa ? "same" : pte_pa == at_map ? "BO PAGES MOVED after BoMap" :
++				    (uint64_t)md_pa == at_map ? "PTE REWRITTEN after BoMap" : "all three differ",
+ 				    kread ? "it reads" : "no map", kword);
+ 			}
+ 			if (!found) {
+-- 
+2.54.0 (Apple Git-157)
+

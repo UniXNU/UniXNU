@@ -1,0 +1,77 @@
+From 52f042e09bfd5452afa7ae727fa604edb40df803 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 18:38:00 +0100
+Subject: [PATCH] umi: dump the CP's IB1/IB2 fetch position on a stuck fence
+
+The 0187 hang dump (fence 835: CP_OPCODE_ERROR, possible opcode 0, ring
+read to 3488 of 3549) printed the head words of the newest submission,
+not of the stuck one, and not where the CP stopped. Read CP_IB1_BASE /
+CP_IB1_REM_SIZE and CP_IB2_BASE / CP_IB2_REM_SIZE (Linux v6.12 a6xx.xml
+0x928/0x92a/0x92b/0x92d, as a6xx_dump does) and print the 32-byte line
+around each fetch position, and the heads of the stuck fence's own
+buffers (up to 8) when it is still in the submission history.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 35 +++++++++++++++++++++++++++++++++--
+ 1 file changed, 33 insertions(+), 2 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index b01a701..3cc32d3 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -1952,6 +1952,10 @@ sa_step_zap_load(void)
+ #define CP_SQE_STAT_ADDR        GPU_WORD(0x0908)  /* 1 there -> CP_SQE_STAT_DATA: the possible opcode */
+ #define CP_SQE_STAT_DATA        GPU_WORD(0x0909)  /* Linux a6xx_cp_hw_err_irq (a6xx_gpu.c) */
+ #define CP_SQE_INSTR_BASE       GPU_WORD(0x0830)
++#define CP_IB1_BASE             GPU_WORD(0x0928)  /* 64-bit; Linux v6.12 a6xx.xml, read by a6xx_dump */
++#define CP_IB1_REM_SIZE         GPU_WORD(0x092a)
++#define CP_IB2_BASE             GPU_WORD(0x092b)  /* 64-bit */
++#define CP_IB2_REM_SIZE         GPU_WORD(0x092d)
+ #define CP_APRIV_CNTL           GPU_WORD(0x0844)
+ #define CP_PROTECT_CNTL         GPU_WORD(0x084f)
+ #define CP_PROTECT              GPU_WORD(0x0850)
+@@ -3162,11 +3166,38 @@ sa_hang_dump(uint32_t fence)
+ 			    (unsigned long long)h->iova[i], h->dwords[i]);
+ 		}
+ 	}
+-	/* the head of the newest submission's buffers, through the page tables */
++	/* where the CP's fetch stands in the first- and second-level buffers (Linux a6xx_dump):
++	 * the base advances with the fetch, the remaining size counts what is left of the
++	 * buffer. The words are read from the 32-byte line around each position. */
++	uint64_t ib_base[2];
++	uint32_t ib_rem[2];
++	ib_base[0] = (uint64_t)sa_rd(sa_gpu.base + CP_IB1_BASE + 4) << 32 | sa_rd(sa_gpu.base + CP_IB1_BASE);
++	ib_rem[0] = sa_rd(sa_gpu.base + CP_IB1_REM_SIZE);
++	ib_base[1] = (uint64_t)sa_rd(sa_gpu.base + CP_IB2_BASE + 4) << 32 | sa_rd(sa_gpu.base + CP_IB2_BASE);
++	ib_rem[1] = sa_rd(sa_gpu.base + CP_IB2_REM_SIZE);
++	for (uint32_t l = 0; l < 2; l++) {
++		uint32_t p[8];
++		uint64_t line = ib_base[l] & ~31ull;
++		if (ib_base[l] != 0 && sa_gpu_words(line, p)) {
++			IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left; words from %#llx: "
++			    "%#x %#x %#x %#x / %#x %#x %#x %#x\n", fence, l + 1, (unsigned long long)ib_base[l],
++			    ib_rem[l], (unsigned long long)line, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++		} else {
++			IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left (words unavailable)\n", fence,
++			    l + 1, (unsigned long long)ib_base[l], ib_rem[l]);
++		}
++	}
++	/* the head of the stuck submission's buffers (the newest one's if it left the history),
++	 * through the page tables */
+ 	uint32_t newest = (sa_submit_next + SA_SUBMIT_HISTORY - 1) % SA_SUBMIT_HISTORY;
+ 	struct sa_submit *h = &sa_submit_hist[newest];
+ 
+-	for (uint32_t i = 0; i < h->n && i < 4; i++) {
++	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
++		if (sa_submit_hist[s].fence == fence && sa_submit_hist[s].n != 0) {
++			h = &sa_submit_hist[s];
++		}
++	}
++	for (uint32_t i = 0; i < h->n && i < 8; i++) {
+ 		uint32_t p[8];
+ 		if (h->dwords[i] >= 8 && sa_gpu_words(h->iova[i], p)) {
+ 			IOLog("SWEET ADRENO: fence %u IB %u words: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
+-- 
+2.54.0 (Apple Git-157)
+

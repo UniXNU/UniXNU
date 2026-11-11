@@ -1,0 +1,120 @@
+From f8da9efa079990c4c7048ec6a27e24aa06270e21 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 16:45:58 +0100
+Subject: [PATCH] umi: panel dark while the display is off
+
+iOS does not lower the brightness when backboardd turns the display off
+(lock, auto-lock, power button): RequestPowerChange(0) only faded the
+picture, so the AMOLED stayed lit. The backlight's thread call now sends
+level 0 and DCS 0x28 (display off) on display off, and DCS 0x29 plus the
+wanted level on display on; levels set while off wait. The panel stays
+out of sleep, so it comes back at once; CoreBrightness then fades up.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 48 +++++++++++++++++++++++++++
+ 1 file changed, 48 insertions(+)
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 2d8bcd2..c0ab958 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -208,6 +208,7 @@ OSDefineMetaClassAndStructors(AppleCLCD, IOMobileFramebuffer);
+ 
+ static AppleCLCD *sweet_fb_main;        /* the panel (sweet_fb_gpu_begin) */
+ static void sweet_backlight_publish(IOService *provider);
++static void sweet_backlight_display_power(bool on);
+ static void sweet_hold(SweetSurface *s, bool on);
+ static void sweet_hold_drop(SweetSurface **set);
+ 
+@@ -1527,6 +1528,7 @@ IOMobileFramebufferUserClient::externalMethod(uint32_t selector, IOExternalMetho
+ 				fFB->fDirty = true;     /* on: redraw the latest frame */
+ 			}
+ 			IOLockUnlock(fFB->fLock);
++			sweet_backlight_display_power(!off);    /* umi: panel dark while off */
+ 			IOLog("SWEET FB: display %s [t %llu]\n", off ? "off" : "on", mach_absolute_time());
+ 		}
+ 		break;
+@@ -1744,12 +1746,15 @@ class AppleARMBacklight : public IOService {
+ 	uint32_t          fMaxNits;
+ 	uint32_t          fSets;        /* setProperties calls (log limit) */
+ 	uint32_t          fLoggedLevel; /* last level logged */
++	volatile bool     fWantOff;     /* display off (RequestPowerChange 0) */
++	bool              fPanelOff;    /* DCS 0x28 sent, not yet 0x29 */
+ 
+ 	static void apply(thread_call_param_t p0, thread_call_param_t p1);
+ 	void updateParameters(uint32_t level);
+ 
+ public:
+ 	bool startBacklight(IOService *provider);
++	void displayPower(bool on);
+ 	IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE;
+ 	OSPtr<OSObject> copyProperty(const char *aKey) const APPLE_KEXT_OVERRIDE;
+ 	using IOService::copyProperty;
+@@ -1906,6 +1911,25 @@ void
+ AppleARMBacklight::apply(thread_call_param_t p0, __unused thread_call_param_t p1)
+ {
+ 	AppleARMBacklight *bl = (AppleARMBacklight *)p0;
++	static const uint8_t displayOff[] = { 0x28 }, displayOn[] = { 0x29 };
++
++	if (bl->fWantOff) {
++		if (!bl->fPanelOff) {
++			/* dark first, then display off: no flash of the old level */
++			if (sweet_panel_set_level(0) == kIOReturnSuccess) {
++				bl->fSent = 0;
++			}
++			IOReturn r = sweet_dsi_dcs_write(displayOff, sizeof(displayOff));
++			bl->fPanelOff = true;
++			IOLog("SWEET BL: panel off -> %#x\n", r);
++		}
++		return;                 /* levels wait until the display is on again */
++	}
++	if (bl->fPanelOff) {
++		IOReturn r = sweet_dsi_dcs_write(displayOn, sizeof(displayOn));
++		bl->fPanelOff = false;
++		IOLog("SWEET BL: panel on -> %#x, level %u\n", r, bl->fTarget);
++	}
+ 	uint32_t level = bl->fTarget;
+ 	if (level == bl->fSent) {
+ 		return;
+@@ -1915,6 +1939,28 @@ AppleARMBacklight::apply(thread_call_param_t p0, __unused thread_call_param_t p1
+ 	}
+ }
+ 
++/*
++ * backboardd's RequestPowerChange (lock, auto-lock, power button): iOS itself does not lower
++ * the brightness when the display goes off, so the panel is darkened here (level 0 + DCS
++ * 0x28 display off; the panel stays out of sleep, so 0x29 + the level bring it straight back).
++ */
++void
++AppleARMBacklight::displayPower(bool on)
++{
++	fWantOff = !on;
++	thread_call_enter(fCall);
++}
++
++static AppleARMBacklight *sweet_bl_main;
++
++static void
++sweet_backlight_display_power(bool on)
++{
++	if (sweet_bl_main != NULL) {
++		sweet_bl_main->displayPower(on);
++	}
++}
++
+ IOReturn
+ AppleARMBacklight::setProperties(OSObject *properties)
+ {
+@@ -2001,6 +2047,8 @@ sweet_backlight_publish(IOService *provider)
+ 	AppleARMBacklight *bl = OSTypeAlloc(AppleARMBacklight);
+ 	if (bl == NULL || !bl->init() || !bl->startBacklight(provider)) {
+ 		IOLog("SWEET BL: no backlight service\n");
++	} else {
++		sweet_bl_main = bl;     /* attached to AppleCLCD: the registry keeps it */
+ 	}
+ 	OSSafeReleaseNULL(bl);
+ }
+-- 
+2.54.0 (Apple Git-157)
+

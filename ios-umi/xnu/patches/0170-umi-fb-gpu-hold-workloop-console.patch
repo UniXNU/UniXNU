@@ -1,0 +1,317 @@
+From 3eb72e7a8b44efe2245f86e7c59df45150831cfe Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 20:40:12 +0100
+Subject: [PATCH] umi-0170-fb-gpu-hold-workloop-console
+
+In sweet_fb_gpu_begin(), set the hold and clean the boot framebuffer from
+the CPU cache inside the framebuffer workloop's gate (fWorkLoop->runAction),
+so no AppleCLCD::present() frame copy runs at the same time; mute the kernel
+text console for the hold (sweet_console_muted, old value put back when the
+hold ends in vsyncFired, also when it ends with the display off); skip the
+power-off fade (and the copy-over that precedes it) while the hold lasts.
+In the 0169 boot the console wrote an opaque black pixel over the GPU's
+green band before iOS's first frame muted it, so step 22's check failed and
+step 23 never ran.
+
+Also stamp the hold-related GPU (printf) and FB (IOLog) lines with
+mach_absolute_time() so their order can be read from the persistent log.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c                |  39 ++++-----
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 109 ++++++++++++++++++++++----
+ 2 files changed, 116 insertions(+), 32 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index f5a5658..a91ed63 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -75,6 +75,7 @@
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+ #include <sys/systm.h>
++#include <mach/mach_time.h>
+ #include <kern/clock.h>
+ #include <kern/thread.h>
+ #include <machine/machine_routines.h>
+@@ -2298,8 +2299,8 @@ sa_step_frame(void)
+ 		rows_per = 2;
+ 	}
+ 	printf("SWEET GPU: %u: framebuffer %ux%u, rows of %u bytes at %#llx; the 2D engine sees %ux%u, rows of %u bytes; "
+-	    "shown alone for %u ms once drawn\n", sa_step, width, height, row, phys, width * rows_per, height / rows_per, row * rows_per,
+-	    hold);
++	    "shown alone for %u ms once drawn (t %llu)\n", sa_step, width, height, row, phys, width * rows_per, height / rows_per, row * rows_per,
++	    hold, mach_absolute_time());
+ 	if ((phys & 4095) || (row * rows_per) % 64 != 0 || height % rows_per != 0 || width * rows_per > 0x4000) {
+ 		printf("SWEET GPU: %u: not a framebuffer the 2D engine can be told about\n", sa_step);
+ 		return false;
+@@ -2362,19 +2363,20 @@ sa_step_frame(void)
+ 		uint32_t y = height * (2 * b + 1) / 6;
+ 		uint32_t middle = sweet_fb_gpu_pixel(width / 2, y), left = sweet_fb_gpu_pixel(0, y),
+ 		    end = sweet_fb_gpu_pixel(width - 1, y);
+-		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x)\n", sa_step, y,
+-		    bands[b].name, left, middle, end, want[b]);
++		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x; t %llu)\n", sa_step, y,
++		    bands[b].name, left, middle, end, want[b], mach_absolute_time());
+ 		right = right && left == want[b] && middle == want[b] && end == want[b];
+ 	}
+ 	printf("SWEET GPU: %u: first pixel %#x, last pixel %#x\n", sa_step, sweet_fb_gpu_pixel(0, 0),
+ 	    sweet_fb_gpu_pixel(width - 1, height - 1));
+ 	sweet_fb_gpu_show(hold);
+ 	if (!right) {
+-		printf("SWEET GPU: %u: the framebuffer does not hold what the 2D engine was told to draw\n", sa_step);
++		printf("SWEET GPU: %u: the framebuffer does not hold what the 2D engine was told to draw (t %llu)\n", sa_step,
++		    mach_absolute_time());
+ 		return false;
+ 	}
+-	printf("SWEET GPU: %u: A PICTURE DRAWN BY THE GPU IS ON THE PANEL: red, green, blue from the top (for %u ms)\n",
+-	    sa_step, hold);
++	printf("SWEET GPU: %u: A PICTURE DRAWN BY THE GPU IS ON THE PANEL: red, green, blue from the top (for %u ms; t %llu)\n",
++	    sa_step, hold, mach_absolute_time());
+ 	return true;
+ }
+ 
+@@ -2551,18 +2553,19 @@ sa_step_submit(void)
+ 
+ 	sa_announce("show the framebuffer alone, submit the object as an indirect buffer, wait for its fence");
+ 	if (!sweet_fb_gpu_begin(&phys, &width, &height, &row, FB_HOLD_UNTIL_DRAWN)) {
+-		printf("SWEET GPU: %u: the framebuffer driver does not hold the panel (display off?): drawing anyway\n", sa_step);
++		printf("SWEET GPU: %u: the framebuffer driver does not hold the panel (display off?): drawing anyway (t %llu)\n",
++		    sa_step, mach_absolute_time());
+ 	}
+ 	uint32_t before = sa_fence_read();
+ 	uint32_t seqno = sa_submit(&cmds, length);
+-	printf("SWEET GPU: %u: submitted %u words as fence %u (fence word was %#x); ring up to word %u\n", sa_step, length,
+-	    seqno, before, sa_ring_at);
++	printf("SWEET GPU: %u: submitted %u words as fence %u (fence word was %#x); ring up to word %u (t %llu)\n", sa_step, length,
++	    seqno, before, sa_ring_at, mach_absolute_time());
+ 	bool done = sa_fence_wait(seqno, 2000);
+ 	uint32_t fence = sa_fence_read();
+ 	printf("SWEET GPU: %u: fence word %#x (%s); ring read up to %u, status %#x, command processor fault %#x, "
+-	    "interrupts %#x, protection %#x\n", sa_step, fence, done ? "SIGNALLED" : "not signalled", sa_rd(sa_gpu.base + CP_RB_RPTR),
++	    "interrupts %#x, protection %#x (t %llu)\n", sa_step, fence, done ? "SIGNALLED" : "not signalled", sa_rd(sa_gpu.base + CP_RB_RPTR),
+ 	    sa_rd(sa_gpu.base + RBBM_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT), sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS),
+-	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS));
++	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS), mach_absolute_time());
+ 	if (sa_space_faulted(&sa_smmu_cb0, "the 3D core") || !done) {
+ 		sweet_fb_gpu_show(0);
+ 		return false;
+@@ -2571,14 +2574,14 @@ sa_step_submit(void)
+ 	sa_to_memory(data.memory, data.size);
+ 	const volatile uint32_t *got = (const volatile uint32_t *)data.memory;
+ 	bool right = got[0] == words[0] && got[1] == words[1] && got[2] == words[2] && got[3] == words[3];
+-	printf("SWEET GPU: %u: the data object reads %#x %#x %#x %#x: %s\n", sa_step, got[0], got[1], got[2], got[3],
+-	    right ? "as written by the core" : "NOT what the core was told to write");
++	printf("SWEET GPU: %u: the data object reads %#x %#x %#x %#x: %s (t %llu)\n", sa_step, got[0], got[1], got[2], got[3],
++	    right ? "as written by the core" : "NOT what the core was told to write", mach_absolute_time());
+ 	for (uint32_t b = 0; b < 3; b++) {
+ 		uint32_t y = sa_fb_height * (2 * b + 1) / 6;
+ 		uint32_t left = sweet_fb_gpu_pixel(0, y), middle = sweet_fb_gpu_pixel(sa_fb_width / 2, y),
+ 		    end = sweet_fb_gpu_pixel(sa_fb_width - 1, y);
+-		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x)\n", sa_step, y,
+-		    bands[b].name, left, middle, end, want[b]);
++		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x; t %llu)\n", sa_step, y,
++		    bands[b].name, left, middle, end, want[b], mach_absolute_time());
+ 		right = right && left == want[b] && middle == want[b] && end == want[b];
+ 	}
+ 	sweet_fb_gpu_show(hold);
+@@ -2589,8 +2592,8 @@ sa_step_submit(void)
+ 	if (!right || !freed) {
+ 		return false;
+ 	}
+-	printf("SWEET GPU: %u: AN INDIRECT BUFFER RAN AND SIGNALLED ITS FENCE: magenta, yellow, cyan from the top (for %u ms)\n",
+-	    sa_step, hold);
++	printf("SWEET GPU: %u: AN INDIRECT BUFFER RAN AND SIGNALLED ITS FENCE: magenta, yellow, cyan from the top (for %u ms; t %llu)\n",
++	    sa_step, hold, mach_absolute_time());
+ 	return true;
+ }
+ 
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 2d05375..c0bdbf1 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -103,6 +103,8 @@ class AppleCLCD : public IOMobileFramebuffer {
+ 	uint64_t            fVsyncCount;
+ 
+ 	static void vsyncFired(OSObject *owner, IOTimerEventSource *sender);
++	static IOReturn gpuHoldBeginAction(OSObject *target, void *arg0, void *arg1, void *arg2, void *arg3);
++	static IOReturn gpuHoldExtendAction(OSObject *target, void *arg0, void *arg1, void *arg2, void *arg3);
+ 
+ public:
+ 	uint64_t      fPhys;
+@@ -138,6 +140,7 @@ public:
+ 	uint64_t      fLastOff;       /* its panel window: byte offset in the surface */
+ 	SweetSurface *fPendHold[SWEET_FB_LAYERS], *fShowHold[SWEET_FB_LAYERS], *fRetireHold[SWEET_FB_LAYERS];
+ 	uint64_t      fGpuHoldUntil;  /* sweet_fb_gpu_begin(): no frames shown before then (mach time), boot framebuffer scanned */
++	int           fGpuHoldConsoleMuted;     /* sweet_console_muted before the hold; put back when it ends */
+ 	void          setupScanout();
+ 	void          scanFrom(uint64_t pa, uint32_t stride);
+ 	void          scanBoot();
+@@ -148,6 +151,8 @@ public:
+ 	void removeClient(IOMobileFramebufferUserClient *client);
+ 	void swap(const uint8_t *rec);
+ 	void present(const uint8_t *rec);
++	bool gpuHoldBegin(uint64_t until);     /* sweet_fb_gpu_begin: hold + cache clean in the workloop's gate */
++	void gpuHoldExtend(uint64_t until);   /* sweet_fb_gpu_show */
+ };
+ 
+ /*
+@@ -328,6 +333,21 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 		client->notify(SWEET_FB_NOTIFY_VSYNC, values, 6);
+ 	}
+ 	if (fb->fPowerOff) {
++		if (fb->fGpuHoldUntil != 0) {
++			if (now < fb->fGpuHoldUntil) {
++				/* the GPU's picture is held: nothing copied over it, no fade while it is shown */
++				if (fb->fDirect) {
++					fb->scanBoot();
++				}
++				IOLockUnlock(fb->fLock);
++				sender->setTimeoutUS(SWEET_FB_VSYNC_US);
++				return;
++			}
++			/* the hold ended with the display off: end it, then fade from what the GPU drew */
++			fb->fGpuHoldUntil = 0;
++			sweet_console_muted = fb->fGpuHoldConsoleMuted;
++			IOLog("SWEET FB: the GPU's picture has been shown (display off) [t %llu]\n", now);
++		}
+ 		if (fb->fDirect && fb->fScanPhys != fb->fBootSrc) {
+ 			/* the fade works on the boot framebuffer: bring the last direct frame over */
+ 			SweetSurface *last = fb->fLastSurf;
+@@ -363,8 +383,9 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 		fb->scanBoot();
+ 	} else if (fb->fGpuHoldUntil != 0 && !gpuHold) {
+ 		fb->fGpuHoldUntil = 0;
++		sweet_console_muted = fb->fGpuHoldConsoleMuted;
+ 		fb->fDirty = true;
+-		IOLog("SWEET FB: the GPU's picture has been shown; frames again\n");
++		IOLog("SWEET FB: the GPU's picture has been shown; frames again [t %llu]\n", now);
+ 	}
+ 	/* direct frames cost one cache clean: every vsync; copied frames every fFlushTicks */
+ 	bool flush = !gpuHold && fb->fDirty && ((fb->fDirect && fb->fLastDirect) || (count % fb->fFlushTicks) == 0);
+@@ -767,31 +788,92 @@ sweet_dcache_flush(uintptr_t va, uint64_t len)
+ }
+ 
+ /*
+- * For the GPU bring-up (bsd/dev/sweet_adreno.c step 22): the boot framebuffer's place and
++ * For the GPU bring-up (bsd/dev/sweet_adreno.c steps 22-23): the boot framebuffer's place and
+  * size, cleaned out of the CPU's caches (so no dirty line lands on what the GPU writes), and
+  * from the next vsync on shown alone on the panel for hold_ms at most: no frames presented,
+- * direct scanout pointed back at it. sweet_fb_gpu_show() sets how long it stays once drawn.
+- * Afterwards the latest frame is shown again.
++ * direct scanout pointed back at it. The hold is set and the caches cleaned inside the
++ * framebuffer's workloop gate, so no present() copies into the framebuffer at the same time,
++ * and the kernel text console is muted for the hold (it draws into the same framebuffer; the
++ * old value is put back when the hold ends, in vsyncFired). The power-off fade is skipped
++ * while the hold lasts. sweet_fb_gpu_show() sets how long it stays once drawn. Afterwards the
++ * latest frame is shown again.
+  */
++struct sweet_fb_gpu_hold {
++	uint64_t until;
++	bool ok;
++};
++
++IOReturn
++AppleCLCD::gpuHoldBeginAction(OSObject *target, void *arg0, __unused void *arg1,
++    __unused void *arg2, __unused void *arg3)
++{
++	AppleCLCD *fb = (AppleCLCD *)target;
++	struct sweet_fb_gpu_hold *h = (struct sweet_fb_gpu_hold *)arg0;
++
++	if (fb->fPowerOff) {
++		h->ok = false;
++		return kIOReturnSuccess;
++	}
++	IOLockLock(fb->fLock);
++	if (fb->fGpuHoldUntil == 0) {           /* a hold already running keeps its saved value */
++		fb->fGpuHoldConsoleMuted = sweet_console_muted;
++	}
++	fb->fGpuHoldUntil = h->until;
++	IOLockUnlock(fb->fLock);
++	sweet_console_muted = 1;
++	sweet_dcache_flush(fb->fPixels, (uint64_t)fb->fRowBytes * fb->fHeight);
++	h->ok = true;
++	return kIOReturnSuccess;
++}
++
++bool
++AppleCLCD::gpuHoldBegin(uint64_t until)
++{
++	struct sweet_fb_gpu_hold h = { until, false };
++
++	fWorkLoop->runAction(&AppleCLCD::gpuHoldBeginAction, this, &h);
++	return h.ok;
++}
++
++IOReturn
++AppleCLCD::gpuHoldExtendAction(OSObject *target, void *arg0, __unused void *arg1,
++    __unused void *arg2, __unused void *arg3)
++{
++	AppleCLCD *fb = (AppleCLCD *)target;
++	struct sweet_fb_gpu_hold *h = (struct sweet_fb_gpu_hold *)arg0;
++
++	IOLockLock(fb->fLock);
++	fb->fGpuHoldUntil = h->until;
++	IOLockUnlock(fb->fLock);
++	return kIOReturnSuccess;
++}
++
++void
++AppleCLCD::gpuHoldExtend(uint64_t until)
++{
++	struct sweet_fb_gpu_hold h = { until, true };
++
++	fWorkLoop->runAction(&AppleCLCD::gpuHoldExtendAction, this, &h);
++}
++
+ extern "C" bool
+ sweet_fb_gpu_begin(uint64_t *phys, uint32_t *width, uint32_t *height, uint32_t *row_bytes, uint32_t hold_ms)
+ {
+ 	AppleCLCD *fb = sweet_fb_main;
+ 	uint64_t hold;
+ 
+-	if (fb == NULL || fb->fPowerOff) {
++	if (fb == NULL) {
+ 		return false;
+ 	}
+ 	*phys = fb->fPhys;
+ 	*width = fb->fWidth;
+ 	*height = fb->fHeight;
+ 	*row_bytes = fb->fRowBytes;
+-	sweet_dcache_flush(fb->fPixels, (uint64_t)fb->fRowBytes * fb->fHeight);
+ 	nanoseconds_to_absolutetime((uint64_t)hold_ms * NSEC_PER_MSEC, &hold);
+-	IOLockLock(fb->fLock);
+-	fb->fGpuHoldUntil = mach_absolute_time() + hold;
+-	IOLockUnlock(fb->fLock);
+-	return true;
++	bool ok = fb->gpuHoldBegin(mach_absolute_time() + hold);
++	IOLog("SWEET FB: GPU hold %u ms: framebuffer cleaned, console muted%s [t %llu]\n", hold_ms,
++	    ok ? "" : " (display off: not held)", mach_absolute_time());
++	return ok;
+ }
+ 
+ /* The GPU's picture is in place: shown alone for hold_ms more. */
+@@ -805,9 +887,8 @@ sweet_fb_gpu_show(uint32_t hold_ms)
+ 		return;
+ 	}
+ 	nanoseconds_to_absolutetime((uint64_t)hold_ms * NSEC_PER_MSEC, &hold);
+-	IOLockLock(fb->fLock);
+-	fb->fGpuHoldUntil = mach_absolute_time() + hold;
+-	IOLockUnlock(fb->fLock);
++	fb->gpuHoldExtend(mach_absolute_time() + hold);
++	IOLog("SWEET FB: GPU hold extended %u ms [t %llu]\n", hold_ms, mach_absolute_time());
+ }
+ 
+ /* A pixel of the boot framebuffer as memory holds it (after the GPU wrote it). */
+@@ -1119,7 +1200,7 @@ IOMobileFramebufferUserClient::externalMethod(uint32_t selector, IOExternalMetho
+ 				fFB->fDirty = true;     /* on: redraw the latest frame */
+ 			}
+ 			IOLockUnlock(fFB->fLock);
+-			IOLog("SWEET FB: display %s\n", off ? "off" : "on");
++			IOLog("SWEET FB: display %s [t %llu]\n", off ? "off" : "on", mach_absolute_time());
+ 		}
+ 		break;
+ 	case kSweetFBSwapWait:
+-- 
+2.54.0 (Apple Git-157)
+

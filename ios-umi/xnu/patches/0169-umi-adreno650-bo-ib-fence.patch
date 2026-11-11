@@ -1,0 +1,357 @@
+From df52f73f73dc3e380b13a2e91d48c727c76fd330 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 20:10:45 +0100
+Subject: [PATCH] umi-0169-adreno-bo-ib-fence
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 269 +++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 260 insertions(+), 9 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 73b7719..f5a5658 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -60,6 +60,9 @@
+  *  21  commands the 3D core out of secure mode, then to write a known word into the scratch page
+  *  22  draws   with the 2D engine: red, green and blue bands straight into the panel's boot
+  *              framebuffer, which the framebuffer driver shows alone for sweetgpuhold ms
++ *  23  submits  commands from a memory object (above 4 GB in context 0) as an indirect buffer
++ *              with a fence: magenta, yellow, cyan bands and four words into a second object;
++ *              both objects freed again
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -1031,18 +1034,26 @@ sa_space_next(struct sa_space *space, uint64_t *entry)
+ 	return table;
+ }
+ 
+-static bool
+-sa_space_map(struct sa_space *space, uint64_t address, uint64_t phys, uint64_t attributes)
++/* The last-level entry for `address` (its tables made when missing), or NULL. */
++static uint64_t *
++sa_space_pte(struct sa_space *space, uint64_t address)
+ {
+ 	if (address >> 39 || (space->table_count == 0 && sa_space_table(space) == NULL)) {
+-		return false;
++		return NULL;
+ 	}
+ 	uint64_t *level2 = sa_space_next(space, &space->table[0][address >> 30 & 0x1ff]);
+ 	uint64_t *level3 = level2 == NULL ? NULL : sa_space_next(space, &level2[address >> 21 & 0x1ff]);
+-	if (level3 == NULL) {
++	return level3 == NULL ? NULL : &level3[address >> 12 & 0x1ff];
++}
++
++static bool
++sa_space_map(struct sa_space *space, uint64_t address, uint64_t phys, uint64_t attributes)
++{
++	uint64_t *pte = sa_space_pte(space, address);
++	if (pte == NULL) {
+ 		return false;
+ 	}
+-	level3[address >> 12 & 0x1ff] = phys | attributes | PTE_PAGE;
++	*pte = phys | attributes | PTE_PAGE;
+ 	return true;
+ }
+ 
+@@ -1969,9 +1980,20 @@ sa_pm4_parity(uint32_t v)
+ 	return 0x9669 >> (0xf & (v ^ v >> 4 ^ v >> 8 ^ v >> 12 ^ v >> 16 ^ v >> 20 ^ v >> 24 ^ v >> 28)) & 1;
+ }
+ 
++/* While sa_cs_words is set, commands go into that buffer (an indirect buffer, step 23) instead of the ring. */
++static uint32_t *sa_cs_words;
++static uint32_t sa_cs_at, sa_cs_max;
++
+ static void
+ sa_ring(uint32_t word)
+ {
++	if (sa_cs_words != NULL) {
++		if (sa_cs_at < sa_cs_max) {
++			sa_cs_words[sa_cs_at] = word;
++		}
++		sa_cs_at++;
++		return;
++	}
+ 	((uint32_t *)sa_core_ring.memory)[sa_ring_at] = word;
+ 	sa_ring_at = (sa_ring_at + 1) % RING_WORDS;
+ }
+@@ -1983,7 +2005,16 @@ sa_ring_packet(uint32_t opcode, uint32_t words)
+ 	sa_ring(7u << 28 | words | sa_pm4_parity(words) << 15 | (opcode & 0x7f) << 16 | sa_pm4_parity(opcode) << 23);
+ }
+ 
+-/* What the ring holds since the last time goes out to memory, the core is told how far to read, and we wait for it to be idle. */
++/* What the ring holds since the last time goes out to memory, and the core is told how far to read. */
++static void
++sa_ring_send(void)
++{
++	sa_to_memory(sa_core_ring.memory, CORE_RING_SIZE);
++	sa_ring_sent = sa_ring_at;
++	sa_wr(sa_gpu.base + CP_RB_WPTR, sa_ring_sent);
++}
++
++/* sa_ring_send(), then wait for the core to have read all of it and to be idle. */
+ static bool
+ sa_ring_run(const char *what)
+ {
+@@ -1993,9 +2024,7 @@ sa_ring_run(const char *what)
+ 	if (sa_pause_ms && sa_step == sa_steps) {
+ 		sa_sleep_ms(sa_pause_ms);
+ 	}
+-	sa_to_memory(sa_core_ring.memory, CORE_RING_SIZE);
+-	sa_ring_sent = sa_ring_at;
+-	sa_wr(sa_gpu.base + CP_RB_WPTR, sa_ring_sent);
++	sa_ring_send();
+ 	for (int i = 0; i < 20000 && (taken != sa_ring_sent || (status & RBBM_STATUS_GPU_BUSY)); i++) {
+ 		delay_for_interval(100, NSEC_PER_USEC);
+ 		taken = sa_rd(sa_gpu.base + CP_RB_RPTR);
+@@ -2196,6 +2225,7 @@ extern uint32_t sweet_fb_gpu_pixel(uint32_t x, uint32_t y);
+ #define EVENT_STAMPS            (CORE_SCRATCH_ADDRESS + 0x100)
+ 
+ static uint32_t sa_event_stamp;
++static uint32_t sa_fb_width, sa_fb_height, sa_fb_row, sa_fb_rows_per;  /* the framebuffer, once the core sees it */
+ 
+ /* A type 4 packet: one register (by its number) written by command. */
+ static void
+@@ -2294,6 +2324,10 @@ sa_step_frame(void)
+ 	}
+ 	printf("SWEET GPU: %u: the 3D core sees %#x..%#llx: the framebuffer (%u page tables in all)\n", sa_step,
+ 	    CORE_PANEL_ADDRESS, CORE_PANEL_ADDRESS + size - 1, sa_core_space.table_count);
++	sa_fb_width = width;
++	sa_fb_height = height;
++	sa_fb_row = row;
++	sa_fb_rows_per = rows_per;
+ 
+ 	sa_announce("have the 2D engine fill the framebuffer: red, green, blue bands from the top");
+ 	/* emit_setup: CCU clean + invalidate, then the CCU in its system-memory setting */
+@@ -2344,11 +2378,228 @@ sa_step_frame(void)
+ 	return true;
+ }
+ 
++/* ---- step 23: memory objects, a submission through an indirect buffer, a fence ---- */
++
++/*
++ * What a GPU service for user space needs (Linux msm: GEM objects, a6xx_submit, fences): memory
++ * objects of wired kernel pages that the core sees at addresses of their own (above 4 GB, mapped
++ * 4K at a time, unmapped again on free), commands in such an object run from the ring as an
++ * indirect buffer, and a fence: CACHE_FLUSH_TS writing the submission's number into the fence
++ * word once everything before it is in memory (no TIMESTAMP bit, so the packet's value is
++ * written). No interrupts yet: the fence is polled. The self-test runs step 22's fill again, in
++ * other colours, from an indirect buffer, and has the core write words into a second object.
++ */
++#define CP_INDIRECT_BUFFER      0x3f
++#define CORE_BO_ADDRESS         0x100000000ull  /* objects from here up (39-bit space) */
++#define CORE_BO_GAP             0x10000ull      /* unmapped between objects */
++#define CORE_FENCE_ADDRESS      (CORE_SCRATCH_ADDRESS + 0x200)
++
++struct sa_bo {
++	uint64_t gpu;
++	vm_offset_t memory;
++	vm_size_t size;
++};
++
++static uint64_t sa_bo_next = CORE_BO_ADDRESS;
++static uint32_t sa_fence_seqno;
++
++/* Page-table changes of context 0 out to memory, and the SMMU's cached translations dropped. */
++static bool
++sa_core_tlb_flush(void)
++{
++	for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
++		flush_dcache64((addr64_t)sa_core_space.table_phys[i], 4096, TRUE);
++	}
++	sa_wr(sa_smmu_cb0.base + SMMU_CB_TLBIASID, CORE_CONTEXT);
++	sa_wr(sa_smmu_cb0.base + SMMU_CB_TLBSYNC, 1);
++	return sa_wait_for(&sa_smmu_cb0, SMMU_CB_TLBSTATUS, 1, 0, 100);
++}
++
++static bool
++sa_bo_new(struct sa_bo *bo, vm_size_t size)
++{
++	bo->size = round_page(size);
++	bo->memory = 0;
++	if (kmem_alloc(kernel_map, &bo->memory, bo->size, KMA_DATA | KMA_ZERO, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		return false;
++	}
++	bo->gpu = sa_bo_next;
++	sa_bo_next += bo->size + CORE_BO_GAP;
++	for (vm_size_t at = 0; at < bo->size; at += 4096) {
++		if (!sa_space_map(&sa_core_space, bo->gpu + at, sa_phys(bo->memory + at), PTE_CORE)) {
++			return false;
++		}
++	}
++	sa_to_memory(bo->memory, bo->size);
++	return sa_core_tlb_flush();
++}
++
++static bool
++sa_bo_free(struct sa_bo *bo)
++{
++	for (vm_size_t at = 0; at < bo->size; at += 4096) {
++		uint64_t *pte = sa_space_pte(&sa_core_space, bo->gpu + at);
++		if (pte != NULL) {
++			*pte = 0;
++		}
++	}
++	bool flushed = sa_core_tlb_flush();
++	kmem_free(kernel_map, bo->memory, bo->size);
++	bo->memory = 0;
++	return flushed;
++}
++
++/* Run `words` of commands in `cmds` (Linux a6xx_submit, less the counters); the fence number it will write. */
++static uint32_t
++sa_submit(const struct sa_bo *cmds, uint32_t words)
++{
++	uint32_t seqno = ++sa_fence_seqno;
++
++	sa_to_memory(cmds->memory, round_page((vm_size_t)words * 4));
++	sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
++	sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
++	sa_ring_packet(CP_INDIRECT_BUFFER, 3);
++	sa_ring((uint32_t)cmds->gpu);
++	sa_ring((uint32_t)(cmds->gpu >> 32));
++	sa_ring(words);
++	sa_ring_packet(CP_EVENT_WRITE, 4);
++	sa_ring(EVENT_CACHE_FLUSH_TS);
++	sa_ring(CORE_FENCE_ADDRESS);
++	sa_ring(0);
++	sa_ring(seqno);
++	sa_ring_send();
++	return seqno;
++}
++
++static uint32_t
++sa_fence_read(void)
++{
++	volatile uint32_t *fence = (volatile uint32_t *)(sa_core_scratch.memory + (CORE_FENCE_ADDRESS - CORE_SCRATCH_ADDRESS));
++	flush_dcache64((addr64_t)sa_phys((vm_offset_t)fence), 64, TRUE);
++	return *fence;
++}
++
++static bool
++sa_fence_wait(uint32_t seqno, uint32_t ms)
++{
++	for (uint32_t i = 0; i < ms * 10; i++) {
++		if ((int32_t)(sa_fence_read() - seqno) >= 0) {
++			return true;
++		}
++		delay_for_interval(100, NSEC_PER_USEC);
++	}
++	return (int32_t)(sa_fence_read() - seqno) >= 0;
++}
++
++static bool
++sa_step_submit(void)
++{
++	static const struct {
++		uint32_t red, green, blue;
++		const char *name;
++	} bands[3] = { { 255, 0, 255, "magenta" }, { 255, 255, 0, "yellow" }, { 0, 255, 255, "cyan" } };
++	static const uint32_t want[3] = { 0xffff00ffu, 0xffffff00u, 0xff00ffffu };
++	static const uint32_t words[4] = { 0x0b0b0001u, 0x0b0b0002u, 0x0b0b0003u, 0x0b0b0004u };
++	struct sa_bo cmds, data;
++	uint64_t phys = 0;
++	uint32_t width = 0, height = 0, row = 0, hold = 10000;
++
++	if (!sa_cx_ready() || !sa_core_runs || sa_fb_width == 0) {
++		printf("SWEET GPU: %u: needs the core running and the framebuffer it sees: step 22\n", sa_step);
++		return false;
++	}
++	(void)PE_parse_boot_argn("sweetgpuhold", &hold, sizeof(hold));
++	sa_announce("make two memory objects for the 3D core (commands, data) above 4 GB");
++	if (!sa_bo_new(&cmds, 4 * PAGE_SIZE) || !sa_bo_new(&data, PAGE_SIZE)) {
++		printf("SWEET GPU: %u: no memory object (or the SMMU does not finish its TLB sync)\n", sa_step);
++		return false;
++	}
++	printf("SWEET GPU: %u: commands at the core's %#llx (%#lx bytes, ours %#llx), data at %#llx (ours %#llx)\n", sa_step,
++	    cmds.gpu, (unsigned long)cmds.size, sa_phys(cmds.memory), data.gpu, sa_phys(data.memory));
++
++	sa_announce("write the commands into the object: magenta, yellow, cyan bands into the framebuffer, four words into "
++	    "the data object");
++	sa_cs_words = (uint32_t *)cmds.memory;
++	sa_cs_at = 0;
++	sa_cs_max = (uint32_t)(cmds.size / 4);
++	sa_ring_event(EVENT_CCU_FLUSH_COLOR_TS, true);
++	sa_ring_event(EVENT_CCU_FLUSH_DEPTH_TS, true);
++	sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
++	sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	sa_ring_register(REG_RB_CCU_CNTL, RB_CCU_CNTL_A650_SYSMEM);
++	uint32_t surface_rows = sa_fb_height / sa_fb_rows_per;
++	for (uint32_t b = 0; b < 3; b++) {
++		sa_ring_fill(CORE_PANEL_ADDRESS, sa_fb_row * sa_fb_rows_per, sa_fb_width * sa_fb_rows_per,
++		    surface_rows * b / 3, surface_rows * (b + 1) / 3, bands[b].red, bands[b].green, bands[b].blue);
++	}
++	sa_ring_event(EVENT_CCU_FLUSH_COLOR_TS, true);
++	sa_ring_event(EVENT_CCU_FLUSH_DEPTH_TS, true);
++	sa_ring_packet(CP_MEM_WRITE, 2 + 4);
++	sa_ring((uint32_t)data.gpu);
++	sa_ring((uint32_t)(data.gpu >> 32));
++	for (unsigned i = 0; i < 4; i++) {
++		sa_ring(words[i]);
++	}
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	uint32_t length = sa_cs_at;
++	sa_cs_words = NULL;
++	if (length > sa_cs_max) {
++		printf("SWEET GPU: %u: %u words do not fit the object\n", sa_step, length);
++		return false;
++	}
++
++	sa_announce("show the framebuffer alone, submit the object as an indirect buffer, wait for its fence");
++	if (!sweet_fb_gpu_begin(&phys, &width, &height, &row, FB_HOLD_UNTIL_DRAWN)) {
++		printf("SWEET GPU: %u: the framebuffer driver does not hold the panel (display off?): drawing anyway\n", sa_step);
++	}
++	uint32_t before = sa_fence_read();
++	uint32_t seqno = sa_submit(&cmds, length);
++	printf("SWEET GPU: %u: submitted %u words as fence %u (fence word was %#x); ring up to word %u\n", sa_step, length,
++	    seqno, before, sa_ring_at);
++	bool done = sa_fence_wait(seqno, 2000);
++	uint32_t fence = sa_fence_read();
++	printf("SWEET GPU: %u: fence word %#x (%s); ring read up to %u, status %#x, command processor fault %#x, "
++	    "interrupts %#x, protection %#x\n", sa_step, fence, done ? "SIGNALLED" : "not signalled", sa_rd(sa_gpu.base + CP_RB_RPTR),
++	    sa_rd(sa_gpu.base + RBBM_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT), sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS),
++	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS));
++	if (sa_space_faulted(&sa_smmu_cb0, "the 3D core") || !done) {
++		sweet_fb_gpu_show(0);
++		return false;
++	}
++
++	sa_to_memory(data.memory, data.size);
++	const volatile uint32_t *got = (const volatile uint32_t *)data.memory;
++	bool right = got[0] == words[0] && got[1] == words[1] && got[2] == words[2] && got[3] == words[3];
++	printf("SWEET GPU: %u: the data object reads %#x %#x %#x %#x: %s\n", sa_step, got[0], got[1], got[2], got[3],
++	    right ? "as written by the core" : "NOT what the core was told to write");
++	for (uint32_t b = 0; b < 3; b++) {
++		uint32_t y = sa_fb_height * (2 * b + 1) / 6;
++		uint32_t left = sweet_fb_gpu_pixel(0, y), middle = sweet_fb_gpu_pixel(sa_fb_width / 2, y),
++		    end = sweet_fb_gpu_pixel(sa_fb_width - 1, y);
++		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x)\n", sa_step, y,
++		    bands[b].name, left, middle, end, want[b]);
++		right = right && left == want[b] && middle == want[b] && end == want[b];
++	}
++	sweet_fb_gpu_show(hold);
++
++	sa_announce("free both objects: their pages out of context 0, the SMMU's translations dropped");
++	bool freed = sa_bo_free(&cmds) & sa_bo_free(&data);
++	printf("SWEET GPU: %u: objects freed (%s)\n", sa_step, freed ? "TLB sync done" : "the SMMU does not finish its TLB sync");
++	if (!right || !freed) {
++		return false;
++	}
++	printf("SWEET GPU: %u: AN INDIRECT BUFFER RAN AND SIGNALLED ITS FENCE: magenta, yellow, cyan from the top (for %u ms)\n",
++	    sa_step, hold);
++	return true;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+ 	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start, sa_step_gmu_queues, sa_step_core_power,
+ 	sa_step_core_space, sa_step_zap_load, sa_step_core_start, sa_step_core_commands, sa_step_frame,
++	sa_step_submit,
+ };
+ 
+ static void
+-- 
+2.54.0 (Apple Git-157)
+

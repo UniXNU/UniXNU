@@ -1,0 +1,87 @@
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -5,6 +5,7 @@
+  */
+ 
+ #include <errno.h>
++#include <stdio.h>
+ #include <pthread.h>
+ #include <string.h>
+ #include <sys/mman.h>
+@@ -52,6 +53,36 @@
+    NativeAdrenoAbiParams params;
+ } dw = { .lock = PTHREAD_MUTEX_INITIALIZER };
+ 
++/* BO lifetime log (umi hang hunt): /var/local/tu-bo-<pid>.log, one line per allocation and per
++ * release, with the newest fence this process submitted then. A hang's freed range (the kernel's
++ * free history) maps to the BO's name here: which object was freed while a command buffer still
++ * called into it. Only when /var/local/tu-bo exists. */
++static FILE *dw_bo_file;
++static once_flag dw_bo_once = ONCE_FLAG_INIT;
++
++static void
++dw_bo_open(void)
++{
++   if (access("/var/local/tu-bo", F_OK) == 0) {
++      char path[64];
++      snprintf(path, sizeof(path), "/var/local/tu-bo-%d.log", (int)getpid());
++      dw_bo_file = fopen(path, "a");
++   }
++}
++
++static void
++dw_bo_log(const char *what, const char *name, uint64_t handle, uint64_t iova, uint64_t size)
++{
++   call_once(&dw_bo_once, dw_bo_open);
++   if (!dw_bo_file)
++      return;
++   fprintf(dw_bo_file, "%llu %s %s h%llu %#llx+%#llx fence %u\n",
++           (unsigned long long)(os_time_get_nano() / 1000000), what, name ? name : "?",
++           (unsigned long long)handle, (unsigned long long)iova, (unsigned long long)size,
++           dw.last_fence);
++   fflush(dw_bo_file);
++}
++
+ /* Preserve the native handle, CPU view and IOVA until the captured ring fence
+  * actually completed. An unrelated later submission never extends this lease.
+  * The queue is bounded; pressure may wait, but ordinary destruction does not. */
+@@ -386,6 +417,7 @@
+                enum tu_bo_alloc_flags flags, struct tu_sparse_vma *lazy_vma,
+                const char *name)
+ {
++   const char *given_name = name;   /* tu_debug_bos_add() below returns NULL without TU_DEBUG=bos */
+    MESA_TRACE_FUNC();
+    if (lazy_vma)
+       return vk_error(dev, VK_ERROR_FEATURE_NOT_PRESENT);
+@@ -435,13 +467,14 @@
+       .gem_handle = gem_handle,
+       .size = size,
+       .iova = iova,
+-      .name = name,
++      .name = name ? name : given_name,
+       .refcnt = 1,
+       .implicit_sync = !!(flags & TU_BO_ALLOC_IMPLICIT_SYNC),
+       .base = base,
+       .unique_id = reply.handle,
+    };
+    bo->darwin_handle = reply.handle;
++   dw_bo_log("alloc", given_name, reply.handle, iova, size);
+ 
+    tu_dump_bo_init(dev, bo);
+    TU_RMV(bo_allocate, dev, bo);
+@@ -498,6 +531,7 @@
+       .unique_id = reply.handle,
+    };
+    bo->darwin_handle = reply.handle;
++   dw_bo_log("alloc", "host import", reply.handle, iova, size);
+    bo->darwin_token = 0;
+    bo->map = pointer;
+    bo->never_unmap = true;
+@@ -605,6 +639,7 @@
+       return;
+    }
+ 
++   dw_bo_log("free", bo->name, bo->darwin_handle, bo->iova, bo->size);
+    tu_debug_bos_del(dev, bo);
+    tu_dump_bo_del(dev, bo);
+ 

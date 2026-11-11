@@ -1,0 +1,58 @@
+From 38b99836c310d7448b1c9ce041248f114a5abe39 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 19:32:26 +0100
+Subject: [PATCH] umi: trigger the hang dump on stalled fence progress
+
+The 0189 boot hung with clients taking turns waiting on fences 662 and
+663; the dump's 2 s timer was keyed on the fence waited for, so every
+alternate call restarted it and the dump never ran. Key it on the fence
+word instead: when it has not advanced for 2 s while waits keep
+failing, dump once for the submission after it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 13 +++++++++----
+ 1 file changed, 9 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index e59725d..9ad0ff3 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3086,7 +3086,7 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+  * or an SMMU status; a bad opcode as CP_INTERRUPT_STATUS's CP_OPCODE_ERROR with the SQE stopped
+  * inside one of the submissions' buffers.
+  */
+-static uint32_t sa_hang_fence = ~0u;
++static uint32_t sa_hang_fence = ~0u;    /* the fence word when waits started failing */
+ static uint64_t sa_hang_first;
+ static bool sa_hang_dumped;
+ 
+@@ -3228,9 +3228,14 @@ sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns)
+ 	if ((int32_t)(sa_fence_read() - fence) >= 0) {
+ 		return true;
+ 	}
++	/* Keyed on the core's progress, not on the fence waited for: clients that take turns
++	 * waiting on two fences (0189: 662 and 663, forever) restarted a per-fence timer on
++	 * every call, and the dump never ran. The fence word standing still for 2 s while
++	 * waits fail is the hang; the stuck submission is the one after it. */
+ 	uint64_t now = mach_absolute_time();
+-	if (sa_hang_fence != fence) {
+-		sa_hang_fence = fence;
++	uint32_t done = sa_fence_read();
++	if (sa_hang_fence != done) {
++		sa_hang_fence = done;
+ 		sa_hang_first = now;
+ 		sa_hang_dumped = false;
+ 	} else if (!sa_hang_dumped) {
+@@ -3239,7 +3244,7 @@ sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns)
+ 		nanoseconds_to_absolutetime(2000000000ull, &two_seconds);
+ 		if (now - sa_hang_first > two_seconds) {
+ 			sa_hang_dumped = true;
+-			sa_hang_dump(fence);
++			sa_hang_dump(done + 1);
+ 		}
+ 	}
+ 	return false;
+-- 
+2.54.0 (Apple Git-157)
+

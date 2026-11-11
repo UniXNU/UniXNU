@@ -1,0 +1,157 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -37,10 +37,15 @@
+ #include <pexpert/pexpert.h>
+ #include <pexpert/device_tree.h>
+ #include <libkern/libkern.h>
++#include <machine/atomic.h>
+ 
+ extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
+ /* osfmk/arm/machine_routines.h, not exported to the BSD layer */
+ extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++extern kern_return_t kernel_thread_start(thread_continue_t, void *, thread_t *);
++extern void thread_deallocate(thread_t);
++extern int hz;
++static void sweet_log_start(void);
+ 
+ #define REG_CAP         0x00
+ #define REG_IS          0x20
+@@ -591,9 +596,116 @@
+ 	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
++	sweet_log_start();
+ 	return 0;
+ }
+ 
++/*
++ * Persistent console log ("sweetlog"). Filming the phone screen is the only
++ * other way to see the console, so every character that reaches the
++ * console (kernel printf and /dev/console writes of daemons, both through
++ * _cnputs) is also kept in a 4 MiB ring, and once the partition is known
++ * and writable a thread copies new ring blocks to the LAST 4 MiB + 4 KiB of
++ * the partition about once a second (far behind the HFS image at its
++ * start). Device block 0 of that area is a header:
++ *   "SWEETLOG" | u32 version 1 | u32 ring size | u64 total bytes written
++ *   | u64 flush sequence
++ * ring offset of byte n = n % ring size. Read it from a recovery with
++ * tools/sweet-log-pull.sh. Disabled with boot-arg sweetlog=0.
++ */
++#define SWEET_LOG_SIZE          (4u << 20)
++#define SWEET_LOG_BLOCKS        (1 + SWEET_LOG_SIZE / UFS_BLOCK)
++
++static char sweet_log_ring[SWEET_LOG_SIZE];
++static uint64_t _Atomic sweet_log_total;
++static int sweet_log_chan;
++
++/* Called for all console output, any context: never blocks. */
++void sweet_log_append(const char *c, int size);
++
++void
++sweet_log_append(const char *c, int size)
++{
++	if (size <= 0) {
++		return;
++	}
++	uint64_t at = os_atomic_add_orig(&sweet_log_total, (uint64_t)size, relaxed);
++	for (int i = 0; i < size; i++) {
++		sweet_log_ring[(at + (uint64_t)i) % SWEET_LOG_SIZE] = c[i];
++	}
++}
++
++struct sweet_log_header {
++	char magic[8];
++	uint32_t version, size;
++	uint64_t total, seq;
++};
++
++static void
++sweet_log_thread(__unused void *arg, __unused wait_result_t wr)
++{
++	uint64_t base = su.first_block + su.nblocks - SWEET_LOG_BLOCKS;
++	uint64_t flushed = 0, seq = 0;
++	void *bounce = (void *)(su.dma + DMA_BOUNCE);
++
++	printf("SWEET LOG: console log to the last %u KiB of the partition (block 0x%llx)\n",
++	    SWEET_LOG_BLOCKS * UFS_BLOCK >> 10, base);
++	for (;;) {
++		(void)tsleep(&sweet_log_chan, PZERO, "sweetlog", hz);
++		uint64_t total = os_atomic_load(&sweet_log_total, relaxed);
++		if (total == flushed) {
++			continue;
++		}
++		uint64_t pos = total - flushed >= SWEET_LOG_SIZE ? total - SWEET_LOG_SIZE : flushed;
++		int error = 0;
++
++		lck_mtx_lock(&sweet_ufs_lock);
++		while (pos < total && !error) {
++			uint32_t off = (uint32_t)(pos % SWEET_LOG_SIZE);
++			uint32_t blk = off / UFS_BLOCK;
++			uint64_t need = ((uint64_t)off % UFS_BLOCK + (total - pos) + UFS_BLOCK - 1) / UFS_BLOCK;
++			uint32_t n = (uint32_t)MIN(MIN(need, (uint64_t)(SWEET_LOG_SIZE / UFS_BLOCK - blk)),
++			    (uint64_t)(BOUNCE_SIZE / UFS_BLOCK));
++			memcpy(bounce, sweet_log_ring + (uint64_t)blk * UFS_BLOCK, n * UFS_BLOCK);
++			error = ufs_write_blocks(base + 1 + blk, n);
++			pos += (uint64_t)(blk + n) * UFS_BLOCK - off;
++		}
++		if (!error) {
++			struct sweet_log_header h = {
++				.magic = { 'S', 'W', 'E', 'E', 'T', 'L', 'O', 'G' },
++				.version = 1, .size = SWEET_LOG_SIZE, .total = total, .seq = ++seq,
++			};
++			bzero(bounce, UFS_BLOCK);
++			memcpy(bounce, &h, sizeof(h));
++			error = ufs_write_blocks(base, 1);
++		}
++		if (!error) {
++			error = ufs_sync_cache();
++		}
++		lck_mtx_unlock(&sweet_ufs_lock);
++		if (error) {
++			printf("SWEET LOG: write failed (%d), stopping\n", error);
++			return;
++		}
++		flushed = total;
++	}
++}
++
++static void
++sweet_log_start(void)
++{
++	uint32_t on = 1;
++	thread_t thread;
++
++	PE_parse_boot_argn("sweetlog", &on, sizeof(on));
++	if (!on || !su.writable || su.nblocks < 2 * SWEET_LOG_BLOCKS) {
++		return;
++	}
++	if (kernel_thread_start(sweet_log_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++
+ /* Root device for rd=ufsroot0 (IOFindBSDRoot). */
+ int sweet_ufs_rootdev(dev_t *dev);
+ 
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -266,11 +266,19 @@
+  *             waiting for an interrupt when the hardware device isn't ready
+  * @param size The number of characters to print to the console.
+  */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c */
++#endif
++
+ static inline void
+ _cnputs(char *c, int size, bool poll)
+ {
+ 	extern int disableConsoleOutput;
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	sweet_log_append(c, size);
++#endif
++
+ 	if (disableConsoleOutput) {
+ 		return;
+ 	}

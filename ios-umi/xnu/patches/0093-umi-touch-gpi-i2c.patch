@@ -1,0 +1,550 @@
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 6630131..d8fef1e 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -108,6 +108,7 @@ bsd/dev/sweet_ufs.c			standard
+ bsd/dev/sweet_sample.c			standard
+ bsd/dev/sweet_keys.c			standard
+ bsd/dev/sweet_touch.c			standard
++bsd/dev/sweet_gpi.c			standard
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+new file mode 100644
+index 0000000..8474f37
+--- /dev/null
++++ b/bsd/dev/sweet_gpi.c
+@@ -0,0 +1,469 @@
++/*
++ * SWEET umi: I2C through the QUP GPI DMA engine (GSI mode).
++ *
++ * On umi (SM8250) the touch I2C engine, QUP1 SE5 at 0xa94000, runs firmware
++ * with its FIFO interface disabled (GENI_IF_DISABLE_RO bit 0): every transfer
++ * goes through the wrapper's GPI DMA engine (qcom,gpi-dma@a00000, ee offset
++ * 0x6000, apps GPIIs 0-5, SMMU stream 0x56), as Xiaomi's umi-q-oss
++ * drivers/dma/qcom/gpi.c and drivers/i2c/busses/i2c-qcom-geni.c do it:
++ *
++ *   one GPII, TX channel 0 (DIR_OUT) and RX channel 1 (DIR_IN), one event ring;
++ *   write: TX ring  CONFIG0 (first time) + GO(write, addr) + DMA(tx buf, IEOT)
++ *   read:  RX ring  DMA(rx buf, IEOT), then TX ring CONFIG0 + GO(read, addr, len)
++ *
++ * Everything is polled (channel states, the event ring's hardware read
++ * pointer). Rings and bounce buffers live in the free 1 MiB at the end of the
++ * splash region (0x9e200000, after the 0091/0092 scanout pool), mapped
++ * uncached, below 4 GiB. The GPI stream is pointed at ABL's display context
++ * bank (translation off) when no SMR matches it yet.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++
++int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid);
++int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
++
++#define GPI_PA          0x00a00000u
++#define GPI_EE_OFFSET   0x6000u         /* qcom,gpi-ee-offset: registers are relative to PA - this */
++#define GPI_MAP_SIZE    0x40000u
++#define GPI_SID         0x56u           /* iommus = <&apps_smmu 0x56 0x0> */
++#define SMMU_PA         0x15000000u
++#define DMA_PA          0x9e200000u     /* free: splash 0x9c000000-0x9e300000, pool ends 0x9e200000 */
++#define DMA_SIZE        0x2000u
++
++/* gpii n register offsets from the ee base (msm_gpi_mmio.h) */
++#define CH_CNTXT(n, k)          (0x20000u + 0x4000u * (n) + 0x80u * (k))
++#define CH_QOS(n, k)            (0x2005cu + 0x4000u * (n) + 0x80u * (k))
++#define CH_SCRATCH(n, k, i)     (0x20060u + 0x4000u * (n) + 0x80u * (k) + 4u * (i))
++#define EV_CNTXT(n, k)          (0x21000u + 0x4000u * (n) + 0x80u * (k))
++#define CH_DB(n, k)             (0x22000u + 0x4000u * (n) + 0x8u * (k))
++#define EV_DB(n, k)             (0x22100u + 0x4000u * (n) + 0x8u * (k))
++#define CH_CMD(n)               (0x23008u + 0x4000u * (n))
++#define EV_CMD(n)               (0x23010u + 0x4000u * (n))
++#define TYPE_IRQ_MSK(n)         (0x23088u + 0x4000u * (n))
++#define GLOB_IRQ_STTS(n)        (0x23100u + 0x4000u * (n))
++#define INTSET(n)               (0x23180u + 0x4000u * (n))
++#define ERROR_LOG(n)            (0x23200u + 0x4000u * (n))
++#define ERROR_LOG_CLR(n)        (0x23210u + 0x4000u * (n))
++/* context registers */
++#define CNTXT_CONFIG    0x00u
++#define CNTXT_LEN       0x04u
++#define CNTXT_BASE_LSB  0x08u
++#define CNTXT_BASE_MSB  0x0cu
++#define CNTXT_RP_LSB    0x10u
++#define CNTXT_INT_MOD   0x20u
++#define CNTXT_MSI_LSB   0x28u
++#define CNTXT_MSI_MSB   0x2cu
++#define CNTXT_RPU_LSB   0x30u
++#define CNTXT_RPU_MSB   0x34u
++
++#define CMD_ALLOCATE    0u
++#define CMD_START       1u
++#define CMD_STOP        2u
++#define CMD_RESET       9u
++#define CMD_DEALLOC     10u
++#define CH_STATE_NOT_ALLOCATED  0u
++#define CH_STATE_ALLOCATED      1u
++#define CH_STATE_STARTED        2u
++#define CH_STATE_STOPPED        3u
++#define CH_STATE_ERROR          0xfu
++
++#define TRE_SIZE        16u
++#define CH_RING_N       16u
++#define EV_RING_N       64u
++/* DMA area layout: event ring first (aligned to its length) */
++#define OFF_EV          0x000u
++#define OFF_TX          0x400u
++#define OFF_RX          0x500u
++#define OFF_TXBUF       0x600u
++#define OFF_RXBUF       0x800u
++#define BUF_MAX         0x200u
++
++#define TRE_DW3(major, minor, link_rx, bei, ieot, ieob, ch) \
++	(((uint32_t)(major) << 20) | ((uint32_t)(minor) << 16) | ((uint32_t)(link_rx) << 11) | \
++	((uint32_t)(bei) << 10) | ((uint32_t)(ieot) << 9) | ((uint32_t)(ieob) << 8) | (uint32_t)(ch))
++
++/* geni_i2c_clk_map, 100 kHz from 19.2 MHz: clk_div 7, t_high 10, t_low 11, t_cycle 26 */
++#define I2C_PACK_EN     3u
++#define I2C_CLK_DIV     7u
++#define I2C_T_HIGH      10u
++#define I2C_T_LOW       11u
++#define I2C_T_CYCLE     26u
++
++#define EV_XFER_COMPLETE        0x22u
++#define EV_IMMEDIATE            0x30u
++#define EV_QUP_NOTIF            0x31u
++#define TCE_EOT                 2u
++#define M_GP_IRQ_1              (1u << 10)      /* NACK */
++#define M_GP_IRQ_3              (1u << 12)      /* bus protocol */
++#define M_GP_IRQ_4              (1u << 13)      /* arbitration lost */
++
++static struct {
++	vm_offset_t ee, se, dma;
++	unsigned gpii, seid;
++	bool ready, cfg_sent;
++	uint32_t tx_wp, rx_wp;          /* ring indexes */
++	uint32_t ev_rp, ev_wp;
++	unsigned logged;
++} g;
++
++static uint32_t
++gpi_rd(uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(g.ee + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++gpi_wr(uint32_t off, uint32_t val)
++{
++	__asm__ volatile ("dsb sy" ::: "memory");      /* ring/buffer writes before the doorbell */
++	*(volatile uint32_t *)(g.ee + off) = val;
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++static volatile uint32_t *
++dma_ptr(uint32_t off)
++{
++	return (volatile uint32_t *)(g.dma + off);
++}
++
++static unsigned
++ch_state(unsigned k)
++{
++	return (gpi_rd(CH_CNTXT(g.gpii, k) + CNTXT_CONFIG) >> 20) & 0xfu;
++}
++
++static unsigned
++ev_state(void)
++{
++	return (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_CONFIG) >> 20) & 0xfu;
++}
++
++static bool
++ch_cmd(unsigned k, uint32_t op, unsigned want)
++{
++	gpi_wr(CH_CMD(g.gpii), (op << 24) | k);
++	for (unsigned i = 0; i < 2500; i++) {
++		if (ch_state(k) == want) {
++			return true;
++		}
++		delay(100);
++	}
++	printf("SWEET GPI: ch%u cmd %u: state %u, want %u, error log %#x\n", k, op, ch_state(k), want,
++	    gpi_rd(ERROR_LOG(g.gpii)));
++	return false;
++}
++
++static bool
++ev_cmd(uint32_t op, unsigned want)
++{
++	gpi_wr(EV_CMD(g.gpii), (op << 24) | 0u);
++	for (unsigned i = 0; i < 2500; i++) {
++		if (ev_state() == want) {
++			return true;
++		}
++		delay(100);
++	}
++	printf("SWEET GPI: ev cmd %u: state %u, want %u, error log %#x\n", op, ev_state(), want,
++	    gpi_rd(ERROR_LOG(g.gpii)));
++	return false;
++}
++
++/*
++ * The GPI masters DRAM as SMMU stream 0x56. With unmatched streams set to fault
++ * (ABL's sCR0), give it a stream match entry that routes it to ABL's display
++ * context bank, whose translation is off (as the hypervisor does not accept
++ * BYPASS S2CRs on these SoCs, Linux arm-smmu-qcom uses such a bank too).
++ */
++static bool
++gpi_smmu_route(void)
++{
++	volatile uint32_t *gr0 = (volatile uint32_t *)ml_io_map(SMMU_PA, 0x1000);
++	if (gr0 == NULL) {
++		return false;
++	}
++	uint32_t n = gr0[0x20 / 4] & 0xff, idr1 = gr0[0x24 / 4];
++	uint32_t pgshift = (idr1 & (1u << 31)) ? 16 : 12;
++	uint64_t numpage = 1ull << (((idr1 >> 28) & 7) + 1);
++	int freeidx = -1, displaycb = -1;
++	for (uint32_t i = 0; i < n && i < 128; i++) {
++		uint32_t smr = gr0[(0x800 + 4 * i) / 4], s2cr = gr0[(0xc00 + 4 * i) / 4];
++		uint32_t id = smr & 0x7fff, mask = (smr >> 16) & 0x7fff;
++		if (!(smr & (1u << 31))) {
++			if (freeidx < 0) {
++				freeidx = (int)i;
++			}
++			continue;
++		}
++		if (((GPI_SID ^ id) & ~mask & 0x7fff) == 0) {
++			printf("SWEET GPI: SMMU SMR%u id %#x mask %#x already routes stream %#x: S2CR %#x\n",
++			    i, id, mask, GPI_SID, s2cr);
++			return ((s2cr >> 16) & 3) != 2;
++		}
++		if (((0x820 ^ id) & ~mask & 0x7fff) == 0 && ((s2cr >> 16) & 3) == 0) {
++			displaycb = (int)(s2cr & 0xff);
++		}
++	}
++	if (freeidx < 0 || displaycb < 0) {
++		printf("SWEET GPI: SMMU: no free SMR (%d) or display bank (%d)\n", freeidx, displaycb);
++		return false;
++	}
++	volatile uint32_t *cb = (volatile uint32_t *)ml_io_map(SMMU_PA + (numpage << pgshift) +
++	    ((uint64_t)displaycb << pgshift), 0x1000);
++	if (cb == NULL || (cb[0] & 1)) {
++		printf("SWEET GPI: SMMU: display bank %d translates (SCTLR %#x)\n", displaycb, cb ? cb[0] : 0);
++		return false;
++	}
++	gr0[(0xc00 + 4 * freeidx) / 4] = (uint32_t)displaycb;          /* S2CR: translate via that bank */
++	__asm__ volatile ("dsb sy" ::: "memory");
++	gr0[(0x800 + 4 * freeidx) / 4] = (1u << 31) | GPI_SID;         /* SMR: valid, exact id */
++	__asm__ volatile ("dsb sy" ::: "memory");
++	uint32_t smr = gr0[(0x800 + 4 * freeidx) / 4], s2cr = gr0[(0xc00 + 4 * freeidx) / 4];
++	printf("SWEET GPI: SMMU SMR%d = %#x, S2CR = %#x (stream %#x -> cb%d, translation off)\n",
++	    freeidx, smr, s2cr, GPI_SID, displaycb);
++	return smr == ((1u << 31) | GPI_SID) && (s2cr & 0x300ff) == (uint32_t)displaycb;
++}
++
++int
++sweet_gpi_i2c_init(vm_offset_t se, unsigned seid)
++{
++	g.se = se;
++	g.seid = seid;
++	g.gpii = 0;
++	(void)PE_parse_boot_argn("sweetgpii", &g.gpii, sizeof(g.gpii));
++	vm_offset_t base = ml_io_map(GPI_PA - GPI_EE_OFFSET, GPI_MAP_SIZE + GPI_EE_OFFSET);
++	g.dma = ml_io_map(DMA_PA, DMA_SIZE);
++	if (base == 0 || g.dma == 0) {
++		printf("SWEET GPI: mapping failed\n");
++		return ENXIO;
++	}
++	g.ee = base;
++	if (!gpi_smmu_route()) {
++		printf("SWEET GPI: no SMMU route for the GPI stream; stopping\n");
++		return ENXIO;
++	}
++	printf("SWEET GPI: gpii%u ch0 %#x ch1 %#x ev %#x glob %#x error log %#x\n", g.gpii,
++	    gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)), gpi_rd(EV_CNTXT(g.gpii, 0)),
++	    gpi_rd(GLOB_IRQ_STTS(g.gpii)), gpi_rd(ERROR_LOG(g.gpii)));
++	/* Leftover state from an earlier owner: reset and free it. */
++	for (unsigned k = 0; k < 2; k++) {
++		unsigned s = ch_state(k);
++		if (s == CH_STATE_STARTED) {
++			(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);
++		}
++		if (s != CH_STATE_NOT_ALLOCATED) {
++			(void)ch_cmd(k, CMD_RESET, CH_STATE_ALLOCATED);
++			(void)ch_cmd(k, CMD_DEALLOC, CH_STATE_NOT_ALLOCATED);
++		}
++	}
++	if (ev_state() != 0) {
++		(void)ev_cmd(CMD_RESET, 1);
++		(void)ev_cmd(CMD_DEALLOC, 0);
++	}
++	gpi_wr(ERROR_LOG_CLR(g.gpii), 0xffffffffu);
++
++	for (uint32_t i = 0; i < DMA_SIZE / 4; i++) {
++		dma_ptr(0)[i] = 0;
++	}
++	/* Serial engine in GSI mode (geni_se_select_gsi_mode). */
++	uint32_t m_en = *(volatile uint32_t *)(se + 0x614) & ~(1u | (1u << 30) | (1u << 26) | (1u << 27));
++	uint32_t s_en = *(volatile uint32_t *)(se + 0x644) & ~1u;
++	*(volatile uint32_t *)(se + 0xe1c) = 0;                         /* SE_IRQ_EN */
++	*(volatile uint32_t *)(se + 0x644) = s_en;
++	*(volatile uint32_t *)(se + 0x614) = m_en;
++	*(volatile uint32_t *)(se + 0x618) = 0xffffffffu;               /* M_IRQ_CLEAR */
++	*(volatile uint32_t *)(se + 0x648) = 0xffffffffu;               /* S_IRQ_CLEAR */
++	*(volatile uint32_t *)(se + 0xc44) = 0xffffffffu;               /* DMA_TX_IRQ_CLR */
++	*(volatile uint32_t *)(se + 0xd44) = 0xffffffffu;               /* DMA_RX_IRQ_CLR */
++	*(volatile uint32_t *)(se + 0x258) |= 1u;                       /* GENI_DMA_MODE_EN */
++	*(volatile uint32_t *)(se + 0xe18) |= 0xfu;                     /* GSI_EVENT_EN: rx tx m s */
++	__asm__ volatile ("dsb sy" ::: "memory");
++
++	/* Interrupts: none (polled), IRQ (not MSI) mode. */
++	gpi_wr(TYPE_IRQ_MSK(g.gpii), 0);
++	gpi_wr(INTSET(g.gpii), 1);
++
++	/* Event ring: allocate, program, hand all but one element to the hardware. */
++	if (!ev_cmd(CMD_ALLOCATE, 1)) {
++		return EIO;
++	}
++	uint32_t evlen = EV_RING_N * TRE_SIZE, ev = EV_CNTXT(g.gpii, 0);
++	gpi_wr(ev + CNTXT_CONFIG, (TRE_SIZE << 24) | (1u << 16) | 2u);  /* el 16, IRQ, GPI_EV */
++	gpi_wr(ev + CNTXT_LEN, evlen);
++	gpi_wr(ev + CNTXT_BASE_LSB, DMA_PA + OFF_EV);
++	gpi_wr(ev + CNTXT_BASE_MSB, 0);
++	gpi_wr(EV_DB(g.gpii, 0) + 4, 0);
++	gpi_wr(ev + CNTXT_INT_MOD, 0);
++	gpi_wr(ev + CNTXT_MSI_LSB, 0);
++	gpi_wr(ev + CNTXT_MSI_MSB, 0);
++	gpi_wr(ev + CNTXT_RPU_LSB, 0);
++	gpi_wr(ev + CNTXT_RPU_MSB, 0);
++	g.ev_rp = 0;
++	g.ev_wp = EV_RING_N - 1;
++	gpi_wr(EV_DB(g.gpii, 0), DMA_PA + OFF_EV + g.ev_wp * TRE_SIZE);
++
++	/* Channels: 0 = TX (DIR_OUT), 1 = RX (DIR_IN), protocol GPI, event ring 0. */
++	for (unsigned k = 0; k < 2; k++) {
++		if (!ch_cmd(k, CMD_ALLOCATE, CH_STATE_ALLOCATED)) {
++			return EIO;
++		}
++		uint32_t c = CH_CNTXT(g.gpii, k), ring = DMA_PA + (k ? OFF_RX : OFF_TX);
++		gpi_wr(c + CNTXT_CONFIG, (TRE_SIZE << 24) | (0u << 14) | ((k ? 0u : 1u) << 3) | 2u);
++		gpi_wr(c + CNTXT_LEN, CH_RING_N * TRE_SIZE);
++		gpi_wr(c + CNTXT_BASE_LSB, ring);
++		gpi_wr(c + CNTXT_BASE_MSB, 0);
++		gpi_wr(CH_DB(g.gpii, k) + 4, 0);
++		gpi_wr(CH_SCRATCH(g.gpii, k, 0), ((k ? 0u : 1u) << 16) | (3u << 4) | g.seid);  /* pair, I2C, SE */
++		gpi_wr(CH_SCRATCH(g.gpii, k, 1), 0);
++		gpi_wr(CH_SCRATCH(g.gpii, k, 2), 0);
++		gpi_wr(CH_SCRATCH(g.gpii, k, 3), 0);
++		gpi_wr(CH_QOS(g.gpii, k), 1);
++	}
++	for (unsigned k = 0; k < 2; k++) {
++		if (!ch_cmd(k, CMD_START, CH_STATE_STARTED)) {
++			return EIO;
++		}
++	}
++	g.tx_wp = g.rx_wp = 0;
++	g.cfg_sent = false;
++	g.ready = true;
++	printf("SWEET GPI: gpii%u ready: SE%u I2C, rings at %#x, ch0 %#x ch1 %#x ev %#x\n", g.gpii, g.seid,
++	    DMA_PA, gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)), gpi_rd(EV_CNTXT(g.gpii, 0)));
++	return 0;
++}
++
++static void
++ring_put(unsigned k, uint32_t d0, uint32_t d1, uint32_t d2, uint32_t d3)
++{
++	uint32_t *wp = k ? &g.rx_wp : &g.tx_wp;
++	volatile uint32_t *t = dma_ptr((k ? OFF_RX : OFF_TX) + *wp * TRE_SIZE);
++	t[0] = d0;
++	t[1] = d1;
++	t[2] = d2;
++	t[3] = d3;
++	*wp = (*wp + 1) % CH_RING_N;
++}
++
++static void
++ring_doorbell(unsigned k)
++{
++	uint32_t wp = k ? g.rx_wp : g.tx_wp;
++	gpi_wr(CH_DB(g.gpii, k), DMA_PA + (k ? OFF_RX : OFF_TX) + wp * TRE_SIZE);
++}
++
++/*
++ * Consume events until the transfer completed (EOT on the channel whose last TRE
++ * asked for it) or a QUP notification reported an error. Returns 0, ENXIO (NACK),
++ * EIO or ETIMEDOUT; *got is the received length.
++ */
++static int
++gpi_wait(unsigned donech, unsigned *got)
++{
++	for (unsigned spin = 0; spin < 20000; spin++) {
++		uint32_t hwrp = (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB) - (DMA_PA + OFF_EV)) / TRE_SIZE;
++		while (g.ev_rp != hwrp % EV_RING_N) {
++			volatile uint32_t *e = dma_ptr(OFF_EV + g.ev_rp * TRE_SIZE);
++			uint32_t d0 = e[0], d2 = e[2], d3 = e[3];
++			uint32_t type = (d3 >> 16) & 0xff, chid = d3 >> 24, code = d2 >> 24, status = d3 & 0xffff;
++			if (g.logged < 24) {
++				g.logged++;
++				printf("SWEET GPI: event ch%u type %#x code %u len %u status %#x (%08x %08x %08x %08x)\n",
++				    chid, type, code, d2 & 0xffffff, status, d0, e[1], d2, d3);
++			}
++			e[0] = e[1] = e[2] = e[3] = 0;
++			g.ev_rp = (g.ev_rp + 1) % EV_RING_N;
++			g.ev_wp = (g.ev_wp + 1) % EV_RING_N;
++			gpi_wr(EV_DB(g.gpii, 0), DMA_PA + OFF_EV + g.ev_wp * TRE_SIZE);
++			if (type == EV_QUP_NOTIF) {
++				uint32_t m = d0;        /* qup_notif_event.status */
++				if (m & M_GP_IRQ_1) {
++					return ENXIO;
++				}
++				if (m & (M_GP_IRQ_3 | M_GP_IRQ_4)) {
++					return EIO;
++				}
++			} else if (type == EV_XFER_COMPLETE) {
++				if (code != TCE_EOT && code != 1u) {
++					return EIO;
++				}
++				if (chid == donech) {
++					if (got != NULL) {
++						*got = d2 & 0xffffff;
++					}
++					return 0;
++				}
++			}
++		}
++		delay(50);
++	}
++	printf("SWEET GPI: timeout: ch0 %#x ch1 %#x ev %#x ev rp %#x glob %#x error log %#x\n",
++	    gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)), gpi_rd(EV_CNTXT(g.gpii, 0)),
++	    gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB), gpi_rd(GLOB_IRQ_STTS(g.gpii)), gpi_rd(ERROR_LOG(g.gpii)));
++	return ETIMEDOUT;
++}
++
++/* One I2C message: write nt bytes or read nr bytes (exactly one of them). */
++int
++sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch)
++{
++	if (!g.ready || (nt && nr) || (!nt && !nr) || nt > BUF_MAX || nr > BUF_MAX) {
++		return EIO;
++	}
++	bool read = nr != 0;
++	if (read) {
++		ring_put(1, DMA_PA + OFF_RXBUF, 0, nr, TRE_DW3(1, 0, 0, 0, 1, 0, 0));
++		ring_doorbell(1);
++	} else {
++		for (unsigned i = 0; i < nt; i++) {
++			((volatile uint8_t *)dma_ptr(OFF_TXBUF))[i] = tx[i];
++		}
++	}
++	if (!g.cfg_sent) {
++		ring_put(0, (I2C_PACK_EN << 24) | (I2C_T_CYCLE << 16) | (I2C_T_HIGH << 8) | I2C_T_LOW,
++		    0, I2C_CLK_DIV, TRE_DW3(2, 2, 0, 0, 0, 0, 1));
++		g.cfg_sent = true;
++	}
++	uint32_t go0 = ((stretch ? 4u : 0u) << 24) | ((uint32_t)addr << 8) | (read ? 2u : 1u);
++	if (read) {
++		ring_put(0, go0, 0, nr, TRE_DW3(2, 0, 1, 0, 0, 1, 0));
++	} else {
++		ring_put(0, go0, 0, 0, TRE_DW3(2, 0, 0, 0, 0, 0, 1));
++		ring_put(0, DMA_PA + OFF_TXBUF, 0, nt, TRE_DW3(1, 0, 0, 0, 1, 0, 0));
++	}
++	ring_doorbell(0);
++	unsigned got = 0;
++	int err = gpi_wait(read ? 1 : 0, &got);
++	if (err == 0 && read) {
++		for (unsigned i = 0; i < nr; i++) {
++			rx[i] = ((volatile uint8_t *)dma_ptr(OFF_RXBUF))[i];
++		}
++	}
++	if (err != 0) {
++		/*
++		 * Stop, reset and restart both channels so the rings start empty again
++		 * (gpi_terminate_all); the next message re-sends CONFIG0.
++		 */
++		for (unsigned k = 0; k < 2; k++) {
++			(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);
++			(void)ch_cmd(k, CMD_RESET, CH_STATE_ALLOCATED);
++		}
++		for (unsigned k = 0; k < 2; k++) {
++			uint32_t c = CH_CNTXT(g.gpii, k);
++			gpi_wr(c + CNTXT_BASE_LSB, DMA_PA + (k ? OFF_RX : OFF_TX));
++			(void)ch_cmd(k, CMD_START, CH_STATE_STARTED);
++		}
++		g.tx_wp = g.rx_wp = 0;
++		g.cfg_sent = false;
++	}
++	return err;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 327935f..c4481b5 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -28,6 +28,8 @@ extern kern_return_t thread_terminate(thread_t);
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
++extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid);   /* sweet_gpi.c */
++extern int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ void sweet_touch_init(void);
+ 
+ #define TOUCH_SE_PA      0x00a84000u
+@@ -107,6 +109,7 @@ void sweet_touch_init(void);
+ static struct {
+ 	vm_offset_t se, gcc, gpio;
+ 	bool started, dead, probing;
++	bool gpi;               /* umi: SE5 FIFO disabled, transfers through GPI DMA */
+ 	int kind, irq_hint;
+ 	/* Board clock and pin choices (sweet defaults, see touch_umi_board). */
+ 	uint32_t gcc_vote, vote_mask, rcg, clk_level, irq_pin;
+@@ -354,7 +357,16 @@ touch_msg(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx,
+ {
+ 	st.irq_status = st.irq_last = 0;
+ 	st.sent = st.got = 0;
+-	int err = touch_msg_run(addr, tx, nt, rx, nr, stretch);
++	int err;
++	if (st.gpi) {
++		err = sweet_gpi_i2c_xfer(addr, tx, nt, rx, nr, stretch);
++		if (!err) {
++			st.sent = nt;
++			st.got = nr;
++		}
++	} else {
++		err = touch_msg_run(addr, tx, nt, rx, nr, stretch);
++	}
+ 	if (st.probing) {
+ 		printf("SWEET TOUCH: probe xfer addr=%#x %s len=%u stretch=%u err=%d irq=%#x seen=%#x tx=%u rx=%u status=%#x\n",
+ 		    addr, nr ? "read" : "write", nr ? nr : nt, stretch ? 1u : 0u,
+@@ -674,7 +686,22 @@ touch_umi_start(void)
+ 		printf("SWEET TOUCH: MMIO mapping failed\n");
+ 		return false;
+ 	}
+-	if (!touch_clocks() || !touch_se_init()) {
++	if (!touch_clocks()) {
++		return false;
++	}
++	/*
++	 * umi's SE5 firmware has its FIFO interface disabled (GENI_IF_DISABLE_RO bit 0):
++	 * Linux (i2c-qcom-geni GSI_ONLY) moves every byte through the GPI DMA engine.
++	 */
++	if (touch_rd(st.se, 0x64) & 1u) {
++		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
++		int gerr = sweet_gpi_i2c_init(st.se, 5);
++		if (gerr) {
++			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);
++			return false;
++		}
++		st.gpi = true;
++	} else if (!touch_se_init()) {
+ 		return false;
+ 	}
+ 	uint32_t avdd_cfg = touch_rd(st.gpio, TOUCH_GPIO_CFG(UMI_PIN_AVDD));

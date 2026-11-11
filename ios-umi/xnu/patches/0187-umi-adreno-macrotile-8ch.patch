@@ -1,0 +1,48 @@
+From 95d2dce70c4d8cc41402e38c45b284d16a3a2f19 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 18:31:11 +0100
+Subject: [PATCH] umi: report the A650's 8-channel UBWC macrotile mode to
+ Turnip
+
+Step 20 programs RBBM_NC_MODE_CNTL = 1 (8-channel macrotile), as Linux
+v6.12 a6xx_calc_ubwc_config does for the A650 (macrotile_mode = 1), but
+both device-info paths told Turnip 0. Turnip then laid out tiled/UBWC
+textures for 4 channels while the hardware addressed 8: their tiles
+came back shuffled, with checkered fringes (every app icon). Report
+SWEET_ADRENO_MACROTILE_MODE = 1 in the msm param table and v2
+GetDeviceInfo. Linear surfaces were never affected. Icons are clean
+on the panel with this.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index c2abb21..9495972 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -88,7 +88,7 @@ enum {
+ #define SWEET_ADRENO_MAX_FREQ_KHZ       305000
+ #define SWEET_ADRENO_HIGHEST_BANK_BIT   16
+ #define SWEET_ADRENO_UBWC_SWIZZLE       0x6
+-#define SWEET_ADRENO_MACROTILE_MODE     0
++#define SWEET_ADRENO_MACROTILE_MODE     1       /* 8 channels: step 20 writes RBBM_NC_MODE_CNTL 1 */
+ 
+ class SweetAdreno : public IOService {
+ 	OSDeclareDefaultStructors(SweetAdreno);
+@@ -530,7 +530,10 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		rp->va_size = fWinSize;
+ 		rp->highest_bank_bit = 16;
+ 		rp->ubwc_swizzle = 0x6;
+-		rp->macrotile_mode = 0;
++		/* what step 20 programmed (RBBM_NC_MODE_CNTL 1, a6xx_calc_ubwc_config: A650
++		 * macrotile_mode 1); Turnip told 4 channels laid tiled/UBWC textures out for a
++		 * different macrotile than the hardware samples: shuffled tiles (the icons) */
++		rp->macrotile_mode = SWEET_ADRENO_MACROTILE_MODE;
+ 		rp->ubwc_version = 4;
+ 		rp->flags = NativeAdrenoDeviceClientIova;
+ 		return kIOReturnSuccess;
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,1167 @@
+From 82beb709027eb4e26b74b3628198816e40c188fb Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 23:13:09 +0100
+Subject: [PATCH 202/202] umi: the QCA6390 as the station and en0 link for
+ wifid
+
+ios-flame's flame_sta.c glues the station boundary to its userland
+radio; umi's radio is in the kernel, so bsd/dev/sweet_wlsta.c glues it
+to sweet_wlce.c / sweet_wldp.c. After stage 8's first scan,
+sweet_wlce_htc hands over to it (boot-arg sweetwifid, default 1;
+sweetwifid=0 keeps the kernel's own join + DHCP + en0 of 0140-0154):
+en0 comes from redwood_net.c with the link down, the station is
+attached, and the boot line's sweetwlanssid becomes a standing join
+request. configd's DHCP runs on en0 once the link is up.
+
+sweet_wlce.c:
+- the BSS table keeps signal (snr + ATH11K_DEFAULT_NOISE_FLOOR -95,
+  ath11k wmi.c), beacon interval, capability, elements and last-heard
+  time, refreshed by every beacon; a full table gives up the oldest;
+- START_SCAN is its own function (wmi_start_scan), the association its
+  own (wlce_assoc: strongest BSS with that name, state reset first);
+- leave: deauth (reason 3), VDEV_DOWN 0x5007/tag 0x5e, PEER_DELETE
+  0x6002/0x62 -> 0x6007, VDEV_STOP 0x5006/0x5d -> 0x5002 (ath11k
+  wmi.h v6.12, ath11k_bss_disassoc / ath11k_mac_vdev_stop order);
+- link loss: deauth/disassoc to us, PEER_STA_KICKOUT 0x6001, ROAM
+  0xb001 reason 2 (beacon miss);
+- wlce_lock shared by the net thread's poll, transmit and the station
+  thread; waits drop it while they sleep.
+
+Open networks on 2.4 GHz only, as the radio is today; a WPA join is
+refused with EAUTH. While joined a real scan runs at most every 20 s.
+With the station, the IO80211Controller entries come with en0 instead
+of at AppleCLCD start (sweetwlanearly=1 forces the early publish).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/conf/files                 |   1 +
+ bsd/dev/sweet_wlce.c           | 538 +++++++++++++++++++++++++--------
+ bsd/dev/sweet_wlsta.c          | 304 +++++++++++++++++++
+ iokit/Kernel/arm/SweetWLAN.cpp |   8 +-
+ 4 files changed, 731 insertions(+), 120 deletions(-)
+ create mode 100644 bsd/dev/sweet_wlsta.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 9225199..b643e50 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -127,6 +127,7 @@ bsd/dev/sweet_wlif.c			standard
+ bsd/dev/redwood_net.c			standard
+ bsd/dev/redwood_sta.c			standard
+ bsd/dev/redwood_apple80211.c		standard
++bsd/dev/sweet_wlsta.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index cc9d112..5b33de8 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -12,6 +12,7 @@
+ #include <sys/systm.h>
+ #include <sys/errno.h>
+ #include <kern/clock.h>
++#include <kern/locks.h>
+ #include <pexpert/pexpert.h>
+ 
+ static uint8_t wlce_mac[6];                     /* 0154: the ADT's mac-address-wifi0 (sweet_wlan_mac); OTP has none */
+@@ -32,6 +33,8 @@ extern void sweet_wldp_set_bssid(const uint8_t bssid[6]);
+ extern int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void));
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
++extern bool sweet_wlsta_wanted(void);
++extern int sweet_wlsta_start(void);
+ 
+ /* qca6390_regs (ath11k hw.c): CE n source R0 at 0xa00000 + n * 0x2000, destination at +0x1000 */
+ #define CE_SRC_REG(n)           (0x00a00000u + (n) * 0x2000u)
+@@ -87,6 +90,8 @@ struct pipe {
+ 	unsigned head;                  /* next buffer to complete (in order) */
+ };
+ 
++#define SWEET_WLCE_IES 768
++
+ static struct {
+ 	vm_offset_t bar0, mem;
+ 	uint32_t pa;
+@@ -337,11 +342,21 @@ static struct {
+ 	uint8_t bss[32][6];
+ 	uint8_t bss_ssid[32][33];       /* raw SSID bytes (0140: join by name) */
+ 	uint32_t bss_ch[32];
++	/* 0202: what the station (sweet_wlsta.c) tells wifid of each, refreshed by every beacon / probe response */
++	uint8_t bss_ssid_len[32];
++	int16_t bss_rssi[32];
++	uint16_t bss_bint[32], bss_cap[32], bss_ielen[32];
++	uint64_t bss_seen[32];          /* ms of uptime */
++	uint8_t bss_ies[32][SWEET_WLCE_IES];
++	uint32_t scan_req;
+ 	/* join (0140) */
+ 	uint8_t join_bssid[6];
+ 	bool peer_mapped, vdev_started, tx_done, auth_rx, assoc_rx, assoc_conf, joined;
+ 	uint32_t vdev_start_status, tx_status, auth_status, assoc_status, aid, ap_caps;
+ 	uint16_t peer_id;
++	/* 0202: leave, and a link the AP or the firmware ended (deauth / disassoc, kickout, beacon miss) */
++	bool peer_deleted, vdev_stopped, lost;
++	uint32_t lost_why;
+ } htc;
+ 
+ #define WMI_EV_BIT(id)          ((id) < 0x4000u ? 1ull << ((id) & 31) : 1ull << (32 + ((id) & 31)))
+@@ -468,6 +483,38 @@ htc_poll(void)
+ 	sweet_wldp_data_poll();         /* transmit completions and received frames (0141) */
+ }
+ 
++/*
++ * 0202: once the station runs (sweet_wlsta.c), the net thread, the station thread and transmit
++ * share the copy engines and rings: all of them hold wlce_lock, and the waits below let go of it
++ * while they sleep, so frames keep moving during a scan or a join. Before that (bring-up) there
++ * is one thread and no lock.
++ */
++static LCK_GRP_DECLARE(wlce_lck_grp, "sweet-wlce");
++static LCK_MTX_DECLARE(wlce_lock, &wlce_lck_grp);
++static bool wlce_shared;
++
++static void
++wlce_tick(void)
++{
++	htc_poll();
++	if (wlce_shared) {
++		lck_mtx_unlock(&wlce_lock);
++		delay(1000);
++		lck_mtx_lock(&wlce_lock);
++	} else {
++		delay(1000);
++	}
++}
++
++static uint64_t
++wlce_now_ms(void)
++{
++	uint64_t t, ns;
++	clock_get_uptime(&t);
++	absolutetime_to_nanoseconds(t, &ns);
++	return ns / 1000000ull;
++}
++
+ /* A control message to endpoint 0 over CE0 (no credit flow on the control endpoint). */
+ static int
+ htc_send_ctrl(const uint32_t *msg, uint32_t len)
+@@ -572,6 +619,25 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+ 		/* PEER_ASSOC_CONF (tag 0x1b2): vdev_id, peer mac */
+ 		htc.assoc_conf = true;
+ 		printf("SWEET WMI: peer assoc confirmed\n");
++	} else if (id == 0x6007u) {
++		/* 0202: PEER_DELETE_RESP (ath11k wmi.h WMI_PEER_DELETE_RESP_EVENTID) */
++		htc.peer_deleted = true;
++	} else if (id == 0x5002u) {
++		/* 0202: VDEV_STOPPED (WMI_VDEV_STOPPED_EVENTID) */
++		htc.vdev_stopped = true;
++	} else if ((id == 0x6001u || id == 0xb001u) && htc.joined) {
++		/*
++		 * 0202: PEER_STA_KICKOUT (the firmware gave up on the AP) or ROAM (tag-less read of
++		 * wmi_roam_event {vdev_id, reason, rssi}: reason 2 = WMI_ROAM_REASON_BEACON_MISS):
++		 * the link is gone (ath11k: ieee80211_beacon_loss / ieee80211_report_low_ack).
++		 */
++		uint32_t reason = id == 0xb001u && len >= 12 ? get32(m + 8) : 0;
++		if (id == 0x6001u || reason == 2) {
++			htc.lost = true;
++			htc.lost_why = id << 8 | reason;
++		}
++		printf("SWEET WMI: %s (reason %u) while joined%s\n", id == 0x6001u ? "peer kickout" : "roam event", reason,
++		    htc.lost ? ": the link is lost" : "");
+ 	} else if (id == WMI_EV_SET_HW_MODE_RESP) {
+ 		printf("SWEET WMI: SET_HW_MODE response, %u bytes\n", len);
+ 	}
+@@ -602,6 +668,10 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 	if (htc.joined && f[0] != 0x80 && f[0] != 0x50 && fl >= 24 &&
+ 	    (memcmp(f + 10, htc.join_bssid, 6) == 0 || memcmp(f + 16, htc.join_bssid, 6) == 0)) {
+ 		uint32_t code = fl >= 26 ? (uint32_t)(f[24] | f[25] << 8) : 0;
++		if ((f[0] == 0xc0 || f[0] == 0xa0) && memcmp(f + 4, wlce_mac, 6) == 0) {
++			htc.lost = true;        /* 0202: deauthenticated / disassociated: the station says so (sweet_wlsta.c) */
++			htc.lost_why = f[0] << 16 | code;
++		}
+ 		printf("SWEET WMI: mgmt from AP after join: subtype %#x, %u bytes, %s %u, to us %d\n", f[0], fl,
+ 		    f[0] == 0xd0 ? "category" : "reason", f[0] == 0xd0 ? (uint32_t)f[24] : code, memcmp(f + 4, wlce_mac, 6) == 0);
+ 		return;
+@@ -626,11 +696,26 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 	if (fl < 36 || (f[0] != 0x80 && f[0] != 0x50)) {
+ 		return;
+ 	}
++	/*
++	 * 0202: every beacon / probe response refreshes its entry (signal, last heard, elements), as
++	 * the station reports them to wifid; a full table (32) gives the longest-unheard entry away.
++	 * Signal: snr + ATH11K_DEFAULT_NOISE_FLOOR (-95), as ath11k wmi.c does for management frames.
++	 */
+ 	const uint8_t *bssid = f + 16;
+-	for (unsigned i = 0; i < htc.nbss; ++i) {
++	uint64_t now = wlce_now_ms();
++	unsigned i, oldest = 0;
++	bool known = false;
++	for (i = 0; i < htc.nbss; ++i) {
+ 		if (memcmp(htc.bss[i], bssid, 6) == 0) {
+-			return;
++			known = true;
++			break;
+ 		}
++		if (htc.bss_seen[i] < htc.bss_seen[oldest]) {
++			oldest = i;
++		}
++	}
++	if (!known && htc.nbss >= 32) {
++		i = oldest;
+ 	}
+ 	uint32_t ch = get32(hdr), mhz = get32(hdr + 64);
+ 	if (mhz == 0 && ch >= 1 && ch <= 13) {
+@@ -639,18 +724,32 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 		mhz = 2484;
+ 	}
+ 	char ssid[33] = {0};
++	unsigned ssid_len = 0;
+ 	if (fl >= 38 && f[36] == 0) {
+-		memcpy(ssid, f + 38, MIN((unsigned)f[37], MIN(fl - 38, 32u)));
++		ssid_len = MIN((unsigned)f[37], MIN(fl - 38, 32u));
++		memcpy(ssid, f + 38, ssid_len);
++	}
++	if (!known || ssid_len != 0) {         /* (a hidden network's beacons have no name; its probe response does) */
++		memcpy(htc.bss_ssid[i], ssid, sizeof(ssid));
++		htc.bss_ssid_len[i] = (uint8_t)ssid_len;
++	}
++	memcpy(htc.bss[i], bssid, 6);
++	htc.bss_ch[i] = ch;
++	htc.bss_rssi[i] = (int16_t)((int32_t)get32(hdr + 4) - 95);
++	htc.bss_bint[i] = (uint16_t)(f[32] | f[33] << 8);
++	htc.bss_cap[i] = (uint16_t)(f[34] | f[35] << 8);
++	htc.bss_ielen[i] = (uint16_t)MIN(fl - 36, (uint32_t)SWEET_WLCE_IES);
++	memcpy(htc.bss_ies[i], f + 36, htc.bss_ielen[i]);
++	htc.bss_seen[i] = now;
++	if (known) {
++		return;
+ 	}
+ 	if (htc.nbss < 32) {
+-		memcpy(htc.bss[htc.nbss], bssid, 6);
+-		memcpy(htc.bss_ssid[htc.nbss], ssid, sizeof(ssid));
+-		htc.bss_ch[htc.nbss] = ch;
+-	}
+-	htc.nbss++;
+-	for (unsigned i = 0; ssid[i]; ++i) {
+-		if (ssid[i] < 0x20 || ssid[i] > 0x7e) {
+-			ssid[i] = '?';
++		htc.nbss++;
++	}
++	for (unsigned k = 0; ssid[k]; ++k) {
++		if (ssid[k] < 0x20 || ssid[k] > 0x7e) {
++			ssid[k] = '?';
+ 		}
+ 	}
+ 	printf("SWEET WMI: BSS %02x:%02x:%02x:%02x:%02x:%02x ch %u %u MHz snr %u %s \"%s\"\n", bssid[0], bssid[1],
+@@ -735,8 +834,7 @@ static bool
+ wmi_wait(uint64_t want, unsigned ms)
+ {
+ 	for (unsigned t = 0; t < ms && (htc.seen & want) != want; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	return (htc.seen & want) == want;
+ }
+@@ -757,8 +855,7 @@ sweet_wlce_htt_send(const void *msg, uint32_t len)
+ 	memcpy(b + 8, msg, len);
+ 	int r = ce_send(&ce.tx4, b, 8 + len, htc.htt_ep);
+ 	for (unsigned t = 0; r == EBUSY && t < 100; ++t) {     /* CE4 full: let the target catch up */
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 		r = ce_send(&ce.tx4, b, 8 + len, htc.htt_ep);
+ 	}
+ 	return r;
+@@ -769,8 +866,7 @@ static int
+ wmi_cmd(uint32_t id, const void *body, uint32_t len, const char *name)
+ {
+ 	for (unsigned t = 0; t < 1000 && htc.wmi_credits == 0; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	int r = wmi_send(id, body, len);
+ 	if (r != 0) {
+@@ -789,6 +885,84 @@ wmi_cmd(uint32_t id, const void *body, uint32_t len, const char *name)
+  */
+ #define SCAN_NCHAN      13
+ 
++/*
++ * START_SCAN of 2412-2472 MHz on vdev 0 and the wait for its end (0202: also the station's scan,
++ * while joined too: the firmware visits the other channels between beacons of the AP's).
++ * 0, 12 not sent, 13 not started; whether it completed is htc.scan_done.
++ */
++static int
++wmi_start_scan(unsigned active)
++{
++	static uint32_t b[64 + 7 * SCAN_NCHAN];
++	/* Probe request IEs (mac80211 adds these; the firmware adds the SSID): supported + extended rates */
++	static const uint8_t ies[] = { 1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 50, 4, 0x30, 0x48, 0x60, 0x6c };
++	/*
++	 * ath11k_wmi_start_scan_init + hw_scan; 40-word fixed part. Active: one
++	 * wildcard SSID (as mac80211 asks), the rate IEs; passive: no SSIDs.
++	 */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x4d, 39 * 4);
++	b[1] = 0xa000;                  /* scan_id (ATH11K_SCAN_ID) */
++	b[2] = ++htc.scan_req;          /* scan_req_id */
++	b[3] = 0;                       /* vdev_id */
++	b[4] = 1;                       /* priority low */
++	b[5] = 0x1f | 0x40;             /* started, completed, bss chan, foreign chan, dequeued, start failed */
++	b[6] = 50;                      /* dwell active */
++	b[7] = 150;                     /* dwell passive */
++	b[8] = 50;                      /* min rest */
++	b[9] = 500;                     /* max rest */
++	b[13] = 20000;                  /* max scan time */
++	b[14] = 5;                      /* probe delay */
++	b[15] = (active ? 0 : 0x1) | 0x10;      /* PASSIVE, CHAN_STAT_EVENT */
++	b[17] = SCAN_NCHAN;
++	b[18] = 1;                      /* num_bssid */
++	b[19] = active ? 1 : 0;         /* num_ssids */
++	b[20] = active ? sizeof(ies) : 0;       /* ie_len */
++	b[37] = 40;                     /* dwell active 6G */
++	b[38] = 30;                     /* dwell passive 6G */
++	uint32_t *p = b + 40;
++	*p++ = WMI_TLV(0x10, SCAN_NCHAN * 4);
++	for (unsigned i = 0; i < SCAN_NCHAN; ++i) {
++		*p++ = 2412 + 5 * i;
++	}
++	if (active) {
++		*p++ = WMI_TLV(0x13, 36);       /* wmi_ssid: u32 length 0 (wildcard), 32 bytes */
++		bzero(p, 36);
++		p += 9;
++	} else {
++		*p++ = WMI_TLV(0x13, 0);
++	}
++	*p++ = WMI_TLV(0x13, 8);        /* one BSSID: broadcast */
++	*p++ = 0xffffffffu;
++	*p++ = 0x0000ffffu;
++	if (active) {
++		*p++ = WMI_TLV(0x11, (sizeof(ies) + 3) & ~3u);
++		bzero(p, (sizeof(ies) + 3) & ~3u);
++		memcpy(p, ies, sizeof(ies));
++		p += (sizeof(ies) + 3) / 4;
++	} else {
++		*p++ = WMI_TLV(0x11, 0);
++	}
++	printf("SWEET WMI: %s scan of 2412-2472 MHz from %02x:%02x:%02x:%02x:%02x:%02x\n", active ? "active" : "passive",
++	    wlce_mac[0], wlce_mac[1], wlce_mac[2], wlce_mac[3], wlce_mac[4], wlce_mac[5]);
++	htc.scan_started = htc.scan_done = false;
++	htc.scan_fail = 0;
++	if (wmi_cmd(0x3001u, b, (uint32_t)((uint8_t *)p - (uint8_t *)b), "START_SCAN") != 0) {
++		return 12;
++	}
++	for (unsigned t = 0; t < 3000 && !htc.scan_started && !htc.scan_fail; ++t) {
++		wlce_tick();
++	}
++	if (!htc.scan_started) {
++		printf("SWEET WMI: scan not started (start failed %u)\n", htc.scan_fail);
++		return 13;
++	}
++	for (unsigned t = 0; t < 15000 && !htc.scan_done; ++t) {
++		wlce_tick();
++	}
++	return 0;
++}
++
+ static int
+ wmi_scan(void)
+ {
+@@ -796,8 +970,6 @@ wmi_scan(void)
+ 	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
+ 	unsigned active = 1;            /* sweetwlanscan=0: passive (0133), 1: probe requests with a wildcard SSID */
+ 	int r;
+-	/* Probe request IEs (mac80211 adds these; the firmware adds the SSID): supported + extended rates */
+-	static const uint8_t ies[] = { 1, 8, 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 50, 4, 0x30, 0x48, 0x60, 0x6c };
+ 	(void)PE_parse_boot_argn("sweetwlanscan", &active, sizeof(active));
+ 
+ 	/* ath11k_wmi_set_hw_mode(WMI_HOST_HW_MODE_DBS): pdev_id 0, mode 1, no band_to_mac */
+@@ -808,8 +980,7 @@ wmi_scan(void)
+ 		return 9;
+ 	}
+ 	for (unsigned t = 0; t < 500; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 
+ 	/* ath11k_dp_tx_htt_h2t_ver_req_msg: HTT VERSION_REQ (type 0) on the HTT endpoint (CE4), major 3 expected */
+@@ -820,8 +991,7 @@ wmi_scan(void)
+ 			return 15;
+ 		}
+ 		for (unsigned t = 0; t < 3000 && !htc.htt_ver; ++t) {
+-			htc_poll();
+-			delay(1000);
++			wlce_tick();
+ 		}
+ 		if (!htc.htt_ver || htc.htt_major != 3) {
+ 			printf("SWEET HTT: no usable version (got %d, major %u; CE4 hp %u tp %u)\n", htc.htt_ver,
+@@ -835,16 +1005,14 @@ wmi_scan(void)
+ 		return 17;
+ 	}
+ 	for (unsigned t = 0; t < 200; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	sweet_wldp_rx_report("0.2 s after ring setup");
+ 	if (sweet_wldp_mon_filter() != 0) {     /* ath11k_mac_op_start: monitor status default filter */
+ 		return 17;
+ 	}
+ 	for (unsigned t = 0; t < 500; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	sweet_wldp_rx_report("0.5 s after the filter");
+ 
+@@ -864,8 +1032,7 @@ wmi_scan(void)
+ 			return 16;
+ 		}
+ 		for (unsigned t = 0; t < 1000; ++t) {
+-			htc_poll();
+-			delay(1000);
++			wlce_tick();
+ 		}
+ 	}
+ 
+@@ -955,75 +1122,13 @@ wmi_scan(void)
+ 		}
+ 	}
+ 
+-	/*
+-	 * ath11k_wmi_start_scan_init + hw_scan; 40-word fixed part. Active: one
+-	 * wildcard SSID (as mac80211 asks), the rate IEs; passive: no SSIDs.
+-	 */
+-	bzero(b, sizeof(b));
+-	b[0] = WMI_TLV(0x4d, 39 * 4);
+-	b[1] = 0xa000;                  /* scan_id (ATH11K_SCAN_ID) */
+-	b[2] = 1;                       /* scan_req_id */
+-	b[3] = 0;                       /* vdev_id */
+-	b[4] = 1;                       /* priority low */
+-	b[5] = 0x1f | 0x40;             /* started, completed, bss chan, foreign chan, dequeued, start failed */
+-	b[6] = 50;                      /* dwell active */
+-	b[7] = 150;                     /* dwell passive */
+-	b[8] = 50;                      /* min rest */
+-	b[9] = 500;                     /* max rest */
+-	b[13] = 20000;                  /* max scan time */
+-	b[14] = 5;                      /* probe delay */
+-	b[15] = (active ? 0 : 0x1) | 0x10;      /* PASSIVE, CHAN_STAT_EVENT */
+-	b[17] = SCAN_NCHAN;
+-	b[18] = 1;                      /* num_bssid */
+-	b[19] = active ? 1 : 0;         /* num_ssids */
+-	b[20] = active ? sizeof(ies) : 0;       /* ie_len */
+-	b[37] = 40;                     /* dwell active 6G */
+-	b[38] = 30;                     /* dwell passive 6G */
+-	uint32_t *p = b + 40;
+-	*p++ = WMI_TLV(0x10, SCAN_NCHAN * 4);
+-	for (unsigned i = 0; i < SCAN_NCHAN; ++i) {
+-		*p++ = 2412 + 5 * i;
+-	}
+-	if (active) {
+-		*p++ = WMI_TLV(0x13, 36);       /* wmi_ssid: u32 length 0 (wildcard), 32 bytes */
+-		bzero(p, 36);
+-		p += 9;
+-	} else {
+-		*p++ = WMI_TLV(0x13, 0);
+-	}
+-	*p++ = WMI_TLV(0x13, 8);        /* one BSSID: broadcast */
+-	*p++ = 0xffffffffu;
+-	*p++ = 0x0000ffffu;
+-	if (active) {
+-		*p++ = WMI_TLV(0x11, (sizeof(ies) + 3) & ~3u);
+-		bzero(p, (sizeof(ies) + 3) & ~3u);
+-		memcpy(p, ies, sizeof(ies));
+-		p += (sizeof(ies) + 3) / 4;
+-	} else {
+-		*p++ = WMI_TLV(0x11, 0);
+-	}
+-	printf("SWEET WMI: %s scan of 2412-2472 MHz from %02x:%02x:%02x:%02x:%02x:%02x\n", active ? "active" : "passive",
+-	    wlce_mac[0], wlce_mac[1], wlce_mac[2], wlce_mac[3], wlce_mac[4], wlce_mac[5]);
+-	r = wmi_cmd(0x3001u, b, (uint32_t)((uint8_t *)p - (uint8_t *)b), "START_SCAN");
++	r = wmi_start_scan(active);
+ 	if (r != 0) {
+-		return 12;
+-	}
+-	for (unsigned t = 0; t < 3000 && !htc.scan_started && !htc.scan_fail; ++t) {
+-		htc_poll();
+-		delay(1000);
+-	}
+-	if (!htc.scan_started) {
+-		printf("SWEET WMI: scan not started (start failed %u)\n", htc.scan_fail);
+-		return 13;
+-	}
+-	for (unsigned t = 0; t < 15000 && !htc.scan_done; ++t) {
+-		htc_poll();
+-		delay(1000);
++		return r;
+ 	}
+ 	sweet_wldp_rx_report("after the scan");
+ 	for (unsigned t = 0; t < 3000; ++t) {   /* listen 3 s more: beacons from the channel the radio rests on */
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	sweet_wldp_mon_report();
+ 	printf("SWEET WMI: scan %s: %u channel visits, %u management frames, %u BSS\n",
+@@ -1049,8 +1154,7 @@ static bool
+ wlce_wait(volatile bool *flag, unsigned ms)
+ {
+ 	for (unsigned t = 0; t < ms && !*flag; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	return *flag;
+ }
+@@ -1087,36 +1191,44 @@ mgmt_hdr(uint8_t *f, uint8_t fc, const uint8_t *bssid, uint16_t seq)
+ 	return 24;
+ }
+ 
++/*
++ * 0202: the association itself, for the boot-line join (wmi_join) and the station
++ * (sweet_wlce_join): the strongest BSS heard with that name (and that BSSID, if given).
++ * 0, or 1 not heard ... 11 authorize failed, as before.
++ */
+ static int
+-wmi_join(void)
++wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ {
+ 	static uint32_t b[64];
+ 	static uint8_t f[128];
+ 	static const uint8_t rates[12] = { 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c };
+ 	char want[33] = {0};
+-	unsigned i;
+-	if (!PE_parse_boot_argn("sweetwlanssid", want, sizeof(want)) || want[0] == 0) {
+-		return 0;                       /* nothing to join */
++	uint8_t bssid[6];
++	unsigned i, best = 32;
++	if (wl == 0 || wl > 32) {
++		return 1;
+ 	}
+-	for (i = 0; want[i]; ++i) {
+-		if (want[i] == '_') {
+-			want[i] = ' ';
+-		}
++	for (i = 0; i < wl; ++i) {
++		want[i] = ssid[i] >= 0x20 && ssid[i] < 0x7f ? (char)ssid[i] : '?';     /* (for the log) */
+ 	}
+-	size_t wl = strlen(want);
+ 	for (i = 0; i < MIN(htc.nbss, 32u); ++i) {
+-		if (strlen((const char *)htc.bss_ssid[i]) == wl && memcmp(htc.bss_ssid[i], want, wl) == 0) {
+-			break;
++		if (htc.bss_ssid_len[i] == wl && memcmp(htc.bss_ssid[i], ssid, wl) == 0 &&
++		    (want_bssid == NULL || memcmp(htc.bss[i], want_bssid, 6) == 0) &&
++		    (best == 32 || htc.bss_rssi[i] > htc.bss_rssi[best])) {
++			best = i;
+ 		}
+ 	}
+-	if (i >= MIN(htc.nbss, 32u)) {
++	if (best == 32) {
+ 		printf("SWEET WMI: \"%s\" not among the %u networks heard\n", want, htc.nbss);
+ 		return 1;
+ 	}
+-	const uint8_t *bssid = htc.bss[i];
+-	uint32_t ch = htc.bss_ch[i], mhz = 2407 + 5 * ch;
++	memcpy(bssid, htc.bss[best], 6);       /* (the table changes with every beacon) */
++	uint32_t ch = htc.bss_ch[best], mhz = 2407 + 5 * ch;
+ 	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
+ 	memcpy(htc.join_bssid, bssid, 6);
++	htc.peer_mapped = htc.vdev_started = htc.tx_done = htc.auth_rx = htc.assoc_rx = htc.assoc_conf = false;
++	htc.lost = false;
++	htc.vdev_start_status = htc.auth_status = htc.assoc_status = 0;
+ 	printf("SWEET WMI: joining \"%s\" %02x:%02x:%02x:%02x:%02x:%02x on channel %u\n", want, bssid[0], bssid[1],
+ 	    bssid[2], bssid[3], bssid[4], bssid[5], ch);
+ 
+@@ -1211,7 +1323,7 @@ wmi_join(void)
+ 	f[n++] = 0;
+ 	f[n++] = 0;
+ 	f[n++] = (uint8_t)wl;
+-	memcpy(f + n, want, wl);
++	memcpy(f + n, ssid, wl);
+ 	n += wl;
+ 	f[n++] = 1;
+ 	f[n++] = 8;
+@@ -1277,13 +1389,32 @@ wmi_join(void)
+ 		return 11;
+ 	}
+ 	for (unsigned t = 0; t < 2000; ++t) {   /* 2 s: a kickout (STA_KICKOUT 0x6001) would show here */
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
+ 	htc.joined = true;
+ 	htc.logged = 0;                 /* log every WMI event / HTT message from here on (up to 24) */
+ 	sweet_wldp_set_bssid(bssid);
++	return 0;
++}
++
++static int
++wmi_join(void)
++{
++	char want[33] = {0};
++	if (!PE_parse_boot_argn("sweetwlanssid", want, sizeof(want)) || want[0] == 0) {
++		return 0;                       /* nothing to join */
++	}
++	for (unsigned i = 0; want[i]; ++i) {
++		if (want[i] == '_') {
++			want[i] = ' ';
++		}
++	}
++	int r = wlce_assoc((const uint8_t *)want, (unsigned)strlen(want), NULL);
++	if (r != 0) {
++		return r;
++	}
++	const uint8_t *bssid = htc.join_bssid;
+ 	int ipr = sweet_wlip_run(wlce_mac, bssid, htc_poll);    /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+@@ -1299,6 +1430,174 @@ wmi_join(void)
+ 	                                         * 20 no default route, 21 no A record, 22 no HTTP reply (0151) */
+ }
+ 
++/*
++ * 0202: the radio for the station of sys/redwood_sta.h (bsd/dev/sweet_wlsta.c), callable again
++ * and again after bring-up: a scan, a join, a leave, the table of what was heard. The caller
++ * holds wlce_lock (sweet_wlce_lock); the waits let go of it while they sleep.
++ */
++void sweet_wlce_lock(bool on);
++unsigned sweet_wlce_poll(void);
++int sweet_wlce_scan(void);
++int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid);
++int sweet_wlce_leave(void);
++bool sweet_wlce_joined(const uint8_t **bssid);
++uint32_t sweet_wlce_lost(void);
++bool sweet_wlce_heard(unsigned index, uint8_t bssid[6], uint8_t ssid[32], uint8_t *ssid_len, uint16_t *mhz, int16_t *rssi,
++    uint16_t *beacon_interval, uint16_t *capability, uint32_t *age_ms, uint8_t *ies, uint16_t *ies_len);
++void sweet_wlce_address(uint8_t mac[6]);
++
++void
++sweet_wlce_lock(bool on)
++{
++	if (on) {
++		lck_mtx_lock(&wlce_lock);
++	} else {
++		lck_mtx_unlock(&wlce_lock);
++	}
++}
++
++/* The net thread (lock held): copy engines and data rings once; frames go to the rx handler. */
++unsigned
++sweet_wlce_poll(void)
++{
++	wlce_shared = true;
++	htc_poll();
++	return 0;
++}
++
++/* 0 completed, EIO the firmware did not start it, ETIMEDOUT not over in 15 s. */
++int
++sweet_wlce_scan(void)
++{
++	wlce_shared = true;
++	int r = wmi_start_scan(1);
++	printf("SWEET WMI: scan %s (%u BSS in the table)\n", r ? "not started" : htc.scan_done ? "completed" : "still running",
++	    htc.nbss);
++	return r ? EIO : htc.scan_done ? 0 : ETIMEDOUT;
++}
++
++/*
++ * Leave (ath11k: mac80211's deauth, ath11k_bss_disassoc's VDEV_DOWN, peer delete on
++ * sta_state NOTEXIST, ath11k_mac_vdev_stop): deauthentication (reason 3, leaving), VDEV_DOWN
++ * 0x5007 (tag 0x5e), PEER_DELETE 0x6002 (tag 0x62) -> PEER_DELETE_RESP 0x6007, VDEV_STOP
++ * 0x5006 (tag 0x5d) -> VDEV_STOPPED 0x5002 (ath11k wmi.h v6.12; tags after VDEV_UP 0x5c and
++ * PEER_CREATE 0x61, which 0140 uses). Then the vdev can start again for the next join.
++ */
++int
++sweet_wlce_leave(void)
++{
++	static uint32_t b[8];
++	static uint8_t f[32];
++	if (!htc.joined) {
++		return 0;
++	}
++	wlce_shared = true;
++	htc.joined = false;
++	uint32_t n = mgmt_hdr(f, 0xc0, htc.join_bssid, 3);
++	f[n++] = 3;
++	f[n++] = 0;
++	if (wmi_mgmt_tx(f, n, 3) == 0) {
++		(void)wlce_wait(&htc.tx_done, 500);
++	}
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x5e, 4);
++	(void)wmi_cmd(0x5007u, b, 8, "VDEV_DOWN");
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x62, 3 * 4);
++	memcpy(&b[2], htc.join_bssid, 6);
++	htc.peer_deleted = false;
++	if (wmi_cmd(0x6002u, b, 4 * 4, "PEER_DELETE") == 0 && !wlce_wait(&htc.peer_deleted, 1000)) {
++		printf("SWEET WMI: no peer delete response in 1 s (continuing)\n");
++	}
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x5d, 4);
++	htc.vdev_stopped = false;
++	if (wmi_cmd(0x5006u, b, 8, "VDEV_STOP") == 0 && !wlce_wait(&htc.vdev_stopped, 1000)) {
++		printf("SWEET WMI: no vdev stopped event in 1 s (continuing)\n");
++	}
++	htc.lost = false;
++	printf("SWEET WMI: left the network\n");
++	return 0;
++}
++
++/* 0, ENOENT not heard, ETIMEDOUT not answered, ECONNREFUSED refused, EIO the firmware said no. */
++int
++sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid)
++{
++	wlce_shared = true;
++	if (htc.joined) {
++		(void)sweet_wlce_leave();
++	}
++	int r = wlce_assoc(ssid, len, bssid);
++	if (r != 0) {
++		printf("SWEET WMI: join failed at step %d\n", r);
++		/* a peer / vdev made before the failure is taken down again */
++		if (r >= 2) {
++			htc.joined = true;
++			(void)sweet_wlce_leave();
++		}
++	}
++	switch (r) {
++	case 0:
++		return 0;
++	case 1:
++		return ENOENT;
++	case 6:
++		return htc.auth_rx ? ECONNREFUSED : ETIMEDOUT;
++	case 8:
++		return htc.assoc_rx ? ECONNREFUSED : ETIMEDOUT;
++	default:
++		return EIO;
++	}
++}
++
++bool
++sweet_wlce_joined(const uint8_t **bssid)
++{
++	if (bssid != NULL) {
++		*bssid = htc.join_bssid;
++	}
++	return htc.joined;
++}
++
++/* The link was lost since the last call (and why: frame subtype << 16 | reason, or event << 8 | reason), or 0. */
++uint32_t
++sweet_wlce_lost(void)
++{
++	if (!htc.lost || !htc.joined) {
++		return 0;
++	}
++	htc.lost = false;
++	return htc.lost_why ? htc.lost_why : 1;
++}
++
++bool
++sweet_wlce_heard(unsigned index, uint8_t bssid[6], uint8_t ssid[32], uint8_t *ssid_len, uint16_t *mhz, int16_t *rssi,
++    uint16_t *beacon_interval, uint16_t *capability, uint32_t *age_ms, uint8_t *ies, uint16_t *ies_len)
++{
++	if (index >= MIN(htc.nbss, 32u)) {
++		return false;
++	}
++	uint32_t ch = htc.bss_ch[index];
++	memcpy(bssid, htc.bss[index], 6);
++	memcpy(ssid, htc.bss_ssid[index], 32);
++	*ssid_len = htc.bss_ssid_len[index];
++	*mhz = (uint16_t)(ch == 14 ? 2484 : 2407 + 5 * ch);
++	*rssi = htc.bss_rssi[index];
++	*beacon_interval = htc.bss_bint[index];
++	*capability = htc.bss_cap[index];
++	*age_ms = (uint32_t)MIN(wlce_now_ms() - htc.bss_seen[index], 0xffffffffull);
++	*ies_len = htc.bss_ielen[index];
++	memcpy(ies, htc.bss_ies[index], htc.bss_ielen[index]);
++	return true;
++}
++
++void
++sweet_wlce_address(uint8_t mac[6])
++{
++	memcpy(mac, wlce_mac, 6);
++}
++
+ /*
+  * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
+  * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-17
+@@ -1309,8 +1608,7 @@ sweet_wlce_htc(void)
+ {
+ 	bzero(&htc, sizeof(htc));
+ 	for (unsigned t = 0; t < 3000 && !htc.ready; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	if (!htc.ready) {
+ 		printf("SWEET HTC: no READY in 3 s (CE1 hp %u, CE2 hp %u)\n",
+@@ -1323,8 +1621,7 @@ sweet_wlce_htc(void)
+ 		return 2;
+ 	}
+ 	for (unsigned t = 0; t < 3000 && !htc.htt_conn; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	printf("SWEET HTC: service 0x300 (HTT) connect %s status %u endpoint %u\n",
+ 	    htc.htt_conn ? "answered" : "not answered", htc.htt_status, htc.htt_ep);
+@@ -1337,8 +1634,7 @@ sweet_wlce_htc(void)
+ 		return 2;
+ 	}
+ 	for (unsigned t = 0; t < 3000 && !htc.conn; ++t) {
+-		htc_poll();
+-		delay(1000);
++		wlce_tick();
+ 	}
+ 	printf("SWEET HTC: CE0 sent hp %u tp %u\n", ce.tx0.src.hp, *mem32(M_RDP + ce.tx0.src.id * 4));
+ 	if (!htc.conn || htc.status != 0) {
+@@ -1375,6 +1671,10 @@ sweet_wlce_htc(void)
+ 	if (r != 0) {
+ 		return r;
+ 	}
++	if (sweet_wlsta_wanted()) {
++		/* 0202: en0 and the station for wifid (bsd/dev/sweet_wlsta.c); the boot-line network is joined from there */
++		return sweet_wlsta_start() ? 33 : 0;
++	}
+ 	r = wmi_join();
+ 	return r ? 17 + r : 0;          /* 18 network not heard ... 28 authorize failed, 29-32 DHCP/ARP/ping */
+ }
+diff --git a/bsd/dev/sweet_wlsta.c b/bsd/dev/sweet_wlsta.c
+new file mode 100644
+index 0000000..7091129
+--- /dev/null
++++ b/bsd/dev/sweet_wlsta.c
+@@ -0,0 +1,304 @@
++/*
++ * umi Wi-Fi for iOS (0202): the station side of sys/redwood_sta.h and the link under en0
++ * (sys/redwood_net.h) on the QCA6390 radio in this kernel (sweet_wlce.c / sweet_wldp.c), as
++ * ios-flame's flame_sta.c does on its userland radio. Once bring-up has scanned (stage 8),
++ * sweet_wlce_htc calls sweet_wlsta_start instead of the kernel's own join + DHCP + en0
++ * (sweet_wlip.c / sweet_wlif.c, still there with boot-arg sweetwifid=0): en0 is made with the
++ * link down, the station is attached, and wifid scans and joins through Apple80211
++ * (bsd/dev/redwood_apple80211.c); configd's DHCP runs on en0 once the link is up.
++ * The boot line's network (sweetwlanssid=NAME, '_' = space) is a standing join request, so the
++ * phone is online without anybody tapping Settings, as with flame's wlan.conf.
++ *
++ * Open networks only (the data path sends with encrypt type OPEN): a WPA join is refused.
++ * 2.4 GHz channels 1-13 only (sweet_wlce.c's channel list).
++ *
++ * Locking: every call into sweet_wlce.c holds its lock (sweet_wlce_lock); the waits inside let
++ * go of it while they sleep, so the net thread's poll and transmit go on during a scan or a join.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <kern/kalloc.h>
++#include <kern/thread.h>
++#include <libkern/libkern.h>
++#include <pexpert/pexpert.h>
++#include <sys/redwood_net.h>
++#include <sys/redwood_sta.h>
++
++extern void sweet_wlce_lock(bool on);
++extern unsigned sweet_wlce_poll(void);
++extern int sweet_wlce_scan(void);
++extern int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid);
++extern int sweet_wlce_leave(void);
++extern bool sweet_wlce_joined(const uint8_t **bssid);
++extern uint32_t sweet_wlce_lost(void);
++extern bool sweet_wlce_heard(unsigned index, uint8_t bssid[6], uint8_t ssid[32], uint8_t *ssid_len, uint16_t *mhz,
++    int16_t *rssi, uint16_t *beacon_interval, uint16_t *capability, uint32_t *age_ms, uint8_t *ies, uint16_t *ies_len);
++extern void sweet_wlce_address(uint8_t mac[6]);
++extern int sweet_wldp_tx(const void *frame, uint32_t len);
++extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++bool sweet_wlsta_wanted(void);
++int sweet_wlsta_start(void);
++
++#define STA_RESCAN_MS   20000u          /* while joined: a real scan at most this often, else the last list */
++
++static struct redwood_sta_bss sta_joined;       /* the network joined (state() reads it on any thread) */
++static int sta_last_error;
++static uint64_t sta_last_scan_ms;
++static unsigned sta_rx_count;
++
++static uint64_t
++sta_now_ms(void)
++{
++	uint64_t t, ns;
++	clock_get_uptime(&t);
++	absolutetime_to_nanoseconds(t, &ns);
++	return ns / 1000000ull;
++}
++
++/* the index-th entry of the radio's table, as the station boundary has it (lock held) */
++static bool
++sta_entry(unsigned index, struct redwood_sta_bss *b)
++{
++	uint16_t ies_len = 0;
++	bzero(b, sizeof(*b));
++	if (!sweet_wlce_heard(index, b->bssid, b->ssid, &b->ssid_length, &b->frequency, &b->rssi, &b->beacon_interval,
++	    &b->capability, &b->age_ms, b->elements, &ies_len)) {
++		return false;
++	}
++	b->elements_length = ies_len;
++	return true;
++}
++
++static int
++sta_power(bool on)
++{
++	if (!on) {                      /* Settings' switch off: leave; the radio itself stays up */
++		sweet_wlce_lock(true);
++		(void)sweet_wlce_leave();
++		sweet_wlce_lock(false);
++		redwood_net_link_state(false);
++	}
++	return 0;
++}
++
++static int
++sta_scan(__unused const struct redwood_sta_scan *what)
++{
++	int r = 0;
++	sweet_wlce_lock(true);
++	if (!sweet_wlce_joined(NULL) || sta_now_ms() - sta_last_scan_ms >= STA_RESCAN_MS) {
++		r = sweet_wlce_scan();
++		sta_last_scan_ms = sta_now_ms();
++	}
++	sweet_wlce_lock(false);
++	return r;
++}
++
++static void
++sta_heard(void (*each)(const struct redwood_sta_bss *bss, void *context), void *context)
++{
++	static struct redwood_sta_bss b;        /* (the station thread only) */
++	for (unsigned i = 0;; i++) {
++		sweet_wlce_lock(true);
++		bool there = sta_entry(i, &b);
++		sweet_wlce_lock(false);
++		if (!there) {
++			break;
++		}
++		if (b.age_ms <= 60000 && b.ssid_length != 0) {  /* heard in the last minute; hidden ones are not listed */
++			each(&b, context);
++		}
++	}
++}
++
++/* the record of the network just joined, from the radio's table (lock held) */
++static void
++sta_note_joined(void)
++{
++	static struct redwood_sta_bss b;
++	const uint8_t *bssid;
++	bzero(&sta_joined, sizeof(sta_joined));
++	if (!sweet_wlce_joined(&bssid)) {
++		return;
++	}
++	for (unsigned i = 0; sta_entry(i, &b); i++) {
++		if (memcmp(b.bssid, bssid, 6) == 0) {
++			sta_joined = b;
++			return;
++		}
++	}
++	memcpy(sta_joined.bssid, bssid, 6);
++}
++
++static int
++sta_join(const struct redwood_sta_join *what)
++{
++	static const uint8_t zero[6];
++	int r;
++	if (what->security != REDWOOD_STA_OPEN) {
++		printf("SWEET WLSTA: join refused: only open networks (the radio sends unencrypted)\n");
++		sta_last_error = EAUTH;
++		return EAUTH;
++	}
++	redwood_net_link_state(false);
++	sweet_wlce_lock(true);
++	r = sweet_wlce_join(what->ssid, what->ssid_length, memcmp(what->bssid, zero, 6) != 0 ? what->bssid : NULL);
++	if (r == ENOENT) {                      /* not in the table (yet): one scan, then again */
++		(void)sweet_wlce_scan();
++		sta_last_scan_ms = sta_now_ms();
++		r = sweet_wlce_join(what->ssid, what->ssid_length, memcmp(what->bssid, zero, 6) != 0 ? what->bssid : NULL);
++	}
++	if (r == 0) {
++		sta_note_joined();
++	}
++	sweet_wlce_lock(false);
++	sta_last_error = r;
++	printf("SWEET WLSTA: join (a name of %u bytes) -> %d\n", what->ssid_length, r);
++	if (r == 0) {
++		redwood_net_link_state(true);
++	}
++	return r;
++}
++
++static int
++sta_leave(void)
++{
++	sweet_wlce_lock(true);
++	(void)sweet_wlce_leave();
++	sweet_wlce_lock(false);
++	sta_last_error = 0;
++	redwood_net_link_state(false);
++	return 0;
++}
++
++static void
++sta_state(struct redwood_sta_state *state)
++{
++	bzero(state, sizeof(*state));
++	state->phase = sweet_wlce_joined(NULL) ? REDWOOD_STA_JOINED : REDWOOD_STA_IDLE;
++	if (state->phase == REDWOOD_STA_JOINED) {
++		state->bss = sta_joined;
++	}
++	state->last_error = sta_last_error;
++}
++
++static unsigned
++sta_channels(struct redwood_sta_channel *channels, unsigned most)
++{
++	unsigned n;
++	for (n = 0; n < most && n < 13; n++) {
++		channels[n].frequency = (uint16_t)(2412 + 5 * n);
++		channels[n].flags = 0;
++	}
++	return n;
++}
++
++static struct redwood_sta_ops sta_ops = {
++	.power = sta_power,
++	.scan = sta_scan,
++	.heard = sta_heard,
++	.join = sta_join,
++	.leave = sta_leave,
++	.state = sta_state,
++	.channels = sta_channels,
++};
++
++/* ---- the link under en0 ---- */
++
++static bool
++sta_transmit(mbuf_t packet, size_t length)
++{
++	static uint8_t frame[REDWOOD_NET_FRAME_MAX];   /* (one sender at a time: redwood_net's transmit lock) */
++	int r;
++	if (length > sizeof(frame) || mbuf_copydata(packet, 0, length, frame) != 0) {
++		return false;
++	}
++	sweet_wlce_lock(true);
++	r = sweet_wlce_joined(NULL) ? sweet_wldp_tx(frame, (uint32_t)length) : ENETDOWN;
++	sweet_wlce_lock(false);
++	return r == 0;
++}
++
++/* from the poll (lock held): one received Ethernet frame */
++static void
++sta_rx(const uint8_t *frame, uint32_t length)
++{
++	sta_rx_count++;
++	redwood_net_input(frame, length);
++}
++
++static unsigned
++sta_poll(void)
++{
++	unsigned before = sta_rx_count;
++	uint32_t lost;
++	sweet_wlce_lock(true);
++	(void)sweet_wlce_poll();
++	lost = sweet_wlce_lost();
++	if (lost != 0) {
++		(void)sweet_wlce_leave();       /* take peer and vdev down: the next join starts clean */
++	}
++	sweet_wlce_lock(false);
++	if (lost != 0) {
++		printf("SWEET WLSTA: the link is lost (%#x)\n", lost);
++		sta_last_error = ECONNRESET;
++		redwood_net_link_state(false);
++		redwood_sta_lost(ECONNRESET);
++	}
++	return sta_rx_count - before;
++}
++
++static struct redwood_net_link sta_link = {
++	.name = "qca6390",
++	.wireless = true,
++	.up = false,
++	.transmit = sta_transmit,
++	.poll = sta_poll,
++};
++
++/* boot-arg sweetwifid=0: the kernel's own join, DHCP and en0 (0140-0154) instead */
++bool
++sweet_wlsta_wanted(void)
++{
++	uint32_t on = 1;
++	(void)PE_parse_boot_argn("sweetwifid", &on, sizeof(on));
++	return on != 0;
++}
++
++/* From stage 8 after the first scan: 0, or 1 en0 could not be made. */
++int
++sweet_wlsta_start(void)
++{
++	char want[33] = {0};
++	sweet_wlce_address(sta_link.address);
++	memcpy(sta_ops.address, sta_link.address, 6);
++	sweet_wlce_lock(true);
++	sweet_wldp_set_rx_handler(sta_rx);
++	(void)sweet_wlce_poll();                /* from here every caller holds the lock */
++	sta_last_scan_ms = sta_now_ms();
++	sweet_wlce_lock(false);
++	if (!redwood_net_attach(&sta_link)) {
++		printf("SWEET WLSTA: en0 could not be made\n");
++		return 1;
++	}
++	redwood_sta_attach(&sta_ops);
++	printf("SWEET WLSTA: en0 and the station are up for wifid\n");
++	if (PE_parse_boot_argn("sweetwlanssid", want, sizeof(want)) && want[0] != 0) {
++		struct redwood_sta_join *j = kalloc_data(sizeof(*j), Z_WAITOK | Z_ZERO);
++		if (j != NULL) {
++			for (unsigned i = 0; want[i]; ++i) {
++				j->ssid[i] = want[i] == '_' ? ' ' : (uint8_t)want[i];
++			}
++			j->ssid_length = (uint8_t)strlen(want);
++			j->security = REDWOOD_STA_OPEN;
++			printf("SWEET WLSTA: the boot line's network is asked for (standing): %d\n",
++			    redwood_sta_ask_join_standing(j));
++			kfree_data(j, sizeof(*j));
++		}
++	}
++	return 0;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/iokit/Kernel/arm/SweetWLAN.cpp b/iokit/Kernel/arm/SweetWLAN.cpp
+index 316b449..902e96e 100644
+--- a/iokit/Kernel/arm/SweetWLAN.cpp
++++ b/iokit/Kernel/arm/SweetWLAN.cpp
+@@ -139,7 +139,13 @@ RedwoodWLANStart(const char *interface, const uint8_t *address)
+ extern "C" void
+ sweet_wlan_publish_early(void)
+ {
+-	uint32_t early = 1;
++	/*
++	 * 0202: with the station (sweetwifid, default on) the entries come with en0, as on ios-flame:
++	 * IO80211.framework then finds the service and the interface together. sweetwlanearly=1 forces.
++	 */
++	uint32_t wifid = 1, early;
++	(void)PE_parse_boot_argn("sweetwifid", &wifid, sizeof(wifid));
++	early = wifid ? 0 : 1;
+ 	(void)PE_parse_boot_argn("sweetwlanearly", &early, sizeof(early));
+ 	IORegistryEntry *wlan = IORegistryEntry::fromPath("/arm-io/wlan", gIODTPlane);
+ 	if (wlan == NULL || early == 0) {
+-- 
+2.54.0 (Apple Git-157)
+

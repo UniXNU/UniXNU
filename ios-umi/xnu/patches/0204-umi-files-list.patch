@@ -1,0 +1,122 @@
+From f1555f530a9808991f22a4ed722e85bcc4164b93 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 22:49:46 +0100
+Subject: [PATCH] umi: LIST for the kernel file server
+
+The file server could read, write and delete paths but not list a
+directory, so app data containers (random UUID names) and caches were
+out of reach. LIST <dir> answers like GET with one "<d_type> <name>"
+line per entry (VNOP_READDIR, . and .. left out, at most 512 KiB).
+Read-only, no sync. tools/umi-files.py list prints them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_files.c | 71 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 71 insertions(+)
+
+diff --git a/bsd/dev/sweet_files.c b/bsd/dev/sweet_files.c
+index 6b9b6f7..dc85636 100644
+--- a/bsd/dev/sweet_files.c
++++ b/bsd/dev/sweet_files.c
+@@ -9,6 +9,7 @@
+  *   LINK <target> <path>\n                        -> "OK\n"  (symlink)
+  *   RM <path>\n                                   -> "OK\n"
+  *   CHMOD <path> <mode-octal>\n                   -> "OK\n"
++ *   LIST <dir>\n                                  -> "OK <size>\n<lines "<d_type> <name>">"
+  *
+  * Errors: "ERR <errno>\n". Paths have no spaces. Started with the USB gadget
+  * (sweet_usb.c) when the interface comes up (boot-arg sweetfiles=0 keeps it off).
+@@ -32,6 +33,8 @@
+ #include <sys/kpi_socket.h>
+ #include <sys/socket.h>
+ #include <sys/uio.h>
++#include <sys/dirent.h>
++#include <kern/kalloc.h>
+ #include <netinet/in.h>
+ #include <kern/thread.h>
+ #include <kern/sched_prim.h>
+@@ -235,6 +238,69 @@ sf_get(socket_t so, const char *path)
+ 	return err;
+ }
+ 
++/* One line per entry, "<d_type> <name>\n" (DT_DIR 4, DT_REG 8, DT_LNK 10), "." and ".." left out. */
++#define SF_LIST_MAX (512 * 1024)
++
++static int
++sf_list(socket_t so, const char *path)
++{
++	vfs_context_t ctx = vfs_context_kernel();
++	vnode_t vp = NULLVP;
++	char *out = NULL;
++	size_t len = 0;
++	int eof = 0, err = vnode_lookup(path, 0, &vp, ctx);
++	if (!err && vnode_vtype(vp) != VDIR) {
++		err = ENOTDIR;
++	}
++	if (!err) {
++		out = kalloc_data(SF_LIST_MAX, Z_WAITOK);
++		err = out ? 0 : ENOMEM;
++	}
++	off_t off = 0;
++	while (!err && !eof) {
++		int count = 0;
++		uio_t uio = uio_create(1, off, UIO_SYSSPACE, UIO_READ);
++		uio_addiov(uio, CAST_USER_ADDR_T(sf_buf), SF_BUF);
++		err = VNOP_READDIR(vp, uio, 0, &eof, &count, ctx);
++		size_t got = SF_BUF - (size_t)uio_resid(uio);
++		off = uio_offset(uio);
++		uio_free(uio);
++		if (err || got == 0) {
++			break;
++		}
++		for (size_t p = 0; p < got;) {
++			struct dirent *de = (struct dirent *)(void *)(sf_buf + p);
++			if (de->d_reclen == 0) {
++				break;
++			}
++			p += de->d_reclen;
++			if (de->d_ino == 0 || !strcmp(de->d_name, ".") || !strcmp(de->d_name, "..")) {
++				continue;
++			}
++			int n = snprintf(out + len, SF_LIST_MAX - len, "%u %s\n", de->d_type, de->d_name);
++			if (n < 0 || (size_t)n >= SF_LIST_MAX - len) {
++				eof = 1;
++				break;
++			}
++			len += (size_t)n;
++		}
++	}
++	if (vp != NULLVP) {
++		vnode_put(vp);
++	}
++	if (err) {
++		if (out) {
++			kfree_data(out, SF_LIST_MAX);
++		}
++		sf_reply(so, err, 0, false);
++		return err;
++	}
++	sf_reply(so, 0, (uint64_t)len, true);
++	err = sf_send(so, out, len);
++	kfree_data(out, SF_LIST_MAX);
++	return err;
++}
++
+ static void
+ sf_handle(socket_t so)
+ {
+@@ -268,6 +334,11 @@ sf_handle(socket_t so)
+ 		printf("SWEET FILES: GET %s -> %d\n", line + 4, err);
+ 		return;
+ 	}
++	if (!strncmp(line, "LIST ", 5)) {
++		err = sf_list(so, line + 5);
++		printf("SWEET FILES: LIST %s -> %d\n", line + 5, err);
++		return;
++	}
+ 	char *sp = strchr(line, ' ');
+ 	if (!sp) {
+ 		sf_reply(so, EINVAL, 0, false);
+-- 
+2.54.0 (Apple Git-157)
+

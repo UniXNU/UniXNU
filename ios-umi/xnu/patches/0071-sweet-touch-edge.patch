@@ -1,0 +1,55 @@
+--- a/iokit/Kernel/arm/hid/SweetHID.cpp
++++ b/iokit/Kernel/arm/hid/SweetHID.cpp
+@@ -348,6 +348,14 @@
+  * absolute digitizers.
+  */
+ #define SWEET_TOUCH_FINGERS 10
++/*
++ * Contacts that start this close to a panel edge (pixels, ~3 mm) carry
++ * kIOHIDDigitizerEventFromEdgeTip for their whole life, as Apple's touch
++ * firmware reports them. UIKit derives UITouch's edge type from that bit
++ * (_UIEventHIDTouchEdgeTypeForHIDEvent); without it there is no home or
++ * app-switcher gesture.
++ */
++#define SWEET_TOUCH_EDGE_PX 48
+ class SweetHIDTouch : public IOHIDEventService {
+ 	OSDeclareDefaultStructors(SweetHIDTouch);
+ public:
+@@ -361,6 +369,7 @@
+ 	IOLock *fLock;
+ 	int fLogicalW, fLogicalH, fOffX, fOffY;
+ 	bool fDown[SWEET_TOUCH_FINGERS];
++	bool fEdge[SWEET_TOUCH_FINGERS];
+ 	IOFixed fX[SWEET_TOUCH_FINGERS];
+ 	IOFixed fY[SWEET_TOUCH_FINGERS];
+ };
+@@ -462,6 +471,10 @@
+ 		IOLockUnlock(fLock);
+ 		return;
+ 	}
++	if (!was && down) {
++		fEdge[finger] = x < SWEET_TOUCH_EDGE_PX || x > 1079 - SWEET_TOUCH_EDGE_PX ||
++		    y < SWEET_TOUCH_EDGE_PX || y > 2399 - SWEET_TOUCH_EDGE_PX;
++	}
+ 
+ 	collection = IOHIDEvent::digitizerEvent(now, 0, kIOHIDDigitizerTransducerTypeHand, false, 0, 0, 0);
+ 	if (!collection) {
+@@ -483,7 +496,7 @@
+ 		if (!child) {
+ 			continue;
+ 		}
+-		UInt32 mask = 0;
++		UInt32 mask = fEdge[i] ? kIOHIDDigitizerEventFromEdgeTip : 0;
+ 		if (i == finger) {
+ 			if (was != down) {
+ 				mask |= kIOHIDDigitizerEventTouch | kIOHIDDigitizerEventRange;
+@@ -518,7 +531,8 @@
+ 	IOLockUnlock(fLock);
+ 
+ 	if (was != down) {
+-		IOLog("SWEET HID: touch %d %s at %d,%d\n", finger, down ? "down" : "up", x, y);
++		IOLog("SWEET HID: touch %d %s at %d,%d%s\n", finger, down ? "down" : "up", x, y,
++		    fEdge[finger] ? " edge" : "");
+ 	}
+ 	dispatchEvent(collection);
+ 	collection->release();

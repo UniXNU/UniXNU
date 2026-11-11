@@ -1,0 +1,146 @@
+From d92a7df7f204a9748758de3278a40e5cf0ec7101 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 22:01:06 +0100
+Subject: [PATCH] umi: serialise the v2 client's methods - the GPU hang's root
+ cause
+
+0199's map log caught it: the only map ever made of a bad command
+address was that BO's own BoMap, and it wrote another BO's page
+(map 0x204618000+0x20000 first page 0x1b4467000; the BO's descriptor
+page at that offset 0x1b49e7000). Turnip calls the v2 methods from
+several threads at once, and fPageBuf (BoMap's page list) and the BO
+table are one per client, with no lock: two concurrent BoMaps filled
+fPageBuf over each other and each mapped the other's pages at its own
+address. The GPU then fetched another buffer's memory as commands
+(CP_OPCODE_ERROR on zero dwords, pixels as IBs), and the CPU's commands
+sat unseen in the right page.
+
+A per-client IOLock now runs every v2 method alone except WaitFence,
+which can block and touches no client state; clientMemoryForType and
+the client's teardown take it too.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 44 +++++++++++++++++++++++++++++---
+ 1 file changed, 40 insertions(+), 4 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index f37b358..0d8ec90 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -189,6 +189,7 @@ class SweetAdrenoUserClient : public IOUserClient {
+ 	    uint64_t *handle);
+ 	void v2Release(SweetAdrenoUserClient::BO *bo);
+ 	IOReturn v2Method(uint32_t method, const void *in, uint32_t inSize, void *out, uint32_t *outSize);
++	IOReturn v2Locked(uint32_t method, const void *in, uint32_t inSize, void *out, uint32_t *outSize);
+ 
+ public:
+ 	bool initWithTask(task_t owningTask, void *securityID, UInt32 type) APPLE_KEXT_OVERRIDE;
+@@ -210,6 +211,12 @@ public:
+ 	struct BO     *fBO;
+ 	uint32_t       fBOCap;
+ 	uint64_t      *fPageBuf;
++	/* Serialises the v2 methods (all but WaitFence): Turnip calls from several threads at once,
++	 * and fPageBuf and the BO table are one per client. Two concurrent BoMaps filled fPageBuf
++	 * over each other and each mapped the other's pages at its own address (0199's map log:
++	 * the only map of the bad address was its own BoMap, with another BO's first page) - the
++	 * GPU then ran another buffer's memory as commands: the CP_OPCODE_ERROR hangs. */
++	IOLock        *fLock;
+ 	uint64_t       fFaultsSeen;    /* faults when this client last looked */
+ 	uint32_t       fLastFence;
+ 	uint32_t       fLogged;        /* bring-up: first calls of each kind get a line */
+@@ -239,7 +246,8 @@ SweetAdrenoUserClient::initWithTask(task_t owningTask, void *securityID, UInt32
+ 		fBOCap = 256;
+ 		fBO = IONewZero(BO, fBOCap);
+ 		fPageBuf = IONew(uint64_t, SWEET_ADRENO_V2_PAGEBUF);
+-		if (fBO == NULL || fPageBuf == NULL ||
++		fLock = IOLockAlloc();
++		if (fBO == NULL || fPageBuf == NULL || fLock == NULL ||
+ 		    sweet_adreno_window_alloc(fTask, &fWinBase, &fWinSize) != 0) {
+ 			IOLog("SWEET ADRENO: v2 client: no window or no memory\n");
+ 			return false;
+@@ -259,6 +267,9 @@ SweetAdrenoUserClient::free(void)
+ 		if (fLastFence != 0 && !sweet_adreno_wait_fence_ns(fLastFence, 2000000000ULL)) {
+ 			IOLog("SWEET ADRENO: v2 client freed with fence %u still pending\n", fLastFence);
+ 		}
++		if (fLock != NULL) {
++			IOLockLock(fLock);
++		}
+ 		if (fBO != NULL) {
+ 			for (uint32_t i = 0; i < fBOCap; i++) {
+ 				v2Release(&fBO[i]);
+@@ -266,6 +277,9 @@ SweetAdrenoUserClient::free(void)
+ 			IODelete(fBO, BO, fBOCap);
+ 			fBO = NULL;
+ 		}
++		if (fLock != NULL) {
++			IOLockUnlock(fLock);
++		}
+ 		if (fPageBuf != NULL) {
+ 			IODelete(fPageBuf, uint64_t, SWEET_ADRENO_V2_PAGEBUF);
+ 			fPageBuf = NULL;
+@@ -275,6 +289,10 @@ SweetAdrenoUserClient::free(void)
+ 			fWinSize = 0;
+ 		}
+ 	}
++	if (fLock != NULL) {
++		IOLockFree(fLock);
++		fLock = NULL;
++	}
+ 	IOUserClient::free();
+ }
+ 
+@@ -303,12 +321,16 @@ SweetAdrenoUserClient::clientMemoryForType(UInt32 type, IOOptionBits *options,
+ 	if (fV2) {
+ 		/* token = slot + 1; write-combined for the CPU, as Turnip expects (imports keep
+ 		 * the client's own mapping and have no token at all) */
++		IOLockLock(fLock);                      /* the BO table, as the v2 methods use it */
+ 		BO *bo = v2Find(type);
+ 		IOMemoryDescriptor *md = bo != NULL && !bo->imported ? bo->md : NULL;
++		if (md != NULL) {
++			md->retain();
++		}
++		IOLockUnlock(fLock);
+ 		if (md == NULL) {
+ 			return kIOReturnBadArgument;
+ 		}
+-		md->retain();
+ 		*options = (*options & ~kIOMapCacheMask) | kIOMapWriteCombineCache;
+ 		*memory = md;
+ 		return kIOReturnSuccess;
+@@ -347,9 +369,9 @@ SweetAdrenoUserClient::externalMethod(uint32_t selector, IOExternalMethodArgumen
+ 		uint32_t osz = o != NULL ? args->structureOutputSize : 0;
+ 		IOReturn r;
+ 		if (isz >= 8 && w[0] == SWEET_ADRENO_V2_TUNNEL) {
+-			r = w[1] == 0xffffffffu ? kIOReturnSuccess : v2Method(w[1], w + 2, isz - 8, o, &osz);
++			r = w[1] == 0xffffffffu ? kIOReturnSuccess : v2Locked(w[1], w + 2, isz - 8, o, &osz);
+ 		} else {
+-			r = v2Method(selector, isz != 0 ? args->structureInput : NULL, isz, o, &osz);
++			r = v2Locked(selector, isz != 0 ? args->structureInput : NULL, isz, o, &osz);
+ 		}
+ 		if (o != NULL) {
+ 			args->structureOutputSize = r == kIOReturnSuccess ? osz : 0;
+@@ -502,6 +524,20 @@ SweetAdrenoUserClient::v2Release(SweetAdrenoUserClient::BO *bo)
+ 	bzero(bo, sizeof(*bo));
+ }
+ 
++/* A WaitFence can block for long and touches no client state; every other method runs alone. */
++IOReturn
++SweetAdrenoUserClient::v2Locked(uint32_t method, const void *in, uint32_t inSize, void *out,
++    uint32_t *outSize)
++{
++	if (method == NativeAdrenoMethodWaitFence) {
++		return v2Method(method, in, inSize, out, outSize);
++	}
++	IOLockLock(fLock);
++	IOReturn r = v2Method(method, in, inSize, out, outSize);
++	IOLockUnlock(fLock);
++	return r;
++}
++
+ IOReturn
+ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize, void *out,
+     uint32_t *outSize)
+-- 
+2.54.0 (Apple Git-157)
+

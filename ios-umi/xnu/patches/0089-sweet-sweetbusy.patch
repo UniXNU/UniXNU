@@ -1,0 +1,92 @@
+diff --git a/iokit/Kernel/arm/SweetBusy.cpp b/iokit/Kernel/arm/SweetBusy.cpp
+new file mode 100644
+index 0000000..da7a3aa
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetBusy.cpp
+@@ -0,0 +1,54 @@
++/*
++ * sweet debugging (from ios-topaz 0127): boot-arg sweetbusy=N prints, N seconds after the framebuffer starts and every
++ * 30 s after, every IOService that is still busy. configd (InterfaceNamer) waits for IOKit to
++ * quiesce before it names network interfaces, and everyone who lists interfaces waits for that.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOLib.h>
++#include <IOKit/IOService.h>
++#include <IOKit/IORegistryEntry.h>
++#include <kern/thread.h>
++#include <pexpert/pexpert.h>
++
++static uint32_t sweet_busy_secs;
++
++static void
++sweet_busy_thread(void *arg __unused, wait_result_t wr __unused)
++{
++	IOSleep(sweet_busy_secs * 1000);
++	for (int round = 0; round < 10; round++) {
++		unsigned busy = 0;
++		IORegistryIterator *it = IORegistryIterator::iterateOver(gIOServicePlane, kIORegistryIterateRecursively);
++		if (it != NULL) {
++			IORegistryEntry *e;
++			while ((e = it->getNextObject()) != NULL) {
++				IOService *s = OSDynamicCast(IOService, e);
++				if (s != NULL && s->getBusyState() != 0) {
++					busy++;
++					IOLog("SWEET BUSY: %s <%s> busy %u\n", s->getName(), s->getMetaClass()->getClassName(), (unsigned)s->getBusyState());
++				}
++			}
++			it->release();
++		}
++		IOLog("SWEET BUSY: round %d: %u busy services\n", round, busy);
++		IOSleep(30000);
++	}
++	thread_terminate(current_thread());
++}
++
++extern "C" void
++sweet_busy_init(void)
++{
++	thread_t thread;
++	if (!PE_parse_boot_argn("sweetbusy", &sweet_busy_secs, sizeof(sweet_busy_secs)) || sweet_busy_secs == 0) {
++		return;
++	}
++	if (kernel_thread_start(sweet_busy_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++#else
++extern "C" void sweet_busy_init(void) {}
++#endif
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 1e53973..a967f84 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -37,6 +37,7 @@
+ #include "SweetSurface.h"
+ 
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
++extern "C" void sweet_busy_init(void);  /* iokit/Kernel/arm/SweetBusy.cpp (boot-arg sweetbusy=N) */
+ 
+ #if defined(SWEET)
+ #include <IOKit/IOService.h>
+@@ -189,6 +190,7 @@ AppleCLCD::start(IOService *provider)
+ 	}
+ 	fOffX = (int32_t)(fLogicalW - fWidth) / 2;
+ 	fOffY = (int32_t)(fLogicalH - fHeight) / 2;
++	sweet_busy_init();
+ 	fLock = IOLockAlloc();
+ 	fClients = OSArray::withCapacity(4);
+ 	fSurface = sweet_surface_create_physical(fPhys, fWidth, fHeight, fRowBytes, SWEET_FB_FORMAT_BGRA);
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+index acc9ae0..76306b9 100644
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -16,6 +16,7 @@ iokit/Kernel/arm/SweetWatchdog.cpp                               optional iokitc
+ iokit/Kernel/arm/SweetSurface.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
++iokit/Kernel/arm/SweetBusy.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp

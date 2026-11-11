@@ -1,0 +1,84 @@
+From b00a030e06cafbd5e3d872db5b526fecc86ca137 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 17:35:18 +0100
+Subject: [PATCH] umi-0159-amfi-interface
+
+---
+ bsd/kern/sweet_amfi.c | 47 +++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 47 insertions(+)
+
+diff --git a/bsd/kern/sweet_amfi.c b/bsd/kern/sweet_amfi.c
+index cb67b4d..30d4bf1 100644
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -35,6 +35,7 @@
+ #include <sys/ubc_internal.h>
+ #include <sys/vnode.h>
+ #include <security/mac_policy.h>
++#include <pexpert/pexpert.h>
+ 
+ /* iokit/Kernel/arm/SweetEntitlements.cpp */
+ void *sweet_entitlements_create(const CS_GenericBlob *blob, size_t blob_len);
+@@ -359,6 +360,48 @@ static struct mac_policy_conf sweet_sandbox_mac_conf = {
+ 
+ static mac_policy_handle_t sweet_sandbox_mac_handle;
+ 
++/*
++ * Policy "AMFI": userland asks Apple's AMFI through __mac_syscall("AMFI", op, arg); our signature
++ * policy is "SWEET AMFI", so every such call failed with ENOPOLICY. lsd reads the signed extension
++ * point catalog (/System/Library/xpc/extensions.plist) only after asking op 0x60, the boot-arg state
++ * (a u64): unless it reports relaxed code signing the catalog must verify against AMFI, which fails,
++ * the catalog stays empty, pkd finds no plugins and Settings > Wallpaper lists nothing.
++ * (Finding from the Bergamota port's notes; this is our implementation.) Op 0x60 answers boot-arg
++ * sweetamfistate (default 0x86: relaxed, which is what this kernel enforces anyway); every other op
++ * keeps ENOPOLICY. The first use of each op is logged. Boot-arg sweetamfistate=0 removes the answer.
++ */
++#define SWEET_AMFI_OP_BOOTARG_STATE 0x60
++static uint64_t sweet_amfi_state = 0x86;
++static uint64_t sweet_amfi_ops_seen[4];
++
++static int
++sweet_amfi_syscall(struct proc *p, int call, user_addr_t arg)
++{
++	if (call >= 0 && call < 256 && !(sweet_amfi_ops_seen[call / 64] & (1ULL << (call % 64)))) {
++		sweet_amfi_ops_seen[call / 64] |= 1ULL << (call % 64);
++		char name[32];
++		proc_name(proc_pid(p), name, sizeof(name));
++		printf("SWEET AMFI: %s op %#x%s\n", name, call,
++		    call == SWEET_AMFI_OP_BOOTARG_STATE && sweet_amfi_state ? " (boot-arg state answered)" : "");
++	}
++	if (call == SWEET_AMFI_OP_BOOTARG_STATE && sweet_amfi_state != 0) {
++		return copyout(&sweet_amfi_state, arg, sizeof(sweet_amfi_state));
++	}
++	return ENOPOLICY;
++}
++
++static const struct mac_policy_ops sweet_amfi_if_mac_ops = {
++	.mpo_policy_syscall = sweet_amfi_syscall,
++};
++
++static struct mac_policy_conf sweet_amfi_if_mac_conf = {
++	.mpc_name = "AMFI",
++	.mpc_fullname = "SWEET AMFI userland interface",
++	.mpc_ops = &sweet_amfi_if_mac_ops,
++};
++
++static mac_policy_handle_t sweet_amfi_if_mac_handle;
++
+ static struct mac_policy_conf sweet_amfi_mac_conf = {
+ 	.mpc_name = "SWEET AMFI",
+ 	.mpc_fullname = "SWEET built-in Mobile File Integrity",
+@@ -376,6 +419,10 @@ sweet_amfi_policy_register(void)
+ 	int error = mac_policy_register(&sweet_amfi_mac_conf, &sweet_amfi_mac_handle, NULL);
+ 	printf("SWEET AMFI: platform binary policy %s (%d)\n",
+ 	    error ? "NOT registered" : "registered", error);
++	(void)PE_parse_boot_argn("sweetamfistate", &sweet_amfi_state, sizeof(sweet_amfi_state));
++	error = mac_policy_register(&sweet_amfi_if_mac_conf, &sweet_amfi_if_mac_handle, NULL);
++	printf("SWEET AMFI: \"AMFI\" interface policy %s (%d), boot-arg state %#llx\n",
++	    error ? "NOT registered" : "registered", error, sweet_amfi_state);
+ 	error = mac_policy_register(&sweet_sandbox_mac_conf, &sweet_sandbox_mac_handle, NULL);
+ 	printf("SWEET Sandbox: permissive policy %s (%d)\n",
+ 	    error ? "NOT registered" : "registered", error);
+-- 
+2.54.0 (Apple Git-157)
+

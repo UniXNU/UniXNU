@@ -1,0 +1,284 @@
+From 0289533597eeab39d49ad5b9e03a2f872df9bc3b Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 17:10:27 +0100
+Subject: [PATCH] umi: Night Shift / True Tone through the MDP's PCC
+
+QuartzCore's IOMFBDisplay::update_color_matrix sends the harmony matrix
+(Night Shift, True Tone) as IOMobileFramebufferSetMatrix index 9: nine
+int64 S31.32 values, row-major. Selector 55 (and SetBlock 0x32, the
+per-frame ICC matrix other devices use) now go to the PCC of DSPP0, the
+color block after mixer LM0 on ABL's CTL0 path (Linux v6.12
+dpu_hw_dspp.c / dpu_6_0_sm8250.h: MDP + 0x54000 + 0x1700, 1.0 = 0x8000,
+CTL_FLUSH bit 13), latched at the next autorefresh frame. Matrices are
+kept per slot and multiplied; identity turns PCC off; negative
+coefficients become 0 as in Linux. sweetpcc=0 only logs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 231 ++++++++++++++++++++++++++
+ 1 file changed, 231 insertions(+)
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index c0ab958..51c236c 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -66,6 +66,8 @@ enum {
+ 	kSweetFBGetID                   = 7,
+ 	kSweetFBGetDisplaySize          = 8,
+ 	kSweetFBRequestPowerChange      = 12,
++	kSweetFBSetMatrix               = 55,
++	kSweetFBSetBlock                = 78,
+ 	kSweetFBIsMainDisplay           = 18,
+ 	kSweetFBGetDotPitch             = 28,
+ 	kSweetFBNotifications           = 72,
+@@ -209,6 +211,8 @@ OSDefineMetaClassAndStructors(AppleCLCD, IOMobileFramebuffer);
+ static AppleCLCD *sweet_fb_main;        /* the panel (sweet_fb_gpu_begin) */
+ static void sweet_backlight_publish(IOService *provider);
+ static void sweet_backlight_display_power(bool on);
++static void sweet_color_matrix(uint64_t which, const uint8_t *in, uint32_t len);
++static void sweet_color_block(const uint64_t *scalars, uint32_t count, const uint8_t *in, uint32_t len);
+ static void sweet_hold(SweetSurface *s, bool on);
+ static void sweet_hold_drop(SweetSurface **set);
+ 
+@@ -1532,6 +1536,18 @@ IOMobileFramebufferUserClient::externalMethod(uint32_t selector, IOExternalMetho
+ 			IOLog("SWEET FB: display %s [t %llu]\n", off ? "off" : "on", mach_absolute_time());
+ 		}
+ 		break;
++	case kSweetFBSetMatrix:
++		if (args->scalarInputCount >= 1 && args->structureInputDescriptor == NULL) {
++			sweet_color_matrix(args->scalarInput[0], (const uint8_t *)args->structureInput,
++			    args->structureInputSize);
++		}
++		break;
++	case kSweetFBSetBlock:
++		if (args->structureInputDescriptor == NULL) {
++			sweet_color_block(args->scalarInput, args->scalarInputCount,
++			    (const uint8_t *)args->structureInput, args->structureInputSize);
++		}
++		break;
+ 	case kSweetFBSwapWait:
+ 	default:
+ 		break;
+@@ -2053,4 +2069,219 @@ sweet_backlight_publish(IOService *provider)
+ 	OSSafeReleaseNULL(bl);
+ }
+ 
++
++/*
++ * Night Shift / color matrices (umi). backboardd's QuartzCore
++ * (IOMFBDisplay::update_color_matrix, fed by CoreBrightness) calls
++ * IOMobileFramebufferSetMatrix, selector 55, index 9 with the "harmony" matrix
++ * (Night Shift, True Tone): 9 int64 S31.32, row-major. Devices that use the
++ * D50 XYZ path send it per frame as an ICC matrix instead (SetBlock 0x32,
++ * handled too). The matrices kept per slot (0..3) are multiplied together and
++ * programmed into the MDP's PCC (polynomial color
++ * correction) of DSPP0, the color block after mixer LM0 on ABL's CTL0 path (Linux
++ * v6.12 dpu_hw_dspp.c / dpu_6_0_sm8250.h: DSPP0 at MDP + 0x54000, PCC at +0x1700,
++ * coefficient 1.0 = 0x8000, flush CTL_FLUSH bit 13 on DPU 6.x). PCC register
++ * RED_G holds how much input red adds to output green (dpu_crtc.c ctm mapping);
++ * negative coefficients become 0, as in Linux.
++ * An identity product turns PCC off. Boot-arg sweetpcc=0 only logs.
++ */
++#define SWEET_MDP_BASE          0x0ae01000
++#define SWEET_DSPP0_PCC         (SWEET_MDP_BASE + 0x54000 + 0x1700)
++#define SWEET_CTL0_FLUSH        (SWEET_MDP_BASE + 0x1000 + 0x18)
++#define SWEET_PCC_ONE           0x8000
++#define SWEET_PCC_MATRICES      4
++
++static int32_t sweet_cm[SWEET_PCC_MATRICES][9];  /* x 0x8000; zero = unset (identity) */
++static bool sweet_cm_set[SWEET_PCC_MATRICES];
++static volatile uint32_t *sweet_pcc;
++static volatile uint32_t *sweet_ctl0;
++static IOLock *sweet_cm_lock;
++static uint32_t sweet_cm_logged;
++
++/* IEEE 754 double bits -> value x 0x8000, rounded, clamped to +-8 */
++static int32_t
++sweet_double_to_q15(uint64_t bits)
++{
++	bool neg = (bits >> 63) != 0;
++	int exp = (int)((bits >> 52) & 0x7ff);
++	uint64_t mant = (bits & ((1ULL << 52) - 1)) | (1ULL << 52);
++	uint64_t v;
++	if (exp == 0) {
++		return 0;
++	}
++	int shift = exp - 1023 + 15 - 52;       /* value x 2^15 = mant x 2^shift */
++	if (shift >= 0) {
++		v = shift > 8 ? (8u << 15) : mant << shift;
++	} else if (shift <= -60) {
++		v = 0;
++	} else {
++		v = (mant + (1ULL << (-shift - 1))) >> -shift;
++	}
++	if (v > (8u << 15)) {
++		v = 8u << 15;
++	}
++	return neg ? -(int32_t)v : (int32_t)v;
++}
++
++static void
++sweet_color_apply(void)
++{
++	int32_t m[9] = { SWEET_PCC_ONE, 0, 0, 0, SWEET_PCC_ONE, 0, 0, 0, SWEET_PCC_ONE };
++	for (int k = 0; k < SWEET_PCC_MATRICES; k++) {
++		if (!sweet_cm_set[k]) {
++			continue;
++		}
++		int32_t r[9];
++		for (int i = 0; i < 3; i++) {
++			for (int j = 0; j < 3; j++) {
++				int64_t acc = 0;
++				for (int t = 0; t < 3; t++) {
++					acc += (int64_t)sweet_cm[k][i * 3 + t] * m[t * 3 + j];
++				}
++				r[i * 3 + j] = (int32_t)(acc >> 15);
++			}
++		}
++		memcpy(m, r, sizeof(m));
++	}
++	bool identity = true;
++	for (int i = 0; i < 9; i++) {
++		int32_t want = (i % 4 == 0) ? SWEET_PCC_ONE : 0;
++		if (m[i] - want > 8 || want - m[i] > 8) {
++			identity = false;
++		}
++	}
++	uint32_t on = 1;
++	PE_parse_boot_argn("sweetpcc", &on, sizeof(on));
++	IOLog("SWEET PCC: %s r %d %d %d g %d %d %d b %d %d %d (/32768)\n",
++	    !on ? "log only" : identity ? "off (identity)" : "on",
++	    m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
++	if (!on || sweet_pcc == NULL || sweet_ctl0 == NULL) {
++		return;
++	}
++	/* output row i, input column j -> register "input j, output i" (RED_R 0x10 .. BLUE_B 0x30) */
++	static const uint32_t reg[3][3] = {     /* [input][output] */
++		{ 0x10, 0x1c, 0x28 }, { 0x14, 0x20, 0x2c }, { 0x18, 0x24, 0x30 },
++	};
++	if (identity) {
++		sweet_pcc[0] = 0;
++	} else {
++		for (int out = 0; out < 3; out++) {
++			for (int in = 0; in < 3; in++) {
++				int32_t c = m[out * 3 + in];
++				sweet_pcc[reg[in][out] / 4] = c < 0 ? 0 : (uint32_t)c & 0x3ffff;
++			}
++		}
++		sweet_pcc[0] = 1;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	*sweet_ctl0 = 1u << 13;                 /* DSPP0, latched at the next autorefresh frame */
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++/* IEEE 754 float bits -> value x 0x8000, rounded, clamped to +-8 */
++static int32_t
++sweet_float_to_q15(uint32_t bits)
++{
++	uint64_t d = 0;
++	int exp = (int)((bits >> 23) & 0xff);
++	if (exp != 0) {
++		d = ((uint64_t)(bits >> 31) << 63) | ((uint64_t)(exp - 127 + 1023) << 52) |
++		    ((uint64_t)(bits & 0x7fffff) << 29);
++	}
++	return sweet_double_to_q15(d);
++}
++
++static void sweet_color_matrix_set(uint64_t which, const int32_t *m, const char *how);
++
++/*
++ * The per-frame ICC matrix: CA's IOMFBDisplay::update_color_matrix (Night Shift, True Tone,
++ * accessibility filters) -> IOMobileFramebufferSwapSetICCMatrix -> SetBlock, selector 78,
++ * block 0x32, 64 bytes = { u32 1, IOMFBColorMatrix } with the 3x3 as floats at +0x10
++ * (iOS 16.7 IOMobileFramebuffer / QuartzCore). Kept as matrix 0.
++ */
++static void
++sweet_color_block(const uint64_t *scalars, uint32_t count, const uint8_t *in, uint32_t len)
++{
++	static uint32_t logged;
++	bool icc = false;
++	for (uint32_t i = 0; i < count && i < 4; i++) {
++		if (scalars[i] == 0x32) {
++			icc = true;
++		}
++	}
++	if (logged < 12 && sweet_board_is_umi()) {
++		logged++;
++		char name[32];
++		proc_selfname(name, sizeof(name));
++		IOLog("SWEET PCC: %s SetBlock %u scalars %#llx %#llx %#llx, %u bytes%s\n", name, count,
++		    count > 0 ? scalars[0] : 0, count > 1 ? scalars[1] : 0, count > 2 ? scalars[2] : 0, len,
++		    icc ? " (ICC matrix)" : "");
++	}
++	if (!icc || in == NULL || len < 0x40 || !sweet_board_is_umi()) {
++		return;
++	}
++	int32_t m[9];
++	for (int i = 0; i < 9; i++) {
++		uint32_t bits;
++		memcpy(&bits, in + 0x10 + 4 * i, 4);
++		m[i] = sweet_float_to_q15(bits);
++	}
++	sweet_color_matrix_set(0, m, "ICC");
++}
++
++static void
++sweet_color_matrix(uint64_t which, const uint8_t *in, uint32_t len)
++{
++	if (!sweet_board_is_umi() || in == NULL || len < 72) {
++		return;
++	}
++	/*
++	 * QuartzCore's IOMFBDisplay::update_color_matrix sends the "harmony" matrix (Night Shift,
++	 * True Tone) as index 9: nine int64 S31.32 values, row-major (fcvtzs #32 of each float).
++	 */
++	int32_t m[9];
++	for (int i = 0; i < 9; i++) {
++		int64_t v;
++		memcpy(&v, in + 8 * i, 8);
++		v >>= 17;                               /* S31.32 -> x 0x8000 */
++		m[i] = v > (8 << 15) ? (8 << 15) : v < -(8 << 15) ? -(8 << 15) : (int32_t)v;
++	}
++	sweet_color_matrix_set(which == 9 ? 0 : which + 100, m, "SetMatrix");
++}
++
++static void
++sweet_color_matrix_set(uint64_t which, const int32_t *m, const char *how)
++{
++	if (sweet_cm_lock == NULL) {
++		IOLock *l = IOLockAlloc();
++		if (!OSCompareAndSwapPtr(NULL, l, &sweet_cm_lock)) {
++			IOLockFree(l);
++		}
++	}
++	IOLockLock(sweet_cm_lock);
++	if (sweet_pcc == NULL) {
++		sweet_pcc = (volatile uint32_t *)ml_io_map(SWEET_DSPP0_PCC & ~0xfffULL, 0x2000) +
++		    (SWEET_DSPP0_PCC & 0xfff) / 4;
++		sweet_ctl0 = (volatile uint32_t *)ml_io_map(SWEET_CTL0_FLUSH & ~0xfffULL, 0x1000) +
++		    (SWEET_CTL0_FLUSH & 0xfff) / 4;
++		IOLog("SWEET PCC: DSPP0 PCC en %#x r.r %#x g.g %#x b.b %#x (ABL)\n", sweet_pcc[0],
++		    sweet_pcc[0x10 / 4], sweet_pcc[0x20 / 4], sweet_pcc[0x30 / 4]);
++	}
++	bool changed = which >= SWEET_PCC_MATRICES || !sweet_cm_set[which] ||
++	    memcmp(sweet_cm[which], m, sizeof(sweet_cm[which])) != 0;
++	if (changed && sweet_cm_logged < 64) {
++		sweet_cm_logged++;
++		char name[32];
++		proc_selfname(name, sizeof(name));
++		IOLog("SWEET PCC: %s %s %llu = %d %d %d / %d %d %d / %d %d %d (/32768)\n", name, how, which,
++		    m[0], m[1], m[2], m[3], m[4], m[5], m[6], m[7], m[8]);
++	}
++	if (which < SWEET_PCC_MATRICES && changed) {
++		memcpy(sweet_cm[which], m, sizeof(sweet_cm[which]));
++		sweet_cm_set[which] = true;
++		sweet_color_apply();
++	}
++	IOLockUnlock(sweet_cm_lock);
++}
++
+ #endif /* SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

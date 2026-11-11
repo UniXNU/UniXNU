@@ -1,0 +1,233 @@
+From 112ddc23c52c83331ec61d2853028e632304096e Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 17:54:17 +0200
+Subject: [PATCH] umi-0135
+
+---
+ bsd/dev/sweet_wlan.c |  2 +-
+ bsd/dev/sweet_wlce.c | 96 +++++++++++++++++++++++++++++++++++++++-----
+ bsd/dev/sweet_wlfw.c |  4 +-
+ 3 files changed, 90 insertions(+), 12 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index f0544fc..af96258 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI/scan: 21-47 = step 1-27 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI/scan: 21-49 = step 1-29 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 847cff4..abc8d65 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -53,7 +53,7 @@ int sweet_wlce_htc(void);
+ #define M_RDP                   0x00000u        /* u32 per ring id: TP (source) / HP (status) written by the chip */
+ #define M_RINGS                 0x01000u        /* 0x400 per ring */
+ #define M_RXBUF                 0x10000u        /* 3 pipes x RX_N x BUF_SZ */
+-#define M_TXBUF                 0x40000u        /* 2 pipes x 32 x BUF_SZ */
++#define M_TXBUF                 0x40000u        /* 3 pipes x 32 x BUF_SZ (CE0, CE3, CE4) */
+ #define BUF_SZ                  0x800u          /* src_sz_max 2048 */
+ #define RX_N                    32u
+ #define RING_SLOT               0x400u
+@@ -77,7 +77,7 @@ static struct {
+ 	vm_offset_t bar0, mem;
+ 	uint32_t pa;
+ 	unsigned nring;
+-	struct pipe tx0, tx3, rx1, rx2, rx5;
++	struct pipe tx0, tx3, tx4, rx1, rx2, rx5;
+ } ce;
+ 
+ static uint32_t
+@@ -170,7 +170,8 @@ pipe_tx_init(struct pipe *p, unsigned id, uint32_t n, uint32_t buf)
+ {
+ 	p->ce = id;
+ 	p->buf = buf;
+-	ring_setup(&p->src, true, RID_SRC(id), CE_SRC_REG(id), CE_SRC_REG(id) + CE_R2, n, 4, 4, 0);
++	ring_setup(&p->src, true, RID_SRC(id), CE_SRC_REG(id), CE_SRC_REG(id) + CE_R2, n, 4,
++	    id == 4 ? 0 : 4, 0);        /* CE4 has CE_ATTR_DIS_INTR: no batch threshold */
+ }
+ 
+ /* Give the buffer at ring position pos back to the target (CE destination descriptor: address only). */
+@@ -265,7 +266,7 @@ sweet_wlce_init(void)
+ 	vm_offset_t mem;
+ 	uint32_t pa, size, er0;
+ 	sweet_mhi_info(&ce.bar0, &mem, &pa, &er0);
+-	if (ce.bar0 == 0 || sweet_wlfw_ce_mem(&ce.mem, &ce.pa, &size) != 0 || size < 0x60000u) {
++	if (ce.bar0 == 0 || sweet_wlfw_ce_mem(&ce.mem, &ce.pa, &size) != 0 || size < 0x70000u) {
+ 		return ENXIO;
+ 	}
+ 	uint32_t wake = rd(0x18) + 127u * 8u;          /* CHDBOFF */
+@@ -275,6 +276,7 @@ sweet_wlce_init(void)
+ 	bzero((void *)(ce.mem + M_RDP), 0x1000);
+ 	pipe_tx_init(&ce.tx0, 0, 16, M_TXBUF);
+ 	pipe_tx_init(&ce.tx3, 3, 32, M_TXBUF + 32 * BUF_SZ);
++	pipe_tx_init(&ce.tx4, 4, 32, M_TXBUF + 64 * BUF_SZ);   /* HTT; ath11k: 2048 x 256 bytes, no interrupt */
+ 	pipe_rx_init(&ce.rx1, 1, M_RXBUF);
+ 	pipe_rx_init(&ce.rx2, 2, M_RXBUF + RX_N * BUF_SZ);
+ 	pipe_rx_init(&ce.rx5, 5, M_RXBUF + 2 * RX_N * BUF_SZ);
+@@ -296,6 +298,7 @@ sweet_wlce_init(void)
+ #define HTC_CONNECT_RESP        3u
+ #define HTC_SETUP_COMPLETE_EX   5u
+ #define HTC_SVC_WMI_CONTROL     0x100u
++#define HTC_SVC_HTT_DATA        0x300u
+ 
+ static struct {
+ 	bool ready, conn;
+@@ -309,6 +312,10 @@ static struct {
+ 	uint32_t rdy_status;
+ 	uint8_t mac[6];
+ 	/* scan (0133) */
++	/* HTT (0135) */
++	bool htt_conn, htt_ver;
++	uint8_t htt_ep, htt_status, seq_htt;
++	uint8_t htt_major, htt_minor;
+ 	bool scan_started, scan_done;
+ 	uint32_t scan_fail, chan_events, mgmt_frames;
+ 	unsigned nbss;
+@@ -380,10 +387,16 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 			    pipe, htc.credits, htc.credit_size, htc.max_ep);
+ 			break;
+ 		case HTC_CONNECT_RESP:
+-			htc.status = (uint8_t)w1;
+-			htc.wmi_ep = (uint8_t)(w1 >> 8);
+-			htc.max_msg = (uint16_t)(w1 >> 16);
+-			htc.conn = true;
++			if (w0 >> 16 == HTC_SVC_HTT_DATA) {
++				htc.htt_status = (uint8_t)w1;
++				htc.htt_ep = (uint8_t)(w1 >> 8);
++				htc.htt_conn = true;
++			} else {
++				htc.status = (uint8_t)w1;
++				htc.wmi_ep = (uint8_t)(w1 >> 8);
++				htc.max_msg = (uint16_t)(w1 >> 16);
++				htc.conn = true;
++			}
+ 			printf("SWEET HTC: service %#x connect status %u endpoint %u max message %u\n",
+ 			    w0 >> 16, htc.status, htc.wmi_ep, htc.max_msg);
+ 			break;
+@@ -402,6 +415,17 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 		if (plen >= 4) {
+ 			wmi_rx(id, m + 4, plen - 4);
+ 		}
++	} else if (htc.htt_conn && eid == htc.htt_ep && plen >= 4) {
++		/* HTT target->host: u32 with the message type in bits 7:0; VERSION_CONF 0: minor 15:8, major 23:16 */
++		uint32_t w0 = get32(m);
++		if ((w0 & 0xffu) == 0) {
++			htc.htt_minor = (uint8_t)(w0 >> 8);
++			htc.htt_major = (uint8_t)(w0 >> 16);
++			htc.htt_ver = true;
++			printf("SWEET HTT: target version %u.%u (CE%u)\n", htc.htt_major, htc.htt_minor, pipe);
++		} else if (htc.logged++ < 24) {
++			printf("SWEET HTT: message type %u, %u bytes (CE%u)\n", w0 & 0xffu, plen, pipe);
++		}
+ 	} else {
+ 		printf("SWEET HTC: CE%u endpoint %u, %u bytes, flags %#x\n", pipe, eid, plen, flags);
+ 	}
+@@ -691,6 +715,45 @@ wmi_scan(void)
+ 		delay(1000);
+ 	}
+ 
++	/* ath11k_dp_tx_htt_h2t_ver_req_msg: HTT VERSION_REQ (type 0) on the HTT endpoint (CE4), major 3 expected */
++	{
++		uint32_t hb[3] = { (uint32_t)htc.htt_ep | 4u << 16, (uint32_t)htc.seq_htt++ << 8, 0 };
++		if (ce_send(&ce.tx4, hb, sizeof(hb), htc.htt_ep) != 0) {
++			printf("SWEET HTT: VERSION_REQ send failed\n");
++			return 15;
++		}
++		for (unsigned t = 0; t < 3000 && !htc.htt_ver; ++t) {
++			htc_poll();
++			delay(1000);
++		}
++		if (!htc.htt_ver || htc.htt_major != 3) {
++			printf("SWEET HTT: no usable version (got %d, major %u; CE4 hp %u tp %u)\n", htc.htt_ver,
++			    htc.htt_major, ce.tx4.src.hp, *mem32(M_RDP + ce.tx4.src.id * 4));
++			return 15;
++		}
++	}
++
++	/*
++	 * WMI_SET_CURRENT_COUNTRY 0x3a001 (tag 0x25f: pdev_id, alpha2), as ath11k for
++	 * current_cc_support chips. Default "00" (world, chosen 2026-10-24); sweetwlancc=XX
++	 * overrides. The firmware answers with REG_CHAN_LIST_CC events (logged).
++	 */
++	{
++		char cc[4] = "00";
++		(void)PE_parse_boot_argn("sweetwlancc", cc, sizeof(cc));
++		bzero(b, sizeof(b));
++		b[0] = WMI_TLV(0x25f, 8);
++		memcpy(&b[2], cc, 2);
++		printf("SWEET WMI: set country \"%c%c\"\n", cc[0], cc[1]);
++		if (wmi_cmd(0x3a001u, b, 12, "SET_CURRENT_COUNTRY") != 0) {
++			return 16;
++		}
++		for (unsigned t = 0; t < 1000; ++t) {
++			htc_poll();
++			delay(1000);
++		}
++	}
++
+ 	/* ath11k_reg_update_chan_list for 2.4 GHz channels 1-13 (all usable actively in the EU): 11G, HE allowed, 20 dBm */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x4f, 12);
+@@ -801,7 +864,8 @@ wmi_scan(void)
+ 
+ /*
+  * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
+- * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-14.
++ * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-16
++ * (15 HTT version, 16 country).
+  */
+ int
+ sweet_wlce_htc(void)
+@@ -816,6 +880,20 @@ sweet_wlce_htc(void)
+ 		    *mem32(M_RDP + ce.rx1.sts.id * 4), *mem32(M_RDP + ce.rx2.sts.id * 4));
+ 		return 1;
+ 	}
++	/* ath11k_core_start order: HTT data service first (ath11k_dp_htt_connect: no credit flow, no credits) */
++	uint32_t hconn[2] = { HTC_CONNECT | HTC_SVC_HTT_DATA << 16, 0x8u };
++	if (htc_send_ctrl(hconn, sizeof(hconn)) != 0) {
++		return 2;
++	}
++	for (unsigned t = 0; t < 3000 && !htc.htt_conn; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	printf("SWEET HTC: service 0x300 (HTT) connect %s status %u endpoint %u\n",
++	    htc.htt_conn ? "answered" : "not answered", htc.htt_status, htc.htt_ep);
++	if (!htc.htt_conn || htc.htt_status != 0) {
++		return 3;
++	}
+ 	/* ath11k_htc_connect_service: WMI control, credit flow on, all credits (qca6390: 1) */
+ 	uint32_t conn[2] = { HTC_CONNECT | HTC_SVC_WMI_CONTROL << 16, 1u << 8 };
+ 	if (htc_send_ctrl(conn, sizeof(conn)) != 0) {
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index e246f68..ced01cc 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -613,7 +613,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-27) that failed. */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-29) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -659,7 +659,7 @@ sweet_wlfw_run(void)
+ 	printf("SWEET WLFW: mission mode requested\n");
+ 	r = sweet_wlce_htc();
+ 	if (r != 0) {
+-		return 13 + r;          /* 14 no HTC READY ... 21 WMI READY, 22-25 hw mode / chan list / vdev / scan send, 26 no scan start, 27 no scan end */
++		return 13 + r;          /* 14 no HTC READY ... 21 WMI READY, 22-25 hw mode / chan list / vdev / scan send, 26 no scan start, 27 no scan end, 28 HTT version, 29 country */
+ 	}
+ 	sweet_ipcr_service(500);        /* log whatever QMI says after that */
+ 	return 0;
+-- 
+2.54.0 (Apple Git-157)
+

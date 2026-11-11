@@ -1,0 +1,15 @@
+--- a/NativeMetalObjects.rs
++++ b/NativeMetalObjects.rs
+@@ -164,6 +164,12 @@
+         options.metal_level = Some(MetalLevel::NEWEST);
+         options.shader_cache = metal2vulkan_runtime::ShaderCacheOptions::in_directory(cache.to_string_lossy().into_owned());
+         options.messages = Some(MessageSink::new(observe_message));
++        // (ios-apollo bridge 0008 + 0016 + 0101) Padded IOSurface textures that render or write alias their rows in
++        // place only where a 16x4 GMEM tile store stays inside the row pitch and the buffer; otherwise they shadow.
++        // Replaces our old 0101, which aliased every padded writer unconditionally.
++        options.policy.padded_reads = metal2vulkan::device::PaddedReadsPolicy::AliasWrites;
++        // (ios-apollo bridge 0013) This front end never calls rebind_bytes_no_copy: encoders log nothing to replay.
++        options.refuse_rebinds = true;
+         Ok(boxed(NmbDevice(Device::system_default_with(&options).map_err(e("device"))?, std::sync::OnceLock::new(), std::sync::Mutex::new(()))))
+     })
+ }

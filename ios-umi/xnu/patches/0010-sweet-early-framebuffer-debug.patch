@@ -1,0 +1,344 @@
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+index e26a1d7..e3579f1 100644
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -56,6 +56,7 @@
+ #include <pexpert/arm/consistent_debug.h>
+ #include <pexpert/device_tree.h>
+ #include <arm64/proc_reg.h>
++#include <arm64/sweet_early.h>
+ #include <arm/pmap.h>
+ #include <arm/caches_internal.h>
+ #include <arm/cpu_internal.h>
+@@ -346,6 +347,8 @@ arm_init(
+ 	DTEntry chosen = NULL;
+ 	unsigned int dt_entry_size = 0;
+ 
++	sweet_early_mark(1, "arm_init entered (MMU on)");
++
+ 	arm_setup_pre_sign();
+ 
+ 	arm_slide_rebase_and_sign_image();
+@@ -362,6 +365,7 @@ arm_init(
+ #endif /* defined(HAS_APPLE_PAC) */
+ 
+ 	PE_init_platform(FALSE, args); /* Get platform expert set up */
++	sweet_early_mark(2, "PE_init_platform done");
+ 
+ #if __arm64__
+ 	configure_timer_apple_regs();
+@@ -423,6 +427,7 @@ arm_init(
+ #endif
+ 
+ 	ml_parse_cpu_topology();
++	sweet_early_mark(3, "ml_parse_cpu_topology done");
+ 
+ 
+ 	master_cpu = ml_get_boot_cpu_number();
+@@ -453,11 +458,13 @@ arm_init(
+ 	 */
+ 	thread->machine.preemption_count = 0;
+ 	cpu_bootstrap();
++	sweet_early_mark(4, "cpu_bootstrap done");
+ 
+ 	rtclock_early_init();
+ 
+ 	kernel_debug_string_early("kernel_startup_bootstrap");
+ 	kernel_startup_bootstrap();
++	sweet_early_mark(5, "kernel_startup_bootstrap done");
+ 
+ 	/*
+ 	 * Initialize the timer callout world
+@@ -466,6 +473,7 @@ arm_init(
+ 
+ 	cpu_init();
+ 
++	sweet_early_mark(6, "cpu_init done");
+ 	processor_bootstrap();
+ 
+ 	if (PE_parse_boot_argn("maxmem", &maxmem, sizeof(maxmem))) {
+@@ -513,6 +521,7 @@ arm_init(
+ 	__builtin_arm_wsr("pan", 1);
+ #endif  /* __ARM_PAN_AVAILABLE__ */
+ 
++	sweet_early_mark(7, "entering arm_vm_init");
+ 	arm_vm_init(xmaxmem, args);
+ 
+ 	if (debug_boot_arg) {
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index d89b0f1..d0c710d 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -41,6 +41,7 @@
+ #include <machine/atomic.h>
+ #include <arm64/proc_reg.h>
+ #include <arm64/lowglobals.h>
++#include <arm64/sweet_early.h>
+ #include <arm/cpu_data_internal.h>
+ #include <arm/misc_protos.h>
+ #include <pexpert/arm64/boot.h>
+@@ -2145,6 +2146,8 @@ arm_vm_init(uint64_t memory_size, boot_args * args)
+ 
+ 	ml_enable_monitor();
+ 
++	/* The framebuffer VA=PA mapping belongs to the outgoing TTBR0. */
++	sweet_early_disable();
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+ 	flush_mmu_tlb();
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+index ccbb188..777aca4 100644
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -463,6 +463,25 @@ LEXT(start_first_cpu)
+ 	mov		x20, x0
+ 	mov		x21, #0
+ 
++#if defined(SWEET)
++	/* Stage 0: white 64x32 band, no stack or page tables needed. */
++	MOV64	x0, (0x9c000000 + 2368 * 4320)
++	mov		w1, #-1
++	mov		x2, #32
++	mov		x4, #4320
++Lsweet_mark_row:
++	mov		x3, #64
++	mov		x5, x0
++Lsweet_mark_pixel:
++	str		w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lsweet_mark_pixel
++	add		x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lsweet_mark_row
++	dsb		sy
++#endif
++
+ 	// Set low reset vector before attempting any loads
+ 	adrp	x0, EXT(LowExceptionVectorBase)@page
+ 	add		x0, x0, EXT(LowExceptionVectorBase)@pageoff
+@@ -609,6 +628,23 @@ Lkernelcache_base_found:
+ 	lsr		x5,  x24, #(ARM_TT_L2_SHIFT)
+ 	create_bootstrap_mapping x14, x15, x5, x3, x2, x9, x10, x11, x12, x13
+ 
++#if defined(SWEET)
++	/*
++	 * Splash framebuffer: one 32MB Normal-NC block in the EXISTING V=P
++	 * L2 table. Both framebuffer and RAM use L1 index 0; another call to
++	 * create_bootstrap_mapping would replace the RAM L2 table.
++	 * SWEET uses 16K pages and all bring-up RAM is below 4GB, so the first
++	 * V=P L2 page is bootstrap_pagetables + 2*PGBYTES.
++	 */
++	MOV64	x10, 0x9c000000
++	MOV64	x11, (ARM_TTE_TYPE_BLOCK | ARM_TTE_VALID | ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX)
++	orr		x11, x11, x10
++	and		x12, x10, #(ARM_TT_L2_INDEX_MASK)
++	lsr		x12, x12, #(ARM_TT_L2_SHIFT)
++	add		x13, x25, #(2 * PGBYTES)
++	str		x11, [x13, x12, lsl #TTE_SHIFT]
++#endif
++
+ 	/* Ensure TTEs are visible */
+ 	dsb		ish
+ 
+diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
+new file mode 100644
+index 0000000..8f4c808
+--- /dev/null
++++ b/osfmk/arm64/sweet_early.c
+@@ -0,0 +1,130 @@
++/*
++ * Redmi Note 10 Pro bootstrap console. No allocation, locks, ADT parsing or
++ * per-CPU state: panic() can reach this before a current thread exists.
++ * start.s maps the splash framebuffer VA=PA as Normal Non-Cacheable memory.
++ * Stop using that mapping before arm_vm_init tears down bootstrap TTBR0.
++ */
++#include <arm64/sweet_early.h>
++
++#if defined(SWEET)
++#include <stdint.h>
++#include <kern/misc_protos.h>
++
++#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0x9c000000)
++#define EARLY_WIDTH 1080u
++#define EARLY_HEIGHT 2400u
++#define EARLY_STRIDE (4320u / 4)
++#define EARLY_SCALE 2u
++#define EARLY_CELL_W (8u * EARLY_SCALE)
++#define EARLY_CELL_H (16u * EARLY_SCALE)
++#define EARLY_ROWS ((EARLY_HEIGHT - 32u) / EARLY_CELL_H)
++#define EARLY_COLS (EARLY_WIDTH / EARLY_CELL_W)
++
++extern unsigned char iso_font[256 * 16];
++
++/* Initialized data must remain writable until disable, including panics. */
++static unsigned int early_row, early_col;
++static unsigned int early_started, early_disabled, early_panicking;
++
++static void
++sweet_early_clear_row(void)
++{
++	for (unsigned int y = 0; y < EARLY_CELL_H; y++) {
++		volatile uint32_t *line = EARLY_FB + (early_row * EARLY_CELL_H + y) * EARLY_STRIDE;
++		for (unsigned int x = 0; x < EARLY_WIDTH; x++) {
++			line[x] = 0xff000000u;
++		}
++	}
++}
++
++void
++sweet_early_putc(char c)
++{
++	if (early_disabled) {
++		return;
++	}
++	if (!early_started) {
++		early_started = 1;
++		sweet_early_clear_row();
++	}
++	if (c == '\r') {
++		early_col = 0;
++		return;
++	}
++	if (c == '\n' || early_col == EARLY_COLS) {
++		early_col = 0;
++		early_row = (early_row + 1) % EARLY_ROWS;
++		sweet_early_clear_row();
++		if (c == '\n') {
++			return;
++		}
++	}
++	const unsigned char *glyph = iso_font + (unsigned char)c * 16;
++	for (unsigned int gy = 0; gy < 16; gy++) {
++		for (unsigned int sy = 0; sy < EARLY_SCALE; sy++) {
++			volatile uint32_t *line = EARLY_FB +
++			    (early_row * EARLY_CELL_H + gy * EARLY_SCALE + sy) * EARLY_STRIDE +
++			    early_col * EARLY_CELL_W;
++			for (unsigned int gx = 0; gx < 8; gx++) {
++				uint32_t pixel = (glyph[gy] & (1u << gx)) ? 0xffffffffu : 0xff000000u;
++				for (unsigned int sx = 0; sx < EARLY_SCALE; sx++) {
++					line[gx * EARLY_SCALE + sx] = pixel;
++				}
++			}
++		}
++	}
++	early_col++;
++}
++
++static void
++sweet_early_string(const char *s)
++{
++	while (*s) {
++		sweet_early_putc(*s++);
++	}
++}
++
++void
++sweet_early_mark(unsigned int stage, const char *label)
++{
++	if (early_disabled || stage > 8) {
++		return;
++	}
++	uint32_t color = 0xff00ff00u | (stage * 28u << 16);
++	for (unsigned int y = EARLY_HEIGHT - 32; y < EARLY_HEIGHT; y++) {
++		for (unsigned int x = stage * 64; x < (stage + 1) * 64; x++) {
++			EARLY_FB[y * EARLY_STRIDE + x] = color;
++		}
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++	sweet_early_string("SWEET EARLY ");
++	sweet_early_putc((char)('0' + stage));
++	sweet_early_string(": ");
++	sweet_early_string(label);
++	sweet_early_putc('\n');
++}
++
++void
++sweet_early_panic(const char *fmt, va_list *args)
++{
++	if (early_disabled || early_panicking) {
++		return;
++	}
++	early_panicking = 1;
++	sweet_early_string("\nSWEET EARLY PANIC: ");
++	va_list copy;
++	va_copy(copy, *args);
++	_doprnt(fmt, &copy, sweet_early_putc, 16);
++	va_end(copy);
++	sweet_early_putc('\n');
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++
++void
++sweet_early_disable(void)
++{
++	sweet_early_mark(8, "leaving bootstrap TTBR0");
++	early_disabled = 1;
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++#endif /* SWEET */
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
+new file mode 100644
+index 0000000..fbbc827
+--- /dev/null
++++ b/osfmk/arm64/sweet_early.h
+@@ -0,0 +1,22 @@
++/* Early screen diagnostics, valid only while the bootstrap TTBR0 is live. */
++#ifndef _ARM64_SWEET_EARLY_H_
++#define _ARM64_SWEET_EARLY_H_
++
++#include <pexpert/arm64/board_config.h>
++#include <stdarg.h>
++
++#if defined(SWEET)
++void sweet_early_mark(unsigned int stage, const char *label);
++void sweet_early_putc(char c);
++void sweet_early_panic(const char *fmt, va_list *args);
++void sweet_early_disable(void);
++#else
++static inline void sweet_early_mark(unsigned int stage, const char *label)
++{
++	(void)stage;
++	(void)label;
++}
++static inline void sweet_early_disable(void) {}
++#endif
++
++#endif
+diff --git a/osfmk/conf/files.arm64 b/osfmk/conf/files.arm64
+index c40d57b..b0dad49 100644
+--- a/osfmk/conf/files.arm64
++++ b/osfmk/conf/files.arm64
+@@ -40,6 +40,7 @@ osfmk/arm64/dbgwrap.c		standard
+ osfmk/arm/arm_timer.c		standard
+ osfmk/arm/arm_init.c	optional config_pmap_ppl
+ osfmk/arm64/arm_vm_init.c	optional config_pmap_ppl
++osfmk/arm64/sweet_early.c	standard
+ osfmk/arm64/arm64_hypercall.c	standard
+ osfmk/arm/io_map.c		standard
+ osfmk/arm64/loose_ends.c	standard
+diff --git a/osfmk/kern/debug.c b/osfmk/kern/debug.c
+index 0a00656..437adb1 100644
+--- a/osfmk/kern/debug.c
++++ b/osfmk/kern/debug.c
+@@ -84,6 +84,9 @@
+ #include <stdatomic.h>
+ #include <sys/pgo.h>
+ #include <console/serial_protos.h>
++#if defined(__arm64__)
++#include <arm64/sweet_early.h>
++#endif
+ #include <IOKit/IOBSD.h>
+ 
+ #if !(MACH_KDP && CONFIG_KDP_INTERACTIVE_DEBUGGING)
+@@ -1069,6 +1072,11 @@ panic_trap_to_debugger(const char *panic_format_str, va_list *panic_args, unsign
+ {
+ #pragma clang diagnostic pop
+ 
++#if defined(SWEET)
++	/* No CPU/thread/debugger state is required for this first panic copy. */
++	sweet_early_panic(panic_format_str, panic_args);
++#endif
++
+ #if defined(__x86_64__) && (DEVELOPMENT || DEBUG)
+ 	read_lbr();
+ #endif

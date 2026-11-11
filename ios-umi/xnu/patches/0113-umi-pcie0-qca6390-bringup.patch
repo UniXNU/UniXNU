@@ -1,0 +1,479 @@
+From 44bd00d81992979105d9899ed787c28140765a30 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Fri, 23 Oct 2026 20:37:05 +0200
+Subject: [PATCH] umi-0113
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_pcie.c | 426 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_ufs.c  |   2 +
+ 3 files changed, 429 insertions(+)
+ create mode 100644 bsd/dev/sweet_pcie.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index d8fef1e..a593609 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,6 +112,7 @@ bsd/dev/sweet_gpi.c			standard
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
++bsd/dev/sweet_pcie.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+new file mode 100644
+index 0000000..30456c7
+--- /dev/null
++++ b/bsd/dev/sweet_pcie.c
+@@ -0,0 +1,426 @@
++/*
++ * umi (Mi 10, SM8250) PCIe0 root complex and the QCA6390 Wi-Fi chip behind it.
++ * Stage 1 (sweetwlan=1): power the chip (WLAN_EN, GPIO 20), bring PCIe0 up the
++ * way msm-4.19 pci-msm does (GDSC, GCC clocks, PARF, the DT qcom,phy-sequence,
++ * PERST, LTSSM) and read the endpoint's ID through an iATU config window.
++ * Nothing here runs unless the boot-arg asks for it.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <kern/sched_prim.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern kern_return_t thread_terminate(thread_t);
++extern bool sweet_board_is_umi(void);
++void sweet_pcie_init(void);
++
++#define PCIE_GCC_PA      0x00100000u
++#define PCIE_GCC_SIZE    0x000a0000u
++#define PCIE_NORTH_PA    0x0f900000u     /* TLMM north tile: GPIO 20, 79-81, 124 */
++#define PCIE_NORTH_SIZE  0x0007d000u
++#define PCIE_PARF_PA     0x01c00000u
++#define PCIE_PHY_PA      0x01c06000u
++#define PCIE_DBI_PA      0x60000000u
++#define PCIE_ELBI_PA     0x60000f20u
++#define PCIE_IATU_PA     0x60001000u
++#define PCIE_CONF_PA     0x60100000u
++
++/* gcc-kona / gcc-sm8250 */
++#define GCC_PCIE0_BCR        0x6b000u
++#define GCC_PCIE0_GDSCR      0x6b004u
++#define GCC_PCIE0_AUX_RCG    0x6b038u
++#define GCC_PCIE0_PHY_BCR    0x6c01cu
++#define GCC_REFGEN_RCG       0x6f014u
++#define GCC_REFGEN_CBCR      0x6f02cu
++#define GCC_WIFI_CLKREF      0x8c004u
++#define GCC_PCIE_VOTE        0x52008u    /* slv-axi 0, mstr-axi 1, cfg-ahb 2, aux 3, pipe 4, slv-q2a 5 */
++#define GCC_PCIE_VOTE_MASK   0x3fu
++#define GCC_AGGRE_TBU_CBCR   0x9000cu
++#define GCC_DDRSS_TBU_CBCR   0x8d058u
++
++#define PARF_SYS_CTRL        0x000u
++#define PARF_PM_CTRL         0x020u
++#define PARF_PHY_CTRL        0x040u
++#define PARF_DBI_BASE_ADDR   0x168u
++#define PARF_MHI_CLK_RST     0x174u
++#define PARF_AXI_HALT_V2     0x1a8u
++#define PARF_LTSSM           0x1b0u
++#define PARF_SLV_ADDR_SPACE  0x358u
++#define PARF_DEVICE_TYPE     0x1000u
++
++#define PHY_PCS_STATUS       0x814u      /* DT qcom,phy-status-offset, bit 6 = PHY not ready */
++
++#define DBI_CMD              0x004u
++#define DBI_BUSNUM           0x018u
++#define DBI_LINKCTL          0x080u      /* PCIe cap link control/status: bit 29 DLL active */
++#define DBI_RO_WR_EN         0x8bcu
++
++#define WLAN_EN_PIN          20u
++#define PERST_PIN            79u
++#define CLKREQ_PIN           80u
++#define WAKE_PIN             81u
++#define SW_CTRL_PIN          124u
++
++struct pcie_phy_step {
++	uint16_t off;
++	uint8_t val;
++	uint8_t delay_us;
++};
++
++/* umi DT pcie0 qcom,phy-sequence (offset, value, delay) */
++static const struct pcie_phy_step pcie_phy_seq[] = {
++	{ 0x0840, 0x03, 0 },
++	{ 0x0094, 0x08, 0 },
++	{ 0x0154, 0x34, 0 },
++	{ 0x016c, 0x08, 0 },
++	{ 0x0058, 0x0f, 0 },
++	{ 0x00a4, 0x42, 0 },
++	{ 0x0110, 0x24, 0 },
++	{ 0x011c, 0x03, 0 },
++	{ 0x0118, 0xb4, 0 },
++	{ 0x010c, 0x02, 0 },
++	{ 0x01bc, 0x11, 0 },
++	{ 0x00bc, 0x82, 0 },
++	{ 0x00d4, 0x03, 0 },
++	{ 0x00d0, 0x55, 0 },
++	{ 0x00cc, 0x55, 0 },
++	{ 0x00b0, 0x1a, 0 },
++	{ 0x00ac, 0x0a, 0 },
++	{ 0x00c4, 0x68, 0 },
++	{ 0x00e0, 0x02, 0 },
++	{ 0x00dc, 0xaa, 0 },
++	{ 0x00d8, 0xab, 0 },
++	{ 0x00b8, 0x34, 0 },
++	{ 0x00b4, 0x14, 0 },
++	{ 0x0158, 0x01, 0 },
++	{ 0x0074, 0x06, 0 },
++	{ 0x007c, 0x16, 0 },
++	{ 0x0084, 0x36, 0 },
++	{ 0x0078, 0x06, 0 },
++	{ 0x0080, 0x16, 0 },
++	{ 0x0088, 0x36, 0 },
++	{ 0x01b0, 0x1e, 0 },
++	{ 0x01ac, 0xca, 0 },
++	{ 0x01b8, 0x18, 0 },
++	{ 0x01b4, 0xa2, 0 },
++	{ 0x0050, 0x07, 0 },
++	{ 0x0010, 0x01, 0 },
++	{ 0x001c, 0x31, 0 },
++	{ 0x0020, 0x01, 0 },
++	{ 0x0024, 0xde, 0 },
++	{ 0x0028, 0x07, 0 },
++	{ 0x0030, 0x4c, 0 },
++	{ 0x0034, 0x06, 0 },
++	{ 0x029c, 0x12, 0 },
++	{ 0x0284, 0x35, 0 },
++	{ 0x023c, 0x11, 0 },
++	{ 0x051c, 0x03, 0 },
++	{ 0x0518, 0x1c, 0 },
++	{ 0x0524, 0x1e, 0 },
++	{ 0x04e8, 0x00, 0 },
++	{ 0x04ec, 0x0e, 0 },
++	{ 0x04f0, 0x4a, 0 },
++	{ 0x04f4, 0x0f, 0 },
++	{ 0x05b4, 0x04, 0 },
++	{ 0x0434, 0x7f, 0 },
++	{ 0x0444, 0x70, 0 },
++	{ 0x0510, 0x17, 0 },
++	{ 0x04d4, 0x04, 0 },
++	{ 0x04d8, 0x07, 0 },
++	{ 0x0598, 0xd4, 0 },
++	{ 0x059c, 0x54, 0 },
++	{ 0x05a0, 0xdb, 0 },
++	{ 0x05a4, 0x3b, 0 },
++	{ 0x05a8, 0x31, 0 },
++	{ 0x0584, 0x24, 0 },
++	{ 0x0588, 0xe4, 0 },
++	{ 0x058c, 0xec, 0 },
++	{ 0x0590, 0x3b, 0 },
++	{ 0x0594, 0x36, 0 },
++	{ 0x0570, 0x3f, 0 },
++	{ 0x0574, 0x3f, 0 },
++	{ 0x0578, 0xff, 0 },
++	{ 0x057c, 0x7f, 0 },
++	{ 0x0580, 0x14, 0 },
++	{ 0x04fc, 0x00, 0 },
++	{ 0x04f8, 0xc0, 0 },
++	{ 0x0460, 0x30, 0 },
++	{ 0x0464, 0x00, 0 },
++	{ 0x05bc, 0x0c, 0 },
++	{ 0x04dc, 0x1b, 0 },
++	{ 0x0408, 0x0c, 0 },
++	{ 0x0414, 0x03, 0 },
++	{ 0x05b8, 0x30, 0 },
++	{ 0x09a4, 0x01, 0 },
++	{ 0x0c90, 0x00, 0 },
++	{ 0x0c40, 0x01, 0 },
++	{ 0x0c48, 0x01, 0 },
++	{ 0x0c50, 0x00, 0 },
++	{ 0x0cb4, 0x33, 0 },
++	{ 0x0cbc, 0x00, 0 },
++	{ 0x0ce0, 0x58, 0 },
++	{ 0x0ca4, 0x0f, 0 },
++	{ 0x0048, 0x90, 0 },
++	{ 0x0c1c, 0xc1, 0 },
++	{ 0x0988, 0x77, 0 },
++	{ 0x0998, 0x0b, 0 },
++	{ 0x08dc, 0x0d, 0 },
++	{ 0x09ec, 0x12, 0 },
++	{ 0x0800, 0x00, 0 },
++	{ 0x0844, 0x03, 0 },
++};
++
++static struct {
++	vm_offset_t gcc, tlmm, parf, phy, dbi, elbi, iatu, conf;
++	unsigned stage;
++	bool started;
++	int sleep_chan;
++} sp;
++
++static uint32_t
++pcie_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++pcie_wr(vm_offset_t base, uint32_t off, uint32_t val)
++{
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + off) = val;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static void
++pcie_wait(unsigned ms)
++{
++	uint64_t deadline;
++	clock_interval_to_deadline(ms, NSEC_PER_MSEC, &deadline);
++	(void)assert_wait_deadline(&sp.sleep_chan, THREAD_UNINT, deadline);
++	thread_block(THREAD_CONTINUE_NULL);
++}
++
++/* Poll until (reg & mask) == want, up to ms milliseconds. */
++static bool
++pcie_poll(vm_offset_t base, uint32_t off, uint32_t mask, uint32_t want, unsigned ms)
++{
++	for (unsigned i = 0; i < ms * 10u; ++i) {
++		if ((pcie_rd(base, off) & mask) == want) {
++			return true;
++		}
++		delay(100);
++	}
++	return false;
++}
++
++static void
++pcie_gpio(unsigned pin, unsigned mux, unsigned pull, unsigned drive, bool out, bool high)
++{
++	uint32_t off = pin * 0x1000u;
++	if (out) {
++		pcie_wr(sp.tlmm, off + 4u, (pcie_rd(sp.tlmm, off + 4u) & ~2u) | (high ? 2u : 0u));
++	}
++	uint32_t cfg = pcie_rd(sp.tlmm, off) & ~0x3ffu;
++	cfg |= (mux << 2) | pull | (drive << 6) | (out ? 0x200u : 0u);
++	pcie_wr(sp.tlmm, off, cfg);
++}
++
++static unsigned
++pcie_gpio_in(unsigned pin)
++{
++	return pcie_rd(sp.tlmm, pin * 0x1000u + 4u) & 1u;
++}
++
++/* An RCG to XO/1 (the 19.2 MHz the DT asks for: qcom,use-19p2mhz-aux-clk). */
++static bool
++pcie_rcg_xo(uint32_t rcg)
++{
++	pcie_wr(sp.gcc, rcg + 4u, 0);
++	pcie_wr(sp.gcc, rcg, pcie_rd(sp.gcc, rcg) | 1u);
++	return pcie_poll(sp.gcc, rcg, 1u, 0, 10);
++}
++
++static void
++pcie_branch_on(uint32_t cbcr)
++{
++	pcie_wr(sp.gcc, cbcr, pcie_rd(sp.gcc, cbcr) | 1u);
++}
++
++static void
++pcie_dump(const char *when)
++{
++	printf("SWEET PCIE: %s: gdsc %#x vote %#x aux %#x cfg %#x mstr %#x slv %#x pipe %#x q2a %#x refgen %#x clkref %#x\n",
++	    when, pcie_rd(sp.gcc, GCC_PCIE0_GDSCR), pcie_rd(sp.gcc, GCC_PCIE_VOTE),
++	    pcie_rd(sp.gcc, 0x6b028), pcie_rd(sp.gcc, 0x6b024), pcie_rd(sp.gcc, 0x6b01c),
++	    pcie_rd(sp.gcc, 0x6b014), pcie_rd(sp.gcc, 0x6b02c), pcie_rd(sp.gcc, 0x6b010),
++	    pcie_rd(sp.gcc, GCC_REFGEN_CBCR), pcie_rd(sp.gcc, GCC_WIFI_CLKREF));
++	printf("SWEET PCIE: %s: wlan_en %#x/%u sw_ctrl %u perst %#x/%u clkreq %#x wake %u\n", when,
++	    pcie_rd(sp.tlmm, WLAN_EN_PIN * 0x1000u), pcie_gpio_in(WLAN_EN_PIN), pcie_gpio_in(SW_CTRL_PIN),
++	    pcie_rd(sp.tlmm, PERST_PIN * 0x1000u), pcie_gpio_in(PERST_PIN),
++	    pcie_rd(sp.tlmm, CLKREQ_PIN * 0x1000u), pcie_gpio_in(WAKE_PIN));
++}
++
++static bool
++pcie_map(void)
++{
++	sp.gcc = ml_io_map(PCIE_GCC_PA, PCIE_GCC_SIZE);
++	sp.tlmm = ml_io_map(PCIE_NORTH_PA, PCIE_NORTH_SIZE);
++	sp.parf = ml_io_map(PCIE_PARF_PA, 0x3000);
++	sp.phy = ml_io_map(PCIE_PHY_PA, 0x1000);
++	sp.dbi = ml_io_map(PCIE_DBI_PA, 0x1000);
++	sp.iatu = ml_io_map(PCIE_IATU_PA, 0x1000);
++	sp.conf = ml_io_map(PCIE_CONF_PA, 0x1000);
++	return sp.gcc && sp.tlmm && sp.parf && sp.phy && sp.dbi && sp.iatu && sp.conf;
++}
++
++/* iATU outbound region 0 (unrolled layout): CFG0 window at PCIE_CONF_PA -> bus 1 dev 0 fn 0. */
++static void
++pcie_cfg_window(void)
++{
++	vm_offset_t r = sp.iatu;
++	pcie_wr(r, 0x04, 0);                         /* CTRL2: disable while programming */
++	pcie_wr(r, 0x08, PCIE_CONF_PA);              /* LWR_BASE */
++	pcie_wr(r, 0x0c, 0);                         /* UPPER_BASE */
++	pcie_wr(r, 0x10, PCIE_CONF_PA + 0xfffu);     /* LIMIT */
++	pcie_wr(r, 0x14, 1u << 24);                  /* LWR_TARGET: bus 1 */
++	pcie_wr(r, 0x18, 0);
++	pcie_wr(r, 0x00, 4);                         /* CTRL1: type CFG0 */
++	pcie_wr(r, 0x04, 1u << 31);                  /* enable */
++	(void)pcie_poll(r, 0x04, 1u << 31, 1u << 31, 5);
++}
++
++static int
++pcie_bringup(void)
++{
++	pcie_dump("before");
++
++	/* QCA6390 power: rails are shared, always-on SMPS (S4A/S5A/S6A/S8C); WLAN_EN high. */
++	pcie_gpio(WLAN_EN_PIN, 0, 3, 7, true, true);
++	pcie_wait(100);
++	printf("SWEET PCIE: WLAN_EN high, sw_ctrl %u\n", pcie_gpio_in(SW_CTRL_PIN));
++
++	/* PERST low, CLKREQ to its PCIe function, WAKE input. */
++	pcie_gpio(PERST_PIN, 0, 1, 0, true, false);
++	pcie_gpio(CLKREQ_PIN, 1, 3, 0, false, false);
++	pcie_gpio(WAKE_PIN, 0, 3, 0, false, false);
++
++	/* GDSC on */
++	pcie_wr(sp.gcc, GCC_PCIE0_GDSCR, pcie_rd(sp.gcc, GCC_PCIE0_GDSCR) & ~1u);
++	if (!pcie_poll(sp.gcc, GCC_PCIE0_GDSCR, 1u << 31, 1u << 31, 50)) {
++		printf("SWEET PCIE: GDSC did not power on: %#x\n", pcie_rd(sp.gcc, GCC_PCIE0_GDSCR));
++		return 1;
++	}
++
++	/* Clocks: aux and refgen at XO, refgen + wifi clkref, voted branches, TBUs. */
++	bool aux = pcie_rcg_xo(GCC_PCIE0_AUX_RCG);
++	bool ref = pcie_rcg_xo(GCC_REFGEN_RCG);
++	pcie_branch_on(GCC_REFGEN_CBCR);
++	pcie_branch_on(GCC_WIFI_CLKREF);
++	pcie_wr(sp.gcc, GCC_PCIE_VOTE, pcie_rd(sp.gcc, GCC_PCIE_VOTE) | GCC_PCIE_VOTE_MASK);
++	pcie_branch_on(GCC_AGGRE_TBU_CBCR);
++	pcie_branch_on(GCC_DDRSS_TBU_CBCR);
++	delay(100);
++	printf("SWEET PCIE: rcg aux %d refgen %d\n", aux, ref);
++	pcie_dump("clocks on");
++	if (sp.stage == 1) {
++		return 0;
++	}
++
++	/* Core and PHY reset pulses */
++	pcie_wr(sp.gcc, GCC_PCIE0_BCR, 1);
++	pcie_wr(sp.gcc, GCC_PCIE0_PHY_BCR, 1);
++	delay(1000);
++	pcie_wr(sp.gcc, GCC_PCIE0_PHY_BCR, 0);
++	pcie_wr(sp.gcc, GCC_PCIE0_BCR, 0);
++	delay(1000);
++
++	/* PARF: root complex, PHY out of test power-down, DBI at 0, keep the link out of L1. */
++	pcie_wr(sp.parf, PARF_DEVICE_TYPE, 4);
++	pcie_wr(sp.parf, PARF_PHY_CTRL, pcie_rd(sp.parf, PARF_PHY_CTRL) & ~1u);
++	pcie_wr(sp.parf, PARF_DBI_BASE_ADDR, 0);
++	pcie_wr(sp.parf, PARF_SYS_CTRL, pcie_rd(sp.parf, PARF_SYS_CTRL) & ~(1u << 29));
++	pcie_wr(sp.parf, PARF_MHI_CLK_RST, pcie_rd(sp.parf, PARF_MHI_CLK_RST) | (1u << 4));
++	pcie_wr(sp.parf, PARF_PM_CTRL, pcie_rd(sp.parf, PARF_PM_CTRL) | (1u << 5));
++	pcie_wr(sp.parf, PARF_AXI_HALT_V2, pcie_rd(sp.parf, PARF_AXI_HALT_V2) | (1u << 31));
++	pcie_wr(sp.parf, PARF_SLV_ADDR_SPACE, 0x4000000);
++
++	/* PHY */
++	for (unsigned i = 0; i < sizeof(pcie_phy_seq) / sizeof(pcie_phy_seq[0]); ++i) {
++		pcie_wr(sp.phy, pcie_phy_seq[i].off, pcie_phy_seq[i].val);
++		if (pcie_phy_seq[i].delay_us) {
++			delay(pcie_phy_seq[i].delay_us);
++		}
++	}
++	bool phy_ok = pcie_poll(sp.phy, PHY_PCS_STATUS, 1u << 6, 0, 100);
++	printf("SWEET PCIE: PHY %s, status %#x\n", phy_ok ? "ready" : "NOT ready", pcie_rd(sp.phy, PHY_PCS_STATUS));
++	pcie_dump("phy");
++	if (!phy_ok || sp.stage == 2) {
++		return phy_ok ? 0 : 2;
++	}
++
++	/* Bus numbers and memory/bus-master on the root port before training. */
++	pcie_wr(sp.dbi, DBI_BUSNUM, 0x00010100);
++	pcie_wr(sp.dbi, DBI_CMD, pcie_rd(sp.dbi, DBI_CMD) | 0x6u);
++
++	/* PERST release (>= 100 ms after power and refclk), then LTSSM. */
++	pcie_wait(100);
++	pcie_gpio(PERST_PIN, 0, 1, 0, true, true);
++	pcie_wait(1);
++	pcie_wr(sp.parf, PARF_LTSSM, pcie_rd(sp.parf, PARF_LTSSM) | (1u << 8));
++	bool up = pcie_poll(sp.dbi, DBI_LINKCTL, 1u << 29, 1u << 29, 1000);
++	uint32_t ls = pcie_rd(sp.dbi, DBI_LINKCTL);
++	printf("SWEET PCIE: link %s: linkctl %#x (gen %u x%u) ltssm %#x\n", up ? "UP" : "down",
++	    ls, (ls >> 16) & 0xf, (ls >> 20) & 0x3f, pcie_rd(sp.parf, PARF_LTSSM));
++	if (!up) {
++		return 3;
++	}
++
++	pcie_cfg_window();
++	uint32_t id = pcie_rd(sp.conf, 0x00);
++	uint32_t cls = pcie_rd(sp.conf, 0x08);
++	printf("SWEET PCIE: bus 1 dev 0: id %#x class/rev %#x %s\n", id, cls,
++	    id == 0x110117cbu ? "(QCA6390)" : "");
++	return id == 0x110117cbu ? 0 : 4;
++}
++
++static void
++pcie_thread(void *arg __unused, wait_result_t wr __unused)
++{
++	unsigned delay_s = 20;
++	(void)PE_parse_boot_argn("sweetwlandelay", &delay_s, sizeof(delay_s));
++	pcie_wait(delay_s * 1000u);
++	if (!pcie_map()) {
++		printf("SWEET PCIE: mapping failed\n");
++	} else {
++		int r = pcie_bringup();
++		printf("SWEET PCIE: stage %u done, result %d\n", sp.stage, r);
++	}
++	(void)thread_terminate(current_thread());
++	thread_block(THREAD_CONTINUE_NULL);
++}
++
++void
++sweet_pcie_init(void)
++{
++	thread_t thread;
++	if (sp.started || !sweet_board_is_umi()) {
++		return;
++	}
++	sp.started = true;
++	(void)PE_parse_boot_argn("sweetwlan", &sp.stage, sizeof(sp.stage));
++	if (sp.stage == 0) {
++		return;
++	}
++	printf("SWEET PCIE: stage %u requested\n", sp.stage);
++	if (kernel_thread_start(pcie_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 6b926fe..2348284 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -53,6 +53,7 @@ extern void sweet_sample_start(void);
+ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+ extern void sweet_usb_probe(void);
++extern void sweet_pcie_init(void);
+ 
+ #define REG_CAP         0x00
+ #define REG_IS          0x20
+@@ -660,6 +661,7 @@ sweet_ufs_init(void)
+ 	sweet_keys_init();
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
++	sweet_pcie_init();
+ 	return 0;
+ }
+ 
+-- 
+2.54.0 (Apple Git-157)
+

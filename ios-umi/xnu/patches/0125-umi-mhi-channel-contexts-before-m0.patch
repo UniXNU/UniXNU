@@ -1,0 +1,37 @@
+From 27f3754ae3ac9af7d6e81700a1f3eae043cd6977 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 12:38:51 +0200
+Subject: [PATCH] umi-0125
+
+---
+ bsd/dev/sweet_mhi.c | 14 +++++++++++++-
+ 1 file changed, 13 insertions(+), 1 deletion(-)
+
+diff --git a/bsd/dev/sweet_mhi.c b/bsd/dev/sweet_mhi.c
+index 93bb273..bf4398a 100644
+--- a/bsd/dev/sweet_mhi.c
++++ b/bsd/dev/sweet_mhi.c
+@@ -137,7 +137,19 @@ sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa)
+ 		return ETIMEDOUT;
+ 	}
+ 
+-	/* Channels stay disabled (zero) until a client starts one. */
++	/*
++	 * Configured channels get their type and event ring before M0, state disabled
++	 * (Linux mhi_init_dev_ctxt): the device reads them at M0, and START_CHAN on an
++	 * all-zero context failed with code 16 (0124). ath11k QCA6390: 0/1 LOOPBACK on
++	 * event ring 0, 20/21 IPCR on event ring 1; burst mode disabled (2).
++	 */
++	static const uint8_t chans[4][3] = { { 0, 1, 0 }, { 1, 2, 0 }, { 20, 1, 1 }, { 21, 2, 1 } };
++	for (unsigned i = 0; i < 4; ++i) {
++		uint32_t c = MEM_CHCTX + chans[i][0] * 40u;
++		mem_wr32(c, 2u << 8);
++		mem_wr32(c + 4, chans[i][1]);
++		mem_wr32(c + 8, chans[i][2]);
++	}
+ 	/* Event rings: type valid (1), MSI vector = Linux irq index; wp = last element. */
+ 	ctx_set(MEM_ERCTX, 0, 1, 1, MEM_ER0, ER0_N * EL, MEM_ER0 + (ER0_N - 1) * EL);
+ 	ctx_set(MEM_ERCTX + 40, 1u << 16, 1, 2, MEM_ER1, ER1_N * EL, MEM_ER1 + (ER1_N - 1) * EL);
+-- 
+2.54.0 (Apple Git-157)
+

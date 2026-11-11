@@ -1,0 +1,145 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 72e56dc..6ff8cc4 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -19,15 +19,18 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern void sweet_hid_key(int key, int down);
+ extern bool sweet_board_is_umi(void);
+ void sweet_keys_init(void);
++int sweet_pmic_read(uint16_t ppid, uint8_t reg, uint8_t *val);
++int sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val);
+ 
+ #define KEYS_CORE_PA     0x0c440000u
+ #define KEYS_OBS_PA      0x0e600000u
+ #define KEYS_CNFG_PA     0x0c40a000u
++#define KEYS_CHNL_PA     0x0c600000u     /* DT "chnls": EE 0 channel registers, 0x80 per APID */
+ #define KEYS_PON_RT      0x0810u
+ #define KEYS_GPIO_RT     0xc110u
+ #define KEYS_NO_APID     0xffffu
+ 
+-static vm_offset_t keys_core, keys_obs, keys_cnfg;
++static vm_offset_t keys_core, keys_obs, keys_cnfg, keys_chnl;
+ static uint16_t keys_pon_apid = KEYS_NO_APID, keys_gpio_apid = KEYS_NO_APID;
+ static uint32_t keys_version, keys_last_status;
+ static bool keys_started;
+@@ -84,6 +87,68 @@ keys_read(uint16_t apid, uint16_t addr, uint8_t *out)
+ 	return false;
+ }
+ 
++/*
++ * PMIC register access by PPID (SID << 8 | peripheral) for other drivers. Reads go
++ * through the observer like the key reads; writes through the EE 0 channel
++ * (PMIC arbiter v5 EXT_WRITEL: WDATA0, then CMD, poll STATUS), only for APIDs the
++ * arbiter's config says apps (EE 0) owns.
++ */
++static bool
++keys_map(void)
++{
++	if (!keys_core) {
++		keys_core = ml_io_map(KEYS_CORE_PA, 0x2000);
++		keys_cnfg = ml_io_map(KEYS_CNFG_PA, 0x1000);
++		keys_obs = ml_io_map(KEYS_OBS_PA, 0x10000);
++	}
++	if (!keys_chnl) {
++		keys_chnl = ml_io_map(KEYS_CHNL_PA, 0x10000);
++	}
++	return keys_core && keys_cnfg && keys_obs && keys_chnl;
++}
++
++int
++sweet_pmic_read(uint16_t ppid, uint8_t reg, uint8_t *val)
++{
++	if (!keys_map()) {
++		return ENXIO;
++	}
++	uint32_t count = keys_rd(keys_core, 4) & 0x7ffu;
++	uint16_t apid = keys_find_apid(ppid, count);
++	return keys_read(apid, (uint16_t)(((ppid & 0xffu) << 8) | reg), val) ? 0 : EIO;
++}
++
++int
++sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val)
++{
++	if (!keys_map()) {
++		return ENXIO;
++	}
++	uint32_t count = keys_rd(keys_core, 4) & 0x7ffu;
++	uint16_t apid = keys_find_apid(ppid, count);
++	if (apid == KEYS_NO_APID) {
++		return ENODEV;
++	}
++	if ((keys_rd(keys_cnfg, 0x700u + 4u * apid) & 7u) != 0) {
++		printf("SWEET PMIC: ppid %#x apid %u not owned by apps\n", ppid, apid);
++		return EPERM;
++	}
++	uint32_t off = 0x80u * apid;
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(keys_chnl + off + 0x10u) = val;                        /* WDATA0 */
++	__asm__ volatile("dsb osh" ::: "memory");
++	*(volatile uint32_t *)(keys_chnl + off) = (0u << 27) | ((uint32_t)reg << 4);  /* EXT_WRITEL, 1 byte */
++	__asm__ volatile("dsb osh" ::: "memory");
++	for (unsigned i = 0; i < 1000; ++i) {
++		uint32_t st = keys_rd(keys_chnl, off + 0x08u);
++		if (st & 1u) {
++			return (st & 0x0eu) ? EIO : 0;
++		}
++		delay(1);
++	}
++	return ETIMEDOUT;
++}
++
+ static void
+ keys_wait(void)
+ {
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 0197dc9..563cd73 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -26,6 +26,8 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ /* Mach MIG declaration is not included by BSD's exported thread.h. */
+ extern kern_return_t thread_terminate(thread_t);
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++extern int sweet_pmic_read(uint16_t ppid, uint8_t reg, uint8_t *val);    /* sweet_keys.c */
++extern int sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val);
+ extern int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
+@@ -842,6 +844,38 @@ touch_umi_start(void)
+ 	/* Keep the IC in reset while its rails settle; IRQ (active low) stays an input. */
+ 	touch_gpio(UMI_PIN_IRQ, 0, 3, 0, false, false);
+ 	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, false);
++	/*
++	 * vdd_boost_vreg: fixed regulator on PM8150B GPIO 5 (PPID 0x2c4), regulator-always-on in
++	 * the DT, so Linux switches it on at boot and nothing else ever does. Copy Linux's
++	 * register state (TWRP regmap spmi0-02: c440=01 c441=01 c442=05 c444=80 c445=03 c446=80).
++	 */
++	uint32_t boost = 1;
++	(void)PE_parse_boot_argn("sweettouchboost", &boost, sizeof(boost));
++	{
++		static const uint8_t regs[6] = {0x40, 0x41, 0x42, 0x44, 0x45, 0x46};
++		static const uint8_t vals[6] = {0x01, 0x01, 0x05, 0x80, 0x03, 0x80};
++		uint8_t before[6] = {0}, st = 0;
++		for (unsigned i = 0; i < 6; i++) {
++			(void)sweet_pmic_read(0x2c4, regs[i], &before[i]);
++		}
++		(void)sweet_pmic_read(0x2c4, 0x08, &st);
++		printf("SWEET TOUCH: PM8150B GPIO5 (vdd_boost) as found: mode %02x vin %02x pull %02x out %02x drv %02x en %02x status %02x\n",
++		    before[0], before[1], before[2], before[3], before[4], before[5], st);
++		if (boost && !(before[0] == 0x01 && before[3] == 0x80 && before[5] == 0x80)) {
++			int werr = 0;
++			for (unsigned i = 0; i < 6; i++) {
++				werr |= sweet_pmic_write(0x2c4, regs[i], vals[i]);
++			}
++			touch_wait(5);  /* startup-delay-us = 4000 */
++			uint8_t after[6] = {0};
++			for (unsigned i = 0; i < 6; i++) {
++				(void)sweet_pmic_read(0x2c4, regs[i], &after[i]);
++			}
++			(void)sweet_pmic_read(0x2c4, 0x08, &st);
++			printf("SWEET TOUCH: PM8150B GPIO5 switched on (err %d): mode %02x vin %02x pull %02x out %02x drv %02x en %02x status %02x\n",
++			    werr, after[0], after[1], after[2], after[3], after[4], after[5], st);
++		}
++	}
+ 	int ldo = 1, power_error = 0;
+ 	(void)PE_parse_boot_argn("sweettouchldo", &ldo, sizeof(ldo));       /* the DT has no vdd-supply */
+ 	if (ldo) {

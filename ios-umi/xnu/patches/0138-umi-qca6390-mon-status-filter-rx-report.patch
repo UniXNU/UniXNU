@@ -1,0 +1,121 @@
+From aa7bcce040427b06c69645f1b2c5c7b51ea838e4 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 20:28:02 +0200
+Subject: [PATCH] umi-0138
+
+---
+ bsd/dev/sweet_wlce.c | 11 ++++++++-
+ bsd/dev/sweet_wldp.c | 57 +++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 64 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 476a810..82288ee 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -18,6 +18,7 @@ extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa
+ extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
+ extern int sweet_wldp_rx_init(void);
+ extern void sweet_wldp_rx_report(const char *when);
++extern int sweet_wldp_mon_filter(void);
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ 
+@@ -762,11 +763,19 @@ wmi_scan(void)
+ 	if (sweet_wldp_rx_init() != 0) {
+ 		return 17;
+ 	}
++	for (unsigned t = 0; t < 200; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	sweet_wldp_rx_report("0.2 s after ring setup");
++	if (sweet_wldp_mon_filter() != 0) {     /* ath11k_mac_op_start: monitor status default filter */
++		return 17;
++	}
+ 	for (unsigned t = 0; t < 500; ++t) {
+ 		htc_poll();
+ 		delay(1000);
+ 	}
+-	sweet_wldp_rx_report("0.5 s after setup");
++	sweet_wldp_rx_report("0.5 s after the filter");
+ 
+ 	/*
+ 	 * WMI_SET_CURRENT_COUNTRY 0x3a001 (tag 0x25f: pdev_id, alpha2), as ath11k for
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index d099f3c..1df8ee4 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -380,16 +380,67 @@ sweet_wldp_rx_init(void)
+ 	return 0;
+ }
+ 
+-/* Where the firmware has moved the receive pointers (in words; rdp = target side, wrp = host/firmware side). */
++/*
++ * ath11k_mac_config_mon_status_default (from ath11k_mac_op_start, before any
++ * vdev): HTT RX_RING_SELECTION_CFG (H2T 0xc) for each monitor-status ring:
++ * pdev i + 1, HTT ring MONITOR_STATUS (1), buffer 2048, ath11k_mac_mon_status_
++ * filter_default = TLVs MPDU_START | PPDU_END | PPDU_END_STATUS_DONE (0x1201),
++ * packet types HTT_RX_FP_MGMT_FILTER_FLAGS0/1, CTRL 2, DATA|CTRL 3 (values
++ * evaluated from ath11k dp.h). With it the hardware starts writing status TLVs
++ * into the status buffers, so the status rings' TP should move.
++ */
++int sweet_wldp_mon_filter(void);
++
++int
++sweet_wldp_mon_filter(void)
++{
++	for (uint32_t i = 0; i < 2; ++i) {
++		uint32_t m[7] = {
++			0xcu | (i + 1) << 8 | 1u << 16,
++			RXBUF_SZ,
++			0x9049249u, 0x1249u, 0x9200000u, 0x1249249u,
++			0x1201u,
++		};
++		int e = sweet_wlce_htt_send(m, sizeof(m));
++		if (e != 0) {
++			printf("SWEET WLDP: HTT RX_RING_SELECTION_CFG status%u failed %d\n", i, e);
++			return e;
++		}
++	}
++	printf("SWEET WLDP: monitor status filter sent (TLVs 0x1201)\n");
++	return 0;
++}
++
++/* Entries whose first word (buffer address or status) is non-zero: what the target has written into a ring. */
++static uint32_t
++rx_filled(const struct rxring *r)
++{
++	uint32_t n = 0;
++	for (uint32_t k = 0; k < r->n; ++k) {
++		n += *mem32(r->off + k * r->esz * 4) != 0;
++	}
++	return n;
++}
++
++/*
++ * Where the receive side stands: refill TP (target consumed / we produced, words),
++ * entries the target wrote into the mac buf and error rings, the pointer words
++ * (wrp by LMAC index for mac buf, rdp by ring id for the others) and status TPs.
++ * 0137 saw refill tp 2046/2046 but mac buf hp 0: the entry count tells whether
++ * the buffers landed there anyway.
++ */
+ void
+ sweet_wldp_rx_report(const char *when)
+ {
+ 	if (dp.mem == 0) {
+ 		return;
+ 	}
+-	printf("SWEET WLDP: %s: refill tp %u/%u, macbuf hp %u %u, errdst hp %u %u, status tp %u %u\n", when,
++	printf("SWEET WLDP: %s: refill tp %u/%u; macbuf filled %u %u (wrp %u %u, rdp %u %u); "
++	    "errdst filled %u %u (hp %u %u); status tp %u %u\n", when,
+ 	    *mem32(M_RDP + 128 * 4), rx_rings[0].hp,
+-	    *mem32(M_WRP + 1 * 4), *mem32(M_WRP + 16 * 4),
++	    rx_filled(&rx_rings[1]), rx_filled(&rx_rings[2]),
++	    *mem32(M_WRP + 1 * 4), *mem32(M_WRP + 16 * 4), *mem32(M_RDP + 129 * 4), *mem32(M_RDP + 144 * 4),
++	    rx_filled(&rx_rings[3]), rx_filled(&rx_rings[4]),
+ 	    *mem32(M_RDP + 133 * 4), *mem32(M_RDP + 148 * 4),
+ 	    *mem32(M_RDP + 132 * 4), *mem32(M_RDP + 147 * 4));
+ }
+-- 
+2.54.0 (Apple Git-157)
+

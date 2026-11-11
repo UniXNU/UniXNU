@@ -1,0 +1,266 @@
+From e06b6586a00743b6eabb30eb54cb91b1d2b4dd1b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 12:05:05 +0100
+Subject: [PATCH] umi-0152
+
+---
+ bsd/dev/sweet_wlif.c | 66 ++++++++++++++++++++++++++++++++++++++----
+ bsd/dev/sweet_wlip.c | 69 ++++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 127 insertions(+), 8 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlif.c b/bsd/dev/sweet_wlif.c
+index 2865db7..1311714 100644
+--- a/bsd/dev/sweet_wlif.c
++++ b/bsd/dev/sweet_wlif.c
+@@ -11,6 +11,10 @@
+  * 0151: a default route via the router (scoped to wl0 if another default
+  * route exists, e.g. over ue0), then HTTP HEAD to the address DNS gave for
+  * apple.com over a kernel TCP socket: the first traffic beyond the hotspot.
++ * 0152: DHCP lease renewal from the poll thread (sweet_wlip.c's RENEWING
++ * REQUEST at half the lease, every 60 s after that until an ACK; boot-arg
++ * sweetwlanrenew=<s> renews sooner, for testing), and the HTTP status line is
++ * read up to its end.
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+@@ -36,9 +40,14 @@
+ #include <net/route_private.h>
+ #include <netinet/in.h>
+ #include <sys/kern_event.h>
++#include <pexpert/pexpert.h>
+ 
+ extern int sweet_wldp_tx(const void *frame, uint32_t len);
+ extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++extern bool sweet_wlip_dhcp_frame(const uint8_t *f, uint32_t n);
++extern int sweet_wlip_renew(void);
++extern bool sweet_wlip_renewed(void);
++extern uint32_t sweet_wlip_lease_secs(void);
+ int sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void));
+ 
+ #define WLIF_FRAME_MAX  (ETHER_MAX_LEN - ETHER_CRC_LEN)
+@@ -59,6 +68,9 @@ wlif_rx(const uint8_t *f, uint32_t len)
+ 	if (wl.ifp == NULL || len < ETHER_HDR_LEN || len > WLIF_FRAME_MAX) {
+ 		return;
+ 	}
++	if (sweet_wlip_dhcp_frame(f, len)) {
++		return;                         /* a DHCP reply to us: the kernel client's (0152) */
++	}
+ 	mbuf_t m = NULL;
+ 	if (mbuf_gethdr(MBUF_DONTWAIT, MBUF_TYPE_DATA, &m) == 0 &&
+ 	    mbuf_mclget(MBUF_DONTWAIT, MBUF_TYPE_DATA, &m) == 0 &&
+@@ -141,14 +153,46 @@ wlif_detach(ifnet_t ifp __unused)
+ {
+ }
+ 
++static uint64_t
++wlif_now_s(void)
++{
++	uint64_t t, ns;
++	clock_get_uptime(&t);
++	absolutetime_to_nanoseconds(t, &ns);
++	return ns / 1000000000ull;
++}
++
+ static void
+ wlif_poll_thread(void *arg __unused, wait_result_t wr __unused)
+ {
+ 	uint64_t n = 0;
++	uint32_t lease = sweet_wlip_lease_secs(), first = 0;
++	if (lease == 0) {
++		lease = 3600;
++	}
++	uint64_t next_renew = wlif_now_s() + lease / 2;
++	if (PE_parse_boot_argn("sweetwlanrenew", &first, sizeof(first)) && first != 0) {
++		next_renew = wlif_now_s() + first;
++	}
++	printf("SWEET WLIF: lease %u s, first renewal in %llu s\n", sweet_wlip_lease_secs(), next_renew - wlif_now_s());
+ 	for (;;) {
+ 		lck_mtx_lock(wl.lock);
+ 		wl.poll();
++		bool renewed = sweet_wlip_renewed();
++		int sent = -1;
++		if (!renewed && wlif_now_s() >= next_renew) {
++			sent = sweet_wlip_renew();
++			next_renew = wlif_now_s() + 60;
++		}
+ 		lck_mtx_unlock(wl.lock);
++		if (sent >= 0) {
++			printf("SWEET WLIF: DHCP renewal REQUEST (send %d)\n", sent);
++		}
++		if (renewed) {
++			lease = sweet_wlip_lease_secs() ? sweet_wlip_lease_secs() : lease;
++			next_renew = wlif_now_s() + lease / 2;
++			printf("SWEET WLIF: lease renewed, %u s, next renewal in %u s\n", lease, lease / 2);
++		}
+ 		delay(2000);
+ 		if (++n % 30000 == 0) {         /* about once a minute */
+ 			printf("SWEET WLIF: wl0 rx %llu tx %llu frames, %llu tx dropped\n", wl.rx_frames, wl.tx_frames,
+@@ -327,16 +371,26 @@ wlif_http_test(uint32_t addr)
+ 		msg.msg_iovlen = 1;
+ 		e = sock_send(so, &msg, 0, &n);
+ 	}
++	char r[128];
++	size_t got = 0;
+ 	for (unsigned t = 0; e == 0 && t < 1000; ++t) {         /* 10 s */
+-		char r[128];
+-		struct iovec iov = { .iov_base = r, .iov_len = sizeof(r) - 1 };
++		struct iovec iov = { .iov_base = r + got, .iov_len = sizeof(r) - 1 - got };
+ 		struct msghdr msg;
+ 		size_t n = 0;
+ 		bzero(&msg, sizeof(msg));
+ 		msg.msg_iov = &iov;
+ 		msg.msg_iovlen = 1;
+ 		errno_t re = sock_receive(so, &msg, MSG_DONTWAIT, &n);
+-		if (re == 0 && n > 0) {
++		got += (re == 0) ? n : 0;
++		/* 0152: the first segment may hold only part of the line (0151 logged "HTTP/1") */
++		bool nl = false;
++		for (size_t i = 0; i < got; ++i) {
++			nl |= r[i] == '\n';
++		}
++		bool line = got >= 64 || nl || (re == 0 && n == 0) ||
++		    (re != 0 && re != EWOULDBLOCK) || t + 1 == 1000;
++		if (got > 0 && line) {
++			n = got;
+ 			size_t k = 0;
+ 			while (k < n && k < 60 && r[k] != '\r' && r[k] != '\n' && r[k] >= 0x20 && r[k] < 0x7f) {
+ 				k++;
+@@ -348,10 +402,12 @@ wlif_http_test(uint32_t addr)
+ 		}
+ 		if (re != 0 && re != EWOULDBLOCK) {
+ 			e = re;
+-		} else if (re == 0) {
++		} else if (re == 0 && n == 0) {
+ 			e = ECONNRESET;         /* closed without data */
+ 		}
+-		delay(10000);
++		if (re != 0) {
++			delay(10000);
++		}
+ 	}
+ 	printf("SWEET WLIF: no HTTP reply over wl0 (err %d)\n", e);
+ 	if (so != NULL) {
+diff --git a/bsd/dev/sweet_wlip.c b/bsd/dev/sweet_wlip.c
+index 0d3f1b8..04ade08 100644
+--- a/bsd/dev/sweet_wlip.c
++++ b/bsd/dev/sweet_wlip.c
+@@ -22,6 +22,8 @@ static struct {
+ 	uint32_t mc_logged;
+ 	uint32_t xid, ip, server, router, mask;        /* network byte order kept as bytes in uint32_t (memcpy) */
+ 	bool offer, ack, nak, arp_ok;
++	bool renewing, renewed;         /* 0152: RENEWING state (RFC 2131 4.4.5) and its ACK */
++	uint32_t lease_secs;            /* option 51, 0 if absent */
+ 	uint32_t pings_back, rx, rx_other;
+ 	uint16_t ping_seq;
+ 	uint64_t ping_sent[8];
+@@ -91,7 +93,9 @@ dhcp_send(uint8_t type)
+ {
+ 	static uint8_t f[400];
+ 	bzero(f, sizeof(f));
+-	uint32_t o = ip_hdr(f, dhcp_dst, 17, 0, 0xffffffffu, 8 + 300);
++	/* 0152: a renewal is unicast from our address to the server (via the router's MAC: here they are one) */
++	uint32_t o = ip.renewing ? ip_hdr(f, ip.router_mac, 17, ip.ip, ip.server, 8 + 300) :
++	    ip_hdr(f, dhcp_dst, 17, 0, 0xffffffffu, 8 + 300);
+ 	put16(f + o, 68);
+ 	put16(f + o + 2, 67);
+ 	put16(f + o + 4, 8 + 300);                      /* UDP checksum 0: allowed for IPv4 */
+@@ -101,13 +105,16 @@ dhcp_send(uint8_t type)
+ 	b[2] = 6;
+ 	memcpy(b + 4, &ip.xid, 4);
+ 	put16(b + 10, 0);                               /* unicast reply (0141-0148: 0x8000, broadcast) */
++	if (ip.renewing) {
++		memcpy(b + 12, &ip.ip, 4);              /* ciaddr */
++	}
+ 	memcpy(b + 28, ip.mac, 6);
+ 	uint8_t *opt = b + 236;
+ 	opt[0] = 99; opt[1] = 130; opt[2] = 83; opt[3] = 99;
+ 	uint32_t n = 4;
+ 	opt[n++] = 53; opt[n++] = 1; opt[n++] = type;
+ 	opt[n++] = 61; opt[n++] = 7; opt[n++] = 1; memcpy(opt + n, ip.mac, 6); n += 6;
+-	if (type == 3) {
++	if (type == 3 && !ip.renewing) {
+ 		opt[n++] = 50; opt[n++] = 4; memcpy(opt + n, &ip.ip, 4); n += 4;
+ 		opt[n++] = 54; opt[n++] = 4; memcpy(opt + n, &ip.server, 4); n += 4;
+ 	}
+@@ -142,6 +149,8 @@ dhcp_rx(const uint8_t *b, uint32_t n)
+ 			memcpy(&rtr, b + o + 2, 4);
+ 		} else if (t == 1 && l >= 4) {
+ 			memcpy(&msk, b + o + 2, 4);
++		} else if (t == 51 && l >= 4) {
++			ip.lease_secs = (uint32_t)b[o + 2] << 24 | (uint32_t)b[o + 3] << 16 | (uint32_t)b[o + 4] << 8 | b[o + 5];
+ 		}
+ 		o += 2 + l;
+ 	}
+@@ -155,7 +164,9 @@ dhcp_rx(const uint8_t *b, uint32_t n)
+ 		printf("SWEET WLIP: DHCP OFFER %u.%u.%u.%u, router %u.%u.%u.%u\n", y[0], y[1], y[2], y[3], r[0], r[1], r[2], r[3]);
+ 	} else if (type == 5) {
+ 		ip.ack = true;
+-		printf("SWEET WLIP: DHCP ACK %u.%u.%u.%u\n", y[0], y[1], y[2], y[3]);
++		ip.renewed = ip.renewing;
++		printf("SWEET WLIP: DHCP ACK %u.%u.%u.%u%s, lease %u s\n", y[0], y[1], y[2], y[3],
++		    ip.renewing ? " (renewal)" : "", ip.lease_secs);
+ 	} else if (type == 6) {
+ 		ip.nak = true;
+ 		printf("SWEET WLIP: DHCP NAK\n");
+@@ -338,6 +349,58 @@ sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void)
+ 	sweet_wldp_set_rx_handler(NULL);
+ 	return ip.pings_back ? 0 : 4;
+ }
++/*
++ * 0152, lease renewal while wl0 owns the data path (called by sweet_wlif.c under its lock):
++ * sweet_wlip_dhcp_frame takes DHCP replies (UDP 67 -> 68 to our MAC) out of the receive path,
++ * sweet_wlip_renew sends a REQUEST in the RENEWING state (ciaddr set, unicast to the server, no
++ * requested-address / server-id options), sweet_wlip_renewed reports and clears its ACK.
++ */
++bool sweet_wlip_dhcp_frame(const uint8_t *f, uint32_t n);
++int sweet_wlip_renew(void);
++bool sweet_wlip_renewed(void);
++uint32_t sweet_wlip_lease_secs(void);
++
++bool
++sweet_wlip_dhcp_frame(const uint8_t *f, uint32_t n)
++{
++	if (n < 34 || get16(f + 12) != 0x0800 || (f[14] >> 4) != 4 || f[23] != 17 || memcmp(f, ip.mac, 6) != 0) {
++		return false;
++	}
++	uint32_t ihl = (f[14] & 0xfu) * 4, tot = get16(f + 16);
++	if (ihl < 20 || 14 + tot > n || tot < ihl + 8) {
++		return false;
++	}
++	const uint8_t *p = f + 14 + ihl;
++	if (get16(p) != 67 || get16(p + 2) != 68) {
++		return false;
++	}
++	dhcp_rx(p + 8, tot - ihl - 8);
++	return true;
++}
++
++int
++sweet_wlip_renew(void)
++{
++	ip.renewing = true;
++	ip.renewed = false;
++	ip.xid++;
++	return dhcp_send(3);
++}
++
++bool
++sweet_wlip_renewed(void)
++{
++	bool r = ip.renewed;
++	ip.renewed = false;
++	return r;
++}
++
++uint32_t
++sweet_wlip_lease_secs(void)
++{
++	return ip.lease_secs;
++}
++
+ /* The DHCP lease for wl0 (0150), network byte order; router falls back to the DHCP server. */
+ void
+ sweet_wlip_lease(uint32_t *addr, uint32_t *mask, uint32_t *router)
+-- 
+2.54.0 (Apple Git-157)
+

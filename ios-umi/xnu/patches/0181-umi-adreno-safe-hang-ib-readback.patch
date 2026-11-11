@@ -1,0 +1,134 @@
+From 6675b5263b4512ee7927ffae88ea036134ca0a64 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 20:37:31 +0100
+Subject: [PATCH] umi: validate mapped IB memory in GPU hang diagnostics
+
+The 0186 boot panicked in FlushPoC_DcacheRegion after fence 2511 stalled. The IB reader computed pa-gPhysBase+gVirtBase, bypassing XNU's ptov remappings. Use a read-only GPU page-table walk, reject unmanaged or invalid pages, translate via phystokv, and verify the kernel mapping before copying the IB head under the service lock. Honor the IB's page offset. Move opt-in pixel captures to 180 seconds by default (or the requested boot-arg delay) to capture frames before this hang. Both modified files pass per-file cross-compilation.
+
+Co-Authored-By: OpenAI Codex <noreply@openai.com>
+---
+ bsd/dev/sweet_adreno.c                | 65 +++++++++++++++++++--------
+ iokit/Kernel/arm/SweetFramebuffer.cpp |  5 ++-
+ 2 files changed, 49 insertions(+), 21 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 2fabc10..08cb027 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -88,6 +88,9 @@
+ #include <pexpert/device_tree.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++/* Internal pmap declarations are hidden from the BSD build. */
++extern boolean_t pmap_valid_address(uint64_t);
++extern vm_map_address_t phystokv(uint64_t);
+ extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
+ extern kern_return_t thread_terminate(thread_t);
+ extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
+@@ -3085,25 +3088,47 @@ static bool sa_hang_dumped;
+ 
+ extern void IOLog(const char *, ...);
+ 
+-/* The page of a GPU address of context 0 as the kernel maps it (NULL: unmapped, or a page the
+- * kernel cannot reach - the low bank is outside its physmap on this highmem kernel). */
+-static uint32_t *
+-sa_gpu_page(uint64_t va)
++/* Read an IB head without inventing a physmap address. arm_vm_init.c's phystokv()
++ * accounts for ptov_table remappings; pa-gPhysBase+gVirtBase does not. Only inspect
++ * managed RAM, validate its actual kernel mapping, and keep the BO mapped while
++ * copying. A diagnostic must not allocate GPU page tables or dereference a stale PTE. */
++static bool
++sa_gpu_words(uint64_t va, uint32_t words[8])
+ {
+-	extern unsigned long gPhysBase, gVirtBase;
+-	uint64_t *pte = sa_space_pte(&sa_core_space, va & ~0xfffull);
+-
+-	if (pte == NULL) {
+-		return NULL;
++	bool ok = false;
++	if ((va >> 39) || (va & 3) || (va & 4095) > 4096 - 8 * sizeof(uint32_t)) {
++		return false;
+ 	}
+-	uint64_t pa = *pte & PTE_ADDRESS;
+-	if (pa < (uint64_t)gPhysBase || pa - (uint64_t)gPhysBase >= 0x200000000ull) {
+-		return NULL;
++	sa_service_take_lock();
++	uint64_t *table = sa_core_space.table_count ? sa_core_space.table[0] : NULL;
++	for (int shift = 30; table != NULL && shift > 12; shift -= 9) {
++		uint64_t entry = table[(va >> shift) & 0x1ff];
++		table = NULL;
++		if ((entry & 3) != PTE_TABLE) {
++			break;
++		}
++		for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
++			if (sa_core_space.table_phys[i] == (entry & PTE_ADDRESS)) {
++				table = sa_core_space.table[i];
++				break;
++			}
++		}
+ 	}
+-	uintptr_t page = (uintptr_t)(pa - (uint64_t)gPhysBase) + (uintptr_t)gVirtBase;
+-
+-	flush_dcache64((addr64_t)page, 4096, FALSE);
+-	return (uint32_t *)page;
++	if (table != NULL) {
++		uint64_t entry = table[(va >> 12) & 0x1ff];
++		uint64_t pa = (entry & PTE_ADDRESS) | (va & 4095);
++		if ((entry & 3) == PTE_PAGE && pmap_valid_address(pa) &&
++		    pmap_valid_address(pa + 8 * sizeof(uint32_t) - 1)) {
++			vm_offset_t kva = phystokv(pa);
++			if (sa_phys(kva) == pa) {
++				flush_dcache64((addr64_t)kva, 8 * sizeof(uint32_t), FALSE);
++				memcpy(words, (const void *)kva, 8 * sizeof(uint32_t));
++				ok = true;
++			}
++		}
++	}
++	sa_service_drop_lock();
++	return ok;
+ }
+ 
+ static void
+@@ -3142,11 +3167,13 @@ sa_hang_dump(uint32_t fence)
+ 	struct sa_submit *h = &sa_submit_hist[newest];
+ 
+ 	for (uint32_t i = 0; i < h->n && i < 4; i++) {
+-		uint32_t *p = sa_gpu_page(h->iova[i]);
+-
+-		if (p != NULL && h->dwords[i] >= 8) {
++		uint32_t p[8];
++		if (h->dwords[i] >= 8 && sa_gpu_words(h->iova[i], p)) {
+ 			IOLog("SWEET ADRENO: fence %u IB %u words: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
+ 			    h->fence, i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++		} else {
++			IOLog("SWEET ADRENO: fence %u IB %u head unavailable (unmapped, unmanaged, or short)\n",
++			    h->fence, i);
+ 		}
+ 	}
+ }
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 21714c5..44c5962 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -475,7 +475,7 @@ static uint32_t sweet_fb_direct_fail[4];     /* 0: layer count, 1: no surface, 2
+ static uint32_t sweet_fb_direct_ok_logged;
+ 
+ /* Opt-in COPY-path dump: two 64x32 rectangles and a row profile, after GPU sync
+- * and source cache maintenance. Delay until 400 s so USB logging can be connected;
++ * and source cache maintenance. Delay until 180 s so USB logging can be connected;
+  * three captures 30 s apart bound both the logging cost and persistent-ring use. */
+ static void
+ sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
+@@ -494,7 +494,8 @@ sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
+ 		return;
+ 	}
+ 	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
+-	if (ns < 400 * NSEC_PER_SEC || (last && ns - last < 30 * NSEC_PER_SEC)) {
++	uint64_t start_seconds = enabled > 1 ? (uint64_t)enabled : 180;
++	if (ns < start_seconds * NSEC_PER_SEC || (last && ns - last < 30 * NSEC_PER_SEC)) {
+ 		return;
+ 	}
+ 	last = ns;
+-- 
+2.54.0 (Apple Git-157)
+

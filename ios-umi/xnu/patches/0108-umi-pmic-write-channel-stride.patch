@@ -1,0 +1,61 @@
+diff --git a/bsd/dev/sweet_keys.c b/bsd/dev/sweet_keys.c
+index 6ff8cc4..0da11cf 100644
+--- a/bsd/dev/sweet_keys.c
++++ b/bsd/dev/sweet_keys.c
+@@ -25,12 +25,12 @@ int sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val);
+ #define KEYS_CORE_PA     0x0c440000u
+ #define KEYS_OBS_PA      0x0e600000u
+ #define KEYS_CNFG_PA     0x0c40a000u
+-#define KEYS_CHNL_PA     0x0c600000u     /* DT "chnls": EE 0 channel registers, 0x80 per APID */
++#define KEYS_CHNL_PA     0x0c600000u     /* DT "chnls": read/write channels, 0x10000 per APID (v5) */
+ #define KEYS_PON_RT      0x0810u
+ #define KEYS_GPIO_RT     0xc110u
+ #define KEYS_NO_APID     0xffffu
+ 
+-static vm_offset_t keys_core, keys_obs, keys_cnfg, keys_chnl;
++static vm_offset_t keys_core, keys_obs, keys_cnfg;
+ static uint16_t keys_pon_apid = KEYS_NO_APID, keys_gpio_apid = KEYS_NO_APID;
+ static uint32_t keys_version, keys_last_status;
+ static bool keys_started;
+@@ -101,10 +101,7 @@ keys_map(void)
+ 		keys_cnfg = ml_io_map(KEYS_CNFG_PA, 0x1000);
+ 		keys_obs = ml_io_map(KEYS_OBS_PA, 0x10000);
+ 	}
+-	if (!keys_chnl) {
+-		keys_chnl = ml_io_map(KEYS_CHNL_PA, 0x10000);
+-	}
+-	return keys_core && keys_cnfg && keys_obs && keys_chnl;
++	return keys_core && keys_cnfg && keys_obs;
+ }
+ 
+ int
+@@ -133,14 +130,25 @@ sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val)
+ 		printf("SWEET PMIC: ppid %#x apid %u not owned by apps\n", ppid, apid);
+ 		return EPERM;
+ 	}
+-	uint32_t off = 0x80u * apid;
++	/* pmic_arb_offset_v5, PMIC_ARB_CHANNEL_RW: 0x10000 * apid (the observer is 0x80 * apid) */
++	static vm_offset_t chnl[512];
++	if (apid >= 512) {
++		return EINVAL;
++	}
++	if (!chnl[apid]) {
++		chnl[apid] = ml_io_map(KEYS_CHNL_PA + 0x10000u * apid, 0x1000);
++		if (!chnl[apid]) {
++			return ENXIO;
++		}
++	}
++	vm_offset_t c = chnl[apid];
+ 	__asm__ volatile("dmb oshst" ::: "memory");
+-	*(volatile uint32_t *)(keys_chnl + off + 0x10u) = val;                        /* WDATA0 */
++	*(volatile uint32_t *)(c + 0x10u) = val;                          /* WDATA0 */
+ 	__asm__ volatile("dsb osh" ::: "memory");
+-	*(volatile uint32_t *)(keys_chnl + off) = (0u << 27) | ((uint32_t)reg << 4);  /* EXT_WRITEL, 1 byte */
++	*(volatile uint32_t *)c = (0u << 27) | ((uint32_t)reg << 4);    /* EXT_WRITEL, 1 byte */
+ 	__asm__ volatile("dsb osh" ::: "memory");
+ 	for (unsigned i = 0; i < 1000; ++i) {
+-		uint32_t st = keys_rd(keys_chnl, off + 0x08u);
++		uint32_t st = keys_rd(c, 0x08u);
+ 		if (st & 1u) {
+ 			return (st & 0x0eu) ? EIO : 0;
+ 		}

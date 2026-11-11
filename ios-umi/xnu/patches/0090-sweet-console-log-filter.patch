@@ -1,0 +1,78 @@
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+index c86b9e7..99785e9 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -43,6 +43,7 @@
+ #include <console/serial_protos.h>
+ #include <kern/startup.h>
+ #include <kern/thread.h>
++#include <pexpert/pexpert.h>
+ #include <kern/cpu_data.h>
+ #include <kern/sched_prim.h>
+ #include <libkern/section_keywords.h>
+@@ -274,6 +275,36 @@ extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c *
+  * the GUI. A panic draws again.
+  */
+ int sweet_console_muted;
++
++/*
++ * Boot-arg sweetlogfilter=WORD,WORD,... (sweetlog= already switches the persistent log): only console lines containing one of the
++ * words are drawn (a panic always is); everything still reaches the log.
++ */
++static char sweet_log_words[128];
++static int sweet_log_filter = -1;
++static char sweet_log_line[256];
++static int sweet_log_len;
++
++static bool
++sweet_log_wanted(const char *line, int len)
++{
++	const char *w = sweet_log_words;
++
++	while (*w) {
++		const char *end = w;
++		while (*end && *end != ',') {
++			end++;
++		}
++		int wl = (int)(end - w);
++		for (int i = 0; wl > 0 && i + wl <= len; i++) {
++			if (strncmp(line + i, w, wl) == 0) {
++				return true;
++			}
++		}
++		w = *end ? end + 1 : end;
++	}
++	return false;
++}
+ #endif
+ 
+ static inline void
+@@ -286,6 +317,28 @@ _cnputs(char *c, int size, bool poll)
+ 	if (sweet_console_muted && !panic_active()) {
+ 		return;
+ 	}
++	if (sweet_log_filter < 0) {
++		sweet_log_filter = PE_parse_boot_argn("sweetlogfilter", sweet_log_words, sizeof(sweet_log_words)) &&
++		    sweet_log_words[0] != '\0';
++	}
++	if (sweet_log_filter > 0 && !panic_active()) {
++		/* collect whole lines; draw the ones that match */
++		while (size-- > 0) {
++			char ch = *c++;
++			if (sweet_log_len < (int)sizeof(sweet_log_line) - 1) {
++				sweet_log_line[sweet_log_len++] = ch;
++			}
++			if (ch == '\n') {
++				if (sweet_log_wanted(sweet_log_line, sweet_log_len) && !disableConsoleOutput) {
++					for (int i = 0; i < sweet_log_len; i++) {
++						_cnputc(sweet_log_line[i], poll);
++					}
++				}
++				sweet_log_len = 0;
++			}
++		}
++		return;
++	}
+ #endif
+ 
+ 	if (disableConsoleOutput) {

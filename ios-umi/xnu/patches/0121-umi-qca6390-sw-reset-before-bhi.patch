@@ -1,0 +1,105 @@
+From 637a85b750a00d97b14f6278e6871793e06ef06c Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 11:36:54 +0200
+Subject: [PATCH] umi-0121
+
+---
+ bsd/dev/sweet_wlan.c | 75 ++++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 75 insertions(+)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 9d2a752..a7aa657 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -359,6 +359,76 @@ wlan_bhie(vm_offset_t bar0, vm_offset_t bhi)
+ 	return done ? 0 : EIO;
+ }
+ 
++/* Registers above 512 KiB go through the window at 0x310c (ath11k pcic/pci.c). */
++static uint32_t
++wl_win_rd(vm_offset_t bar0, uint32_t off)
++{
++	if (off < 0x80000u) {
++		return wl_rd(bar0, off);
++	}
++	wl_wr(bar0, 0x310cu, 0x40000000u | ((off >> 19) & 0x3fu));
++	(void)wl_rd(bar0, 0x310cu);
++	return wl_rd(bar0, 0x80000u + (off & 0x7ffffu));
++}
++
++static void
++wl_win_wr(vm_offset_t bar0, uint32_t off, uint32_t val)
++{
++	if (off < 0x80000u) {
++		wl_wr(bar0, off, val);
++		return;
++	}
++	wl_wr(bar0, 0x310cu, 0x40000000u | ((off >> 19) & 0x3fu));
++	(void)wl_rd(bar0, 0x310cu);
++	wl_wr(bar0, 0x80000u + (off & 0x7ffffu), val);
++}
++
++/* ath11k_pci_sw_reset(power_on = true) for QCA6390 hw2.0 */
++static void
++wlan_prep(vm_offset_t bar0)
++{
++	delay(100000);
++	/* enable_ltssm */
++	if (wl_win_rd(bar0, 0x1e081b0u) != 0x111u) {
++		wl_win_wr(bar0, 0x1e081b0u, 0x111u);
++	}
++	wl_win_wr(bar0, 0x1e402bcu, wl_win_rd(bar0, 0x1e402bcu) | 0x10u);  /* GCC_GCC_PCIE_HOT_RST */
++	delay(5000);
++	wl_win_wr(bar0, 0x1e08228u, 0xffffffffu);      /* PCIE_PCIE_INT_ALL_CLEAR */
++	uint32_t pwr = wl_win_rd(bar0, 0x1f8031cu);    /* WLAON_QFPROM_PWR_CTRL: VDD4BLOW off */
++	wl_win_wr(bar0, 0x1f8031cu, pwr & ~0x4u);
++	/* fix_l1ss */
++	wl_win_wr(bar0, 0x1e0c0acu, 0x10u);
++	static const uint32_t dtct[3][2] = { { 0x1e0c628u, 0x02u }, { 0x1e0c62cu, 0x52u }, { 0x1e0c634u, 0xffu } };
++	for (unsigned i = 0; i < 3; ++i) {
++		wl_win_wr(bar0, dtct[i][0], (wl_win_rd(bar0, dtct[i][0]) & ~0xffu) | dtct[i][1]);
++	}
++	/* mhi_clear_vector: TXVECDB/STATUS, RXVECDB/STATUS */
++	wl_wr(bar0, 0x360u, 0);
++	wl_wr(bar0, 0x368u, 0);
++	wl_wr(bar0, 0x394u, 0);
++	wl_wr(bar0, 0x39cu, 0);
++	/* clear_dbg_registers: stop Q6 taking the warm path */
++	uint32_t cookie = wl_win_rd(bar0, 0x1f80500u);
++	delay(10000);
++	wl_win_wr(bar0, 0x1f80504u, 0);
++	delay(10000);
++	uint32_t cause = wl_win_rd(bar0, 0x1f8060cu);
++	/* soc_global_reset */
++	uint32_t v = wl_rd(bar0, 0x3008u);
++	wl_wr(bar0, 0x3008u, v | 1u);
++	delay(10000);
++	wl_wr(bar0, 0x3008u, v & ~1u);
++	delay(10000);
++	uint32_t after = wl_rd(bar0, 0x3008u);
++	/* SOC_GLOBAL_RESET leaves SYSERR set: MHICTRL.RESET clears it */
++	wl_wr(bar0, 0x38u, 1u << 1);
++	delay(10000);
++	wl_wr(bar0, 0x310cu, 0x40000000u);
++	printf("SWEET WLAN: sw reset: pwr_ctrl %#x cookie %#x reset cause %#x global reset %#x mhistatus %#x\n",
++	    pwr, cookie, cause, after, wl_rd(bar0, 0x48u));
++}
++
+ int
+ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ {
+@@ -387,6 +457,11 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (sw.fw_size == 0 && wlan_load_fw() != 0) {
+ 		return 13;
+ 	}
++	unsigned prep = 1;
++	(void)PE_parse_boot_argn("sweetwlanprep", &prep, sizeof(prep));
++	if (prep) {
++		wlan_prep(bar0);
++	}
+ 	wlan_state(bar0, bhi, "before BHI");
+ 	if (wl_rd(bhi, BHI_EXECENV) == 0 && wlan_bhi(bar0, bhi) != 0) {
+ 		return 14;
+-- 
+2.54.0 (Apple Git-157)
+

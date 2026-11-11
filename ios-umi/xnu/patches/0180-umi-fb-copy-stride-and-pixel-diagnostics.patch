@@ -1,0 +1,138 @@
+From 29b1da4c32c390fd0d73aa868123fbc76de516b8 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 20:25:28 +0100
+Subject: [PATCH] umi: instrument copy geometry and framebuffer pixels
+
+Add the source-stride diagnostic override and bounded opt-in pixel rectangles and row profiles after present-time GPU synchronization and cache maintenance. Report rejected copy geometry to distinguish bounds failures from GPU hangs. Per-file cross-compile and diff checks passed.
+
+Co-Authored-By: OpenAI Codex <noreply@openai.com>
+---
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 85 +++++++++++++++++++++++++--
+ 1 file changed, 81 insertions(+), 4 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 28e89f7..21714c5 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -467,9 +467,69 @@ static uint64_t sweet_fb_swap_count;
+  * directPresent's failures (the swap logging only covers the copy path - the direct path
+  * returns before it, so a direct-present boot logs nothing about its frames). */
+ static uint64_t sweet_fb_present_count;
++/* bring-up: override the stride the surfaces claim (IOSurface bytesPerRow), in case the
++ * GPU's image and the surface disagree - what reads as moving noise then snaps into a
++ * picture for the right value (sweetfb_srcbpr=N) */
++static uint32_t sweet_fb_src_bpr = 0xffffffff;
+ static uint32_t sweet_fb_direct_fail[4];     /* 0: layer count, 1: no surface, 2: shape, 3: address */
+ static uint32_t sweet_fb_direct_ok_logged;
+ 
++/* Opt-in COPY-path dump: two 64x32 rectangles and a row profile, after GPU sync
++ * and source cache maintenance. Delay until 400 s so USB logging can be connected;
++ * three captures 30 s apart bound both the logging cost and persistent-ring use. */
++static void
++sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
++    int32_t sx, int32_t sy, int32_t w, int32_t h)
++{
++	static int enabled = -1;
++	static uint32_t captures;
++	static uint64_t last;
++	uint64_t ns;
++
++	if (enabled == -1) {
++		enabled = 0;
++		PE_parse_boot_argn("sweetfb_dump", &enabled, sizeof(enabled));
++	}
++	if (!enabled || captures >= 3 || w < 64 || h < 32) {
++		return;
++	}
++	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
++	if (ns < 400 * NSEC_PER_SEC || (last && ns - last < 30 * NSEC_PER_SEC)) {
++		return;
++	}
++	last = ns;
++	captures++;
++	IOLog("SWEET FB: copydump %u surface %u %ux%u fmt %#x bpe %u offset %u "
++	    "alloc %u memory %llu bpr %u effective %u rect %d,%d %dx%d tns %llu\n",
++	    captures, s->id, s->width, s->height, s->pixelFormat, s->bytesPerElement,
++	    s->offset, s->allocSize, (uint64_t)s->memory->getLength(), s->bytesPerRow,
++	    bpr, sx, sy, w, h, ns);
++	for (uint32_t region = 0; region < 2; region++) {
++		uint32_t x0 = sx + (region ? (w - 64) / 2 : 0);
++		uint32_t y0 = sy + (region ? (h - 32) / 2 : 0);
++		for (uint32_t y = y0; y < y0 + 32; y++) {
++			for (uint32_t x = x0; x < x0 + 64; x += 8) {
++				const uint32_t *p = (const uint32_t *)(src + s->offset + (uint64_t)y * bpr + x * 4);
++				IOLog("SWEET FB: copyhex %u %u,%u %08x %08x %08x %08x %08x %08x %08x %08x\n",
++				    captures, x, y, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++			}
++		}
++	}
++	for (int32_t y = sy; y < sy + h; y += 32) {
++		const uint8_t *p = (const uint8_t *)(src + s->offset + (uint64_t)y * bpr + sx * 4);
++		uint64_t rgb = 0, alpha = 0;
++		uint32_t black = 0;
++		for (int32_t x = 0; x < w; x++, p += 4) {
++			rgb += p[0] + p[1] + p[2];
++			alpha += p[3];
++			black += (p[0] | p[1] | p[2]) == 0;
++		}
++		IOLog("SWEET FB: copyrow %u y %d rgb %llu alpha %llu black %u width %d\n",
++		    captures, y, rgb, alpha, black, w);
++	}
++	IOLog("SWEET FB: copydump %u end\n", captures);
++}
++
+ /* Copy each enabled layer's surface into the panel memory (no scaling). */
+ /*
+  * A swap only records the frame: copying 10 MB into the panel on every
+@@ -1133,6 +1193,15 @@ AppleCLCD::present(const uint8_t *rec)
+ 		}
+ 		uintptr_t src = s->kernelAddress();
+ 		uint32_t bpe = s->bytesPerElement ? s->bytesPerElement : 4;
++		if (sweet_fb_src_bpr == 0xffffffff) {
++			int bpr = 0;
++
++			if (!PE_parse_boot_argn("sweetfb_srcbpr", &bpr, sizeof(bpr))) {
++				bpr = 0;
++			}
++			sweet_fb_src_bpr = (uint32_t)bpr;
++		}
++		uint32_t sbpr = sweet_fb_src_bpr ? sweet_fb_src_bpr : s->bytesPerRow;
+ 		if (w <= 0 || h <= 0) {
+ 			w = (int32_t)s->width;
+ 			h = (int32_t)s->height;
+@@ -1168,20 +1237,28 @@ AppleCLCD::present(const uint8_t *rec)
+ 		if (h > (int32_t)fHeight - dy) {
+ 			h = (int32_t)fHeight - dy;
+ 		}
+-		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * s->bytesPerRow +
++		uint64_t last = (uint64_t)s->offset + (uint64_t)(sy + h - 1) * sbpr +
+ 		    (uint64_t)(sx + w) * 4;
+ 		if (w <= 0 || h <= 0 || s->elementWidth != 1 || s->elementHeight != 1 ||
+ 		    s->memory == NULL || last > s->memory->getLength()) {
++			static uint32_t rejected;
++			if (rejected++ < 8) {
++				IOLog("SWEET FB: copy refused surface %u rect %d,%d %dx%d bpr %u "
++				    "last %llu length %llu element %ux%u\n", id, sx, sy, w, h, sbpr,
++				    last, s->memory ? (uint64_t)s->memory->getLength() : 0,
++				    s->elementWidth, s->elementHeight);
++			}
+ 			src = 0;
+ 		}
+ 		if (src != 0 && bpe == 4) {
+ 			/* the GPU wrote the source (Metal on Turnip); its lines may sit stale in the
+ 			 * CPU cache - drop them so the copy reads memory, and write our lines out */
+-			sweet_dcache_flush(src + s->offset + (uint64_t)sy * s->bytesPerRow + (uint64_t)sx * 4,
+-			    (uint64_t)(h - 1) * s->bytesPerRow + (uint64_t)w * 4);
++			sweet_dcache_flush(src + s->offset + (uint64_t)sy * sbpr + (uint64_t)sx * 4,
++			    (uint64_t)(h - 1) * sbpr + (uint64_t)w * 4);
++			sweet_fb_dump_copy(s, src, sbpr, sx, sy, w, h);
+ 			for (int32_t y = 0; y < h; y++) {
+ 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
+-				    (const void *)(src + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4),
++				    (const void *)(src + s->offset + (uint64_t)(sy + y) * sbpr + (uint64_t)sx * 4),
+ 				    (size_t)w * 4);
+ 			}
+ 			sweet_dcache_clean(fPixels + (uint64_t)dy * fRowBytes + (uint64_t)dx * 4,
+-- 
+2.54.0 (Apple Git-157)
+

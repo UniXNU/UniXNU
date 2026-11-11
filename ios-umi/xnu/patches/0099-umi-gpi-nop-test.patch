@@ -1,0 +1,71 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 598d018..6d29b9b 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -29,6 +29,7 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ 
+ int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);
+ int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
++int sweet_gpi_nop(void);
+ 
+ #define GPI_PA          0x00a00000u
+ #define GPI_EE_OFFSET   0x6000u         /* qcom,gpi-ee-offset: registers are relative to PA - this */
+@@ -609,6 +610,27 @@ gpi_terminate(void)
+ 	printf("SWEET GPI: terminated: ch0 %#x ch1 %#x\n", gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)));
+ }
+ 
++/*
++ * Test stage 6: one NOP TRE (msm_gpi.h MSM_GPI_TRE_NOP, major 0 minor 1) with IEOT on the TX
++ * channel. The GPI fetches it and writes a completion event (DMA through SMMU stream 0x56) but
++ * the serial engine is not involved: tells a DMA/SMMU cause from an I2C bus cause.
++ */
++int
++sweet_gpi_nop(void)
++{
++	if (!g.ready) {
++		return EIO;
++	}
++	g.trace = 1;
++	ring_put(0, 0, 0, 0, TRE_DW3(0, 1, 0, 0, 1, 0, 0));
++	uint32_t donetre = DMA_PA + OFF_TX + ((g.tx_wp + CH_RING_N - 1) % CH_RING_N) * TRE_SIZE;
++	ring_doorbell(0);
++	int err = gpi_wait(0, donetre, NULL);
++	printf("SWEET GPI: NOP TRE -> %d (ch0 %#x ev rp %#x)\n", err, gpi_rd(CH_CNTXT(g.gpii, 0)),
++	    gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB));
++	return err;
++}
++
+ /* One I2C message: write nt bytes or read nr bytes (exactly one of them). */
+ int
+ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch)
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 1e0fec9..8970666 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -29,6 +29,7 @@ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
+ extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);   /* sweet_gpi.c */
++extern int sweet_gpi_nop(void);
+ extern int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ void sweet_touch_init(void);
+ 
+@@ -703,12 +704,17 @@ touch_umi_start(void)
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
+-		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage ? st.test_stage : 9, st.clk_level);
++		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage && st.test_stage != 6 ? st.test_stage : 9, st.clk_level);
+ 		if (gerr) {
+ 			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);
+ 			return false;
+ 		}
+ 		st.gpi = true;
++		if (st.test_stage == 6) {
++			(void)sweet_gpi_nop();
++			printf("SWEET TEST: stage 6 reached (one GPI NOP TRE, no I2C)\n");
++			return false;
++		}
+ 		if (st.test_stage == 1 || st.test_stage == 2) {
+ 			printf("SWEET TEST: stage %u reached (GPI%s)\n", st.test_stage,
+ 			    st.test_stage == 1 ? " SMMU route" : " channels started");

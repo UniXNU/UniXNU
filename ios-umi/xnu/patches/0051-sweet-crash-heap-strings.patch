@@ -1,0 +1,114 @@
+--- a/osfmk/kern/exception.c
++++ b/osfmk/kern/exception.c
+@@ -833,6 +833,7 @@
+  * (crashing) thread.
+  */
+ void sweet_crash_log(const char *name, int pid, int sig, uint64_t code, uint64_t subcode);
++static void sweet_crash_strings(const char *name);
+ 
+ void
+ sweet_crash_log(const char *name, int pid, int sig, uint64_t code, uint64_t subcode)
+@@ -871,6 +872,103 @@
+ 		fp = frame[0];
+ 	}
+ 	printf("%s\n", line);
++
++	if (sig == 6) {
++		sweet_crash_strings(name);
++	}
++}
++
++/*
++ * SWEET: for an aborting process named in boot-arg sweetscan (comma
++ * separated, default "backboardd"; "-" = off) print the printable text runs
++ * (>= 24 characters, at least 2 spaces) found in its malloc heap as
++ * "STR text", at most 700 lines. An uncaught NSException's reason string
++ * is among them: the abort message only carries the exception's type.
++ */
++static void
++sweet_crash_strings(const char *name)
++{
++	static char names[128];
++	char *buf;
++	vm_map_t map = current_map();
++	vm_map_offset_t addr = 0;
++	uint64_t scanned = 0;
++	int lines = 0;
++	char last[96] = "";
++
++	if (!PE_parse_boot_argn("sweetscan", names, sizeof(names))) {
++		strlcpy(names, "backboardd", sizeof(names));
++	}
++	size_t n = strlen(name), found = 0;
++	for (const char *t = names; *t;) {
++		const char *end = strchr(t, ',');
++		size_t tl = end ? (size_t)(end - t) : strlen(t);
++		if (tl == n && n > 0 && strncmp(t, name, n) == 0) {
++			found = 1;
++			break;
++		}
++		if (!end) {
++			break;
++		}
++		t = end + 1;
++	}
++	if (!found) {
++		return;
++	}
++	buf = kalloc_data(65536, Z_WAITOK);
++	if (buf == NULL) {
++		return;
++	}
++	printf("STR scan of %s heap\n", name);
++	while (lines < 700 && scanned < (96ull << 20)) {
++		vm_map_size_t size = 0;
++		natural_t depth = 0;
++		vm_region_submap_info_data_64_t info;
++		mach_msg_type_number_t count = VM_REGION_SUBMAP_INFO_V2_COUNT_64;
++
++		if (vm_map_region_recurse_64(map, &addr, &size, &depth,
++		    (vm_region_submap_info_64_t)&info, &count) != KERN_SUCCESS) {
++			break;
++		}
++		vm_map_offset_t base = addr;
++		addr += size;
++		if (info.is_submap || (info.protection & (VM_PROT_READ | VM_PROT_WRITE)) !=
++		    (VM_PROT_READ | VM_PROT_WRITE) || info.user_tag < 1 || info.user_tag > 11) {
++			continue;
++		}
++		for (vm_map_offset_t off = 0; off < size && lines < 700; off += 65536) {
++			size_t len = (size - off) < 65536 ? (size_t)(size - off) : 65536;
++			if (copyin((user_addr_t)(base + off), buf, len) != 0) {
++				continue;
++			}
++			scanned += len;
++			size_t start = 0;
++			int spaces = 0;
++			for (size_t i = 0; i <= len; i++) {
++				bool ok = i < len && ((unsigned char)buf[i] >= 0x20 && (unsigned char)buf[i] < 0x7f);
++				if (ok) {
++					spaces += buf[i] == ' ';
++					continue;
++				}
++				size_t run = i - start;
++				if (run >= 24 && spaces >= 2) {
++					char text[160];
++					size_t m = run < sizeof(text) - 1 ? run : sizeof(text) - 1;
++					memcpy(text, buf + start, m);
++					text[m] = 0;
++					if (strncmp(text, last, sizeof(last) - 1) != 0) {
++						printf("STR %s\n", text);
++						lines++;
++						strlcpy(last, text, sizeof(last));
++					}
++				}
++				start = i + 1;
++				spaces = 0;
++			}
++		}
++	}
++	printf("STR done: %llu KiB scanned, %d strings\n", scanned >> 10, lines);
++	kfree_data(buf, 65536);
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+ 

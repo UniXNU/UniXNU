@@ -1,0 +1,109 @@
+From 1e75b0da4c050f52b42ba1817424fe6cc7810272 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 22:37:29 +0200
+Subject: [PATCH] umi-0145
+
+---
+ bsd/dev/sweet_wlce.c |  9 +++++++--
+ bsd/dev/sweet_wldp.c | 35 ++++++++++++++++++++++++++++++++---
+ 2 files changed, 39 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 3f9a7db..219dec8 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -24,6 +24,7 @@ extern void sweet_wldp_mon_report(void);
+ extern int sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa);
+ extern void sweet_wldp_data_poll(void);
+ extern void sweet_wldp_data_report(void);
++extern void sweet_wldp_set_bssid(const uint8_t bssid[6]);
+ extern int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void));
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+@@ -901,9 +902,12 @@ wmi_scan(void)
+ 	if (wmi_cmd(0x5001u, b, 19 * 4, "VDEV_CREATE") != 0) {
+ 		return 11;
+ 	}
+-	/* ath11k_mac_op_add_interface with encap/decap offload: TX_ENCAP_TYPE (0x30) and RX_DECAP_TYPE (0x5b) = ETHERNET (2) */
++	/*
++	 * ath11k_mac_op_add_interface: TX_ENCAP_TYPE (0x30) = NATIVE_WIFI (1), ath11k's default
++	 * (0145; Ethernet TX frames were acked but never answered), RX_DECAP_TYPE (0x5b) = ETHERNET (2)
++	 */
+ 	for (unsigned k = 0; k < 2; ++k) {
+-		uint32_t sp[4] = { WMI_TLV(0x5f, 12), 0, k ? 0x5bu : 0x30u, 2 };
++		uint32_t sp[4] = { WMI_TLV(0x5f, 12), 0, k ? 0x5bu : 0x30u, k ? 2u : 1u };
+ 		if (wmi_cmd(0x5008u, sp, sizeof(sp), "VDEV_SET_PARAM encap") != 0) {
+ 			return 11;
+ 		}
+@@ -1261,6 +1265,7 @@ wmi_join(void)
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
+ 	htc.joined = true;
+ 	htc.logged = 0;                 /* log every WMI event / HTT message from here on (up to 24) */
++	sweet_wldp_set_bssid(bssid);
+ 	int ipr = sweet_wlip_run(wlce_mac, bssid, htc_poll);    /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index b980fe7..e93cec6 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -642,24 +642,53 @@ sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa)
+ 	return 0;
+ }
+ 
++/*
++ * 0145: transmit as NATIVE_WIFI (encap 1), ath11k's default (frame_mode parameter =
++ * NATIVE_WIFI; Ethernet encap is only used with frame_mode=2): mac80211's STA data frame,
++ * 802.11 header (FC 0x0108 = data, ToDS; A1 BSSID, A2 source, A3 destination, no QoS
++ * field) + LLC/SNAP (aa aa 03 00 00 00, EtherType) + payload. 0141-0144 sent Ethernet-
++ * encapsulated frames: acked by the AP but never answered. Receive stays Ethernet (works).
++ */
++static uint8_t tx_bssid[6];
++
++void sweet_wldp_set_bssid(const uint8_t bssid[6]);
++
++void
++sweet_wldp_set_bssid(const uint8_t bssid[6])
++{
++	memcpy(tx_bssid, bssid, 6);
++}
++
+ int
+ sweet_wldp_tx(const void *frame, uint32_t len)
+ {
+ 	struct dpring *r = &dp_rings[4];                /* tcl_data0 */
+ 	uint32_t size = r->n * r->esz, next = (r->hp + r->esz) % size;
+-	if (dp.mem == 0 || len > RXBUF_SZ) {
++	const uint8_t *eth = frame;
++	if (dp.mem == 0 || len < 14 || len - 14 + 24 + 8 > RXBUF_SZ) {
+ 		return EINVAL;
+ 	}
+ 	if (next == *mem32(M_RDP + r->id * 4)) {
+ 		return EBUSY;
+ 	}
+ 	uint32_t id = dd.tx_id++, slot = id % TX_NBUF, pa = dp.pa + M_TX_BUFS + slot * RXBUF_SZ;
+-	memcpy((void *)(dp.mem + M_TX_BUFS + slot * RXBUF_SZ), frame, len);
++	uint8_t *w = (uint8_t *)(dp.mem + M_TX_BUFS + slot * RXBUF_SZ);
++	bzero(w, 24);
++	w[0] = 0x08;                                    /* data */
++	w[1] = 0x01;                                    /* ToDS */
++	memcpy(w + 4, tx_bssid, 6);                     /* A1 receiver = AP */
++	memcpy(w + 10, eth + 6, 6);                     /* A2 transmitter / source */
++	memcpy(w + 16, eth, 6);                         /* A3 destination */
++	static const uint8_t snap[6] = { 0xaa, 0xaa, 0x03, 0x00, 0x00, 0x00 };
++	memcpy(w + 24, snap, 6);
++	memcpy(w + 30, eth + 12, 2);                    /* EtherType */
++	memcpy(w + 32, eth + 14, len - 14);
++	len = len - 14 + 32;
+ 	volatile uint32_t *d = mem32(r->off + r->hp * 4);
+ 	d[0] = 0x144u << 1 | 28u << 10;                 /* TLV: HAL_TCL_DATA_CMD, 28 bytes */
+ 	d[1] = pa;
+ 	d[2] = 3u << 8 | ((id & 0x1ffffu) << 2) << 11;  /* RBM SW0, cookie = msdu id << 2 (mac 0, pool 0) */
+-	d[3] = 2u << 2 | 7u << 4 | 2u << 14 | 1u << 16; /* ETHERNET, encrypt OPEN (7), ADDRY, metadata 1 */
++	d[3] = 1u << 2 | 7u << 4 | 2u << 14 | 1u << 16; /* NATIVE_WIFI, encrypt OPEN (7), ADDRY, metadata 1 */
+ 	d[4] = len;
+ 	d[5] = 1u << 21;                                /* TID_OVERWRITE, TID 0, LMAC 0 */
+ 	d[6] = 0;
+-- 
+2.54.0 (Apple Git-157)
+

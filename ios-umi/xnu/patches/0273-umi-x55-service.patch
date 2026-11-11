@@ -1,0 +1,210 @@
+From d51c6ece78568e29e412c68649371ec65b568f6f Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 20:20:49 +0100
+Subject: [PATCH] umi: X55 service mode (sweetmdm=9) - the modem service runs
+ for good, sleeps between polls, slower polls once registered, restarts on
+ loss; sysctl kern.sweet_cell (0273)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 86 +++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 71 insertions(+), 15 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index c4fab94..5aa7600 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -33,6 +33,10 @@
+  *               (again every 10 s). sweetmdmonline=1: the host steers the operating mode (low power when DMS
+  *               appears, online ~20 s later and whenever it is not; the radio then transmits and registers with
+  *               the SIM's network); default off.
++ *   sweetmdm=9  + service mode: the mission loop runs for good (sleeping between polls), NAS / DMS every 30 s once
++ *               registered (10 s before), UIM every 60 s, a status line a minute, DIAG down to error / fatal once
++ *               registered; the modem is restarted whenever it goes away (sweetmdmrestart, default 10 here).
++ *               sysctl kern.sweet_cell: "reg=0|1 rat=lte mcc=228 mnc=2 dbm=-90 sim=ready mode=online" for iOS.
+  *               Also a TFTP server for the modem (QRTR service 0x1000, port 0x4002): reads from the FAT modem
+  *               partition; /readwrite files kept in RAM for this phone boot (never written to the phone); DMS's
+  *               offline reason is logged. When DMS stays "shutting down" (two polls, ~10 s) the modem is restarted
+@@ -55,6 +59,7 @@
+ #include <kern/sched_prim.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
++#include <sys/sysctl.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern kern_return_t thread_terminate(thread_t);
+@@ -1621,8 +1626,10 @@ static struct {
+ 	uint32_t node;
+ 	uint32_t svc_node[0x60], svc_port[0x60];   /* where each QMI service (< 0x60) is */
+ 	uint16_t txn;
+-	bool asked, online_asked, restart_wanted, lpm_sent;
+-	unsigned online_at, sim_at, sim_step;
++	bool asked, online_asked, restart_wanted, lpm_sent, quiet;
++	unsigned online_at, sim_at, sim_step, next_poll, next_online, next_uim;
++	int reg, rat, dbm;
++	unsigned mcc, mnc;
+ 	unsigned answers, opmode, opmode5;
+ 	bool v2;                /* the modem speaks QRTR v2 headers (version 3, 16 bytes) on IPCR: answered the same way */
+ } mq;
+@@ -2190,6 +2197,12 @@ mx_opmode(unsigned m)
+ }
+ 
+ 
++/* What iOS will read: kern.sweet_cell (kept up to date by the QMI answers). */
++static char sweet_cell[128] = "modem=off";
++SYSCTL_STRING(_kern, OID_AUTO, sweet_cell, CTLFLAG_RD | CTLFLAG_LOCKED, sweet_cell, sizeof(sweet_cell), "X55 modem state");
++
++static void mx_cell_update(void);
++
+ /* The first USIM seen: its slot and AID, for the provisioning session. */
+ static struct {
+ 	uint8_t slot, aidlen, state;
+@@ -2238,6 +2251,17 @@ mx_uim_cards(const uint8_t *v, uint16_t tl)
+ 	}
+ }
+ 
++static void
++mx_cell_update(void)
++{
++	static const char *const rat[] = { "none", "cdma", "evdo", "amps", "gsm", "umts", "?", "?", "lte", "tdscdma", "?", "?",
++		                           "nr5g" };
++	static const char *const sim[] = { "unknown", "detected", "pin", "puk", "perso", "blocked", "illegal", "ready" };
++	snprintf(sweet_cell, sizeof(sweet_cell), "reg=%d rat=%s mcc=%u mnc=%u dbm=%d sim=%s mode=%s", mq.reg == 1,
++	    mq.rat >= 0 && mq.rat < 13 ? rat[mq.rat] : "?", mq.mcc, mq.mnc, mq.dbm,
++	    mq_usim.state < 8 ? sim[mq_usim.state] : "?", mq.opmode < 9 ? mx_opmode(mq.opmode) : "?");
++}
++
+ static void
+ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ {
+@@ -2283,6 +2307,7 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 		printf("SWEET MDM: DMS operating mode: %u (%s)\n", v[0], mx_opmode(v[0]));
+ 		mq.opmode = v[0];
+ 		mq.opmode5 = v[0] == 5 ? mq.opmode5 + 1 : 0;
++		mx_cell_update();
+ 		if (mq.opmode5 >= 12) {        /* two minutes (0266: after 10 s, which cut its EFS sync short) */
+ 			mq.restart_wanted = true;
+ 		}
+@@ -2328,6 +2353,8 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 		    res == 0 ? "ok" : "refused", err);
+ 	} else if (svc == 0x03 && msg == 0x24 && (v = mx_tlv(m, len, 0x01, &tl)) != NULL && tl >= 5) {
+ 		static const char *const rs[] = { "not registered", "REGISTERED", "searching", "denied", "unknown" };
++		mq.reg = v[0];
++		mq.rat = v[4] && tl >= 6 ? v[5] : 0;
+ 		printf("SWEET MDM: NAS serving system: %s, cs attach %u ps attach %u, network %u, %u radio(s)\n",
+ 		    v[0] < 5 ? rs[v[0]] : "?", v[1], v[2], v[3], v[4]);
+ 		if (v[4] && tl >= 6) {
+@@ -2338,9 +2365,13 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 		if ((v = mx_tlv(m, len, 0x12, &tl)) != NULL && tl >= 5) {
+ 			printf("SWEET MDM: NAS network: MCC %u MNC %u \"%.*s\"\n", v[0] | v[1] << 8, v[2] | v[3] << 8,
+ 			    (int)MIN((unsigned)v[4], (unsigned)tl - 5u), (const char *)(v + 5));
++			mq.mcc = v[0] | v[1] << 8;
++			mq.mnc = v[2] | v[3] << 8;
+ 		}
+ 	} else if (svc == 0x03 && msg == 0x20 && (v = mx_tlv(m, len, 0x01, &tl)) != NULL && tl >= 2) {
+ 		printf("SWEET MDM: NAS signal strength: %d dBm on radio %u\n", (int8_t)v[0], v[1]);
++		mq.dbm = (int8_t)v[0];
++		mx_cell_update();
+ 	} else if (svc == 0x02 && msg == 0x2e) {
+ 		printf("SWEET MDM: DMS set operating mode: %s\n", res == 0 ? "accepted" : "refused");
+ 	}
+@@ -2367,7 +2398,8 @@ mx_mode_steer(unsigned t_ms)
+ 		mx_qmi_req(0x02, 0x2e, lpm, 4);
+ 		return;
+ 	}
+-	if (t_ms >= mq.online_at && t_ms % 10000 == 5000 && mq.opmode != 0) {
++	if (t_ms >= mq.online_at && t_ms >= mq.next_online && mq.opmode != 0) {
++		mq.next_online = t_ms + 10000;
+ 		static const uint8_t on[4] = { 0x01, 0x01, 0x00, 0x00 };     /* TLV 1: mode 0 = online */
+ 		printf("SWEET MDM: QMI: DMS mode %u: set operating mode ONLINE\n", mq.opmode);
+ 		mx_qmi_req(0x02, 0x2e, on, 4);
+@@ -2427,11 +2459,24 @@ mx_qmi_survey(unsigned t_ms)
+ 		    mq_usim.slot, mq_usim.aidlen);
+ 		mx_qmi_req(0x0b, 0x38, t, (uint16_t)k);
+ 		mq.sim_at = t_ms + 3000;
+-	} else if (mq.asked && t_ms % 10000 == 0) {
++	} else if (mq.asked && t_ms >= mq.next_poll) {
++		mq.next_poll = t_ms + (md.stage >= 9 && mq.reg == 1 ? 30000 : 10000);
++		if (md.stage >= 9 && mq.reg == 1 && !mq.quiet) {
++			/* registered: DIAG down to error / fatal (the F3 flood costs CPU and log) */
++			static const uint8_t q[8] = { 0x7d, 0x05, 0x00, 0x00, 0x18, 0x00, 0x00, 0x00 };
++			mq.quiet = true;
++			if (dg.on) {
++				dg_send(q, 8);
++			}
++			printf("SWEET MDM: registered: DIAG mask 0x18, polls every 30 s\n");
++		}
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);
+ 		mx_qmi_req(0x02, 0x2d, NULL, 0);
+-		mx_qmi_req(0x0b, 0x2f, NULL, 0);
++		if (md.stage < 9 || t_ms >= mq.next_uim) {
++			mq.next_uim = t_ms + 60000;
++			mx_qmi_req(0x0b, 0x2f, NULL, 0);
++		}
+ 	}
+ }
+ 
+@@ -2605,14 +2650,20 @@ md_mission(void)
+ 	bzero(&mq, sizeof(mq));
+ 	bzero(&mq_usim, sizeof(mq_usim));
+ 	mq.opmode = 0xff;
++	snprintf(sweet_cell, sizeof(sweet_cell), "modem=starting");
+ 	bzero(mt, sizeof(mt));                  /* TFTP sessions of a previous modem run */
+ 	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
+-	unsigned secs = md.stage >= 8 ? 240 : 30;
++	unsigned secs = md.stage >= 9 ? 0 : md.stage >= 8 ? 240 : 30;   /* 0: for good (service mode) */
+ 	(void)PE_parse_boot_argn("sweetmdmqrtr", &secs, sizeof(secs));
+-	unsigned maxr0 = 0;
++	unsigned maxr0 = md.stage >= 9 ? 10 : 0;
+ 	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr0, sizeof(maxr0));
+ 	bool printed_sfr = false;
+-	for (unsigned t = 0; t < secs * 1000u && !mx.gone && !(mq.restart_wanted && maxr0); ++t) {
++	uint64_t t0 = mach_absolute_time();
++	unsigned next_status = 10000, status_every = md.stage >= 9 ? 60000 : 10000;
++	for (unsigned t = 0; (secs == 0 || t < secs * 1000u) && !mx.gone && !(mq.restart_wanted && maxr0);) {
++		uint64_t ns;
++		absolutetime_to_nanoseconds(mach_absolute_time() - t0, &ns);
++		t = (unsigned)(ns / 1000000);
+ 		if (mq.opmode == 5 && !printed_sfr) {
+ 			printed_sfr = true;
+ 			mx_sfr_print("shutting down");
+@@ -2627,15 +2678,20 @@ md_mission(void)
+ 		if (md.stage >= 8) {
+ 			mx_qmi_survey(t);
+ 		}
+-		if (t % 10000 == 9999) {
+-			printf("SWEET MDM: QRTR %u s: %u hellos, %u services, %u data; mhistatus %#x mdm2ap status %u errfatal %u\n",
+-			    (t + 1) / 1000, mq.hellos, mq.servers, mq.data, md_rd(md.bar0, MHI_STATUS), md_gpio_in(MDM2AP_STATUS),
+-			    md_gpio_in(MDM2AP_ERRFATAL));
+-			if (md_rd(md.bar0, MHI_STATUS) == 0xffffffffu) {
++		if (t >= next_status) {
++			next_status = t + status_every;
++			printf("SWEET MDM: QRTR %u s: %u hellos, %u services, %u data; mhistatus %#x mdm2ap status %u errfatal %u; %s\n",
++			    t / 1000, mq.hellos, mq.servers, mq.data, md_rd(md.bar0, MHI_STATUS), md_gpio_in(MDM2AP_STATUS),
++			    md_gpio_in(MDM2AP_ERRFATAL), sweet_cell);
++			if (md_rd(md.bar0, MHI_STATUS) == 0xffffffffu || md_gpio_in(MDM2AP_ERRFATAL)) {
+ 				mx.gone = true;
+ 			}
+ 		}
+-		delay(1000);
++		if (md.stage >= 9 && t > 60000) {
++			md_wait(2);                     /* service mode: sleep between polls (the first minute polls hard) */
++		} else {
++			delay(1000);
++		}
+ 	}
+ 	printf("SWEET MDM: mission: %u hellos, %u services announced, %u data packets, %u QMI answers%s\n", mq.hellos,
+ 	    mq.servers, mq.data, mq.answers, mx.gone ? " (the modem went away)" : "");
+@@ -2643,7 +2699,7 @@ md_mission(void)
+ 	    dg.msgs, dg.printed, dg.muted, dg.other, dg.bad);
+ 	mx_sfr_print("end of the run");
+ 	static unsigned restarts;
+-	unsigned maxr = 0;                      /* restarts are opt-in now: sweetmdmrestart=N */
++	unsigned maxr = md.stage >= 9 ? 10 : 0;  /* opt-in (sweetmdmrestart=N), 10 in service mode */
+ 	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr, sizeof(maxr));
+ 	if ((mq.restart_wanted || mx.gone) && restarts < maxr) {
+ 		restarts++;
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,181 @@
+From f2b6209559d723d31b9b87019e157d4b697d827b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 15:09:47 +0200
+Subject: [PATCH] umi-0130
+
+---
+ bsd/dev/sweet_wlan.c |   2 +-
+ bsd/dev/sweet_wlfw.c | 120 +++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 117 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 3a003d2..7408964 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI: 21-29 = step 1-9 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI: 21-32 = step 1-12 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 1c4a2d5..341f87e 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -3,7 +3,8 @@
+  * Follows Linux ath11k qmi.c for "qca6390 hw2.0". Stage 8 (sweetwlan=8):
+  *   IND_REGISTER, HOST_CAP, REQUEST_MEM indication -> RESPOND_MEM, FW_MEM_READY,
+  *   CAP, BDF_DOWNLOAD (board data from the modem partition, sweet_wlan.c),
+- *   M3_INFO (m3.bin in the firmware memory window), FW_READY indication.
++ *   M3_INFO (m3.bin in the firmware memory window), FW_READY or FW_INIT_DONE,
++ *   then WLAN_INI, WLAN_CFG (copy-engine layout) and WLAN_MODE (mission).
+  * QMI: u8 type (0 request, 2 response, 4 indication), u16 transaction, u16 message,
+  * u16 length, then TLVs (u8 type, u16 length, value). Little endian. Polled.
+  */
+@@ -142,6 +143,10 @@ q_find(const uint8_t *msg, uint32_t len, uint8_t type, uint16_t *n)
+ #define WLFW_CAP                0x24u
+ #define WLFW_BDF_DOWNLOAD       0x25u
+ #define WLFW_M3_INFO            0x3cu
++#define WLFW_FW_INIT_DONE_IND   0x38u
++#define WLFW_WLAN_MODE          0x22u
++#define WLFW_WLAN_CFG           0x23u
++#define WLFW_WLAN_INI           0x2fu
+ #define WLFW_CLIENT_ID          0x4b4e454cu     /* ath11k ATH11K_QMI_WLFW_CLIENT_ID "KNEL" */
+ #define WLFW_SEG_MAX            32u             /* ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01 */
+ 
+@@ -488,7 +493,109 @@ wf_m3(void)
+ 	return wf_request(&m, "M3_INFO", 2000);
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-9) that failed. */
++/*
++ * Step 9: ready. qca6390 sends FW_INIT_DONE 0x38 rather than FW_READY 0x21
++ * (0129 boot); ath11k's event handler treats both as "firmware ready".
++ */
++static int
++wf_wait_ready(unsigned ms)
++{
++	const uint64_t want = 1ull << (WLFW_FW_READY_IND & 63) | 1ull << (WLFW_FW_INIT_DONE_IND & 63);
++	for (unsigned t = 0; t < ms && !(wf.ind & want); t += 10) {
++		sweet_ipcr_service(10);
++	}
++	if (!(wf.ind & want)) {
++		printf("SWEET WLFW: no FW_READY / FW_INIT_DONE indication in %u ms\n", ms);
++		return ETIMEDOUT;
++	}
++	return 0;
++}
++
++/*
++ * Steps 10-12 (ath11k_qmi_firmware_start for qca6390 hw2.0):
++ * WLAN_INI 0x2F: 0x10 enablefwlog u8 (fw_wmi_diag_event is set for this chip).
++ * WLAN_CFG 0x23: 0x10 host_version "WIN", 0x11 u8 n + n x {pipe, dir, nentries,
++ *   nbytes_max, flags} (ath11k_target_ce_config_wlan_qca6390), 0x12 u8 n + n x
++ *   {service, dir, pipe} (ath11k_target_service_to_ce_map_wlan_qca6390).
++ *   No 0x14 shadow_reg_v2 yet: its list comes from the host HAL rings, which
++ *   do not exist before the copy-engine patch.
++ * WLAN_MODE 0x22: 0x01 mode u32 (0 = mission), 0x10 hw_debug u8 0.
++ * Directions: 1 in (target->host), 2 out, 3 in/out, 4 host only. Flag 8 = no interrupt.
++ */
++static const uint32_t wf_ce_cfg[][5] = {
++	{ 0, 2, 32, 2048, 0 },          /* HTC control, raw */
++	{ 1, 1, 32, 2048, 0 },          /* HTT + HTC control */
++	{ 2, 1, 32, 2048, 0 },          /* WMI */
++	{ 3, 2, 32, 2048, 0 },          /* WMI */
++	{ 4, 2, 256, 256, 8 },          /* HTT */
++	{ 5, 1, 32, 2048, 0 },          /* pktlog */
++	{ 6, 3, 32, 16384, 0 },         /* target hif_memcpy */
++	{ 7, 4, 0, 0, 8 },              /* host only */
++	{ 8, 3, 32, 16384, 0 },         /* IPA */
++};
++
++static const uint32_t wf_svc_cfg[][3] = {
++	{ 0x104, 2, 3 }, { 0x104, 1, 2 },       /* WMI data VO */
++	{ 0x102, 2, 3 }, { 0x102, 1, 2 },       /* WMI data BK */
++	{ 0x101, 2, 3 }, { 0x101, 1, 2 },       /* WMI data BE */
++	{ 0x103, 2, 3 }, { 0x103, 1, 2 },       /* WMI data VI */
++	{ 0x100, 2, 3 }, { 0x100, 1, 2 },       /* WMI control */
++	{ 0x001, 2, 0 }, { 0x001, 1, 2 },       /* HTC reserved control */
++	{ 0x300, 2, 4 }, { 0x300, 1, 1 },       /* HTT data */
++};
++
++#define NELEM(a)        (sizeof(a) / sizeof((a)[0]))
++
++static int
++wf_firmware_start(void)
++{
++	static struct qmsg m;
++	wf_begin(&m, WLFW_WLAN_INI);
++	q_u8(&m, 0x10, 1);
++	if (wf_request(&m, "WLAN_INI", 2000) != 0) {
++		return 10;
++	}
++
++	wf_begin(&m, WLFW_WLAN_CFG);
++	uint8_t *p = q_tlv(&m, 0x10, 3);
++	if (p == NULL) {
++		return 11;
++	}
++	memcpy(p, "WIN", 3);
++	p = q_tlv(&m, 0x11, (uint16_t)(1 + NELEM(wf_ce_cfg) * 20));
++	if (p == NULL) {
++		return 11;
++	}
++	*p++ = (uint8_t)NELEM(wf_ce_cfg);
++	for (unsigned i = 0; i < NELEM(wf_ce_cfg); ++i) {
++		for (unsigned k = 0; k < 5; ++k, p += 4) {
++			put32(p, wf_ce_cfg[i][k]);
++		}
++	}
++	p = q_tlv(&m, 0x12, (uint16_t)(1 + NELEM(wf_svc_cfg) * 12));
++	if (p == NULL) {
++		return 11;
++	}
++	*p++ = (uint8_t)NELEM(wf_svc_cfg);
++	for (unsigned i = 0; i < NELEM(wf_svc_cfg); ++i) {
++		for (unsigned k = 0; k < 3; ++k, p += 4) {
++			put32(p, wf_svc_cfg[i][k]);
++		}
++	}
++	if (wf_request(&m, "WLAN_CFG", 2000) != 0) {
++		return 11;
++	}
++
++	wf_begin(&m, WLFW_WLAN_MODE);
++	q_u32(&m, 0x01, 0);
++	q_u8(&m, 0x10, 0);
++	if (wf_request(&m, "WLAN_MODE", 5000) != 0) {
++		return 12;
++	}
++	return 0;
++}
++
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-12) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -520,11 +627,16 @@ sweet_wlfw_run(void)
+ 	if (wf_m3() != 0) {
+ 		return 8;
+ 	}
+-	if (wf_wait_ind(WLFW_FW_READY_IND, "FW_READY", 10000) != 0) {
++	if (wf_wait_ready(10000) != 0) {
+ 		return 9;
+ 	}
+ 	printf("SWEET WLFW: firmware ready\n");
+-	sweet_ipcr_service(500);        /* log whatever follows (FW_INIT_DONE 0x38 may come) */
++	int r = wf_firmware_start();
++	if (r != 0) {
++		return r;
++	}
++	printf("SWEET WLFW: mission mode requested\n");
++	sweet_ipcr_service(1000);       /* log whatever follows */
+ 	return 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

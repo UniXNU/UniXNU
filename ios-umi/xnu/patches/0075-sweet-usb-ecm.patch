@@ -1,0 +1,457 @@
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -21,6 +21,18 @@
+ #include <vm/pmap.h>
+ #include <vm/vm_kern.h>
+ #include <pexpert/pexpert.h>
++#include <kern/locks.h>
++#include <sys/kpi_mbuf.h>
++#include <sys/kpi_socket.h>
++#include <sys/sockio.h>
++#include <net/if.h>
++#include <net/if_types.h>
++#include <net/ethernet.h>
++#include <net/if_ether.h>
++#include <net/ether_if_module.h>
++#include <net/kpi_interface.h>
++#include <net/kpi_protocol.h>
++#include <netinet/in.h>
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ void sweet_usb_probe(void);
+@@ -184,10 +196,25 @@
+ #define UD_EVT_SIZE     0x1000
+ #define UD_TRB_OUT      0x1000          /* ep0 OUT TRB */
+ #define UD_TRB_IN       0x1010          /* ep0 IN TRB */
++#define UD_TRB_RX       0x1020          /* ep1 OUT (bulk, host -> phone) */
++#define UD_TRB_TX       0x1030          /* ep1 IN (bulk, phone -> host) */
++#define UD_TRB_INT      0x1050          /* ep2 IN (interrupt, notifications) */
+ #define UD_SETUP        0x1040          /* 8-byte setup packet */
+ #define UD_DATA         0x1100          /* ep0 data stage, 512 bytes */
++#define UD_NOTIFY       0x1300          /* 16-byte notification */
++#define UD_RX           0x2000          /* one received frame */
++#define UD_TX           0x2800          /* one frame to send */
++#define UD_FRAME_MAX    0x800
+ #define UD_SIZE         0x4000
+ 
++/* Physical endpoints: 2n = OUT, 2n+1 = IN */
++#define EP_RX           2               /* 0x01 bulk OUT */
++#define EP_TX           3               /* 0x81 bulk IN */
++#define EP_INT          5               /* 0x82 interrupt IN */
++#define TRBCTL_NORMAL   (1u << 4)
++
++#define UD_TXQ          32
++
+ static struct {
+ 	vm_offset_t dwc;
+ 	vm_offset_t dma;
+@@ -197,6 +224,15 @@
+ 	enum { EP0_SETUP, EP0_DATA, EP0_WAIT_STATUS2, EP0_WAIT_STATUS3, EP0_STATUS } state;
+ 	bool        data_in;        /* data stage direction */
+ 	uint32_t    events;
++	bool        configured;
++	uint8_t     data_alt;       /* data interface alternate setting */
++	/* network */
++	ifnet_t     ifp;
++	lck_mtx_t  *lock;           /* TX ring and TX endpoint */
++	mbuf_t      txq[UD_TXQ];
++	unsigned    txq_head, txq_count;
++	bool        tx_busy;
++	uint64_t    rx_frames, tx_frames;
+ } ud;
+ 
+ static inline void
+@@ -250,11 +286,10 @@
+ 	return -1;
+ }
+ 
+-/* One TRB on physical endpoint ep (0 = ep0 OUT, 1 = ep0 IN). */
++/* One TRB (at DMA offset trb) on physical endpoint ep. */
+ static void
+-ud_start(unsigned ep, uint32_t buf, uint32_t len, uint32_t ctl)
++ud_start_trb(unsigned ep, uint32_t trb, uint32_t buf, uint32_t len, uint32_t ctl)
+ {
+-	uint32_t trb = ep ? UD_TRB_IN : UD_TRB_OUT;
+ 	volatile uint32_t *t = (volatile uint32_t *)(ud.dma + trb);
+ 	uint64_t bpa = ud.dma_pa + buf;
+ 
+@@ -271,6 +306,12 @@
+ }
+ 
+ static void
++ud_start(unsigned ep, uint32_t buf, uint32_t len, uint32_t ctl)
++{
++	ud_start_trb(ep, ep ? UD_TRB_IN : UD_TRB_OUT, buf, len, ctl);
++}
++
++static void
+ ud_start_setup(void)
+ {
+ 	ud.state = EP0_SETUP;
+@@ -284,16 +325,32 @@
+ 	ud_start_setup();
+ }
+ 
+-/* Descriptors. VID 0x1209 / PID 0x0001 = pid.codes test ID, not a product. */
++/*
++ * USB descriptors: a CDC-ECM (Ethernet) function, which Linux (cdc_ether)
++ * and macOS drive without extra drivers. VID 0x1209 / PID 0x0001 =
++ * pid.codes test ID, not a product.
++ */
+ static const uint8_t ud_dev_desc[18] = {
+-	18, 1, 0x00, 0x02, 0x00, 0x00, 0x00, 64,
++	18, 1, 0x00, 0x02, 0x02, 0x00, 0x00, 64,
+ 	0x09, 0x12, 0x01, 0x00, 0x00, 0x01, 1, 2, 3, 1,
+ };
+-static const uint8_t ud_cfg_desc[18] = {
+-	9, 2, 18, 0, 1, 1, 0, 0x80, 250,                /* config: 1 interface, 500 mA */
+-	9, 4, 0, 0, 0, 0xff, 0x00, 0x00, 0,             /* vendor interface, no endpoints */
++static const uint8_t ud_cfg_desc[80] = {
++	9, 2, 80, 0, 2, 1, 0, 0x80, 250,                /* config: 2 interfaces, 500 mA */
++	9, 4, 0, 0, 1, 0x02, 0x06, 0x00, 0,             /* comm interface 0: CDC ECM, 1 endpoint */
++	5, 0x24, 0x00, 0x10, 0x01,                      /* header, CDC 1.10 */
++	5, 0x24, 0x06, 0, 1,                            /* union: control 0, data 1 */
++	13, 0x24, 0x0f, 4, 0, 0, 0, 0, 0xea, 0x05, 0, 0, 0, /* ethernet: MAC string 4, max segment 1514 */
++	7, 5, 0x82, 0x03, 16, 0, 9,                     /* ep 0x82 interrupt IN, 16 bytes, 2^(9-1) uframes */
++	9, 4, 1, 0, 0, 0x0a, 0x00, 0x00, 0,             /* data interface 1 alt 0: no endpoints */
++	9, 4, 1, 1, 2, 0x0a, 0x00, 0x00, 0,             /* data interface 1 alt 1: two bulk endpoints */
++	7, 5, 0x81, 0x02, 0x00, 0x02, 0,                /* ep 0x81 bulk IN, 512 */
++	7, 5, 0x01, 0x02, 0x00, 0x02, 0,                /* ep 0x01 bulk OUT, 512 */
++};
++/* The host side's MAC (ECM iMACAddress); the phone's own is ..:02 */
++static const char *const ud_strings[] = {
++	NULL, "ios-sweet", "Sweet iOS (USB Ethernet)", "0001", "02005E77EE01",
+ };
+-static const char *const ud_strings[] = { NULL, "ios-sweet", "Sweet iOS (USB bring-up)", "0001" };
++static const uint8_t ud_phone_mac[ETHER_ADDR_LEN] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x02 };
+ 
+ static uint32_t
+ ud_string(unsigned idx, uint8_t *out)
+@@ -316,6 +373,45 @@
+ 	return n;
+ }
+ 
++static void ud_rx_arm(void);
++static void ud_tx_kick_locked(void);
++
++/* NETWORK_CONNECTION notification: the host brings its link up on it. */
++static void
++ud_notify_connected(void)
++{
++	uint8_t *n = (uint8_t *)(ud.dma + UD_NOTIFY);
++	n[0] = 0xa1; n[1] = 0x00;       /* NETWORK_CONNECTION */
++	n[2] = 1; n[3] = 0;             /* connected */
++	n[4] = 0; n[5] = 0;             /* interface 0 */
++	n[6] = 0; n[7] = 0;
++	ud_start_trb(EP_INT, UD_TRB_INT, UD_NOTIFY, 8, TRBCTL_NORMAL);
++}
++
++/* SET_CONFIGURATION(1): bulk IN/OUT and the interrupt endpoint. */
++static void
++ud_configure(void)
++{
++	if (ud.configured) {
++		return;
++	}
++	if (ud_epcmd(0, DEPCMD_DEPSTARTCFG | (2u << 16), 0, 0, 0) ||
++	    ud_epcmd(EP_RX, DEPCMD_SETEPCONFIG, (2u << 1) | (512u << 3), (1u << 8) | ((uint32_t)EP_RX << 25), 0) ||
++	    ud_epcmd(EP_RX, DEPCMD_SETTRANSFRESOURCE, 1, 0, 0) ||
++	    ud_epcmd(EP_TX, DEPCMD_SETEPCONFIG, (2u << 1) | (512u << 3) | (1u << 17), (1u << 8) | ((uint32_t)EP_TX << 25), 0) ||
++	    ud_epcmd(EP_TX, DEPCMD_SETTRANSFRESOURCE, 1, 0, 0) ||
++	    ud_epcmd(EP_INT, DEPCMD_SETEPCONFIG, (3u << 1) | (16u << 3) | (2u << 17),
++	    (1u << 8) | (8u << 16) | ((uint32_t)EP_INT << 25), 0) ||
++	    ud_epcmd(EP_INT, DEPCMD_SETTRANSFRESOURCE, 1, 0, 0)) {
++		printf("SWEET USB: data endpoints setup failed\n");
++		return;
++	}
++	dwc_wr(DALEPENA, dwc_rd(DALEPENA) | (1u << EP_RX) | (1u << EP_TX) | (1u << EP_INT));
++	ud.configured = true;
++	ud_rx_arm();
++	printf("SWEET USB: ECM endpoints configured\n");
++}
++
+ static void
+ ud_setup(void)
+ {
+@@ -323,13 +419,16 @@
+ 	uint8_t *data = (uint8_t *)(ud.dma + UD_DATA);
+ 	uint8_t type = st[0], req = st[1];
+ 	uint16_t value = (uint16_t)(st[2] | st[3] << 8);
++	uint16_t index = (uint16_t)(st[4] | st[5] << 8);
+ 	uint16_t length = (uint16_t)(st[6] | st[7] << 8);
+ 	uint32_t n = 0;
+ 	bool ok = true;
+ 
+-	printf("SWEET USB: setup %02x %02x %04x len %u\n", type, req, value, length);
++	printf("SWEET USB: setup %02x %02x %04x %04x len %u\n", type, req, value, index, length);
+ 	ud.data_in = (type & 0x80) != 0;
+-	if ((type & 0x60) != 0) {       /* only standard requests */
++	if ((type & 0x60) == 0x20) {    /* class request (e.g. SET_ETHERNET_PACKET_FILTER) */
++		ok = (length == 0);
++	} else if ((type & 0x60) != 0) {
+ 		ok = false;
+ 	} else if (req == 6) {          /* GET_DESCRIPTOR */
+ 		switch (value >> 8) {
+@@ -343,12 +442,24 @@
+ 		dwc_wr(DCFG, dcfg | ((uint32_t)(value & 0x7f) << 3));
+ 		printf("SWEET USB: address %u\n", value & 0x7f);
+ 	} else if (req == 9) {          /* SET_CONFIGURATION */
++		if (value == 1) {
++			ud_configure();
++		}
+ 		printf("SWEET USB: configured (%u)\n", value);
+ 	} else if (req == 8) {          /* GET_CONFIGURATION */
+-		data[0] = 1; n = 1;
++		data[0] = ud.configured ? 1 : 0; n = 1;
+ 	} else if (req == 0) {          /* GET_STATUS */
+ 		data[0] = 0; data[1] = 0; n = 2;
+ 	} else if (req == 11) {         /* SET_INTERFACE */
++		if (index == 1) {
++			ud.data_alt = (uint8_t)value;
++			if (value == 1 && ud.configured) {
++				ud_notify_connected();
++			}
++		}
++	} else if (req == 10) {         /* GET_INTERFACE */
++		data[0] = index == 1 ? ud.data_alt : 0; n = 1;
++	} else if (req == 1 || req == 3) { /* CLEAR/SET_FEATURE (halt, remote wakeup) */
+ 	} else {
+ 		ok = false;
+ 	}
+@@ -371,6 +482,183 @@
+ 	}
+ }
+ 
++/* ---- network interface (ue0) ---- */
++
++static void
++ud_rx_arm(void)
++{
++	ud_start_trb(EP_RX, UD_TRB_RX, UD_RX, UD_FRAME_MAX, TRBCTL_NORMAL);
++}
++
++static void
++ud_rx_done(void)
++{
++	volatile uint32_t *t = (volatile uint32_t *)(ud.dma + UD_TRB_RX);
++	ud_sync(UD_TRB_RX, 16);
++	uint32_t len = UD_FRAME_MAX - (t[2] & 0xffffff);
++	ud_sync(UD_RX, UD_FRAME_MAX);
++	if (ud.ifp != NULL && len >= ETHER_HDR_LEN && len <= ETHER_MAX_LEN) {
++		mbuf_t m = NULL;
++		if (mbuf_allocpacket(MBUF_DONTWAIT, len, NULL, &m) == 0 &&
++		    mbuf_copyback(m, 0, len, (const void *)(ud.dma + UD_RX), MBUF_DONTWAIT) == 0) {
++			struct ifnet_stat_increment_param stats = {};
++			void *frame_header = mbuf_data(m);
++			mbuf_pkthdr_setrcvif(m, ud.ifp);
++			mbuf_pkthdr_setheader(m, frame_header);
++			mbuf_pkthdr_adjustlen(m, -ETHER_HDR_LEN);
++			(void)mbuf_setdata(m, (char *)mbuf_data(m) + ETHER_HDR_LEN, mbuf_len(m) - ETHER_HDR_LEN);
++			stats.packets_in = 1;
++			stats.bytes_in = len;
++			ud.rx_frames++;
++			ifnet_input(ud.ifp, m, &stats);
++		} else if (m != NULL) {
++			mbuf_freem(m);
++		}
++	}
++	ud_rx_arm();
++}
++
++/* Start the next queued frame if the IN endpoint is idle. ud.lock held. */
++static void
++ud_tx_kick_locked(void)
++{
++	while (!ud.tx_busy && ud.txq_count > 0 && ud.configured) {
++		mbuf_t m = ud.txq[ud.txq_head];
++		ud.txq_head = (ud.txq_head + 1) % UD_TXQ;
++		ud.txq_count--;
++		size_t len = mbuf_pkthdr_len(m);
++		if (len > ETHER_MAX_LEN - ETHER_CRC_LEN) {
++			mbuf_freem(m);
++			continue;
++		}
++		mbuf_copydata(m, 0, len, (void *)(ud.dma + UD_TX));
++		mbuf_freem(m);
++		/* A frame of a multiple of 512 bytes would need a zero-length
++		 * packet to end it; one pad byte does the same (IP ignores it). */
++		if ((len % 512) == 0) {
++			((uint8_t *)(ud.dma + UD_TX))[len++] = 0;
++		}
++		ud.tx_busy = true;
++		ud.tx_frames++;
++		ud_start_trb(EP_TX, UD_TRB_TX, UD_TX, (uint32_t)len, TRBCTL_NORMAL);
++	}
++}
++
++static errno_t
++ud_if_output(ifnet_t ifp, mbuf_t m)
++{
++	lck_mtx_lock(ud.lock);
++	if (ud.txq_count == UD_TXQ || !ud.configured) {
++		lck_mtx_unlock(ud.lock);
++		mbuf_freem(m);
++		ifnet_stat_increment_out(ifp, 0, 0, 1);
++		return 0;
++	}
++	ifnet_stat_increment_out(ifp, 1, mbuf_pkthdr_len(m), 0);
++	ud.txq[(ud.txq_head + ud.txq_count) % UD_TXQ] = m;
++	ud.txq_count++;
++	ud_tx_kick_locked();
++	lck_mtx_unlock(ud.lock);
++	return 0;
++}
++
++static errno_t
++ud_if_ioctl(ifnet_t ifp, unsigned long cmd, void *data __unused)
++{
++	switch (cmd) {
++	case SIOCSIFADDR:
++	case SIOCAIFADDR:
++		ifnet_set_flags(ifp, IFF_UP, IFF_UP);
++		return 0;
++	case SIOCSIFFLAGS:
++	case SIOCADDMULTI:
++	case SIOCDELMULTI:
++		return 0;
++	default:
++		return EOPNOTSUPP;
++	}
++}
++
++static void
++ud_if_detach(ifnet_t ifp __unused)
++{
++}
++
++/* ue0, 192.168.7.2/24 (the host side is 192.168.7.1). */
++static void
++ud_if_create(void)
++{
++	struct ifnet_init_eparams init;
++	static lck_grp_t *grp;
++
++	grp = lck_grp_alloc_init("sweet_usb", LCK_GRP_ATTR_NULL);
++	ud.lock = lck_mtx_alloc_init(grp, LCK_ATTR_NULL);
++
++	bzero(&init, sizeof(init));
++	init.ver = IFNET_INIT_CURRENT_VERSION;
++	init.len = sizeof(init);
++	init.flags = IFNET_INIT_LEGACY;
++	init.uniqueid = "sweet-usb-ecm";
++	init.uniqueid_len = sizeof("sweet-usb-ecm") - 1;
++	init.name = "ue";
++	init.unit = 0;
++	init.family = IFNET_FAMILY_ETHERNET;
++	init.type = IFT_ETHER;
++	init.output = ud_if_output;
++	init.demux = ether_demux;
++	init.add_proto = ether_add_proto;
++	init.del_proto = ether_del_proto;
++	init.check_multi = ether_check_multi;
++	init.framer_extended = ether_frameout_extended;
++	init.ioctl = ud_if_ioctl;
++	init.detach = ud_if_detach;
++	init.broadcast_addr = etherbroadcastaddr;
++	init.broadcast_len = ETHER_ADDR_LEN;
++	if (ifnet_allocate_extended(&init, &ud.ifp) != 0) {
++		printf("SWEET USB: ifnet_allocate failed\n");
++		ud.ifp = NULL;
++		return;
++	}
++	ifnet_set_addrlen(ud.ifp, ETHER_ADDR_LEN);
++	ifnet_set_hdrlen(ud.ifp, sizeof(struct ether_header));
++	ifnet_set_mtu(ud.ifp, ETHERMTU);
++	ifnet_set_baudrate(ud.ifp, 480000000);
++	ifnet_set_flags(ud.ifp, IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST, 0xffff);
++	if (ifnet_attach(ud.ifp, NULL) != 0) {
++		printf("SWEET USB: ifnet_attach failed\n");
++		ud.ifp = NULL;
++		return;
++	}
++	ifnet_set_lladdr(ud.ifp, ud_phone_mac, ETHER_ADDR_LEN);
++
++	errno_t err = proto_plumb(PF_INET, ud.ifp);
++	socket_t so = NULL;
++	if (err == 0) {
++		err = sock_socket(PF_INET, SOCK_DGRAM, 0, NULL, NULL, &so);
++	}
++	if (err == 0) {
++		struct ifaliasreq ifra;
++		bzero(&ifra, sizeof(ifra));
++		snprintf(ifra.ifra_name, sizeof(ifra.ifra_name), "ue0");
++		struct sockaddr_in *a = (struct sockaddr_in *)&ifra.ifra_addr;
++		a->sin_len = sizeof(*a);
++		a->sin_family = AF_INET;
++		a->sin_addr.s_addr = htonl(0xc0a80702);         /* 192.168.7.2 */
++		a = (struct sockaddr_in *)&ifra.ifra_mask;
++		a->sin_len = sizeof(*a);
++		a->sin_family = AF_INET;
++		a->sin_addr.s_addr = htonl(0xffffff00);
++		a = (struct sockaddr_in *)&ifra.ifra_broadaddr;
++		a->sin_len = sizeof(*a);
++		a->sin_family = AF_INET;
++		a->sin_addr.s_addr = htonl(0xc0a807ff);
++		err = sock_ioctl(so, SIOCAIFADDR, &ifra);
++		sock_close(so);
++	}
++	ifnet_set_flags(ud.ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
++	printf("SWEET USB: ue0 192.168.7.2/24 %s (err %d)\n", err ? "NOT configured" : "up", err);
++}
++
+ static void
+ ud_event(uint32_t ev)
+ {
+@@ -395,6 +683,18 @@
+ 	unsigned ep = (ev >> 1) & 0x1f;
+ 	unsigned type = (ev >> 6) & 0xf;
+ 	unsigned status = (ev >> 12) & 0xf;
++
++	if (ep == EP_RX && type == 1) {
++		ud_rx_done();
++		return;
++	}
++	if (ep == EP_TX && type == 1) {
++		lck_mtx_lock(ud.lock);
++		ud.tx_busy = false;
++		ud_tx_kick_locked();
++		lck_mtx_unlock(ud.lock);
++		return;
++	}
+ 	if (ep > 1) {
+ 		return;
+ 	}
+@@ -433,6 +733,7 @@
+ static void
+ ud_thread(void *arg __unused, wait_result_t wr __unused)
+ {
++	uint32_t ticks = 0;
+ 	for (;;) {
+ 		uint32_t count = dwc_rd(GEVNTCOUNT) & 0xffff;
+ 		if (count) {
+@@ -440,13 +741,16 @@
+ 			for (uint32_t done = 0; done < count; done += 4) {
+ 				uint32_t ev = *(volatile uint32_t *)(ud.dma + UD_EVT + ud.evt_pos);
+ 				ud.evt_pos = (ud.evt_pos + 4) % UD_EVT_SIZE;
+-				if (ud.events++ < 400) {
++				if (ud.events++ < 200) {
+ 					printf("SWEET USB: event 0x%08x\n", ev);
+ 				}
+ 				ud_event(ev);
+ 			}
+ 			dwc_wr(GEVNTCOUNT, count);
+ 		}
++		if ((++ticks % 30000) == 0) {
++			printf("SWEET USB: ue0 rx %llu tx %llu frames\n", ud.rx_frames, ud.tx_frames);
++		}
+ 		ud_sleep_ms(1);
+ 	}
+ }
+@@ -467,6 +771,7 @@
+ 		return;
+ 	}
+ 	ud.dma_pa = ptoa_64(pn);
++	ud_if_create();
+ 
+ 	/* Device controller soft reset (PHY and global setup stay as ABL left them). */
+ 	dwc_wr(DCTL, DCTL_CSFTRST);

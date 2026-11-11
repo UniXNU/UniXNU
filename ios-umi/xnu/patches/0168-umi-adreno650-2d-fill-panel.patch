@@ -1,0 +1,366 @@
+From 3978608689ba0f146ae854208ca5d33fe4765fff Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 19:44:56 +0100
+Subject: [PATCH] umi-0168-adreno-2d-fill-panel
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c                | 205 +++++++++++++++++++++++++-
+ iokit/Kernel/arm/SweetFramebuffer.cpp |  85 ++++++++++-
+ 2 files changed, 288 insertions(+), 2 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 31e8ed6..73b7719 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -58,6 +58,8 @@
+  *  20  writes  the 3D core's registers (Linux a6xx_gpu.c hw_init for the A650, without clock gating,
+  *              register protection and interrupts), starts its command processor, CP_ME_INIT
+  *  21  commands the 3D core out of secure mode, then to write a known word into the scratch page
++ *  22  draws   with the 2D engine: red, green and blue bands straight into the panel's boot
++ *              framebuffer, which the framebuffer driver shows alone for sweetgpuhold ms
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -2141,11 +2143,212 @@ sa_step_core_commands(void)
+ 	return word == CORE_KNOWN_WORD;
+ }
+ 
++/* ---- step 22: a picture drawn by the GPU, on the panel ---- */
++
++/*
++ * The 2D engine fills rectangles of one colour (Mesa 24.2 fd6_blitter.cc fd6_clear_surface, with
++ * emit_setup before and the flushes of fd6_clear_texture after) straight into the panel's boot
++ * framebuffer, which the 3D core is given at CORE_PANEL_ADDRESS. The framebuffer's rows are 4320
++ * bytes, not a multiple of 64 as the 2D engine's pitch must be; two rows (8640 = 135 x 64) are
++ * one row of the surface the engine is told about, twice as wide: the same pixels, so full-width
++ * bands come out right (only band edges are rounded to even rows). The framebuffer driver
++ * shows that framebuffer alone (sweet_fb_gpu_begin) until sweetgpuhold ms (default 10000) after
++ * it has been drawn (sweet_fb_gpu_show), 60 s at most if the drawing does not come.
++ */
++extern bool sweet_fb_gpu_begin(uint64_t *phys, uint32_t *width, uint32_t *height, uint32_t *row_bytes, uint32_t hold_ms);
++extern void sweet_fb_gpu_show(uint32_t hold_ms);
++extern uint32_t sweet_fb_gpu_pixel(uint32_t x, uint32_t y);
++#define FB_HOLD_UNTIL_DRAWN     60000           /* ms the framebuffer is held while the steps go on (each waits sweetgpupause) */
++
++#define CORE_PANEL_ADDRESS      0x10000000u
++#define CP_WAIT_FOR_IDLE        0x26
++#define CP_BLIT                 0x2c
++#define CP_EVENT_WRITE          0x46
++#define BLIT_OP_SCALE           3
++#define EVENT_TIMESTAMP         (1u << 30)      /* CP_EVENT_WRITE_0_TIMESTAMP, as Mesa's A6XX __event_write */
++#define EVENT_CACHE_FLUSH_TS    4
++#define EVENT_CCU_INVALIDATE_DEPTH 24
++#define EVENT_CCU_INVALIDATE_COLOR 25
++#define EVENT_CCU_FLUSH_DEPTH_TS 28
++#define EVENT_CCU_FLUSH_COLOR_TS 29
++#define EVENT_LABEL             63
++/* a6xx.xml register numbers (written by command) */
++#define REG_GRAS_2D_BLIT_CNTL   0x8400
++#define REG_GRAS_2D_DST_TL      0x8405
++#define REG_GRAS_2D_DST_BR      0x8406
++#define REG_RB_2D_BLIT_CNTL     0x8c00
++#define REG_RB_2D_UNKNOWN_8C01  0x8c01
++#define REG_RB_2D_DST_INFO      0x8c17
++#define REG_RB_2D_DST           0x8c18
++#define REG_RB_2D_DST_PITCH     0x8c1a
++#define REG_RB_2D_SRC_SOLID_C0  0x8c2c
++#define REG_RB_DBG_ECO_CNTL     0x8e04
++#define REG_RB_CCU_CNTL         0x8e07
++#define REG_SP_2D_DST_FORMAT    0xacc0
++#define FMT6_8_8_8_8_UNORM      0x30
++#define R2D_UNORM8              0x10
++#define COLOR_SWAP_WXYZ         1               /* B8G8R8A8: blue first in memory, as the panel's a8r8g8b8 */
++#define BLIT_CNTL_SOLID         (1u << 7 | FMT6_8_8_8_8_UNORM << 8 | 0xfu << 20 | R2D_UNORM8 << 24)
++#define SP_2D_DST_FORMAT_8888   (FMT6_8_8_8_8_UNORM << 3 | 0xfu << 12)
++#define RB_2D_DST_INFO_BGRA     (FMT6_8_8_8_8_UNORM | COLOR_SWAP_WXYZ << 10)
++#define RB_CCU_CNTL_A650_SYSMEM 0x18000000u     /* colour cache at 3 CCUs x 64K of depth cache (fd6_screen.cc) */
++#define RB_DBG_ECO_CNTL_A650_BLIT 0x04100000u   /* freedreno_devices.py A650 magic RB_DBG_ECO_CNTL_blit */
++#define EVENT_STAMPS            (CORE_SCRATCH_ADDRESS + 0x100)
++
++static uint32_t sa_event_stamp;
++
++/* A type 4 packet: one register (by its number) written by command. */
++static void
++sa_ring_register(uint32_t number, uint32_t value)
++{
++	sa_ring(4u << 28 | 1 | sa_pm4_parity(1) << 7 | (number & 0x3ffff) << 8 | sa_pm4_parity(number) << 27);
++	sa_ring(value);
++}
++
++/* Mesa's A6XX event write: a _TS event writes a stamp (into the scratch page) when it is done. */
++static void
++sa_ring_event(uint32_t event, bool stamped)
++{
++	sa_ring_packet(CP_EVENT_WRITE, stamped ? 4 : 1);
++	sa_ring(event | (stamped ? EVENT_TIMESTAMP : 0));
++	if (stamped) {
++		sa_ring(EVENT_STAMPS + 4 * (sa_event_stamp++ % 32));
++		sa_ring(0);
++		sa_ring(sa_event_stamp);
++	}
++}
++
++static void
++sa_ring_fill(uint32_t base, uint32_t pitch, uint32_t width, uint32_t top, uint32_t bottom, uint32_t red, uint32_t green,
++    uint32_t blue)
++{
++	sa_ring_register(REG_GRAS_2D_DST_TL, top << 16);
++	sa_ring_register(REG_GRAS_2D_DST_BR, (width - 1) | (bottom - 1) << 16);
++	sa_ring_register(REG_RB_2D_SRC_SOLID_C0, red);         /* R2D_UNORM8: one register per channel, 0..255 */
++	sa_ring_register(REG_RB_2D_SRC_SOLID_C0 + 1, green);
++	sa_ring_register(REG_RB_2D_SRC_SOLID_C0 + 2, blue);
++	sa_ring_register(REG_RB_2D_SRC_SOLID_C0 + 3, 255);
++	sa_ring_register(REG_RB_2D_BLIT_CNTL, BLIT_CNTL_SOLID);
++	sa_ring_register(REG_GRAS_2D_BLIT_CNTL, BLIT_CNTL_SOLID);
++	sa_ring_register(REG_SP_2D_DST_FORMAT, SP_2D_DST_FORMAT_8888);
++	sa_ring_register(REG_RB_2D_UNKNOWN_8C01, 0);
++	sa_ring_register(REG_RB_2D_DST_INFO, RB_2D_DST_INFO_BGRA);
++	sa_ring_register(REG_RB_2D_DST, base);
++	sa_ring_register(REG_RB_2D_DST + 1, 0);
++	sa_ring_register(REG_RB_2D_DST_PITCH, pitch >> 6);
++	sa_ring_event(EVENT_LABEL, false);
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	sa_ring_register(REG_RB_DBG_ECO_CNTL, RB_DBG_ECO_CNTL_A650_BLIT);
++	sa_ring_packet(CP_BLIT, 1);
++	sa_ring(BLIT_OP_SCALE);
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	sa_ring_register(REG_RB_DBG_ECO_CNTL, 0);
++}
++
++static bool
++sa_step_frame(void)
++{
++	static const struct {
++		uint32_t red, green, blue;
++		const char *name;
++	} bands[3] = { { 255, 0, 0, "red" }, { 0, 255, 0, "green" }, { 0, 0, 255, "blue" } };
++	uint64_t phys = 0;
++	uint32_t width = 0, height = 0, row = 0, hold = 10000, rows_per = 1;
++
++	if (!sa_cx_ready() || !sa_core_runs) {
++		return false;
++	}
++	(void)PE_parse_boot_argn("sweetgpuhold", &hold, sizeof(hold));
++	sa_announce("find the panel's boot framebuffer and have the framebuffer driver show it alone");
++	if (!sweet_fb_gpu_begin(&phys, &width, &height, &row, FB_HOLD_UNTIL_DRAWN)) {
++		printf("SWEET GPU: %u: no framebuffer to draw into (or the display is off)\n", sa_step);
++		return false;
++	}
++	if (row % 64 != 0) {
++		rows_per = 2;
++	}
++	printf("SWEET GPU: %u: framebuffer %ux%u, rows of %u bytes at %#llx; the 2D engine sees %ux%u, rows of %u bytes; "
++	    "shown alone for %u ms once drawn\n", sa_step, width, height, row, phys, width * rows_per, height / rows_per, row * rows_per,
++	    hold);
++	if ((phys & 4095) || (row * rows_per) % 64 != 0 || height % rows_per != 0 || width * rows_per > 0x4000) {
++		printf("SWEET GPU: %u: not a framebuffer the 2D engine can be told about\n", sa_step);
++		return false;
++	}
++
++	sa_announce("give the 3D core the framebuffer (0x10000000 in its SMMU context), then forget old translations");
++	uint64_t size = ((uint64_t)row * height + 4095) & ~4095ull;
++	for (uint64_t at = 0; at < size; at += 4096) {
++		if (!sa_space_map(&sa_core_space, CORE_PANEL_ADDRESS + at, phys + at, PTE_CORE)) {
++			printf("SWEET GPU: %u: no page tables for the framebuffer\n", sa_step);
++			return false;
++		}
++	}
++	for (uint32_t i = 0; i < sa_core_space.table_count; i++) {
++		flush_dcache64((addr64_t)sa_core_space.table_phys[i], 4096, TRUE);
++	}
++	sa_put(&sa_smmu_cb0, "tlbiasid", SMMU_CB_TLBIASID, CORE_CONTEXT);
++	sa_put(&sa_smmu_cb0, "tlbsync", SMMU_CB_TLBSYNC, 1);
++	if (!sa_wait_for(&sa_smmu_cb0, SMMU_CB_TLBSTATUS, 1, 0, 100)) {
++		printf("SWEET GPU: %u: the SMMU does not finish its TLB sync\n", sa_step);
++		return false;
++	}
++	printf("SWEET GPU: %u: the 3D core sees %#x..%#llx: the framebuffer (%u page tables in all)\n", sa_step,
++	    CORE_PANEL_ADDRESS, CORE_PANEL_ADDRESS + size - 1, sa_core_space.table_count);
++
++	sa_announce("have the 2D engine fill the framebuffer: red, green, blue bands from the top");
++	/* emit_setup: CCU clean + invalidate, then the CCU in its system-memory setting */
++	sa_ring_event(EVENT_CCU_FLUSH_COLOR_TS, true);
++	sa_ring_event(EVENT_CCU_FLUSH_DEPTH_TS, true);
++	sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
++	sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	sa_ring_register(REG_RB_CCU_CNTL, RB_CCU_CNTL_A650_SYSMEM);
++	uint32_t surface_rows = height / rows_per;
++	for (uint32_t b = 0; b < 3; b++) {
++		sa_ring_fill(CORE_PANEL_ADDRESS, row * rows_per, width * rows_per, surface_rows * b / 3,
++		    surface_rows * (b + 1) / 3, bands[b].red, bands[b].green, bands[b].blue);
++	}
++	/* fd6_clear_texture: what was drawn out of the caches into memory */
++	sa_ring_event(EVENT_CCU_FLUSH_COLOR_TS, true);
++	sa_ring_event(EVENT_CCU_FLUSH_DEPTH_TS, true);
++	sa_ring_event(EVENT_CACHE_FLUSH_TS, true);
++	sa_ring_packet(CP_WAIT_FOR_IDLE, 0);
++	if (!sa_ring_run("fill the framebuffer")) {
++		return false;
++	}
++	sa_to_memory(sa_core_scratch.memory, PAGE_SIZE);
++	const volatile uint32_t *stamps = (const volatile uint32_t *)(sa_core_scratch.memory + 0x100);
++	printf("SWEET GPU: %u: event stamps: %#x %#x %#x %#x %#x (%u events with stamps)\n", sa_step, stamps[0], stamps[1],
++	    stamps[2], stamps[3], stamps[4], sa_event_stamp);
++
++	/* one pixel in the middle of each band, and the corners; memory order B G R A = 0xAARRGGBB */
++	static const uint32_t want[3] = { 0xffff0000u, 0xff00ff00u, 0xff0000ffu };
++	bool right = true;
++	for (uint32_t b = 0; b < 3; b++) {
++		uint32_t y = height * (2 * b + 1) / 6;
++		uint32_t middle = sweet_fb_gpu_pixel(width / 2, y), left = sweet_fb_gpu_pixel(0, y),
++		    end = sweet_fb_gpu_pixel(width - 1, y);
++		printf("SWEET GPU: %u: row %u (%s band): pixels %#x %#x %#x (left, middle, right; want %#x)\n", sa_step, y,
++		    bands[b].name, left, middle, end, want[b]);
++		right = right && left == want[b] && middle == want[b] && end == want[b];
++	}
++	printf("SWEET GPU: %u: first pixel %#x, last pixel %#x\n", sa_step, sweet_fb_gpu_pixel(0, 0),
++	    sweet_fb_gpu_pixel(width - 1, height - 1));
++	sweet_fb_gpu_show(hold);
++	if (!right) {
++		printf("SWEET GPU: %u: the framebuffer does not hold what the 2D engine was told to draw\n", sa_step);
++		return false;
++	}
++	printf("SWEET GPU: %u: A PICTURE DRAWN BY THE GPU IS ON THE PANEL: red, green, blue from the top (for %u ms)\n",
++	    sa_step, hold);
++	return true;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+ 	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start, sa_step_gmu_queues, sa_step_core_power,
+-	sa_step_core_space, sa_step_zap_load, sa_step_core_start, sa_step_core_commands,
++	sa_step_core_space, sa_step_zap_load, sa_step_core_start, sa_step_core_commands, sa_step_frame,
+ };
+ 
+ static void
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 66d6e72..2d05375 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -137,6 +137,7 @@ public:
+ 	SweetSurface *fLastSurf;      /* surface of the last direct frame */
+ 	uint64_t      fLastOff;       /* its panel window: byte offset in the surface */
+ 	SweetSurface *fPendHold[SWEET_FB_LAYERS], *fShowHold[SWEET_FB_LAYERS], *fRetireHold[SWEET_FB_LAYERS];
++	uint64_t      fGpuHoldUntil;  /* sweet_fb_gpu_begin(): no frames shown before then (mach time), boot framebuffer scanned */
+ 	void          setupScanout();
+ 	void          scanFrom(uint64_t pa, uint32_t stride);
+ 	void          scanBoot();
+@@ -197,6 +198,7 @@ public:
+ OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
+ OSDefineMetaClassAndStructors(AppleCLCD, IOMobileFramebuffer);
+ 
++static AppleCLCD *sweet_fb_main;        /* the panel (sweet_fb_gpu_begin) */
+ static void sweet_hold(SweetSurface *s, bool on);
+ static void sweet_hold_drop(SweetSurface **set);
+ 
+@@ -269,6 +271,7 @@ AppleCLCD::start(IOService *provider)
+ 		return false;
+ 	}
+ 	setupScanout();
++	sweet_fb_main = this;
+ 	uint32_t hz = 10;
+ 	PE_parse_boot_argn("sweetfb_hz", &hz, sizeof(hz));
+ 	fFlushTicks = (hz == 0 || hz >= 60) ? 1 : 60 / hz;
+@@ -354,8 +357,17 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 		sender->setTimeoutUS(SWEET_FB_VSYNC_US);
+ 		return;
+ 	}
++	/* the GPU's picture in the boot framebuffer (sweet_fb_gpu_begin): shown alone until the hold ends, then the latest frame again */
++	bool gpuHold = fb->fGpuHoldUntil != 0 && now < fb->fGpuHoldUntil;
++	if (gpuHold && fb->fDirect) {
++		fb->scanBoot();
++	} else if (fb->fGpuHoldUntil != 0 && !gpuHold) {
++		fb->fGpuHoldUntil = 0;
++		fb->fDirty = true;
++		IOLog("SWEET FB: the GPU's picture has been shown; frames again\n");
++	}
+ 	/* direct frames cost one cache clean: every vsync; copied frames every fFlushTicks */
+-	bool flush = fb->fDirty && ((fb->fDirect && fb->fLastDirect) || (count % fb->fFlushTicks) == 0);
++	bool flush = !gpuHold && fb->fDirty && ((fb->fDirect && fb->fLastDirect) || (count % fb->fFlushTicks) == 0);
+ 	uint8_t *rec = NULL;
+ 	SweetSurface *taken[SWEET_FB_LAYERS] = {}, *retire[SWEET_FB_LAYERS];
+ 	if (flush) {
+@@ -741,6 +753,77 @@ AppleCLCD::scanBoot()
+ 	}
+ }
+ 
++/* Clean and invalidate the data cache to the point of coherency (memory the GPU writes). */
++static void
++sweet_dcache_flush(uintptr_t va, uint64_t len)
++{
++	uint64_t ctr;
++	__asm__ volatile ("mrs %0, ctr_el0" : "=r"(ctr));
++	uint64_t line = 4ull << ((ctr >> 16) & 0xf);
++	for (uintptr_t p = va & ~(line - 1); p < va + len; p += line) {
++		__asm__ volatile ("dc civac, %0" :: "r"(p) : "memory");
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++/*
++ * For the GPU bring-up (bsd/dev/sweet_adreno.c step 22): the boot framebuffer's place and
++ * size, cleaned out of the CPU's caches (so no dirty line lands on what the GPU writes), and
++ * from the next vsync on shown alone on the panel for hold_ms at most: no frames presented,
++ * direct scanout pointed back at it. sweet_fb_gpu_show() sets how long it stays once drawn.
++ * Afterwards the latest frame is shown again.
++ */
++extern "C" bool
++sweet_fb_gpu_begin(uint64_t *phys, uint32_t *width, uint32_t *height, uint32_t *row_bytes, uint32_t hold_ms)
++{
++	AppleCLCD *fb = sweet_fb_main;
++	uint64_t hold;
++
++	if (fb == NULL || fb->fPowerOff) {
++		return false;
++	}
++	*phys = fb->fPhys;
++	*width = fb->fWidth;
++	*height = fb->fHeight;
++	*row_bytes = fb->fRowBytes;
++	sweet_dcache_flush(fb->fPixels, (uint64_t)fb->fRowBytes * fb->fHeight);
++	nanoseconds_to_absolutetime((uint64_t)hold_ms * NSEC_PER_MSEC, &hold);
++	IOLockLock(fb->fLock);
++	fb->fGpuHoldUntil = mach_absolute_time() + hold;
++	IOLockUnlock(fb->fLock);
++	return true;
++}
++
++/* The GPU's picture is in place: shown alone for hold_ms more. */
++extern "C" void
++sweet_fb_gpu_show(uint32_t hold_ms)
++{
++	AppleCLCD *fb = sweet_fb_main;
++	uint64_t hold;
++
++	if (fb == NULL) {
++		return;
++	}
++	nanoseconds_to_absolutetime((uint64_t)hold_ms * NSEC_PER_MSEC, &hold);
++	IOLockLock(fb->fLock);
++	fb->fGpuHoldUntil = mach_absolute_time() + hold;
++	IOLockUnlock(fb->fLock);
++}
++
++/* A pixel of the boot framebuffer as memory holds it (after the GPU wrote it). */
++extern "C" uint32_t
++sweet_fb_gpu_pixel(uint32_t x, uint32_t y)
++{
++	AppleCLCD *fb = sweet_fb_main;
++
++	if (fb == NULL || x >= fb->fWidth || y >= fb->fHeight) {
++		return 0;
++	}
++	uintptr_t va = fb->fPixels + (uint64_t)y * fb->fRowBytes + (uint64_t)x * 4;
++	sweet_dcache_flush(va, 4);
++	return *(volatile uint32_t *)va;
++}
++
+ /*
+  * A frame that is exactly one full-screen surface from the scanout pool is
+  * shown by pointing the pipe at its panel window. Returns false for the copy
+-- 
+2.54.0 (Apple Git-157)
+

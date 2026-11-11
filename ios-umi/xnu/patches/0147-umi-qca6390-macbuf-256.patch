@@ -1,0 +1,54 @@
+From eea57fafdac0711f0c041548edc7c016c6457055 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 10:24:38 +0100
+Subject: [PATCH] umi-0147
+
+---
+ bsd/dev/sweet_wlce.c |  1 +
+ bsd/dev/sweet_wldp.c | 11 ++++++++---
+ 2 files changed, 9 insertions(+), 3 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index a6f564d..f161f0d 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -1283,6 +1283,7 @@ wmi_join(void)
+ 	int ipr = sweet_wlip_run(wlce_mac, bssid, htc_poll);    /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
++	sweet_wldp_rx_report("after DHCP");     /* 0147: are both MACs stocked with receive buffers? */
+ 	return ipr ? 11 + ipr : 0;              /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
+ }
+ 
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index e93cec6..1a57d04 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -292,7 +292,7 @@ sweet_wldp_init(void)
+  * Buffers (2 KiB, 128-aligned) go into the refill ring and both status rings,
+  * cookie = buffer id (pdev 0), return buffer manager SW1 (4). The firmware
+  * moves refill buffers into the mac buf rings, so the refill TP advancing
+- * shows the setup took. Sizes: refill 1024 (ath11k 4096), status 128 (1024).
++ * shows the setup took. Sizes: refill 1024 (ath11k 4096), mac buf 256 (1024), status 128 (1024).
+  */
+ #define M_WRP           0x07f000u       /* u32 per LMAC ring index */
+ #define M_RX_RINGS      0x200000u
+@@ -314,8 +314,13 @@ struct rxring {
+ #define I_OTHER(e)      ((256u >> 3) << 16 | 1u * (e))  /* RXDMA_DST: timer 256 us, batch 1 entry */
+ static struct rxring rx_rings[] = {
+ 	{ "refill", 128, 2, 1024, true, 5, 2, 0, true, I_RX, (1024 >> 3) * 2 },
+-	{ "macbuf0", 129, 2, 1024, true, 0, 1, 1, false, I_RX, (1024 >> 3) * 2 },
+-	{ "macbuf1", 144, 2, 1024, true, 0, 1, 2, false, I_RX, (1024 >> 3) * 2 },
++	/*
++	 * 0147: mac buf rings 256 (ath11k 1024 with 4096 refill buffers). With 1024-entry rings and our 1023
++	 * refill buffers the firmware stocked MAC 0's ring with all of them and MAC 1 - the 2.4 GHz radio -
++	 * got none: unicast frames were acked over the air but never DMA'd (0146 capture + ring dump).
++	 */
++	{ "macbuf0", 129, 2, 256, true, 0, 1, 1, false, I_RX, (256 >> 3) * 2 },
++	{ "macbuf1", 144, 2, 256, true, 0, 1, 2, false, I_RX, (256 >> 3) * 2 },
+ 	{ "errdst0", 133, 8, 1024, false, 7, 0, 1, false, I_OTHER(8), 0 },
+ 	{ "errdst1", 148, 8, 1024, false, 7, 0, 2, false, I_OTHER(8), 0 },
+ 	{ "status0", 132, 2, 128, true, 1, 1, 1, true, I_RX, (128 >> 3) * 2 },
+-- 
+2.54.0 (Apple Git-157)
+

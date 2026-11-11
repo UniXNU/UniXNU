@@ -1,0 +1,30 @@
+diff --git a/bsd/miscfs/mockfs/mockfs_vfsops.c b/bsd/miscfs/mockfs/mockfs_vfsops.c
+--- a/bsd/miscfs/mockfs/mockfs_vfsops.c
++++ b/bsd/miscfs/mockfs/mockfs_vfsops.c
+@@ -102,7 +102,12 @@
+ 		 * For the moment, we won't try to optimize when mi_phys is true.
+ 		 */
+ 		if (!mockfs_mount_data->mockfs_physical_memory) {
+-			mockfs_mount_data->mockfs_memory_backed = memdev_info.mi_mdev;
++			/*
++			 * Only a physical memory device has an address the pager can map
++			 * directly; a virtual one (IOKit's RAMDisk) goes through normal
++			 * device I/O. mi_base is a physical page number only when mi_phys.
++			 */
++			mockfs_mount_data->mockfs_memory_backed = memdev_info.mi_mdev && memdev_info.mi_phys;
+ 			mockfs_mount_data->mockfs_physical_memory = memdev_info.mi_phys;
+ 			mockfs_mount_data->mockfs_memdev_base = memdev_info.mi_base;
+ 			mockfs_mount_data->mockfs_memdev_size = memdev_info.mi_size;
+diff --git a/bsd/miscfs/mockfs/mockfs_fsnode.c b/bsd/miscfs/mockfs/mockfs_fsnode.c
+--- a/bsd/miscfs/mockfs/mockfs_fsnode.c
++++ b/bsd/miscfs/mockfs/mockfs_fsnode.c
+@@ -345,7 +345,8 @@
+ 				panic("mockfs_fsvnode failed to get ubc_mem_object for a new vnode");
+ 			}
+ 
+-			rvalue = pager_map_to_phys_contiguous(ubc_mem_object, 0, (mockfs_mnt->mockfs_memdev_base << PAGE_SHIFT), fsnp->size);
++			/* memdev counts in 4K pages, independent of the kernel's PAGE_SHIFT. */
++			rvalue = pager_map_to_phys_contiguous(ubc_mem_object, 0, ((uint64_t)mockfs_mnt->mockfs_memdev_base << 12), fsnp->size);
+ 
+ 			if (rvalue) {
+ 				panic("mockfs_fsnode_vnode failed to create fictitious pages for a memory-backed device; rvalue = %d", rvalue);

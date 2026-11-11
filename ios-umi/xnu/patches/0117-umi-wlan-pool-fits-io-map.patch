@@ -1,0 +1,41 @@
+From 779795f82dee3e45b24efea591470eab7a21db95 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 10:13:52 +0200
+Subject: [PATCH] umi-0117
+
+---
+ bsd/dev/sweet_wlan.c | 11 ++++++-----
+ 1 file changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index cefa69f..a8aea5c 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -5,7 +5,8 @@
+  *   stage 5: BHI - the first 512 KiB (SBL) from DMA memory, PBL starts it
+  *   stage 6: BHIe - the whole image as 512 KiB segments (Linux fbc_download)
+  * DMA memory: low RAM that highmem XNU does not manage (sweetwlanpool, default
+- * 0xd0000000, 32 MiB; the chip is a 32-bit DMA master), mapped write-combined.
++ * 0xd0000000, 4.6 MiB; the chip is a 32-bit DMA master), mapped write-combined.
++ * A 32 MiB I/O mapping does not fit (0116: kmem_alloc 33554432 failed with 3, panic).
+  * The chip masters through SMMU streams 0x1c00/0x1c01 (DT pcie0 iommu-map).
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+@@ -22,10 +23,10 @@ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ 
+ #define WLAN_POOL_PA            0xd0000000u
+-#define WLAN_POOL_SIZE          0x02000000u
+-#define WLAN_FW_OFF             0x000000u       /* amss20.bin, up to 8 MiB */
+-#define WLAN_FW_MAX             0x800000u
+-#define WLAN_VEC_OFF            0x800000u       /* BHIe vector table */
++#define WLAN_POOL_SIZE          0x00490000u
++#define WLAN_FW_OFF             0x000000u       /* amss20.bin */
++#define WLAN_FW_MAX             0x480000u        /* amss20.bin is 4352144 bytes */
++#define WLAN_VEC_OFF            0x480000u       /* BHIe vector table */
+ #define WLAN_SBL_SIZE           0x80000u        /* ath11k sbl_size = seg_len = 512 KiB */
+ #define WLAN_SEG_LEN            0x80000u
+ 
+-- 
+2.54.0 (Apple Git-157)
+

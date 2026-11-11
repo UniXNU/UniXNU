@@ -1,0 +1,432 @@
+From 9f188c9ec73e51d4456256125b2ee2d9e214481e Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 21:05:19 +0200
+Subject: [PATCH] umi-0140
+
+---
+ bsd/dev/sweet_wlce.c | 309 ++++++++++++++++++++++++++++++++++++++++---
+ bsd/dev/sweet_wldp.c |   6 +-
+ bsd/dev/sweet_wlfw.c |   2 +-
+ 3 files changed, 296 insertions(+), 21 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index aa111d0..191a8ef 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -325,6 +325,13 @@ static struct {
+ 	uint32_t scan_fail, chan_events, mgmt_frames;
+ 	unsigned nbss;
+ 	uint8_t bss[32][6];
++	uint8_t bss_ssid[32][33];       /* raw SSID bytes (0140: join by name) */
++	uint32_t bss_ch[32];
++	/* join (0140) */
++	uint8_t join_bssid[6];
++	bool peer_mapped, vdev_started, tx_done, auth_rx, assoc_rx, assoc_conf;
++	uint32_t vdev_start_status, tx_status, auth_status, assoc_status, aid, ap_caps;
++	uint16_t peer_id;
+ } htc;
+ 
+ #define WMI_EV_BIT(id)          ((id) < 0x4000u ? 1ull << ((id) & 31) : 1ull << (32 + ((id) & 31)))
+@@ -337,6 +344,7 @@ static struct {
+ #define WMI_EV_SET_HW_MODE_RESP 0x4010u
+ #define WMI_EV_REG_CHAN_LIST    0x3a001u        /* REG_CHAN_LIST_CC */
+ 
++static const uint8_t wlce_mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };  /* locally administered: OTP has none */
+ static void wmi_rx(uint32_t id, const uint8_t *m, uint32_t len);
+ static void wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len);
+ 
+@@ -423,7 +431,12 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 	} else if (htc.htt_conn && eid == htc.htt_ep && plen >= 4) {
+ 		/* HTT target->host: u32 with the message type in bits 7:0; VERSION_CONF 0: minor 15:8, major 23:16 */
+ 		uint32_t w0 = get32(m);
+-		if ((w0 & 0xffu) == 0) {
++		if (((w0 & 0xffu) == 0x3 || (w0 & 0xffu) == 0x1e) && plen >= 8) {
++			/* PEER_MAP / PEER_MAP2: info vdev 15:8, peer id 31:16; mac bytes 0-3, then 4-5 in the next word */
++			htc.peer_id = (uint16_t)(w0 >> 16);
++			htc.peer_mapped = true;
++			printf("SWEET HTT: peer map (type %#x): vdev %u peer id %u\n", w0 & 0xffu, (w0 >> 8) & 0xffu, htc.peer_id);
++		} else if ((w0 & 0xffu) == 0) {
+ 			htc.htt_minor = (uint8_t)(w0 >> 8);
+ 			htc.htt_major = (uint8_t)(w0 >> 16);
+ 			htc.htt_ver = true;
+@@ -534,6 +547,21 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+ 		}
+ 		printf("SWEET WMI: regulatory phy %u: country \"%s\" id %u domain %#x\n",
+ 		    get32(v + 4), cc, get32(v + 16), get32(v + 20));
++	} else if (id == 0x5001u && (v = wmi_tlv_find(m, len, 0x28, &l)) != NULL && l >= 16) {
++		/* VDEV_START_RESP: vdev_id, requestor_id, resp_type, status */
++		htc.vdev_start_status = get32(v + 12);
++		htc.vdev_started = true;
++		printf("SWEET WMI: vdev %u start response type %u status %u\n", get32(v), get32(v + 8), htc.vdev_start_status);
++	} else if (id == 0x7006u && (v = wmi_tlv_find(m, len, 0x1a7, &l)) != NULL && l >= 8) {
++		/* MGMT_TX_COMPLETION: desc_id, status (0 = acked), pdev_id, ppdu_id, ack_rssi */
++		htc.tx_status = get32(v + 4);
++		htc.tx_done = true;
++		printf("SWEET WMI: mgmt tx %u done, status %u%s\n", get32(v), htc.tx_status,
++		    l >= 20 ? "" : "");
++	} else if (id == 0x6006u) {
++		/* PEER_ASSOC_CONF (tag 0x1b2): vdev_id, peer mac */
++		htc.assoc_conf = true;
++		printf("SWEET WMI: peer assoc confirmed\n");
+ 	} else if (id == WMI_EV_SET_HW_MODE_RESP) {
+ 		printf("SWEET WMI: SET_HW_MODE response, %u bytes\n", len);
+ 	}
+@@ -556,7 +584,27 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 	uint32_t fl;
+ 	const uint8_t *f = wmi_tlv_find(m, len, 0x11, &fl);
+ 	htc.mgmt_frames++;
+-	if (f == NULL || fl < 36 || (f[0] != 0x80 && f[0] != 0x50)) {
++	if (f == NULL || fl < 24) {
++		return;
++	}
++	/* 0140: authentication (0xb0) and association response (0x10) from the AP we join, to our address */
++	if ((f[0] == 0xb0 || f[0] == 0x10) && memcmp(f + 10, htc.join_bssid, 6) == 0 && memcmp(f + 4, wlce_mac, 6) == 0) {
++		if (f[0] == 0xb0 && fl >= 30) {         /* algorithm, transaction sequence, status */
++			htc.auth_status = f[28] | f[29] << 8;
++			htc.auth_rx = true;
++			printf("SWEET WMI: auth reply: algorithm %u seq %u status %u\n", f[24] | f[25] << 8, f[26] | f[27] << 8,
++			    htc.auth_status);
++		} else if (f[0] == 0x10 && fl >= 30) {  /* capability, status, AID */
++			htc.ap_caps = f[24] | f[25] << 8;
++			htc.assoc_status = f[26] | f[27] << 8;
++			htc.aid = (f[28] | f[29] << 8) & 0x3fffu;
++			htc.assoc_rx = true;
++			printf("SWEET WMI: assoc reply: status %u, AID %u, AP capability %#x\n", htc.assoc_status, htc.aid,
++			    htc.ap_caps);
++		}
++		return;
++	}
++	if (fl < 36 || (f[0] != 0x80 && f[0] != 0x50)) {
+ 		return;
+ 	}
+ 	const uint8_t *bssid = f + 16;
+@@ -565,25 +613,27 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 			return;
+ 		}
+ 	}
+-	if (htc.nbss < 32) {
+-		memcpy(htc.bss[htc.nbss], bssid, 6);
+-	}
+-	htc.nbss++;
+-	char ssid[33] = {0};
+-	if (fl >= 38 && f[36] == 0) {
+-		memcpy(ssid, f + 38, MIN((unsigned)f[37], MIN(fl - 38, 32u)));
+-		for (unsigned i = 0; ssid[i]; ++i) {
+-			if (ssid[i] < 0x20 || ssid[i] > 0x7e) {
+-				ssid[i] = '?';
+-			}
+-		}
+-	}
+ 	uint32_t ch = get32(hdr), mhz = get32(hdr + 64);
+ 	if (mhz == 0 && ch >= 1 && ch <= 13) {
+ 		mhz = 2407 + 5 * ch;
+ 	} else if (mhz == 0 && ch == 14) {
+ 		mhz = 2484;
+ 	}
++	char ssid[33] = {0};
++	if (fl >= 38 && f[36] == 0) {
++		memcpy(ssid, f + 38, MIN((unsigned)f[37], MIN(fl - 38, 32u)));
++	}
++	if (htc.nbss < 32) {
++		memcpy(htc.bss[htc.nbss], bssid, 6);
++		memcpy(htc.bss_ssid[htc.nbss], ssid, sizeof(ssid));
++		htc.bss_ch[htc.nbss] = ch;
++	}
++	htc.nbss++;
++	for (unsigned i = 0; ssid[i]; ++i) {
++		if (ssid[i] < 0x20 || ssid[i] > 0x7e) {
++			ssid[i] = '?';
++		}
++	}
+ 	printf("SWEET WMI: BSS %02x:%02x:%02x:%02x:%02x:%02x ch %u %u MHz snr %u %s \"%s\"\n", bssid[0], bssid[1],
+ 	    bssid[2], bssid[3], bssid[4], bssid[5], ch, mhz, get32(hdr + 4), f[0] == 0x50 ? "probe-resp" : "beacon", ssid);
+ }
+@@ -719,7 +769,6 @@ wmi_cmd(uint32_t id, const void *body, uint32_t len, const char *name)
+  * (single-pdev chip). Events: SCAN 0x3001 (tag 0x24), MGMT_RX 0x7001 (0x2c).
+  */
+ #define SCAN_NCHAN      13
+-static const uint8_t wlce_mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };  /* locally administered: OTP has none */
+ 
+ static int
+ wmi_scan(void)
+@@ -915,6 +964,227 @@ wmi_scan(void)
+ 	return htc.scan_done ? 0 : 14;
+ }
+ 
++/*
++ * Join an open network (0140), as mac80211 + ath11k do for a qca6390 station
++ * (vdev_start_delay: peer first, then vdev start), legacy 11g only:
++ *   PEER_CREATE 0x6001 (tag 0x61) -> HTT PEER_MAP; VDEV_START 0x5003 (tag 0x58 +
++ *   channel 0x50, MODE_11G, LDPC rx flag) -> VDEV_START_RESP 0x5001; auth and
++ *   assoc request through MGMT_TX_SEND 0x7008 (tag 0x1a6: frame in DMA memory,
++ *   first 64 bytes inline) -> MGMT_TX_COMPLETION 0x7006 + replies via MGMT_RX;
++ *   PEER_ASSOC 0x6005 (tag 0x65, 41 words: AUTH flag, 11G, 12 legacy rates) ->
++ *   PEER_ASSOC_CONF 0x6006; VDEV_UP 0x5005 (tag 0x5c); PEER_SET_PARAM 0x6004
++ *   (tag 0x64) AUTHORIZE (3) = 1. The network: boot-arg sweetwlanssid=NAME,
++ *   '_' for spaces (boot arguments cannot hold spaces); matched against the scan.
++ */
++#define M_MGMT_TX       0x7c000u        /* 2 KiB frame buffer in the copy-engine area */
++
++static bool
++wlce_wait(volatile bool *flag, unsigned ms)
++{
++	for (unsigned t = 0; t < ms && !*flag; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	return *flag;
++}
++
++static int
++wmi_mgmt_tx(const uint8_t *frame, uint32_t len, uint32_t desc)
++{
++	static uint32_t b[10 + 16];
++	uint32_t inl = MIN(len, 64u);
++	memcpy((void *)(ce.mem + M_MGMT_TX), frame, len);
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x1a6, 8 * 4);
++	b[2] = desc;                    /* vdev 0, chanfreq 0 (on-channel) */
++	b[4] = ce.pa + M_MGMT_TX;
++	b[6] = len;
++	b[7] = inl;
++	b[9] = WMI_TLV(0x11, inl);
++	memcpy(&b[10], frame, inl);
++	htc.tx_done = false;
++	return wmi_cmd(0x7008u, b, (10 + (inl + 3) / 4) * 4, "MGMT_TX_SEND");
++}
++
++/* 802.11 management header: frame control, duration, DA, SA, BSSID, sequence */
++static uint32_t
++mgmt_hdr(uint8_t *f, uint8_t fc, const uint8_t *bssid, uint16_t seq)
++{
++	bzero(f, 24);
++	f[0] = fc;
++	memcpy(f + 4, bssid, 6);
++	memcpy(f + 10, wlce_mac, 6);
++	memcpy(f + 16, bssid, 6);
++	f[22] = (uint8_t)(seq << 4);
++	f[23] = (uint8_t)(seq >> 4);
++	return 24;
++}
++
++static int
++wmi_join(void)
++{
++	static uint32_t b[64];
++	static uint8_t f[128];
++	static const uint8_t rates[12] = { 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c };
++	char want[33] = {0};
++	unsigned i;
++	if (!PE_parse_boot_argn("sweetwlanssid", want, sizeof(want)) || want[0] == 0) {
++		return 0;                       /* nothing to join */
++	}
++	for (i = 0; want[i]; ++i) {
++		if (want[i] == '_') {
++			want[i] = ' ';
++		}
++	}
++	size_t wl = strlen(want);
++	for (i = 0; i < MIN(htc.nbss, 32u); ++i) {
++		if (strlen((const char *)htc.bss_ssid[i]) == wl && memcmp(htc.bss_ssid[i], want, wl) == 0) {
++			break;
++		}
++	}
++	if (i >= MIN(htc.nbss, 32u)) {
++		printf("SWEET WMI: \"%s\" not among the %u networks heard\n", want, htc.nbss);
++		return 1;
++	}
++	const uint8_t *bssid = htc.bss[i];
++	uint32_t ch = htc.bss_ch[i], mhz = 2407 + 5 * ch;
++	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
++	memcpy(htc.join_bssid, bssid, 6);
++	printf("SWEET WMI: joining \"%s\" %02x:%02x:%02x:%02x:%02x:%02x on channel %u\n", want, bssid[0], bssid[1],
++	    bssid[2], bssid[3], bssid[4], bssid[5], ch);
++
++	/* ath11k_peer_create: vdev 0, AP address, type default */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x61, 4 * 4);
++	memcpy(&b[2], bssid, 6);
++	if (wmi_cmd(0x6001u, b, 5 * 4, "PEER_CREATE") != 0) {
++		return 2;
++	}
++	if (!wlce_wait(&htc.peer_mapped, 1000)) {
++		printf("SWEET WMI: no HTT peer map in 1 s (continuing)\n");
++	}
++
++	/* ath11k_mac_vdev_start for the STA (ath11k_start_vdev_delay): channel of the AP, 11g */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x58, 26 * 4);
++	b[3] = 100;                     /* beacon interval */
++	b[4] = 1;                       /* dtim */
++	b[5] = 1u << 3;                 /* LDPC_RX_ENABLED */
++	b[19] = chains;                 /* preferred tx streams */
++	b[20] = chains;                 /* preferred rx streams */
++	uint32_t *c = b + 27;
++	c[0] = WMI_TLV(0x50, 24);
++	c[1] = mhz;
++	c[2] = mhz;
++	c[4] = 1;                       /* MODE_11G */
++	c[5] = 40u << 8 | 40u << 16;
++	c[6] = 40u << 8;
++	b[34] = WMI_TLV(0x12, 0);       /* no NoA descriptors */
++	if (wmi_cmd(0x5003u, b, 35 * 4, "VDEV_START") != 0) {
++		return 3;
++	}
++	if (!wlce_wait(&htc.vdev_started, 2000) || htc.vdev_start_status != 0) {
++		printf("SWEET WMI: vdev start %s (status %u)\n", htc.vdev_started ? "failed" : "not answered",
++		    htc.vdev_start_status);
++		return 4;
++	}
++
++	/* open-system authentication, transaction 1 */
++	uint32_t n = mgmt_hdr(f, 0xb0, bssid, 1);
++	bzero(f + n, 6);
++	f[n + 2] = 1;
++	n += 6;
++	if (wmi_mgmt_tx(f, n, 1) != 0) {
++		return 5;
++	}
++	wlce_wait(&htc.tx_done, 1000);
++	if (!wlce_wait(&htc.auth_rx, 2000) || htc.auth_status != 0) {
++		printf("SWEET WMI: auth %s (tx %s status %u, reply status %u)\n", htc.auth_rx ? "refused" : "not answered",
++		    htc.tx_done ? "done" : "pending", htc.tx_status, htc.auth_status);
++		return 6;
++	}
++
++	/* association request: capability ESS + short slot, listen interval 1, SSID, rates, extended rates */
++	n = mgmt_hdr(f, 0x00, bssid, 2);
++	f[n++] = 0x01;
++	f[n++] = 0x04;
++	f[n++] = 1;
++	f[n++] = 0;
++	f[n++] = 0;
++	f[n++] = (uint8_t)wl;
++	memcpy(f + n, want, wl);
++	n += wl;
++	f[n++] = 1;
++	f[n++] = 8;
++	memcpy(f + n, rates, 8);
++	n += 8;
++	f[n++] = 50;
++	f[n++] = 4;
++	memcpy(f + n, rates + 8, 4);
++	n += 4;
++	if (wmi_mgmt_tx(f, n, 2) != 0) {
++		return 7;
++	}
++	wlce_wait(&htc.tx_done, 1000);
++	if (!wlce_wait(&htc.assoc_rx, 2000) || htc.assoc_status != 0) {
++		printf("SWEET WMI: association %s (status %u)\n", htc.assoc_rx ? "refused" : "not answered", htc.assoc_status);
++		return 8;
++	}
++
++	/* ath11k_bss_assoc: peer assoc (legacy), wait for the confirmation */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x65, 40 * 4);
++	memcpy(&b[1], bssid, 6);
++	b[3] = 0;                       /* vdev */
++	b[4] = 1;                       /* new assoc */
++	b[5] = htc.aid;
++	b[6] = 0x1;                     /* WMI_PEER_AUTH: open network, no 4-way handshake */
++	b[7] = htc.ap_caps;
++	b[8] = 1;                       /* listen interval */
++	b[13] = 1;                      /* nss */
++	b[15] = 1;                      /* MODE_11G */
++	b[18] = sizeof(rates);          /* legacy rates */
++	uint32_t *p = b + 41;
++	*p++ = WMI_TLV(0x11, sizeof(rates));
++	memcpy(p, rates, sizeof(rates));
++	p += sizeof(rates) / 4;
++	*p++ = WMI_TLV(0x11, 0);        /* no HT rates */
++	*p++ = WMI_TLV(0x66, 5 * 4);    /* VHT rate set: unused */
++	p += 5;
++	*p++ = WMI_TLV(0x12, 0);        /* no HE rate sets */
++	if (wmi_cmd(0x6005u, b, (uint32_t)((uint8_t *)p - (uint8_t *)b), "PEER_ASSOC") != 0) {
++		return 9;
++	}
++	if (!wlce_wait(&htc.assoc_conf, 2000)) {
++		printf("SWEET WMI: no peer assoc confirmation (continuing)\n");
++	}
++
++	/* ath11k_wmi_vdev_up: vdev 0, AID, BSSID */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x5c, 8 * 4);
++	b[2] = htc.aid;
++	memcpy(&b[3], bssid, 6);
++	if (wmi_cmd(0x5005u, b, 9 * 4, "VDEV_UP") != 0) {
++		return 10;
++	}
++
++	/* ath11k_mac_op_sta_state -> AUTHORIZED: WMI_PEER_AUTHORIZE = 1 */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x64, 5 * 4);
++	memcpy(&b[2], bssid, 6);
++	b[4] = 3;
++	b[5] = 1;
++	if (wmi_cmd(0x6004u, b, 6 * 4, "PEER_SET_PARAM authorize") != 0) {
++		return 11;
++	}
++	for (unsigned t = 0; t < 2000; ++t) {   /* 2 s: a kickout (STA_KICKOUT 0x6001) would show here */
++		htc_poll();
++		delay(1000);
++	}
++	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
++	return 0;
++}
++
+ /*
+  * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
+  * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-17
+@@ -987,6 +1257,11 @@ sweet_wlce_htc(void)
+ 	if (htc.rdy_status != 0) {
+ 		return 8;
+ 	}
+-	return wmi_scan();
++	r = wmi_scan();
++	if (r != 0) {
++		return r;
++	}
++	r = wmi_join();
++	return r ? 17 + r : 0;          /* 18 network not heard ... 28 authorize failed */
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 23b3272..72bbc5f 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -425,8 +425,8 @@ sweet_wldp_mon_filter(void)
+  * it; a used buffer starts with TLV STATUS_BUFFER_DONE (0x140). TLV header u32:
+  * tag bits 9:1, length 25:10, user 31:26; 4-byte aligned; PPDU_END (0xce) counts
+  * as 4 bytes so the PHY TLVs after it are read. PPDU_START 0xcd: chan_num at +4;
+- * PHYRX_RSSI_LEGACY 0x4c: rssi_comb bits 15:8 of the word at +140 (signal =
+- * rssi_comb - 95 dBm, ath11k's default noise floor); MPDU_START 0xcf counted;
++ * PHYRX_RSSI_LEGACY 0x4c: rssi_comb bits 15:8 of the word at +140, a signed dBm
++ * value (ath11k's db2dbm case; 0139 showed raw 171..233 = -85..-23 dBm); MPDU_START 0xcf counted;
+  * PPDU_END_STATUS_DONE 0x13f or tag 0 ends a PPDU. The same buffer goes back
+  * into the slot (ath11k allocates a new one), the slot left empty at setup
+  * gets the ring's spare.
+@@ -458,7 +458,7 @@ mon_parse(const uint8_t *b, unsigned ring)
+ 		} else if (tag == 0x4c && o + 144 <= RXBUF_SZ) {
+ 			uint32_t info0;
+ 			memcpy(&info0, b + o + 140, 4);
+-			rssi = (int)((info0 >> 8) & 0xffu) - 95;
++			rssi = (int8_t)((info0 >> 8) & 0xffu);  /* already dBm: the firmware converts (0139 boot) */
+ 			have_rssi = true;
+ 		} else if (tag == 0xcf) {
+ 			nmpdu++;
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 2ba69b5..03fc1d0 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -614,7 +614,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-31) that failed (30 = RX rings, 31 = DP rings). */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-41) that failed (30 = RX rings, 31 = DP rings, 31-41 = join steps 1-11 via 13 + 17 + n). */
+ int
+ sweet_wlfw_run(void)
+ {
+-- 
+2.54.0 (Apple Git-157)
+

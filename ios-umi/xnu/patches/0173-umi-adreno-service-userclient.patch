@@ -1,0 +1,691 @@
+From dae96efb4c0b7784aafff797ef55fc0c8e0d0bae Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 22:58:15 +0100
+Subject: [PATCH] umi-0173-adreno-service-userclient
+
+The Adreno 650 as an IOKit service for user space, the shape of Linux's
+msm DRM uAPI so Mesa's drm/msm backend ports with a thin libdrm stand-in:
+GET_PARAM (msm_drm.h MSM_PARAM ids: chip id 0x06050002, gmem 1.125 MB,
+VA start/size, max freq 305 MHz, highest bank bit 16, UBWC swizzle 6,
+macrotile 0 - a6xx_catalog.c / a6xx_calc_ubwc_config for the A650),
+GEM_NEW / GEM_INFO / GEM_CLOSE (step 23's memory objects: wired pages
+mapped 4K at a time into context 0, TLBIASID on close; the memory reaches
+the task via clientMemoryForType), GEM_SUBMIT (step 23's
+CP_INDIRECT_BUFFER from the ring, ring-room checked, with the
+CACHE_FLUSH_TS fence) and WAIT_FENCE (the fence word, polled). The kernel
+side (sweet_adreno.c) exports the C API under one mutex; opens are refused
+until the sweetgpu bring-up has the core running, and the step-20 CP
+protect table keeps client commands off the registers. Published from
+AppleCLCD::start as IOServiceMatching("SweetAdreno") (sweetadreno=0 off);
+this XNU has no clientHasEntitlement, so opens are logged with the process
+name instead of entitlement-checked.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c                | 249 ++++++++++++++++++
+ iokit/Kernel/arm/SweetAdreno.cpp      | 352 ++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetFramebuffer.cpp |   2 +
+ iokit/conf/files.arm64                |   1 +
+ 4 files changed, 604 insertions(+)
+ create mode 100644 iokit/Kernel/arm/SweetAdreno.cpp
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 21e3287..4fc73c3 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -78,6 +78,7 @@
+ #include <sys/systm.h>
+ #include <mach/mach_time.h>
+ #include <kern/clock.h>
++#include <kern/locks.h>
+ #include <kern/thread.h>
+ #include <machine/machine_routines.h>
+ #include <arm/caches_internal.h>
+@@ -2651,6 +2652,254 @@ sa_step_submit(void)
+ 	return true;
+ }
+ 
++/*
++ * ---- the service for user space (iokit/Kernel/arm/SweetAdreno.cpp) ----
++ *
++ * The shape of Linux's msm DRM uAPI (GET_PARAM / GEM_NEW / GEM_INFO / GEM_CLOSE / GEM_SUBMIT /
++ * WAIT_FENCE), so Mesa's drm/msm backend ports with a thin libdrm stand-in. A GEM object is
++ * step 23's memory object: wired kernel pages mapped 4K at a time into the 3D core's SMMU
++ * context 0 at an address of its own, unmapped + TLBIASID on close; a submit is step 23's
++ * CP_INDIRECT_BUFFER from the ring with a CACHE_FLUSH_TS fence; a fence is the sequence number
++ * in the fence word (scratch + 0x200), polled. The A650 CP protect table (step 20) is what
++ * makes this safe to hand to user space: a client's commands cannot touch GPU registers.
++ *
++ * Only callable once the bring-up has the core running (boot-arg sweetgpu=N, N >= 21; the run
++ * of steps ends with the GPU block left on). One mutex covers the ring, the object table and
++ * the GPU address allocator; the CP protect table keeps the register file safe from the
++ * commands themselves.
++ */
++#define SA_SERVICE_BOS          64
++
++struct sa_service_bo {
++	uint64_t        handle;         /* nonzero: index + 1 */
++	uint64_t        gpu;            /* the core's address of the object */
++	vm_offset_t     memory;         /* wired kernel memory */
++	vm_size_t       size;
++};
++
++static struct sa_service_bo sa_service_bos[SA_SERVICE_BOS];
++static lck_mtx_t *sa_service_lock;
++
++static void
++sa_service_take_lock(void)
++{
++	static lck_grp_t *grp;
++
++	if (sa_service_lock == NULL) {
++		grp = lck_grp_alloc_init("sweet_gpu", LCK_GRP_ATTR_NULL);
++		sa_service_lock = lck_mtx_alloc_init(grp, LCK_ATTR_NULL);
++	}
++	if (sa_service_lock != NULL) {
++		lck_mtx_lock(sa_service_lock);
++	}
++}
++
++static void
++sa_service_drop_lock(void)
++{
++	if (sa_service_lock != NULL) {
++		lck_mtx_unlock(sa_service_lock);
++	}
++}
++
++static struct sa_service_bo *
++sa_service_find(uint64_t handle)
++{
++	if (handle == 0 || handle > SA_SERVICE_BOS) {
++		return NULL;
++	}
++	struct sa_service_bo *bo = &sa_service_bos[handle - 1];
++	return bo->handle == handle ? bo : NULL;
++}
++
++/* Room in the ring for `words` more words without overwriting what the core has not read. */
++static bool
++sa_ring_room(uint32_t words)
++{
++	uint32_t rptr = sa_rd(sa_gpu.base + CP_RB_RPTR);
++	uint32_t used = (sa_ring_at + RING_WORDS - rptr) % RING_WORDS;
++	if (sa_ring_at >= rptr && used < words) {
++		return true;                    /* no wrap in the way */
++	}
++	return used + words < RING_WORDS - 16;
++}
++
++bool
++sweet_adreno_service_ready(void)
++{
++	return sa_core_runs && sa_core_space_on;
++}
++
++int
++sweet_adreno_bo_new(vm_size_t size, uint64_t *handle, uint64_t *gpu, vm_offset_t *memory)
++{
++	if (!sweet_adreno_service_ready()) {
++		return ENXIO;
++	}
++	size = round_page(size);
++	if (size == 0) {
++		return EINVAL;
++	}
++	sa_service_take_lock();
++	struct sa_service_bo *bo = NULL;
++	int err = 0;
++	for (uint32_t i = 0; i < SA_SERVICE_BOS; i++) {
++		if (sa_service_bos[i].handle == 0) {
++			bo = &sa_service_bos[i];
++			break;
++		}
++	}
++	if (bo == NULL) {
++		err = ENOMEM;
++		goto out;
++	}
++	if (kmem_alloc(kernel_map, &bo->memory, size, KMA_DATA | KMA_ZERO, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		bo->memory = 0;
++		err = ENOMEM;
++		goto out;
++	}
++	bo->gpu = sa_bo_next;
++	bo->size = size;
++	for (vm_size_t at = 0; at < size; at += 4096) {
++		if (!sa_space_map(&sa_core_space, bo->gpu + at, sa_phys(bo->memory + at), PTE_CORE)) {
++			err = ENOMEM;
++			break;
++		}
++	}
++	sa_to_memory(bo->memory, size);
++	if (err == 0 && !sa_core_tlb_flush()) {
++		err = EIO;
++	}
++	if (err != 0) {
++		for (vm_size_t at = 0; at < size; at += 4096) {
++			uint64_t *pte = sa_space_pte(&sa_core_space, bo->gpu + at);
++			if (pte != NULL) {
++				*pte = 0;
++			}
++		}
++		(void)sa_core_tlb_flush();
++		kmem_free(kernel_map, bo->memory, size);
++		bo->memory = 0;
++		bo->size = 0;
++		goto out;
++	}
++	sa_bo_next += size + CORE_BO_GAP;
++	bo->handle = (uint64_t)(bo - sa_service_bos) + 1;
++	*handle = bo->handle;
++	*gpu = bo->gpu;
++	*memory = bo->memory;
++out:
++	sa_service_drop_lock();
++	return err;
++}
++
++int
++sweet_adreno_bo_info(uint64_t handle, uint64_t *gpu, vm_offset_t *memory, vm_size_t *size)
++{
++	if (!sweet_adreno_service_ready()) {
++		return ENXIO;
++	}
++	sa_service_take_lock();
++	struct sa_service_bo *bo = sa_service_find(handle);
++	int err = bo == NULL ? ENOENT : 0;
++	if (err == 0) {
++		*gpu = bo->gpu;
++		*memory = bo->memory;
++		*size = bo->size;
++	}
++	sa_service_drop_lock();
++	return err;
++}
++
++/* The object's pages out of context 0 and back to the kernel; the caller waits its fences first. */
++int
++sweet_adreno_bo_free(uint64_t handle)
++{
++	if (!sweet_adreno_service_ready()) {
++		return ENXIO;
++	}
++	sa_service_take_lock();
++	struct sa_service_bo *bo = sa_service_find(handle);
++	int err = bo == NULL ? ENOENT : 0;
++	if (err == 0) {
++		for (vm_size_t at = 0; at < bo->size; at += 4096) {
++			uint64_t *pte = sa_space_pte(&sa_core_space, bo->gpu + at);
++			if (pte != NULL) {
++				*pte = 0;
++			}
++		}
++		err = sa_core_tlb_flush() ? 0 : EIO;
++		kmem_free(kernel_map, bo->memory, bo->size);
++		bo->handle = 0;
++		bo->memory = 0;
++		bo->size = 0;
++	}
++	sa_service_drop_lock();
++	return err;
++}
++
++/* Step 23's submission, as a service: the object's words run as an indirect buffer, the fence
++ * word gets a new sequence number once the caches are clean. The caller keeps the object alive
++ * until the fence it got has been waited for. */
++int
++sweet_adreno_submit(uint64_t handle, uint32_t offset_dwords, uint32_t dwords, uint32_t *fence)
++{
++	if (!sweet_adreno_service_ready()) {
++		return ENXIO;
++	}
++	sa_service_take_lock();
++	struct sa_service_bo *bo = sa_service_find(handle);
++	int err = bo == NULL ? ENOENT : 0;
++	if (err == 0 && (uint64_t)offset_dwords + dwords > bo->size / 4) {
++		err = EINVAL;
++	}
++	if (err == 0 && dwords == 0) {
++		err = EINVAL;
++	}
++	for (int i = 0; err == 0 && i < 5000; i++) {
++		if (sa_ring_room(11)) {
++			break;
++		}
++		if (i == 4999) {
++			err = EBUSY;
++		} else {
++			delay_for_interval(100, NSEC_PER_USEC);
++		}
++	}
++	if (err == 0) {
++		uint64_t ib = bo->gpu + 4ull * offset_dwords;
++		uint32_t seqno = ++sa_fence_seqno;
++		sa_to_memory(bo->memory, bo->size);
++		sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
++		sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
++		sa_ring_packet(CP_INDIRECT_BUFFER, 3);
++		sa_ring((uint32_t)ib);
++		sa_ring((uint32_t)(ib >> 32));
++		sa_ring(dwords);
++		sa_ring_packet(CP_EVENT_WRITE, 4);
++		sa_ring(EVENT_CACHE_FLUSH_TS);
++		sa_ring(CORE_FENCE_ADDRESS);
++		sa_ring(0);
++		sa_ring(seqno);
++		sa_ring_send();
++		*fence = seqno;
++	}
++	sa_service_drop_lock();
++	return err;
++}
++
++uint32_t
++sweet_adreno_fence_value(void)
++{
++	return sa_fence_read();
++}
++
++bool
++sweet_adreno_fence_wait(uint32_t fence, uint32_t ms)
++{
++	return sa_fence_wait(fence, ms);
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+new file mode 100644
+index 0000000..23f08a7
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -0,0 +1,352 @@
++/*
++ * The Adreno 650 of umi as an IOKit service for user space: the shape of Linux's msm DRM uAPI
++ * (include/uapi/drm/msm_drm.h), so Mesa's drm/msm backend ports with a thin libdrm stand-in.
++ * The kernel side (bsd/dev/sweet_adreno.c, patches 0160-0172) does the bring-up with boot-arg
++ * sweetgpu=N and leaves the GPU on; the service refuses to open until the core runs (N >= 21).
++ * Clients find it as IOServiceMatching("SweetAdreno") and open its user client.
++ *
++ * Selectors (externalMethod), scalars in -> scalars out:
++ *   1  GET_PARAM  {param}                 -> {value}: msm's MSM_PARAM_* ids
++ *   2  GEM_NEW    {size bytes}            -> {handle}
++ *   3  GEM_INFO   {handle}                -> {gpu address, size bytes}
++ *   4  GEM_CLOSE  {handle}
++ *   5  GEM_SUBMIT {handle, offset dwords, dword count} -> {fence}
++ *   6  WAIT_FENCE {fence, timeout ms}     -> {1 signalled, 0 not}
++ * The object's memory reaches the task with IOConnectMapMemory(connection, handle, ...):
++ * clientMemoryForType maps the wired kernel pages of the object. A submit is step 23's
++ * CP_INDIRECT_BUFFER from the ring with a CACHE_FLUSH_TS fence; WAIT_FENCE polls the fence
++ * word (no interrupts yet). The A650 CP protect table (step 20) is what makes user commands
++ * safe: they cannot write GPU registers.
++ *
++ * Entitlements are not checked: this XNU has no clientHasEntitlement, and the port's AMFI is
++ * permissive; every open is logged with the process name instead. Published from AppleCLCD::start
++ * (like the other SWEET services, boot-arg sweetadreno=0 keeps it off).
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOService.h>
++#include <IOKit/IOUserClient.h>
++#include <IOKit/IOKitKeys.h>
++#include <IOKit/IOLib.h>
++#include <IOKit/IOMemoryDescriptor.h>
++#include <IOKit/system.h>
++#include <pexpert/pexpert.h>
++#include <sys/proc.h>
++
++extern "C" {
++	bool sweet_adreno_service_ready(void);
++	int sweet_adreno_bo_new(vm_size_t size, uint64_t *handle, uint64_t *gpu, vm_offset_t *memory);
++	int sweet_adreno_bo_info(uint64_t handle, uint64_t *gpu, vm_offset_t *memory, vm_size_t *size);
++	int sweet_adreno_bo_free(uint64_t handle);
++	int sweet_adreno_submit(uint64_t handle, uint32_t offset_dwords, uint32_t dwords, uint32_t *fence);
++	uint32_t sweet_adreno_fence_value(void);
++	bool sweet_adreno_fence_wait(uint32_t fence, uint32_t ms);
++	bool sweet_board_is_umi(void);           /* bsd/dev/sweet_rpmh.c */
++}
++
++enum {
++	kSweetAdrenoGetParam  = 1,
++	kSweetAdrenoGemNew    = 2,
++	kSweetAdrenoGemInfo   = 3,
++	kSweetAdrenoGemClose  = 4,
++	kSweetAdrenoGemSubmit = 5,
++	kSweetAdrenoWaitFence = 6,
++};
++
++/* Linux v6.12 include/uapi/drm/msm_drm.h MSM_PARAM_* ids (GET_PARAM's selector space) */
++enum {
++	kSweetAdrenoMsmParamGpuId           = 0x01,
++	kSweetAdrenoMsmParamGmemSize         = 0x02,
++	kSweetAdrenoMsmParamChipId           = 0x03,
++	kSweetAdrenoMsmParamMaxFreq          = 0x04,
++	kSweetAdrenoMsmParamPriorities       = 0x07,
++	kSweetAdrenoMsmParamVaStart          = 0x0e,
++	kSweetAdrenoMsmParamVaSize           = 0x0f,
++	kSweetAdrenoMsmParamHighestBankBit   = 0x10,
++	kSweetAdrenoMsmParamUbwcSwizzle      = 0x12,
++	kSweetAdrenoMsmParamMacrotileMode    = 0x13,
++};
++
++/* umi (A650, SM8250): chip ID 6.5.0.2, gmem 1.125 MB, objects from 0x100000000 (Linux
++ * a6xx_catalog.c / a6xx_calc_ubwc_config for the A650; the 39-bit page tables bound the space). */
++#define SWEET_ADRENO_CHIP_ID            0x06050002ull
++#define SWEET_ADRENO_GMEM_BYTES         0x120000ull
++#define SWEET_ADRENO_VA_START           0x100000000ull
++#define SWEET_ADRENO_VA_SIZE            (0x8000000000ull - SWEET_ADRENO_VA_START)
++#define SWEET_ADRENO_MAX_FREQ_KHZ       305000
++#define SWEET_ADRENO_HIGHEST_BANK_BIT   16
++#define SWEET_ADRENO_UBWC_SWIZZLE       0x6
++#define SWEET_ADRENO_MACROTILE_MODE     0
++
++class SweetAdreno : public IOService {
++	OSDeclareDefaultStructors(SweetAdreno);
++public:
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	bool handleOpen(IOService *forClient, IOOptionBits options, void *arg) APPLE_KEXT_OVERRIDE;
++};
++
++OSDefineMetaClassAndStructors(SweetAdreno, IOService);
++
++static bool
++sweet_adreno_param(uint32_t param, uint64_t *value)
++{
++	switch (param) {
++	case kSweetAdrenoMsmParamGpuId:
++		*value = 650;                       /* revn, as freedreno reads it */
++		break;
++	case kSweetAdrenoMsmParamGmemSize:
++		*value = SWEET_ADRENO_GMEM_BYTES;
++		break;
++	case kSweetAdrenoMsmParamChipId:
++		*value = SWEET_ADRENO_CHIP_ID;
++		break;
++	case kSweetAdrenoMsmParamMaxFreq:
++		*value = SWEET_ADRENO_MAX_FREQ_KHZ;
++		break;
++	case kSweetAdrenoMsmParamPriorities:
++		*value = 1;
++		break;
++	case kSweetAdrenoMsmParamVaStart:
++		*value = SWEET_ADRENO_VA_START;
++		break;
++	case kSweetAdrenoMsmParamVaSize:
++		*value = SWEET_ADRENO_VA_SIZE;
++		break;
++	case kSweetAdrenoMsmParamHighestBankBit:
++		*value = SWEET_ADRENO_HIGHEST_BANK_BIT;
++		break;
++	case kSweetAdrenoMsmParamUbwcSwizzle:
++		*value = SWEET_ADRENO_UBWC_SWIZZLE;
++		break;
++	case kSweetAdrenoMsmParamMacrotileMode:
++		*value = SWEET_ADRENO_MACROTILE_MODE;
++		break;
++	default:
++		return false;
++	}
++	return true;
++}
++
++bool
++SweetAdreno::handleOpen(IOService *forClient, IOOptionBits options, void *arg)
++{
++	char name[32];
++
++	proc_selfname(name, sizeof(name));
++	if (!sweet_adreno_service_ready()) {
++		IOLog("SWEET ADRENO: %s opens the GPU service: the core is not running (boot-arg sweetgpu >= 21)\n", name);
++		return false;
++	}
++	IOLog("SWEET ADRENO: %s opens the GPU service\n", name);
++	return IOService::handleOpen(forClient, options, arg);
++}
++
++bool
++SweetAdreno::start(IOService *provider)
++{
++	if (!IOService::start(provider)) {
++		return false;
++	}
++	if (!sweet_adreno_service_ready()) {
++		IOLog("SWEET ADRENO: published; the core is not running yet (opens are refused until it is)\n");
++	}
++	setProperty(kIOUserClientClassKey, "SweetAdrenoUserClient");
++	registerService();
++	return true;
++}
++
++class SweetAdrenoUserClient : public IOUserClient {
++	OSDeclareDefaultStructors(SweetAdrenoUserClient);
++
++public:
++	bool initWithTask(task_t owningTask, void *securityID, UInt32 type) APPLE_KEXT_OVERRIDE;
++	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
++	IOReturn clientClose(void) APPLE_KEXT_OVERRIDE;
++	IOReturn clientMemoryForType(UInt32 type, IOOptionBits *options,
++	    IOMemoryDescriptor **memory) APPLE_KEXT_OVERRIDE;
++	IOReturn externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++	    IOExternalMethodDispatch *dispatch, OSObject *target,
++	    void *reference) APPLE_KEXT_OVERRIDE;
++
++	task_t fTask;
++	SweetAdreno *fService;
++};
++
++OSDefineMetaClassAndStructors(SweetAdrenoUserClient, IOUserClient);
++
++bool
++SweetAdrenoUserClient::initWithTask(task_t owningTask, void *securityID, UInt32 type)
++{
++	if (!IOUserClient::initWithTask(owningTask, securityID, type)) {
++		return false;
++	}
++	fTask = owningTask;
++	return true;
++}
++
++bool
++SweetAdrenoUserClient::start(IOService *provider)
++{
++	fService = OSDynamicCast(SweetAdreno, provider);
++	if (fService == NULL || !IOUserClient::start(provider)) {
++		return false;
++	}
++	return true;
++}
++
++IOReturn
++SweetAdrenoUserClient::clientClose(void)
++{
++	terminate();
++	return kIOReturnSuccess;
++}
++
++/* The object's wired kernel memory, mapped into the task by IOConnectMapMemory(type = handle). */
++IOReturn
++SweetAdrenoUserClient::clientMemoryForType(UInt32 type, IOOptionBits *options,
++    IOMemoryDescriptor **memory)
++{
++	uint64_t gpu = 0;
++	vm_offset_t kmem = 0;
++	vm_size_t size = 0;
++	int err = sweet_adreno_bo_info(type, &gpu, &kmem, &size);
++
++	if (err != 0) {
++		return kIOReturnBadArgument;
++	}
++	IOMemoryDescriptor *md = IOMemoryDescriptor::withAddress((void *)kmem, size, kIODirectionInOut);
++	if (md == NULL) {
++		return kIOReturnNoMemory;
++	}
++	*options = 0;
++	*memory = md;                          /* released with the map */
++	return kIOReturnSuccess;
++}
++
++IOReturn
++SweetAdrenoUserClient::externalMethod(uint32_t selector, IOExternalMethodArguments *args,
++    __unused IOExternalMethodDispatch *dispatch, __unused OSObject *target,
++    __unused void *reference)
++{
++	IOReturn ret = kIOReturnSuccess;
++	uint64_t out[2] = { 0, 0 };
++	uint32_t outCount = 0;
++
++	switch (selector) {
++	case kSweetAdrenoGetParam: {
++		uint64_t value = 0;
++		if (args->scalarInputCount < 1 ||
++		    !sweet_adreno_param((uint32_t)args->scalarInput[0], &value)) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		out[0] = value;
++		outCount = 1;
++		break;
++	}
++	case kSweetAdrenoGemNew: {
++		uint64_t handle = 0, gpu = 0;
++		vm_offset_t memory = 0;
++		if (args->scalarInputCount < 1 || args->scalarInput[0] > UINT32_MAX) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		int err = sweet_adreno_bo_new((vm_size_t)args->scalarInput[0], &handle, &gpu, &memory);
++		if (err != 0) {
++			ret = kIOReturnNoResources;
++			break;
++		}
++		out[0] = handle;
++		outCount = 1;
++		break;
++	}
++	case kSweetAdrenoGemInfo: {
++		uint64_t gpu = 0;
++		vm_offset_t memory = 0;
++		vm_size_t size = 0;
++		if (args->scalarInputCount < 1 ||
++		    sweet_adreno_bo_info(args->scalarInput[0], &gpu, &memory, &size) != 0) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		out[0] = gpu;
++		out[1] = size;
++		outCount = 2;
++		break;
++	}
++	case kSweetAdrenoGemClose:
++		if (args->scalarInputCount < 1 ||
++		    sweet_adreno_bo_free(args->scalarInput[0]) != 0) {
++			ret = kIOReturnBadArgument;
++		}
++		break;
++	case kSweetAdrenoGemSubmit: {
++		uint32_t fence = 0;
++		if (args->scalarInputCount < 3 ||
++		    args->scalarInput[2] > UINT32_MAX || args->scalarInput[1] > UINT32_MAX ||
++		    sweet_adreno_submit(args->scalarInput[0], (uint32_t)args->scalarInput[1],
++		    (uint32_t)args->scalarInput[2], &fence) != 0) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		out[0] = fence;
++		outCount = 1;
++		break;
++	}
++	case kSweetAdrenoWaitFence:
++		if (args->scalarInputCount < 2) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		out[0] = sweet_adreno_fence_wait((uint32_t)args->scalarInput[0],
++		    (uint32_t)args->scalarInput[1]) ? 1 : 0;
++		outCount = 1;
++		break;
++	default:
++		ret = kIOReturnUnsupported;
++		break;
++	}
++
++	for (uint32_t i = 0; i < args->scalarOutputCount; i++) {
++		args->scalarOutput[i] = i < outCount ? out[i] : 0;
++	}
++	if (args->structureOutputDescriptor == NULL && args->structureOutput != NULL) {
++		bzero(args->structureOutput, args->structureOutputSize);
++	}
++	if (ret != kIOReturnSuccess) {
++		IOLog("SWEET ADRENO: selector %u -> 0x%x\n", selector, ret);
++	}
++	return ret;
++}
++
++/*
++ * Published from AppleCLCD::start (SweetFramebuffer.cpp), like the other SWEET services; the GPU
++ * block itself is brought up by the sweetgpu steps (bsd/dev/sweet_adreno.c), so the service can be
++ * up before the core runs - opens are refused until it does.
++ */
++extern "C" void
++sweet_adreno_publish(IOService *provider)
++{
++	SweetAdreno *service;
++	uint32_t on = 1;
++
++	(void)PE_parse_boot_argn("sweetadreno", &on, sizeof(on));
++	if (on == 0 || !sweet_board_is_umi()) {
++		return;
++	}
++	service = OSTypeAlloc(SweetAdreno);
++	if (service == NULL || !service->init()) {
++		IOLog("SWEET ADRENO: no service\n");
++		OSSafeReleaseNULL(service);
++		return;
++	}
++	service->setName("SweetAdreno");
++	if (service->attach(provider)) {
++		service->registerService();
++		IOLog("SWEET ADRENO: GPU service published (SweetAdreno; opens %s)\n",
++		    sweet_adreno_service_ready() ? "allowed" : "refused until the core runs");
++	}
++	OSSafeReleaseNULL(service);
++}
++#endif /* SWEET */
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index c0bdbf1..3c0d298 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -39,6 +39,7 @@
+ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ extern "C" void sweet_busy_init(void);  /* iokit/Kernel/arm/SweetBusy.cpp (boot-arg sweetbusy=N) */
+ extern "C" bool sweet_board_is_umi(void);       /* bsd/dev/sweet_rpmh.c */
++extern "C" void sweet_adreno_publish(IOService *provider);       /* iokit/Kernel/arm/SweetAdreno.cpp */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ extern "C" void ml_io_unmap(vm_offset_t addr, vm_size_t sz);
+ extern "C" void (*sweet_panic_display_hook)(void);      /* pexpert/arm/pe_identify_machine.c */
+@@ -309,6 +310,7 @@ AppleCLCD::start(IOService *provider)
+ 	}
+ 	OSSafeReleaseNULL(stack);
+ 	sweet_wlan_publish_early();             /* 0154: Wi-Fi registry entries before wifid starts */
++	sweet_adreno_publish(this);             /* the GPU service for user space (SweetAdreno.cpp) */
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
+ 	return true;
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+index aabe7dc..b44e3f6 100644
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -18,6 +18,7 @@ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitc
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetBusy.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/SweetWLAN.cpp                                   optional iokitcpp
++iokit/Kernel/arm/SweetAdreno.cpp                                 optional iokitcpp
+ iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp
+-- 
+2.54.0 (Apple Git-157)
+

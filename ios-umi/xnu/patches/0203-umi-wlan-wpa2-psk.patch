@@ -1,0 +1,1058 @@
+From 71d1fd4a63a63aa50852a95d799a8e54b3de2088 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Fri, 30 Oct 2026 17:32:07 +0100
+Subject: [PATCH] umi: WPA2-PSK for the Wi-Fi station
+
+wifid hands the PMK over (Apple80211 ASSOCIATE, key kind 6); 0202
+refused anything but open networks. New bsd/dev/sweet_wlsec.c is the
+supplicant's half of IEEE 802.11-2016 12.7 for PSK + CCMP: PBKDF2 for a
+passphrase, PTK = PRF-384, EAPOL-Key descriptor version 2 (HMAC-SHA1
+MIC, AES key unwrap of the key data), 4-way handshake messages 1-4 and
+the group key handshake. Checked on the Mac against the IEEE 802.11
+PBKDF2 and PRF vectors, RFC 2202 (HMAC-SHA1) and RFC 3394 (unwrap).
+
+sweet_wlce.c (ath11k mac.c / wmi.c v6.12 as the model):
+- only WPA2-PSK/CCMP APs (group and pairwise CCMP, AKM PSK, MFP not
+  required); our RSN element goes into the association request and
+  message 2;
+- PEER_ASSOC with WMI_PEER_NEED_PTK_4_WAY instead of WMI_PEER_AUTH;
+- after the handshake: VDEV_INSTALL_KEY 0x5009 (tag 0x60, AES_CCM,
+  pairwise idx 0, then the GTK with its RSC) waiting for
+  INSTALL_KEY_COMPLETE 0x5003, then PEER_AUTHORIZE;
+- a new GTK from a group rekey is installed from the poll;
+- leave resets the encrypt type and forgets the keys.
+sweet_wldp.c: TCL encrypt type CCMP_128 (6) once the pairwise key is
+in, OPEN (7) before and on open networks. sweet_wlsta.c: EAPOL frames
+go to the handshake, not to the stack; a failed handshake after
+message 1 is EAUTH (wifid: invalid password).
+
+Also flame 0123's AppleKeyStore wrap/unwrap (from HackiOS) so securityd
+can store wifid's network passwords in the keychain.
+Association request: Privacy for a protected network and the AP's
+short preamble in the capability field, as mac80211's
+ieee80211_send_assoc copies them. An 802.11ax phone hotspot refused
+WPA2 without Privacy with status 45 (INVALID_RSNE_CAPABILITIES) whatever
+RSN capabilities, HT or WMM elements were tried; with it, accepted at
+once. A refused association logs the reply's elements and the AP's RSN
+element / element kinds; transmit completions are counted by release
+source and reason (every 5 min while joined).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/conf/files                     |   1 +
+ bsd/dev/sweet_wlce.c               | 239 +++++++++++++++++-
+ bsd/dev/sweet_wldp.c               |  26 +-
+ bsd/dev/sweet_wlsec.c              | 385 +++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlsta.c              |  40 ++-
+ iokit/Kernel/arm/SweetKeyStore.cpp |  43 ++++
+ 6 files changed, 710 insertions(+), 24 deletions(-)
+ create mode 100644 bsd/dev/sweet_wlsec.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index b643e50..c1c5b37 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -128,6 +128,7 @@ bsd/dev/redwood_net.c			standard
+ bsd/dev/redwood_sta.c			standard
+ bsd/dev/redwood_apple80211.c		standard
+ bsd/dev/sweet_wlsta.c			standard
++bsd/dev/sweet_wlsec.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 5b33de8..2fc3888 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -34,6 +34,12 @@ extern int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ extern bool sweet_wlsta_wanted(void);
++extern void sweet_wldp_set_encrypt(unsigned type);
++extern void sweet_wlsec_begin(const uint8_t pmk[32], const uint8_t aa[6], const uint8_t spa[6], const uint8_t *ie, unsigned ie_len);
++extern void sweet_wlsec_end(void);
++extern int sweet_wlsec_state(void);
++extern void sweet_wlsec_keys(uint8_t tk[16], uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8]);
++extern bool sweet_wlsec_new_gtk(uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8]);
+ extern int sweet_wlsta_start(void);
+ 
+ /* qca6390_regs (ath11k hw.c): CE n source R0 at 0xa00000 + n * 0x2000, destination at +0x1000 */
+@@ -357,6 +363,9 @@ static struct {
+ 	/* 0202: leave, and a link the AP or the firmware ended (deauth / disassoc, kickout, beacon miss) */
+ 	bool peer_deleted, vdev_stopped, lost;
+ 	uint32_t lost_why;
++	/* 0203: WPA2-PSK */
++	bool rsn, key_done;
++	uint32_t key_status;
+ } htc;
+ 
+ #define WMI_EV_BIT(id)          ((id) < 0x4000u ? 1ull << ((id) & 31) : 1ull << (32 + ((id) & 31)))
+@@ -619,6 +628,11 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+ 		/* PEER_ASSOC_CONF (tag 0x1b2): vdev_id, peer mac */
+ 		htc.assoc_conf = true;
+ 		printf("SWEET WMI: peer assoc confirmed\n");
++	} else if (id == 0x5003u && len >= 28) {
++		/* 0203: VDEV_INSTALL_KEY_COMPLETE {vdev_id, peer mac (2 words), key_idx, key_flags, status} */
++		htc.key_status = get32(m + 4 + 20);
++		htc.key_done = true;
++		printf("SWEET WMI: key %u (flags %u) installed, status %u\n", get32(m + 4 + 12), get32(m + 4 + 16), htc.key_status);
+ 	} else if (id == 0x6007u) {
+ 		/* 0202: PEER_DELETE_RESP (ath11k wmi.h WMI_PEER_DELETE_RESP_EVENTID) */
+ 		htc.peer_deleted = true;
+@@ -690,6 +704,13 @@ wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
+ 			htc.assoc_rx = true;
+ 			printf("SWEET WMI: assoc reply: status %u, AID %u, AP capability %#x\n", htc.assoc_status, htc.aid,
+ 			    htc.ap_caps);
++			if (htc.assoc_status != 0) {    /* 0203: what the refusal carries */
++				printf("SWEET WMI: assoc reply elements (%u bytes):", fl - 30);
++				for (unsigned k = 30; k < fl && k < 30 + 96; k++) {
++					printf(" %02x", f[k]);
++				}
++				printf("\n");
++			}
+ 		}
+ 		return;
+ 	}
+@@ -1196,11 +1217,72 @@ mgmt_hdr(uint8_t *f, uint8_t fc, const uint8_t *bssid, uint16_t seq)
+  * (sweet_wlce_join): the strongest BSS heard with that name (and that BSSID, if given).
+  * 0, or 1 not heard ... 11 authorize failed, as before.
+  */
++/*
++ * 0203: the AP's RSN element (in its beacon's elements) and ours: WPA2-PSK only, i.e. group
++ * cipher CCMP (00-0f-ac:4), CCMP among the pairwise ciphers, PSK (00-0f-ac:2) among the AKMs,
++ * management frame protection not required (capability bit 6). Ours names exactly those
++ * (12.2.2, 9.4.2.25); the same bytes go into 4-way message 2. 0, or -1 not for us.
++ */
++static const uint8_t wlce_rsn_ie[22] = { 0x30, 20, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 4, 1, 0, 0x00, 0x0f, 0xac, 2,
++	                                 0, 0 };
++
++static int
++wlce_rsn_check(const uint8_t *ies, unsigned len)
++{
++	static const uint8_t ccmp[4] = { 0x00, 0x0f, 0xac, 4 }, psk[4] = { 0x00, 0x0f, 0xac, 2 };
++	for (unsigned o = 0; o + 2 <= len && o + 2 + ies[o + 1] <= len; o += 2 + ies[o + 1]) {
++		const uint8_t *e = ies + o + 2;
++		unsigned l = ies[o + 1], n, p = 8;
++		bool pw = false, akm = false;
++		if (ies[o] != 0x30) {
++			continue;
++		}
++		if (l < 8 + 2 || memcmp(e + 2, ccmp, 4) != 0) {
++			printf("SWEET WMI: the AP's group cipher is not CCMP\n");
++			return -1;
++		}
++		n = e[6] | e[7] << 8;
++		for (unsigned i = 0; i < n && p + 4 <= l; i++, p += 4) {
++			pw |= memcmp(e + p, ccmp, 4) == 0;
++		}
++		if (p + 2 > l) {
++			return -1;
++		}
++		n = e[p] | e[p + 1] << 8;
++		p += 2;
++		for (unsigned i = 0; i < n && p + 4 <= l; i++, p += 4) {
++			akm |= memcmp(e + p, psk, 4) == 0;
++		}
++		unsigned caps = p + 2 <= l ? (unsigned)(e[p] | e[p + 1] << 8) : 0;
++		printf("SWEET WMI: AP RSN: pairwise CCMP %d, PSK %d, capabilities %#x\n", pw, akm, caps);
++		/* 0203: the AP's whole RSN element and the kinds of its other elements (ids; 255 with the extension id,
++		 * 221 with OUI + type), for APs that refuse us - never the SSID's bytes */
++		printf("SWEET WMI: AP RSN element:");
++		for (unsigned k = 0; k < l + 2 && k < 48; k++) {
++			printf(" %02x", ies[o + k]);
++		}
++		printf("\nSWEET WMI: AP elements:");
++		for (unsigned q = 0; q + 2 <= len && q + 2 + ies[q + 1] <= len; q += 2 + ies[q + 1]) {
++			if (ies[q] == 255 && ies[q + 1] >= 1) {
++				printf(" 255/%u", ies[q + 2]);
++			} else if (ies[q] == 221 && ies[q + 1] >= 4) {
++				printf(" 221/%02x%02x%02x-%u", ies[q + 2], ies[q + 3], ies[q + 4], ies[q + 5]);
++			} else {
++				printf(" %u", ies[q]);
++			}
++		}
++		printf("\n");
++		return pw && akm && !(caps & 0x40) ? 0 : -1;
++	}
++	printf("SWEET WMI: the AP has no RSN element (WPA1 / WEP / open)\n");
++	return -1;
++}
++
+ static int
+-wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
++wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid, const uint8_t *pmk)
+ {
+ 	static uint32_t b[64];
+-	static uint8_t f[128];
++	static uint8_t f[256];
+ 	static const uint8_t rates[12] = { 0x82, 0x84, 0x8b, 0x96, 0x0c, 0x12, 0x18, 0x24, 0x30, 0x48, 0x60, 0x6c };
+ 	char want[33] = {0};
+ 	uint8_t bssid[6];
+@@ -1223,6 +1305,15 @@ wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ 		return 1;
+ 	}
+ 	memcpy(bssid, htc.bss[best], 6);       /* (the table changes with every beacon) */
++	uint16_t ap_cap = htc.bss_cap[best];
++	htc.rsn = pmk != NULL;
++	if (htc.rsn ? wlce_rsn_check(htc.bss_ies[best], htc.bss_ielen[best]) != 0 : (htc.bss_cap[best] & 0x10) != 0) {
++		printf("SWEET WMI: \"%s\": %s\n", want, htc.rsn ? "not a WPA2-PSK/CCMP network" : "the network wants a key");
++		return 12;
++	}
++	if (htc.rsn) {
++		sweet_wlsec_begin(pmk, bssid, wlce_mac, wlce_rsn_ie, sizeof(wlce_rsn_ie));
++	}
+ 	uint32_t ch = htc.bss_ch[best], mhz = 2407 + 5 * ch;
+ 	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
+ 	memcpy(htc.join_bssid, bssid, 6);
+@@ -1315,9 +1406,14 @@ wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ 		return 6;
+ 	}
+ 
+-	/* association request: capability ESS + short slot, listen interval 1, SSID, rates, extended rates */
++	/*
++	 * association request: capability ESS + short slot, listen interval 1, SSID, rates, extended rates.
++	 * 0203: plus Privacy for a protected network and the AP's short preamble, as mac80211's
++	 * ieee80211_send_assoc copies them (an 802.11ax phone hotspot refused WPA2 without Privacy with status 45,
++	 * INVALID_RSNE_CAPABILITIES, whatever RSN capabilities, HT or WMM elements were sent).
++	 */
+ 	n = mgmt_hdr(f, 0x00, bssid, 2);
+-	f[n++] = 0x01;
++	f[n++] = (uint8_t)(0x01 | (htc.rsn ? 0x10 : 0) | (ap_cap & 0x20));
+ 	f[n++] = 0x04;
+ 	f[n++] = 1;
+ 	f[n++] = 0;
+@@ -1333,6 +1429,10 @@ wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ 	f[n++] = 4;
+ 	memcpy(f + n, rates + 8, 4);
+ 	n += 4;
++	if (htc.rsn) {
++		memcpy(f + n, wlce_rsn_ie, sizeof(wlce_rsn_ie));
++		n += sizeof(wlce_rsn_ie);
++	}
+ 	if (wmi_mgmt_tx(f, n, 2) != 0) {
+ 		return 7;
+ 	}
+@@ -1349,7 +1449,7 @@ wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ 	b[3] = 0;                       /* vdev */
+ 	b[4] = 1;                       /* new assoc */
+ 	b[5] = htc.aid;
+-	b[6] = 0x1;                     /* WMI_PEER_AUTH: open network, no 4-way handshake */
++	b[6] = htc.rsn ? 0x4u : 0x1u;   /* WMI_PEER_NEED_PTK_4_WAY (ath11k wmi.c drops AUTH then) / WMI_PEER_AUTH */
+ 	b[7] = htc.ap_caps;
+ 	b[8] = 1;                       /* listen interval */
+ 	b[13] = 1;                      /* nss */
+@@ -1379,6 +1479,16 @@ wlce_assoc(const uint8_t *ssid, unsigned wl, const uint8_t *want_bssid)
+ 		return 10;
+ 	}
+ 
++	if (htc.rsn) {
++		/* 0203: the 4-way handshake comes now; keys and authorization after it (sweet_wlce_join) */
++		printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u), waiting for the 4-way handshake\n", want,
++		    htc.aid, htc.peer_id);
++		htc.joined = true;
++		htc.logged = 0;
++		sweet_wldp_set_bssid(bssid);
++		return 0;
++	}
++
+ 	/* ath11k_mac_op_sta_state -> AUTHORIZED: WMI_PEER_AUTHORIZE = 1 */
+ 	bzero(b, sizeof(b));
+ 	b[0] = WMI_TLV(0x64, 5 * 4);
+@@ -1410,7 +1520,7 @@ wmi_join(void)
+ 			want[i] = ' ';
+ 		}
+ 	}
+-	int r = wlce_assoc((const uint8_t *)want, (unsigned)strlen(want), NULL);
++	int r = wlce_assoc((const uint8_t *)want, (unsigned)strlen(want), NULL, NULL);
+ 	if (r != 0) {
+ 		return r;
+ 	}
+@@ -1438,7 +1548,7 @@ wmi_join(void)
+ void sweet_wlce_lock(bool on);
+ unsigned sweet_wlce_poll(void);
+ int sweet_wlce_scan(void);
+-int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid);
++int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid, const uint8_t *pmk);
+ int sweet_wlce_leave(void);
+ bool sweet_wlce_joined(const uint8_t **bssid);
+ uint32_t sweet_wlce_lost(void);
+@@ -1457,11 +1567,20 @@ sweet_wlce_lock(bool on)
+ }
+ 
+ /* The net thread (lock held): copy engines and data rings once; frames go to the rx handler. */
++static int wlce_install_key(bool group, unsigned idx, const uint8_t *key, unsigned len, const uint8_t rsc[8]);
++
+ unsigned
+ sweet_wlce_poll(void)
+ {
++	uint8_t gtk[32], rsc[8];
++	unsigned gtk_len, gtk_idx;
+ 	wlce_shared = true;
+ 	htc_poll();
++	/* 0203: a new GTK from a group key handshake (received just now, answered already) */
++	if (htc.joined && htc.rsn && sweet_wlsec_new_gtk(gtk, &gtk_len, &gtk_idx, rsc)) {
++		(void)wlce_install_key(true, gtk_idx, gtk, gtk_len, rsc);
++		bzero(gtk, sizeof(gtk));
++	}
+ 	return 0;
+ }
+ 
+@@ -1476,6 +1595,89 @@ sweet_wlce_scan(void)
+ 	return r ? EIO : htc.scan_done ? 0 : ETIMEDOUT;
+ }
+ 
++/*
++ * 0203: WMI_VDEV_INSTALL_KEY 0x5009 (tag 0x60, after VDEV_SET_PARAM 0x5f) as ath11k_install_key:
++ * wmi_vdev_install_key_cmd {vdev_id, peer mac, key_idx, key_flags (PAIRWISE 0 / GROUP 1),
++ * key_cipher (AES_CCM 4), rsc, global rsc, tsc (2 words each), wpi rsc / tsc (16 bytes each),
++ * key_len, tx mic len, rx mic len, group key id valid, group key id}, then the key as a byte
++ * array (0x11); the peer is the AP for both keys of a station. Waits for
++ * VDEV_INSTALL_KEY_COMPLETE 0x5003. 0 or EIO.
++ */
++static int
++wlce_install_key(bool group, unsigned idx, const uint8_t *key, unsigned len, const uint8_t rsc[8])
++{
++	static uint32_t b[27 + 8];
++	if (len > 32) {
++		return EINVAL;
++	}
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x60, 25 * 4);
++	memcpy(&b[2], htc.join_bssid, 6);
++	b[4] = idx;
++	b[5] = group ? 1 : 0;
++	b[6] = 4;                       /* WMI_CIPHER_AES_CCM */
++	if (rsc != NULL) {
++		memcpy(&b[7], rsc, 8);
++	}
++	b[21] = len;
++	b[26] = WMI_TLV(0x11, (len + 3) & ~3u);
++	memcpy(&b[27], key, len);
++	htc.key_done = false;
++	int r = wmi_cmd(0x5009u, b, (27 + (len + 3) / 4) * 4, group ? "INSTALL_KEY group" : "INSTALL_KEY pairwise");
++	bzero(&b[27], 32);
++	if (r != 0 || !wlce_wait(&htc.key_done, 1000) || htc.key_status != 0) {
++		printf("SWEET WMI: %s key %u not installed (send %d, %s, status %u)\n", group ? "group" : "pairwise", idx, r,
++		    htc.key_done ? "answered" : "no answer", htc.key_status);
++		return EIO;
++	}
++	return 0;
++}
++
++/* 0203: after a WPA2 association: the 4-way handshake (sweet_wlsec.c), the keys, authorization */
++static int
++wlce_secure(void)
++{
++	static uint32_t b[8];
++	uint8_t tk[16], gtk[32], rsc[8];
++	unsigned gtk_len, gtk_idx, t;
++	int st = 0, r;
++	bool m1 = false;
++	/* (an AP that does not like message 2 deauthenticates, reason 15: the leave that follows forgets the handshake) */
++	for (t = 0; t < 8000 && htc.joined && !htc.lost && (st = sweet_wlsec_state()) != 1; ++t) {
++		m1 |= st == 2;
++		wlce_tick();
++	}
++	if (st != 1) {
++		printf("SWEET WMI: 4-way handshake not done (%s, %s)\n", htc.joined && !htc.lost ? "8 s" : "the AP sent us away",
++		    m1 ? "message 1 came: wrong password?" : "no message 1 from the AP");
++		return m1 ? EAUTH : ETIMEDOUT;
++	}
++	for (t = 0; t < 50; ++t) {      /* (message 4 on the air before the key goes in) */
++		wlce_tick();
++	}
++	sweet_wlsec_keys(tk, gtk, &gtk_len, &gtk_idx, rsc);
++	r = wlce_install_key(false, 0, tk, 16, NULL);
++	if (r == 0) {
++		sweet_wldp_set_encrypt(6);      /* HAL_ENCRYPT_TYPE_CCMP_128 */
++		r = wlce_install_key(true, gtk_idx, gtk, gtk_len, rsc);
++	}
++	bzero(tk, sizeof(tk));
++	bzero(gtk, sizeof(gtk));
++	if (r != 0) {
++		return EIO;
++	}
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x64, 5 * 4);
++	memcpy(&b[2], htc.join_bssid, 6);
++	b[4] = 3;                       /* WMI_PEER_AUTHORIZE */
++	b[5] = 1;
++	if (wmi_cmd(0x6004u, b, 6 * 4, "PEER_SET_PARAM authorize") != 0) {
++		return EIO;
++	}
++	printf("SWEET WMI: WPA2 keys installed, peer authorized\n");
++	return 0;
++}
++
+ /*
+  * Leave (ath11k: mac80211's deauth, ath11k_bss_disassoc's VDEV_DOWN, peer delete on
+  * sta_state NOTEXIST, ath11k_mac_vdev_stop): deauthentication (reason 3, leaving), VDEV_DOWN
+@@ -1516,23 +1718,36 @@ sweet_wlce_leave(void)
+ 		printf("SWEET WMI: no vdev stopped event in 1 s (continuing)\n");
+ 	}
+ 	htc.lost = false;
++	sweet_wldp_set_encrypt(7);      /* HAL_ENCRYPT_TYPE_OPEN */
++	sweet_wlsec_end();
+ 	printf("SWEET WMI: left the network\n");
+ 	return 0;
+ }
+ 
+-/* 0, ENOENT not heard, ETIMEDOUT not answered, ECONNREFUSED refused, EIO the firmware said no. */
++/*
++ * 0, ENOENT not heard, ETIMEDOUT not answered, ECONNREFUSED refused, EIO the firmware said no,
++ * EINVAL the network's security is not what was asked (0203: pmk = WPA2-PSK, NULL = open),
++ * EAUTH the 4-way handshake failed after message 1 (a wrong password).
++ */
+ int
+-sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid)
++sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid, const uint8_t *pmk)
+ {
+ 	wlce_shared = true;
+ 	if (htc.joined) {
+ 		(void)sweet_wlce_leave();
+ 	}
+-	int r = wlce_assoc(ssid, len, bssid);
++	int r = wlce_assoc(ssid, len, bssid, pmk);
++	if (r == 0 && htc.rsn) {
++		int s = wlce_secure();
++		if (s != 0) {
++			(void)sweet_wlce_leave();
++			return s;
++		}
++	}
+ 	if (r != 0) {
+ 		printf("SWEET WMI: join failed at step %d\n", r);
+ 		/* a peer / vdev made before the failure is taken down again */
+-		if (r >= 2) {
++		if (r >= 2 && r != 12) {
+ 			htc.joined = true;
+ 			(void)sweet_wlce_leave();
+ 		}
+@@ -1546,6 +1761,8 @@ sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid)
+ 		return htc.auth_rx ? ECONNREFUSED : ETIMEDOUT;
+ 	case 8:
+ 		return htc.assoc_rx ? ECONNREFUSED : ETIMEDOUT;
++	case 12:
++		return EINVAL;
+ 	default:
+ 		return EIO;
+ 	}
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index e032185..282d02b 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -652,6 +652,7 @@ void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
+ static struct {
+ 	uint32_t tx_id, tx_sent, tx_done, tx_acked, tx_logged;
+ 	uint32_t rx_frames, rx_dropped, rx_logged;
++	uint32_t tx_why[8][16];                 /* 0203: completions by release source (TQM 0, FW 3) and reason */
+ 	void (*rx_fn)(const uint8_t *frame, uint32_t len);
+ } dd;
+ 
+@@ -702,6 +703,21 @@ sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa)
+  * encapsulated frames: acked by the AP but never answered. Receive stays Ethernet (works).
+  */
+ void sweet_wldp_set_bssid(const uint8_t bssid[6]);
++void sweet_wldp_set_encrypt(unsigned type);
++
++/*
++ * 0203: hal_encrypt_type for the TCL descriptor (ath11k hal_desc.h: CCMP_128 6, OPEN 7): CCMP
++ * once the pairwise key is installed (the firmware encrypts with the peer's key), OPEN before
++ * (EAPOL) and on open networks.
++ */
++static unsigned tx_encrypt = 7;
++
++void
++sweet_wldp_set_encrypt(unsigned type)
++{
++	tx_encrypt = type;
++	printf("SWEET WLDP: tx encrypt type %u\n", type);
++}
+ 
+ void
+ sweet_wldp_set_bssid(const uint8_t bssid[6])
+@@ -738,7 +754,7 @@ sweet_wldp_tx(const void *frame, uint32_t len)
+ 	d[0] = 0x144u << 1 | 28u << 10;                 /* TLV: HAL_TCL_DATA_CMD, 28 bytes */
+ 	d[1] = pa;
+ 	d[2] = 3u << 8 | ((id & 0x1ffffu) << 2) << 11;  /* RBM SW0, cookie = msdu id << 2 (mac 0, pool 0) */
+-	d[3] = 1u << 2 | 7u << 4 | 2u << 14 | 1u << 16; /* NATIVE_WIFI, encrypt OPEN (7), ADDRY, metadata 1 */
++	d[3] = 1u << 2 | tx_encrypt << 4 | 2u << 14 | 1u << 16;     /* NATIVE_WIFI, encrypt type, ADDRY, metadata 1 */
+ 	d[4] = len;
+ 	d[5] = 1u << 21;                                /* TID_OVERWRITE, TID 0, LMAC 0 */
+ 	d[6] = 0;
+@@ -764,6 +780,7 @@ sweet_wldp_data_poll(void)
+ 		uint32_t src = e[2] & 7u, reason = (e[2] >> 13) & 0xfu;
+ 		dd.tx_done++;
+ 		dd.tx_acked += (src == 0 && reason == 0);
++		dd.tx_why[src][reason]++;
+ 		if (dd.tx_logged++ < 6) {
+ 			printf("SWEET WLDP: tx done: cookie %#x, release source %u, reason %u, raw %08x %08x %08x %08x %08x %08x\n",
+ 			    e[1] >> 11, src, reason, e[2], e[3], e[4], e[5], e[6], e[7]);
+@@ -843,6 +860,13 @@ sweet_wldp_data_report(void)
+ 	printf("SWEET WLDP: data: tx %u sent, %u done, %u acked; rx %u frames, %u dropped; rx release ring hp %u, "
+ 	    "reo exception hp %u\n", dd.tx_sent, dd.tx_done, dd.tx_acked, dd.rx_frames, dd.rx_dropped,
+ 	    *mem32(M_RDP + dp_rings[7].id * 4), *mem32(M_RDP + dp_rings[8].id * 4));
++	for (unsigned s = 0; s < 8; ++s) {
++		for (unsigned r = 0; r < 16; ++r) {
++			if (dd.tx_why[s][r] != 0) {
++				printf("SWEET WLDP:   tx completions from source %u reason %u: %u\n", s, r, dd.tx_why[s][r]);
++			}
++		}
++	}
+ 	/*
+ 	 * RXDMA error destination rings (133 / 148, 8-word hal_reo_entrance_ring entries): frames the
+ 	 * hardware refused before REO (0144). Entry word 7 (info0 of the REO entrance ring) carries the
+diff --git a/bsd/dev/sweet_wlsec.c b/bsd/dev/sweet_wlsec.c
+new file mode 100644
+index 0000000..a688744
+--- /dev/null
++++ b/bsd/dev/sweet_wlsec.c
+@@ -0,0 +1,385 @@
++/*
++ * umi Wi-Fi 0203: WPA2-PSK for the station (bsd/dev/sweet_wlsta.c), the supplicant's half of
++ * IEEE 802.11-2016 12.7 for AKM 00-0f-ac:2 (PSK) with CCMP pairwise and group ciphers:
++ *   - PMK: given by wifid (Apple80211 ASSOCIATE, key kind 6), or PBKDF2-SHA1(passphrase, SSID,
++ *     4096, 32) for a passphrase (12.7.1.3);
++ *   - PTK = PRF-384(PMK, "Pairwise key expansion", min/max(AA, SPA) || min/max(ANonce, SNonce)):
++ *     KCK 0-15, KEK 16-31, TK 32-47 (12.7.1.2-3);
++ *   - EAPOL-Key frames, key descriptor version 2: MIC = HMAC-SHA1-128(KCK), key data wrapped
++ *     with AES key wrap (RFC 3394) under the KEK (12.7.2);
++ *   - 4-way handshake message 1 -> 2 (SNonce, our RSN element), 3 -> 4 (GTK KDE from the key
++ *     data, 12.7.6), and the group key handshake 1 -> 2 for a new GTK (12.7.7).
++ * Frames arrive from the data path (sweet_wlsta.c's receive hook, wlce lock held) and the
++ * answers go straight back out through sweet_wldp_tx (unencrypted: the keys come after). The
++ * keys are installed by the caller from its own thread (sweet_wlce.c), never from here.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <sys/random.h>
++#include <libkern/crypto/sha1.h>
++#include <libkern/crypto/aes.h>
++
++extern int sweet_wldp_tx(const void *frame, uint32_t len);
++
++void sweet_wlsec_pmk(const uint8_t *pass, unsigned pass_len, const uint8_t *ssid, unsigned ssid_len, uint8_t pmk[32]);
++void sweet_wlsec_begin(const uint8_t pmk[32], const uint8_t aa[6], const uint8_t spa[6], const uint8_t *ie, unsigned ie_len);
++void sweet_wlsec_end(void);
++bool sweet_wlsec_rx(const uint8_t *frame, uint32_t len);
++int sweet_wlsec_state(void);
++void sweet_wlsec_keys(uint8_t tk[16], uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8]);
++bool sweet_wlsec_new_gtk(uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8]);
++
++#define KI_VER_MASK     0x0007u
++#define KI_PAIRWISE     0x0008u
++#define KI_INSTALL      0x0040u
++#define KI_ACK          0x0080u
++#define KI_MIC          0x0100u
++#define KI_SECURE       0x0200u
++#define KI_ENCDATA      0x1000u
++
++/* EAPOL-Key frame offsets from the EAPOL header (version, type 3, body length) */
++#define EK_DESC         4
++#define EK_INFO         5
++#define EK_KEYLEN       7
++#define EK_REPLAY       9
++#define EK_NONCE        17
++#define EK_RSC          65
++#define EK_MIC          81
++#define EK_DATALEN      97
++#define EK_DATA         99
++
++static struct {
++	bool on;
++	int state;                      /* 0 waiting, 1 keys ready (message 4 sent) */
++	uint8_t pmk[32], aa[6], spa[6];
++	uint8_t ie[64];
++	unsigned ie_len;
++	uint8_t anonce[32], snonce[32];
++	bool have_anonce;
++	uint8_t ptk[48];
++	uint8_t replay[8];
++	bool replay_seen;
++	uint8_t gtk[32], rsc[8];
++	unsigned gtk_len, gtk_idx;
++	bool gtk_new;
++	unsigned m1, m3, mic_bad;
++} ws;
++
++/* ---- HMAC-SHA1 (RFC 2104) over up to three pieces ---- */
++static void
++hmac_sha1(const uint8_t *key, size_t key_len, const void *a, size_t al, const void *b, size_t bl, const void *c, size_t cl,
++    uint8_t out[20])
++{
++	uint8_t k[64], pad[64], inner[20];
++	SHA1_CTX ctx;
++	bzero(k, sizeof(k));
++	if (key_len > 64) {
++		SHA1Init(&ctx);
++		SHA1Update(&ctx, key, key_len);
++		SHA1Final(k, &ctx);
++	} else {
++		memcpy(k, key, key_len);
++	}
++	for (int i = 0; i < 64; i++) {
++		pad[i] = k[i] ^ 0x36;
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, pad, 64);
++	if (al) {
++		SHA1Update(&ctx, a, al);
++	}
++	if (bl) {
++		SHA1Update(&ctx, b, bl);
++	}
++	if (cl) {
++		SHA1Update(&ctx, c, cl);
++	}
++	SHA1Final(inner, &ctx);
++	for (int i = 0; i < 64; i++) {
++		pad[i] = k[i] ^ 0x5c;
++	}
++	SHA1Init(&ctx);
++	SHA1Update(&ctx, pad, 64);
++	SHA1Update(&ctx, inner, 20);
++	SHA1Final(out, &ctx);
++}
++
++/* PBKDF2-HMAC-SHA1(passphrase, SSID, 4096 iterations, 32 bytes): the PSK of a passphrase */
++void
++sweet_wlsec_pmk(const uint8_t *pass, unsigned pass_len, const uint8_t *ssid, unsigned ssid_len, uint8_t pmk[32])
++{
++	for (uint32_t block = 1; block <= 2; block++) {
++		uint8_t be[4] = { 0, 0, 0, (uint8_t)block }, u[20], t[20];
++		hmac_sha1(pass, pass_len, ssid, ssid_len, be, 4, NULL, 0, u);
++		memcpy(t, u, 20);
++		for (int i = 1; i < 4096; i++) {
++			hmac_sha1(pass, pass_len, u, 20, NULL, 0, NULL, 0, u);
++			for (int j = 0; j < 20; j++) {
++				t[j] ^= u[j];
++			}
++		}
++		memcpy(pmk + 20 * (block - 1), t, block == 1 ? 20 : 12);
++	}
++}
++
++/* PRF-384 (12.7.1.2): HMAC-SHA1(PMK, label || 0 || data || counter) for counters 0-2 */
++static void
++derive_ptk(void)
++{
++	static const char label[] = "Pairwise key expansion";      /* (the trailing NUL is the 0 byte) */
++	uint8_t data[76], out[60];
++	bool aa_first = memcmp(ws.aa, ws.spa, 6) < 0, an_first = memcmp(ws.anonce, ws.snonce, 32) < 0;
++	memcpy(data, aa_first ? ws.aa : ws.spa, 6);
++	memcpy(data + 6, aa_first ? ws.spa : ws.aa, 6);
++	memcpy(data + 12, an_first ? ws.anonce : ws.snonce, 32);
++	memcpy(data + 44, an_first ? ws.snonce : ws.anonce, 32);
++	for (uint8_t i = 0; i < 3; i++) {
++		hmac_sha1(ws.pmk, 32, label, sizeof(label), data, sizeof(data), &i, 1, out + 20 * i);
++	}
++	memcpy(ws.ptk, out, 48);
++}
++
++/* RFC 3394 key unwrap under the KEK; 0 or -1 (integrity check failed) */
++static int
++aes_unwrap(const uint8_t kek[16], const uint8_t *in, unsigned len, uint8_t *out)
++{
++	aes_decrypt_ctx ctx;
++	uint8_t a[8], b[16];
++	unsigned n = len / 8 - 1;
++	if (len < 24 || len % 8 || aes_decrypt_key128(kek, &ctx) != aes_good) {
++		return -1;
++	}
++	memcpy(a, in, 8);
++	memcpy(out, in + 8, 8 * n);
++	for (int j = 5; j >= 0; j--) {
++		for (unsigned i = n; i >= 1; i--) {
++			uint64_t t = (uint64_t)n * (unsigned)j + i;
++			memcpy(b, a, 8);
++			for (int k = 0; k < 8; k++) {
++				b[7 - k] ^= (uint8_t)(t >> (8 * k));
++			}
++			memcpy(b + 8, out + 8 * (i - 1), 8);
++			aes_decrypt(b, b, &ctx);
++			memcpy(a, b, 8);
++			memcpy(out + 8 * (i - 1), b + 8, 8);
++		}
++	}
++	for (int k = 0; k < 8; k++) {
++		if (a[k] != 0xa6) {
++			return -1;
++		}
++	}
++	return 0;
++}
++
++static bool
++mic_ok(const uint8_t *e, unsigned len)
++{
++	static uint8_t copy[1600];
++	uint8_t mic[20];
++	if (len > sizeof(copy)) {
++		return false;
++	}
++	memcpy(copy, e, len);
++	bzero(copy + EK_MIC, 16);
++	hmac_sha1(ws.ptk, 16, copy, len, NULL, 0, NULL, 0, mic);
++	return memcmp(mic, e + EK_MIC, 16) == 0;
++}
++
++/* An EAPOL-Key frame of ours: info, replay counter, nonce, key data; MIC'd unless the KCK is unknown */
++static int
++send_key(uint16_t info, const uint8_t replay[8], const uint8_t *nonce, const uint8_t *data, unsigned data_len)
++{
++	static uint8_t f[14 + EK_DATA + 64];
++	uint8_t *e = f + 14, mic[20];
++	unsigned elen = EK_DATA + data_len;
++	if (data_len > 64) {
++		return EINVAL;
++	}
++	bzero(f, sizeof(f));
++	memcpy(f, ws.aa, 6);
++	memcpy(f + 6, ws.spa, 6);
++	f[12] = 0x88;
++	f[13] = 0x8e;
++	e[0] = 1;                       /* 802.1X-2001 */
++	e[1] = 3;                       /* EAPOL-Key */
++	e[2] = (uint8_t)((elen - 4) >> 8);
++	e[3] = (uint8_t)(elen - 4);
++	e[EK_DESC] = 2;                 /* RSN key descriptor */
++	e[EK_INFO] = (uint8_t)(info >> 8);
++	e[EK_INFO + 1] = (uint8_t)info;
++	memcpy(e + EK_REPLAY, replay, 8);
++	if (nonce != NULL) {
++		memcpy(e + EK_NONCE, nonce, 32);
++	}
++	e[EK_DATALEN] = (uint8_t)(data_len >> 8);
++	e[EK_DATALEN + 1] = (uint8_t)data_len;
++	if (data_len) {
++		memcpy(e + EK_DATA, data, data_len);
++	}
++	if (info & KI_MIC) {
++		hmac_sha1(ws.ptk, 16, e, elen, NULL, 0, NULL, 0, mic);
++		memcpy(e + EK_MIC, mic, 16);
++	}
++	return sweet_wldp_tx(f, 14 + elen);
++}
++
++/* The GTK KDE (00-0f-ac:1) in decrypted key data: key id, the key */
++static bool
++find_gtk(const uint8_t *d, unsigned len)
++{
++	for (unsigned o = 0; o + 2 <= len;) {
++		unsigned type = d[o], l = d[o + 1];
++		if (type == 0xdd && l == 0 && o + 2 <= len) {
++			break;                  /* padding */
++		}
++		if (o + 2 + l > len) {
++			break;
++		}
++		if (type == 0xdd && l >= 6 + 5 && d[o + 2] == 0x00 && d[o + 3] == 0x0f && d[o + 4] == 0xac && d[o + 5] == 1 &&
++		    l - 6 <= sizeof(ws.gtk)) {
++			ws.gtk_idx = d[o + 6] & 3u;
++			ws.gtk_len = l - 6;
++			memcpy(ws.gtk, d + o + 8, ws.gtk_len);
++			return true;
++		}
++		o += 2 + l;
++	}
++	return false;
++}
++
++void
++sweet_wlsec_begin(const uint8_t pmk[32], const uint8_t aa[6], const uint8_t spa[6], const uint8_t *ie, unsigned ie_len)
++{
++	bzero(&ws, sizeof(ws));
++	memcpy(ws.pmk, pmk, 32);
++	memcpy(ws.aa, aa, 6);
++	memcpy(ws.spa, spa, 6);
++	ws.ie_len = MIN(ie_len, (unsigned)sizeof(ws.ie));
++	memcpy(ws.ie, ie, ws.ie_len);
++	ws.on = true;
++}
++
++void
++sweet_wlsec_end(void)
++{
++	bzero(&ws, sizeof(ws));         /* (the keys too) */
++}
++
++/* 1 keys ready, 2 message 1 came but no good message 3 (yet), 0 nothing yet */
++int
++sweet_wlsec_state(void)
++{
++	return ws.state != 0 ? ws.state : ws.m1 != 0 ? 2 : 0;
++}
++
++void
++sweet_wlsec_keys(uint8_t tk[16], uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8])
++{
++	memcpy(tk, ws.ptk + 32, 16);
++	memcpy(gtk, ws.gtk, sizeof(ws.gtk));
++	*gtk_len = ws.gtk_len;
++	*gtk_idx = ws.gtk_idx;
++	memcpy(rsc, ws.rsc, 8);
++}
++
++/* A GTK from a group key handshake since the last call */
++bool
++sweet_wlsec_new_gtk(uint8_t gtk[32], unsigned *gtk_len, unsigned *gtk_idx, uint8_t rsc[8])
++{
++	if (!ws.gtk_new) {
++		return false;
++	}
++	ws.gtk_new = false;
++	memcpy(gtk, ws.gtk, sizeof(ws.gtk));
++	*gtk_len = ws.gtk_len;
++	*gtk_idx = ws.gtk_idx;
++	memcpy(rsc, ws.rsc, 8);
++	return true;
++}
++
++/* A received Ethernet frame: true if it was EAPOL (handled here, not for the stack). */
++bool
++sweet_wlsec_rx(const uint8_t *frame, uint32_t len)
++{
++	static uint8_t plain[256];
++	if (len < 14 || frame[12] != 0x88 || frame[13] != 0x8e) {
++		return false;
++	}
++	const uint8_t *e = frame + 14;
++	unsigned elen = len - 14;
++	if (!ws.on || elen < EK_DATA || e[1] != 3 || e[EK_DESC] != 2) {
++		return true;
++	}
++	unsigned body = (unsigned)(e[2] << 8 | e[3]) + 4, dlen = (unsigned)(e[EK_DATALEN] << 8 | e[EK_DATALEN + 1]);
++	if (body > elen || EK_DATA + dlen > body) {
++		return true;
++	}
++	elen = body;
++	uint16_t info = (uint16_t)(e[EK_INFO] << 8 | e[EK_INFO + 1]);
++	if ((info & KI_VER_MASK) != 2 || !(info & KI_ACK)) {
++		printf("SWEET WLSEC: EAPOL-Key info %#x ignored (descriptor version %u)\n", info, info & KI_VER_MASK);
++		return true;
++	}
++	if (ws.replay_seen && memcmp(e + EK_REPLAY, ws.replay, 8) <= 0) {
++		return true;                    /* replayed */
++	}
++	if ((info & KI_PAIRWISE) && !(info & KI_MIC)) {
++		/* message 1: ANonce; a new SNonce for a new ANonce */
++		if (!ws.have_anonce || memcmp(ws.anonce, e + EK_NONCE, 32) != 0) {
++			memcpy(ws.anonce, e + EK_NONCE, 32);
++			read_random(ws.snonce, 32);
++			ws.have_anonce = true;
++			derive_ptk();
++		}
++		ws.m1++;
++		memcpy(ws.replay, e + EK_REPLAY, 8);
++		ws.replay_seen = true;
++		int r = send_key(2 | KI_PAIRWISE | KI_MIC, ws.replay, ws.snonce, ws.ie, ws.ie_len);
++		printf("SWEET WLSEC: 4-way message 1 (%u), message 2 sent: %d\n", ws.m1, r);
++		return true;
++	}
++	if (!(info & KI_MIC) || !ws.have_anonce) {
++		return true;
++	}
++	if (!mic_ok(e, elen)) {
++		ws.mic_bad++;
++		printf("SWEET WLSEC: EAPOL-Key MIC wrong (info %#x, %u times): wrong password?\n", info, ws.mic_bad);
++		return true;
++	}
++	memcpy(ws.replay, e + EK_REPLAY, 8);
++	ws.replay_seen = true;
++	if ((info & KI_ENCDATA) && (dlen > sizeof(plain) + 8 || aes_unwrap(ws.ptk + 16, e + EK_DATA, dlen, plain) != 0)) {
++		printf("SWEET WLSEC: key data (%u bytes) does not unwrap\n", dlen);
++		return true;
++	}
++	unsigned plen = (info & KI_ENCDATA) ? dlen - 8 : 0;
++	if (info & KI_PAIRWISE) {
++		/* message 3: the same ANonce, the GTK; message 4 answers it, then the keys go in */
++		if (memcmp(ws.anonce, e + EK_NONCE, 32) != 0 || !(info & KI_INSTALL)) {
++			printf("SWEET WLSEC: message 3 with another ANonce / no install bit, ignored\n");
++			return true;
++		}
++		bool gtk = find_gtk(plain, plen);
++		memcpy(ws.rsc, e + EK_RSC, 8);
++		int r = send_key(2 | KI_PAIRWISE | KI_MIC | KI_SECURE, ws.replay, NULL, NULL, 0);
++		ws.m3++;
++		printf("SWEET WLSEC: 4-way message 3 (GTK %s, id %u, %u bytes), message 4 sent: %d\n", gtk ? "found" : "MISSING",
++		    ws.gtk_idx, ws.gtk_len, r);
++		if (r == 0 && gtk) {
++			ws.state = 1;
++		}
++	} else {
++		/* group key handshake message 1: a new GTK */
++		if (find_gtk(plain, plen)) {
++			memcpy(ws.rsc, e + EK_RSC, 8);
++			ws.gtk_new = ws.state == 1;
++			int r = send_key(2 | KI_MIC | KI_SECURE, ws.replay, NULL, NULL, 0);
++			printf("SWEET WLSEC: group key message 1 (id %u), message 2 sent: %d\n", ws.gtk_idx, r);
++		}
++	}
++	return true;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlsta.c b/bsd/dev/sweet_wlsta.c
+index 7091129..c4f63c2 100644
+--- a/bsd/dev/sweet_wlsta.c
++++ b/bsd/dev/sweet_wlsta.c
+@@ -9,8 +9,9 @@
+  * The boot line's network (sweetwlanssid=NAME, '_' = space) is a standing join request, so the
+  * phone is online without anybody tapping Settings, as with flame's wlan.conf.
+  *
+- * Open networks only (the data path sends with encrypt type OPEN): a WPA join is refused.
+- * 2.4 GHz channels 1-13 only (sweet_wlce.c's channel list).
++ * Open and (0203) WPA2-PSK/CCMP networks: the PMK wifid gives (or one made of a passphrase)
++ * goes to the 4-way handshake (bsd/dev/sweet_wlsec.c), whose EAPOL frames are taken out of the
++ * receive path here. 2.4 GHz channels 1-13 only (sweet_wlce.c's channel list).
+  *
+  * Locking: every call into sweet_wlce.c holds its lock (sweet_wlce_lock); the waits inside let
+  * go of it while they sleep, so the net thread's poll and transmit go on during a scan or a join.
+@@ -30,7 +31,9 @@
+ extern void sweet_wlce_lock(bool on);
+ extern unsigned sweet_wlce_poll(void);
+ extern int sweet_wlce_scan(void);
+-extern int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid);
++extern int sweet_wlce_join(const uint8_t *ssid, unsigned len, const uint8_t *bssid, const uint8_t *pmk);
++extern bool sweet_wlsec_rx(const uint8_t *frame, uint32_t len);
++extern void sweet_wlsec_pmk(const uint8_t *pass, unsigned pass_len, const uint8_t *ssid, unsigned ssid_len, uint8_t pmk[32]);
+ extern int sweet_wlce_leave(void);
+ extern bool sweet_wlce_joined(const uint8_t **bssid);
+ extern uint32_t sweet_wlce_lost(void);
+@@ -39,6 +42,7 @@ extern bool sweet_wlce_heard(unsigned index, uint8_t bssid[6], uint8_t ssid[32],
+ extern void sweet_wlce_address(uint8_t mac[6]);
+ extern int sweet_wldp_tx(const void *frame, uint32_t len);
+ extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++extern void sweet_wldp_data_report(void);
+ bool sweet_wlsta_wanted(void);
+ int sweet_wlsta_start(void);
+ 
+@@ -46,7 +50,7 @@ int sweet_wlsta_start(void);
+ 
+ static struct redwood_sta_bss sta_joined;       /* the network joined (state() reads it on any thread) */
+ static int sta_last_error;
+-static uint64_t sta_last_scan_ms;
++static uint64_t sta_last_scan_ms, sta_last_report_ms;
+ static unsigned sta_rx_count;
+ 
+ static uint64_t
+@@ -137,26 +141,32 @@ static int
+ sta_join(const struct redwood_sta_join *what)
+ {
+ 	static const uint8_t zero[6];
++	static uint8_t pmk[32];
++	const uint8_t *key = NULL, *bssid = memcmp(what->bssid, zero, 6) != 0 ? what->bssid : NULL;
+ 	int r;
+-	if (what->security != REDWOOD_STA_OPEN) {
+-		printf("SWEET WLSTA: join refused: only open networks (the radio sends unencrypted)\n");
+-		sta_last_error = EAUTH;
+-		return EAUTH;
++	if (what->security == REDWOOD_STA_WPA2_PSK) {
++		if (what->passphrase_length != 0) {
++			sweet_wlsec_pmk(what->passphrase, what->passphrase_length, what->ssid, what->ssid_length, pmk);
++		} else {
++			memcpy(pmk, what->pmk, 32);
++		}
++		key = pmk;
+ 	}
+ 	redwood_net_link_state(false);
+ 	sweet_wlce_lock(true);
+-	r = sweet_wlce_join(what->ssid, what->ssid_length, memcmp(what->bssid, zero, 6) != 0 ? what->bssid : NULL);
++	r = sweet_wlce_join(what->ssid, what->ssid_length, bssid, key);
+ 	if (r == ENOENT) {                      /* not in the table (yet): one scan, then again */
+ 		(void)sweet_wlce_scan();
+ 		sta_last_scan_ms = sta_now_ms();
+-		r = sweet_wlce_join(what->ssid, what->ssid_length, memcmp(what->bssid, zero, 6) != 0 ? what->bssid : NULL);
++		r = sweet_wlce_join(what->ssid, what->ssid_length, bssid, key);
+ 	}
+ 	if (r == 0) {
+ 		sta_note_joined();
+ 	}
+ 	sweet_wlce_lock(false);
++	bzero(pmk, sizeof(pmk));
+ 	sta_last_error = r;
+-	printf("SWEET WLSTA: join (a name of %u bytes) -> %d\n", what->ssid_length, r);
++	printf("SWEET WLSTA: join (a name of %u bytes, %s) -> %d\n", what->ssid_length, key ? "WPA2" : "open", r);
+ 	if (r == 0) {
+ 		redwood_net_link_state(true);
+ 	}
+@@ -227,7 +237,9 @@ static void
+ sta_rx(const uint8_t *frame, uint32_t length)
+ {
+ 	sta_rx_count++;
+-	redwood_net_input(frame, length);
++	if (!sweet_wlsec_rx(frame, length)) {  /* (EAPOL is the handshake's, not the stack's) */
++		redwood_net_input(frame, length);
++	}
+ }
+ 
+ static unsigned
+@@ -237,6 +249,10 @@ sta_poll(void)
+ 	uint32_t lost;
+ 	sweet_wlce_lock(true);
+ 	(void)sweet_wlce_poll();
++	if (sweet_wlce_joined(NULL) && sta_now_ms() - sta_last_report_ms >= 300000) {
++		sta_last_report_ms = sta_now_ms();
++		sweet_wldp_data_report();       /* 0203: transmit completions by reason, every 5 min while joined */
++	}
+ 	lost = sweet_wlce_lost();
+ 	if (lost != 0) {
+ 		(void)sweet_wlce_leave();       /* take peer and vdev down: the next join starts clean */
+diff --git a/iokit/Kernel/arm/SweetKeyStore.cpp b/iokit/Kernel/arm/SweetKeyStore.cpp
+index d11fe26..73d9267 100644
+--- a/iokit/Kernel/arm/SweetKeyStore.cpp
++++ b/iokit/Kernel/arm/SweetKeyStore.cpp
+@@ -227,6 +227,49 @@ AppleKeyStoreUserClient::externalMethod(uint32_t selector, IOExternalMethodArgum
+ 		args->scalarOutputCount = 0;
+ 		ret = sweet_aks_device_state(args);
+ 		break;
++	/*
++	 * (from HackiOS) kAKSWrapKey / kAKSUnwrapKey: securityd wraps each keychain item's key with
++	 * its protection class before storing it. No SEP, no secret: a mark, the class and the key
++	 * mixed with a fixed pattern, 8 bytes longer like AES key wrap. Without them no keychain item
++	 * (wifid's network passwords among them) could be stored.
++	 */
++	case kAKSWrapKey: {
++		uint8_t wrapped[8 + 64];
++		size_t len = args->structureInputSize;
++		if (args->structureInput == NULL || len == 0 || len > 64 || in_scalars < 2) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		memcpy(wrapped, "HKwr", 4);
++		wrapped[4] = (uint8_t)args->scalarInput[1];
++		wrapped[5] = wrapped[6] = wrapped[7] = 0;
++		memcpy(wrapped + 8, args->structureInput, len);
++		for (size_t i = 0; i < len; i++) {
++			wrapped[8 + i] ^= (uint8_t)(0x5a + 37 * i);
++		}
++		if (out_scalars >= 1) {
++			args->scalarOutput[0] = args->scalarInput[1];
++			args->scalarOutputCount = 1;
++		}
++		ret = sweet_aks_struct_out(args, wrapped, (uint32_t)(8 + len));
++		break;
++	}
++	case kAKSUnwrapKey: {
++		uint8_t key[64];
++		const uint8_t *w = (const uint8_t *)args->structureInput;
++		size_t len = args->structureInputSize;
++		if (w == NULL || len <= 8 || len > 8 + sizeof(key) || memcmp(w, "HKwr", 4) != 0) {
++			ret = kIOReturnBadArgument;
++			break;
++		}
++		memcpy(key, w + 8, len - 8);
++		for (size_t i = 0; i < len - 8; i++) {
++			key[i] ^= (uint8_t)(0x5a + 37 * i);
++		}
++		args->scalarOutputCount = 0;
++		ret = sweet_aks_struct_out(args, key, (uint32_t)(len - 8));
++		break;
++	}
+ 	default:
+ 		ret = kIOReturnUnsupported;
+ 		break;
+-- 
+2.54.0 (Apple Git-157)
+

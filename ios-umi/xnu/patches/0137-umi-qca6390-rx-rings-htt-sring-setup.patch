@@ -1,0 +1,262 @@
+From f49d2f9868b7b68f7099592ec4927bef8650a0b4 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 18:41:40 +0200
+Subject: [PATCH] umi-0137
+
+---
+ bsd/dev/sweet_wlan.c |   2 +-
+ bsd/dev/sweet_wlce.c |  40 ++++++++++++++-
+ bsd/dev/sweet_wldp.c | 115 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlfw.c |   6 +--
+ 4 files changed, 157 insertions(+), 6 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index a175964..713c107 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI/scan: 21-50 = step 1-30 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI/scan: 21-51 = step 1-31 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 2eedba9..476a810 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -16,6 +16,8 @@
+ 
+ extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
+ extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
++extern int sweet_wldp_rx_init(void);
++extern void sweet_wldp_rx_report(const char *when);
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ 
+@@ -666,6 +668,29 @@ wmi_wait(uint64_t want, unsigned ms)
+ 	return (htc.seen & want) == want;
+ }
+ 
++/* One HTT message to the target on CE4 (no credit flow on the HTT endpoint), for sweet_wldp.c. */
++int sweet_wlce_htt_send(const void *msg, uint32_t len);
++
++int
++sweet_wlce_htt_send(const void *msg, uint32_t len)
++{
++	uint8_t b[8 + 64];
++	if (!htc.htt_conn || len > 64) {
++		return EINVAL;
++	}
++	uint32_t info = (uint32_t)htc.htt_ep | len << 16, ctrl = (uint32_t)htc.seq_htt++ << 8;
++	memcpy(b, &info, 4);
++	memcpy(b + 4, &ctrl, 4);
++	memcpy(b + 8, msg, len);
++	int r = ce_send(&ce.tx4, b, 8 + len, htc.htt_ep);
++	for (unsigned t = 0; r == EBUSY && t < 100; ++t) {     /* CE4 full: let the target catch up */
++		htc_poll();
++		delay(1000);
++		r = ce_send(&ce.tx4, b, 8 + len, htc.htt_ep);
++	}
++	return r;
++}
++
+ /* Send a WMI command, waiting up to 1 s for a credit (credits come back in HTC trailers). */
+ static int
+ wmi_cmd(uint32_t id, const void *body, uint32_t len, const char *name)
+@@ -733,6 +758,16 @@ wmi_scan(void)
+ 		}
+ 	}
+ 
++	/* Receive rings + buffers + HTT SRING_SETUP (sweet_wldp.c), as ath11k_core_pdev_create after core start */
++	if (sweet_wldp_rx_init() != 0) {
++		return 17;
++	}
++	for (unsigned t = 0; t < 500; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	sweet_wldp_rx_report("0.5 s after setup");
++
+ 	/*
+ 	 * WMI_SET_CURRENT_COUNTRY 0x3a001 (tag 0x25f: pdev_id, alpha2), as ath11k for
+ 	 * current_cc_support chips. Default "00" (world, chosen 2026-10-24); sweetwlancc=XX
+@@ -857,6 +892,7 @@ wmi_scan(void)
+ 		htc_poll();
+ 		delay(1000);
+ 	}
++	sweet_wldp_rx_report("after the scan");
+ 	printf("SWEET WMI: scan %s: %u channel visits, %u management frames, %u BSS\n",
+ 	    htc.scan_done ? "completed" : "still running after 15 s", htc.chan_events, htc.mgmt_frames, htc.nbss);
+ 	return htc.scan_done ? 0 : 14;
+@@ -864,8 +900,8 @@ wmi_scan(void)
+ 
+ /*
+  * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
+- * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-16
+- * (15 HTT version, 16 country).
++ * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-17
++ * (15 HTT version, 16 country, 17 receive rings).
+  */
+ int
+ sweet_wlce_htc(void)
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index a1c413c..d099f3c 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -278,4 +278,119 @@ sweet_wldp_init(void)
+ 	    reg_rd(dp_rings[0].r2), reg_rd(UMAC_REO + 0x0), bad);
+ 	return bad ? EIO : 0;
+ }
++
++/*
++ * Per-radio receive rings (ath11k_dp_rx_pdev_alloc for qca6390: rx_mac_buf_ring,
++ * no rxdma1, 2 MACs, pdev 0). These are LMAC rings: no host register setup; the
++ * host's pointer lives in the "wrp" words (index ring id - 128), the target's in
++ * the rdp words (index ring id), and HTT SRING_SETUP (H2T type 0xb) tells the
++ * firmware where everything is. Ring id = start + ring_num + mac * 15.
++ *   refill  RXDMA_BUF 0, mac 0: id 128, HTT HOST1_TO_FW_RXBUF (5), SW->SW, pdev 0
++ *   mac buf RXDMA_BUF 1, mac i: 129/144, RXDMA_HOST_BUF (0), SW->HW, pdev i + 1
++ *   err dst RXDMA_DST 0, mac i: 133/148, NON_MONITOR_DEST (7), HW->SW, pdev i + 1
++ *   status  MONITOR_STATUS, i:  132/147, MONITOR_STATUS (1), SW->HW, pdev i + 1
++ * Buffers (2 KiB, 128-aligned) go into the refill ring and both status rings,
++ * cookie = buffer id (pdev 0), return buffer manager SW1 (4). The firmware
++ * moves refill buffers into the mac buf rings, so the refill TP advancing
++ * shows the setup took. Sizes: refill 1024 (ath11k 4096), status 128 (1024).
++ */
++#define M_WRP           0x07f000u       /* u32 per LMAC ring index */
++#define M_RX_RINGS      0x200000u
++#define M_RX_BUFS       0x240000u
++#define RXBUF_SZ        2048u
++
++struct rxring {
++	const char *name;
++	uint32_t id, esz, n;
++	bool src;                       /* host produces (SW->x) */
++	uint8_t htt_id, htt_type, pdev;
++	bool bufs;
++	uint32_t intr, low;             /* HTT intr_info, info2 low threshold (ath11k_dp_srng_setup values) */
++	uint32_t off, pa, hp, nbuf;
++};
++
++#define I_RX            ((500u >> 3) << 16)             /* RXDMA_BUF / MONITOR_STATUS: timer 500 us, batch 0 */
++#define I_OTHER(e)      ((256u >> 3) << 16 | 1u * (e))  /* RXDMA_DST: timer 256 us, batch 1 entry */
++static struct rxring rx_rings[] = {
++	{ "refill", 128, 2, 1024, true, 5, 2, 0, true, I_RX, (1024 >> 3) * 2 },
++	{ "macbuf0", 129, 2, 1024, true, 0, 1, 1, false, I_RX, (1024 >> 3) * 2 },
++	{ "macbuf1", 144, 2, 1024, true, 0, 1, 2, false, I_RX, (1024 >> 3) * 2 },
++	{ "errdst0", 133, 8, 1024, false, 7, 0, 1, false, I_OTHER(8), 0 },
++	{ "errdst1", 148, 8, 1024, false, 7, 0, 2, false, I_OTHER(8), 0 },
++	{ "status0", 132, 2, 128, true, 1, 1, 1, true, I_RX, (128 >> 3) * 2 },
++	{ "status1", 147, 2, 128, true, 1, 1, 2, true, I_RX, (128 >> 3) * 2 },
++};
++#define RX_NRING        (sizeof(rx_rings) / sizeof(rx_rings[0]))
++
++extern int sweet_wlce_htt_send(const void *msg, uint32_t len);
++int sweet_wldp_rx_init(void);
++void sweet_wldp_rx_report(const char *when);
++
++/* After the HTT version handshake (ath11k_core_pdev_create -> ath11k_dp_pdev_alloc). 0 or errno. */
++int
++sweet_wldp_rx_init(void)
++{
++	uint32_t off = M_RX_RINGS, boff = M_RX_BUFS, buf_id = 1;
++	if (dp.mem == 0) {
++		return ENXIO;
++	}
++	bzero((void *)(dp.mem + M_WRP), 0x100);
++	for (unsigned i = 0; i < RX_NRING; ++i) {
++		struct rxring *r = &rx_rings[i];
++		r->off = off;
++		r->pa = dp.pa + off;
++		r->hp = 0;
++		r->nbuf = 0;
++		off = (off + r->n * r->esz * 4 + 0xffu) & ~0xffu;
++		bzero((void *)(dp.mem + r->off), r->n * r->esz * 4);
++		*mem32(M_RDP + r->id * 4) = 0;
++		/* ath11k_dp_rxbufs_replenish: n - 1 buffers */
++		for (uint32_t k = 0; r->bufs && k + 1 < r->n; ++k) {
++			volatile uint32_t *d = mem32(r->off + r->hp * 4);
++			d[0] = dp.pa + boff;
++			d[1] = (buf_id++ & 0x3ffffu) << 11 | 4u << 8;   /* cookie (pdev 0, buf id), RBM SW1 */
++			boff += RXBUF_SZ;
++			r->hp += r->esz;
++			r->nbuf++;
++		}
++		*mem32(M_WRP + (r->id - 128) * 4) = r->src ? r->hp : 0;
++		if (boff > 0x800000u || off > M_RX_BUFS) {
++			printf("SWEET WLDP: receive rings/buffers do not fit (%s)\n", r->name);
++			return ENOMEM;
++		}
++		/* htt_srng_setup_cmd */
++		uint32_t rdp = dp.pa + M_RDP + r->id * 4, wrp = dp.pa + M_WRP + (r->id - 128) * 4;
++		uint32_t m[13] = {
++			0xbu | (uint32_t)r->pdev << 8 | (uint32_t)r->htt_id << 16 | (uint32_t)r->htt_type << 24,
++			r->pa, 0,
++			(r->n * r->esz) | r->esz << 16 | (r->htt_type == 1 ? 1u << 25 : 0),     /* LOOP_CNT_DIS for SW->HW */
++			r->src ? wrp : rdp, 0,          /* head pointer address */
++			r->src ? rdp : wrp, 0,          /* tail pointer address */
++			0, 0, 0,                        /* no MSI */
++			r->intr, r->low,
++		};
++		int e = sweet_wlce_htt_send(m, sizeof(m));
++		if (e != 0) {
++			printf("SWEET WLDP: HTT SRING_SETUP %s failed %d\n", r->name, e);
++			return e;
++		}
++	}
++	printf("SWEET WLDP: %u receive rings at %#x, %u buffers at %#x-%#x, HTT SRING_SETUP sent\n",
++	    (unsigned)RX_NRING, dp.pa + M_RX_RINGS, buf_id - 1, dp.pa + M_RX_BUFS, dp.pa + boff);
++	return 0;
++}
++
++/* Where the firmware has moved the receive pointers (in words; rdp = target side, wrp = host/firmware side). */
++void
++sweet_wldp_rx_report(const char *when)
++{
++	if (dp.mem == 0) {
++		return;
++	}
++	printf("SWEET WLDP: %s: refill tp %u/%u, macbuf hp %u %u, errdst hp %u %u, status tp %u %u\n", when,
++	    *mem32(M_RDP + 128 * 4), rx_rings[0].hp,
++	    *mem32(M_WRP + 1 * 4), *mem32(M_WRP + 16 * 4),
++	    *mem32(M_RDP + 133 * 4), *mem32(M_RDP + 148 * 4),
++	    *mem32(M_RDP + 132 * 4), *mem32(M_RDP + 147 * 4));
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index a06501f..2ba69b5 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -614,7 +614,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-30) that failed (30 = DP rings). */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-31) that failed (30 = RX rings, 31 = DP rings). */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -654,7 +654,7 @@ sweet_wlfw_run(void)
+ 		return 13;
+ 	}
+ 	if (sweet_wldp_init() != 0) {   /* data-path rings: ath11k_dp_alloc, also before WLAN_CFG */
+-		return 30;
++		return 31;
+ 	}
+ 	int r = wf_firmware_start();
+ 	if (r != 0) {
+@@ -663,7 +663,7 @@ sweet_wlfw_run(void)
+ 	printf("SWEET WLFW: mission mode requested\n");
+ 	r = sweet_wlce_htc();
+ 	if (r != 0) {
+-		return 13 + r;          /* 14 no HTC READY ... 21 WMI READY, 22-25 hw mode / chan list / vdev / scan send, 26 no scan start, 27 no scan end, 28 HTT version, 29 country */
++		return 13 + r;          /* 14 no HTC READY ... 21 WMI READY, 22-25 hw mode / chan list / vdev / scan send, 26 no scan start, 27 no scan end, 28 HTT version, 29 country, 30 RX rings */
+ 	}
+ 	sweet_ipcr_service(500);        /* log whatever QMI says after that */
+ 	return 0;
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,18 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -214,6 +214,14 @@ touch_clocks(void)
+ 		}
+ 	}
+ 	for (unsigned i = 0; i < st.nbranches; ++i) {
++		/*
++		 * Like Linux clk_branch_check_halt(): a branch in hardware clock
++		 * gating mode (CBCR bit 1) reads CLK_OFF while idle; skip it.
++		 * umi's wrap1 s-ahb (0x18008) reads 0x80000002 before any access.
++		 */
++		if (touch_rd(st.gcc, st.branches[i]) & 2u) {
++			continue;
++		}
+ 		if (!touch_wait_clear(st.gcc, st.branches[i], 1u << 31)) {
+ 			printf("SWEET TOUCH: GCC branch %#x halted (%#x)\n", st.branches[i],
+ 			    touch_rd(st.gcc, st.branches[i]));

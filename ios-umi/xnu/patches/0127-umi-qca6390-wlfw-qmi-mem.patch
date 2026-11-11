@@ -1,0 +1,618 @@
+From 4ab55a15e77a85ae4b31af58662fc7cf788dd7c0 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 13:47:18 +0200
+Subject: [PATCH] umi-0127
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_ipcr.c | 100 ++++++++++--
+ bsd/dev/sweet_wlan.c |  10 +-
+ bsd/dev/sweet_wlfw.c | 373 +++++++++++++++++++++++++++++++++++++++++++
+ 4 files changed, 473 insertions(+), 11 deletions(-)
+ create mode 100644 bsd/dev/sweet_wlfw.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 0472a0b..1140a6e 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -117,6 +117,7 @@ bsd/dev/sweet_mon.c			standard
+ bsd/dev/sweet_wlan.c			standard
+ bsd/dev/sweet_mhi.c			standard
+ bsd/dev/sweet_ipcr.c			standard
++bsd/dev/sweet_wlfw.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_ipcr.c b/bsd/dev/sweet_ipcr.c
+index d90aa2d..1fcc044 100644
+--- a/bsd/dev/sweet_ipcr.c
++++ b/bsd/dev/sweet_ipcr.c
+@@ -13,6 +13,10 @@
+ extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
+ extern bool sweet_mhi_er0_next(uint64_t *ptr, uint32_t *d0, uint32_t *d1);
+ int sweet_ipcr_start(unsigned ms);
++int sweet_ipcr_send(const void *qmi, uint32_t len);
++void sweet_ipcr_service(unsigned ms);
++extern void sweet_wlfw_rx(const uint8_t *qmi, uint32_t len);
++#define WLFW_PORT       0x4001u         /* our QRTR port for the WLFW client */
+ 
+ /* In sweet_mhi.c's block, after its rings (which end at 0x5400) */
+ #define MEM_CHCTX       0x0000u
+@@ -22,13 +26,15 @@ int sweet_ipcr_start(unsigned ms);
+ #define MEM_CMD         0x5000u
+ #define MEM_TRE_OUT     0x5800u         /* channel 20: 16 elements */
+ #define MEM_TRE_IN      0x5900u         /* channel 21: 16 elements */
+-#define MEM_TXBUF       0x6000u
++#define MEM_TXBUF       0xf000u         /* 8 KiB: a BDF segment is 6 KiB + headers */
+ #define MEM_RXBUF       0x7000u         /* RX_N x 4 KiB */
+ #define ER1_N           256u
+ #define CMD_N           64u
+ #define TRE_N           16u
+ #define RX_N            8u
+ #define BUF_LEN         0x1000u
++#define TX_LEN          0x2000u
++#define RXQ_N           16u
+ #define EL              16u
+ #define CH_OUT          20u
+ #define CH_IN           21u
+@@ -42,8 +48,15 @@ static struct {
+ 	uint32_t pa, chdb, erdb1;
+ 	uint32_t cmd_wp, er1_rp, er1_wp, out_wp, in_wp;
+ 	uint32_t node;          /* firmware's QRTR node */
++	uint32_t wlfw_node, wlfw_port;
++	bool tx_done;
++	unsigned rxq_head, rxq_tail;
+ } ip;
+ 
++/* Received packets wait here until the poll loop's caller handles them. */
++static uint8_t rxq[RXQ_N][BUF_LEN];
++static uint32_t rxq_len[RXQ_N];
++
+ static uint32_t
+ ip_rd(uint32_t off)
+ {
+@@ -88,6 +101,8 @@ tre(uint32_t off, uint64_t ptr, uint32_t d0, uint32_t d1)
+ 	m32(off)[3] = d1;
+ }
+ 
++static void er1_poll(void);
++
+ /* Channel context: enabled, doorbell burst off; ring empty (rp = wp = base). */
+ static void
+ chan_init(unsigned ch, bool in, uint32_t ring)
+@@ -143,16 +158,27 @@ rx_queue(unsigned buf)
+ 	chan_ring(CH_IN, MEM_TRE_IN, ip.in_wp);
+ }
+ 
+-static void
++/* One packet at a time: wait (up to 200 ms) for its completion before returning. */
++static int
+ ip_send(const void *p, uint32_t len)
+ {
+-	if (len > BUF_LEN) {
+-		return;
++	if (len > TX_LEN) {
++		return EMSGSIZE;
+ 	}
+ 	memcpy((void *)(ip.mem + MEM_TXBUF), p, len);
++	ip.tx_done = false;
+ 	tre(MEM_TRE_OUT + ip.out_wp * EL, ip.pa + MEM_TXBUF, len, 0x2u << 16 | 1u << 9);
+ 	ip.out_wp = (ip.out_wp + 1) % TRE_N;
+ 	chan_ring(CH_OUT, MEM_TRE_OUT, ip.out_wp);
++	for (unsigned i = 0; i < 2000 && !ip.tx_done; ++i) {
++		er1_poll();
++		delay(100);
++	}
++	if (!ip.tx_done) {
++		printf("SWEET IPCR: send of %u bytes not completed\n", len);
++		return ETIMEDOUT;
++	}
++	return 0;
+ }
+ 
+ /* QRTR v1 (qrtr-mhi): 32-byte header, then the payload. We are node 1. */
+@@ -186,6 +212,20 @@ q_rx(const uint8_t *p, uint32_t len)
+ 	case 4:
+ 		printf("SWEET IPCR: QRTR NEW_SERVER service %#x instance %#x node %u port %#x%s\n",
+ 		    c[1], c[2], c[3], c[4], c[1] == 0x45 ? "  <- WLFW" : "");
++		if (c[1] == 0x45) {
++			ip.wlfw_node = c[3];
++			ip.wlfw_port = c[4];
++		}
++		break;
++	case 1:
++		if (h.confirm_rx) {
++			/* flow control: RESUME_TX back to the sender (Linux qrtr_send_resume_tx) */
++			uint32_t r[8 + 5] = { 1, 7, 1, h.dst_port, 0, 20, h.src_node, h.src_port, 7, 1, h.dst_port, 0, 0 };
++			(void)ip_send(r, sizeof(r));
++		}
++		if (h.dst_port == WLFW_PORT && h.size <= len - sizeof(h)) {
++			sweet_wlfw_rx(p + sizeof(h), h.size);
++		}
+ 		break;
+ 	default:
+ 		printf("SWEET IPCR: QRTR type %u from %u:%#x to port %#x, %u bytes\n",
+@@ -211,10 +251,19 @@ er1_poll(void)
+ 			uint64_t buf = (uint64_t)m32(MEM_TRE_IN + slot * EL)[0];
+ 			unsigned b = (unsigned)((buf - (ip.pa + MEM_RXBUF)) / BUF_LEN);
+ 			if (b < RX_N) {
+-				q_rx((const uint8_t *)(ip.mem + MEM_RXBUF + b * BUF_LEN), n);
++				unsigned q = ip.rxq_tail % RXQ_N;
++				if (ip.rxq_tail - ip.rxq_head < RXQ_N && n <= BUF_LEN) {
++					memcpy(rxq[q], (const void *)(ip.mem + MEM_RXBUF + b * BUF_LEN), n);
++					rxq_len[q] = n;
++					ip.rxq_tail++;
++				} else {
++					printf("SWEET IPCR: receive queue full, %u bytes dropped\n", n);
++				}
+ 				rx_queue(b);
+ 			}
+-		} else if (!(type == 0x22 && ch == CH_OUT)) {
++		} else if (type == 0x22 && ch == CH_OUT) {
++			ip.tx_done = true;
++		} else {
+ 			printf("SWEET IPCR: event %#x ch %u code %u len %u\n", type, ch, code, n);
+ 		}
+ 		ip.er1_rp = (ip.er1_rp + 1) % ER1_N;
+@@ -226,6 +275,38 @@ er1_poll(void)
+ 	}
+ }
+ 
++
++/* QMI message to the WLFW service, from our client port. */
++int
++sweet_ipcr_send(const void *qmi, uint32_t len)
++{
++	static uint8_t pkt[TX_LEN];
++	if (!ip.wlfw_node || len + 32 > TX_LEN) {
++		return EINVAL;
++	}
++	uint32_t h[8] = { 1, 1, 1, WLFW_PORT, 1, len, ip.wlfw_node, ip.wlfw_port };
++	memcpy(pkt, h, sizeof(h));
++	memcpy(pkt + sizeof(h), qmi, len);
++	return ip_send(pkt, (uint32_t)((sizeof(h) + len + 3) & ~3u));
++}
++
++/* Poll for ms milliseconds, handling every packet that arrives. */
++void
++sweet_ipcr_service(unsigned ms)
++{
++	for (unsigned t = 0; t <= ms; ++t) {
++		er1_poll();
++		while (ip.rxq_head != ip.rxq_tail) {
++			unsigned q = ip.rxq_head % RXQ_N;
++			ip.rxq_head++;
++			q_rx(rxq[q], rxq_len[q]);
++		}
++		if (t < ms) {
++			delay(1000);
++		}
++	}
++}
++
+ /* Stage 7: start IPCR, say HELLO, listen for ms milliseconds. */
+ int
+ sweet_ipcr_start(unsigned ms)
+@@ -249,10 +330,9 @@ sweet_ipcr_start(unsigned ms)
+ 	}
+ 	printf("SWEET IPCR: channels %u/%u running, %u receive buffers\n", CH_OUT, CH_IN, RX_N);
+ 	q_ctrl(2, 0xffffffffu, 0, 0);           /* HELLO; the firmware answers with its own */
+-	for (unsigned t = 0; t < ms; ++t) {
+-		er1_poll();
+-		delay(1000);
++	for (unsigned t = 0; t < ms && !ip.wlfw_node; t += 10) {
++		sweet_ipcr_service(10);
+ 	}
+-	return ip.node ? 0 : ETIMEDOUT;
++	return ip.wlfw_node ? 0 : ETIMEDOUT;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 660d73e..19f788c 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -26,6 +26,7 @@ extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ extern int sweet_pcie_msi(uint32_t addr, uint32_t data);
+ extern int sweet_ipcr_start(unsigned ms);
++extern int sweet_wlfw_run(void);
+ 
+ #define WLAN_POOL_PA            0xd0000000u
+ #define WLAN_POOL_SIZE          0x004a0000u
+@@ -492,6 +493,13 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 7) {
+ 		return 0;
+ 	}
+-	return sweet_ipcr_start(5000) ? 19 : 0;
++	if (sweet_ipcr_start(5000) != 0) {
++		return 19;
++	}
++	if (stage < 8) {
++		return 0;
++	}
++	int w = sweet_wlfw_run();      /* WLFW QMI: 21-25 = step 1-5 failed */
++	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+new file mode 100644
+index 0000000..450f956
+--- /dev/null
++++ b/bsd/dev/sweet_wlfw.c
+@@ -0,0 +1,373 @@
++/*
++ * umi QCA6390: WLFW QMI client (service 0x45) over QRTR, carried by sweet_ipcr.c.
++ * Follows Linux ath11k qmi.c for "qca6390 hw2.0". Stage 8 (sweetwlan=8):
++ *   IND_REGISTER, HOST_CAP, REQUEST_MEM indication -> RESPOND_MEM, FW_MEM_READY.
++ * QMI: u8 type (0 request, 2 response, 4 indication), u16 transaction, u16 message,
++ * u16 length, then TLVs (u8 type, u16 length, value). Little endian. Polled.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
++extern int sweet_ipcr_send(const void *qmi, uint32_t len);
++extern void sweet_ipcr_service(unsigned ms);
++void sweet_wlfw_rx(const uint8_t *qmi, uint32_t len);
++int sweet_wlfw_run(void);
++
++#define QMI_REQUEST     0u
++#define QMI_RESPONSE    2u
++#define QMI_INDICATION  4u
++#define QMI_HDR         7u
++#define QMI_MAX         1024u
++
++/* QMI message: header, then TLVs appended by the q_* helpers */
++struct qmsg {
++	uint8_t b[QMI_MAX];
++	uint32_t len;
++};
++
++static void
++put16(uint8_t *p, uint16_t v)
++{
++	p[0] = (uint8_t)v;
++	p[1] = (uint8_t)(v >> 8);
++}
++
++static void
++put32(uint8_t *p, uint32_t v)
++{
++	put16(p, (uint16_t)v);
++	put16(p + 2, (uint16_t)(v >> 16));
++}
++
++static void
++put64(uint8_t *p, uint64_t v)
++{
++	put32(p, (uint32_t)v);
++	put32(p + 4, (uint32_t)(v >> 32));
++}
++
++static uint16_t
++get16(const uint8_t *p)
++{
++	return (uint16_t)(p[0] | p[1] << 8);
++}
++
++static uint32_t
++get32(const uint8_t *p)
++{
++	return get16(p) | (uint32_t)get16(p + 2) << 16;
++}
++
++static void
++q_begin(struct qmsg *m, uint16_t txn, uint16_t id)
++{
++	m->b[0] = QMI_REQUEST;
++	put16(m->b + 1, txn);
++	put16(m->b + 3, id);
++	put16(m->b + 5, 0);
++	m->len = QMI_HDR;
++}
++
++/* Append one TLV; returns its value area (n bytes) for the caller to fill, NULL if full. */
++static uint8_t *
++q_tlv(struct qmsg *m, uint8_t type, uint16_t n)
++{
++	if (m->len + 3 + n > QMI_MAX) {
++		return NULL;
++	}
++	uint8_t *p = m->b + m->len;
++	p[0] = type;
++	put16(p + 1, n);
++	m->len += 3 + n;
++	put16(m->b + 5, (uint16_t)(m->len - QMI_HDR));
++	return p + 3;
++}
++
++static void
++q_u8(struct qmsg *m, uint8_t type, uint8_t v)
++{
++	uint8_t *p = q_tlv(m, type, 1);
++	if (p) {
++		p[0] = v;
++	}
++}
++
++static void
++q_u32(struct qmsg *m, uint8_t type, uint32_t v)
++{
++	uint8_t *p = q_tlv(m, type, 4);
++	if (p) {
++		put32(p, v);
++	}
++}
++
++/* Find TLV `type` in a received message; returns its value and length, NULL if absent. */
++static const uint8_t *
++q_find(const uint8_t *msg, uint32_t len, uint8_t type, uint16_t *n)
++{
++	uint32_t end = QMI_HDR + get16(msg + 5);
++	if (end > len) {
++		end = len;
++	}
++	for (uint32_t o = QMI_HDR; o + 3 <= end;) {
++		uint16_t l = get16(msg + o + 1);
++		if (o + 3 + l > end) {
++			break;
++		}
++		if (msg[o] == type) {
++			*n = l;
++			return msg + o + 3;
++		}
++		o += 3 + l;
++	}
++	return NULL;
++}
++
++#define WLFW_IND_REGISTER       0x20u
++#define WLFW_FW_READY_IND       0x21u
++#define WLFW_HOST_CAP           0x34u
++#define WLFW_REQUEST_MEM_IND    0x35u
++#define WLFW_RESPOND_MEM        0x36u
++#define WLFW_FW_MEM_READY_IND   0x37u
++#define WLFW_CLIENT_ID          0x4b4e454cu     /* ath11k ATH11K_QMI_WLFW_CLIENT_ID "KNEL" */
++#define WLFW_SEG_MAX            32u             /* ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01 */
++
++static struct {
++	uint16_t txn;                   /* transaction of the request in flight */
++	bool resp;
++	uint16_t result, error;
++	uint64_t ind;                   /* indications seen, bit (id & 63) */
++	unsigned nseg;
++	struct {
++		uint32_t size, type;
++		uint64_t pa;
++	} seg[WLFW_SEG_MAX];
++} wf;
++
++/* REQUEST_MEM: TLV 0x01 = u8 count, per segment u32 size, u32 type, u8 n, n x {u64 offset, u32 size, u8 flag} */
++static void
++wf_request_mem(const uint8_t *msg, uint32_t len)
++{
++	uint16_t n;
++	const uint8_t *v = q_find(msg, len, 0x01, &n);
++	if (v == NULL || n < 1) {
++		printf("SWEET WLFW: REQUEST_MEM without segments\n");
++		return;
++	}
++	unsigned count = v[0], o = 1;
++	wf.nseg = 0;
++	for (unsigned i = 0; i < count && wf.nseg < WLFW_SEG_MAX && o + 9 <= n; ++i) {
++		uint32_t size = get32(v + o), type = get32(v + o + 4);
++		unsigned cfg = v[o + 8];
++		o += 9 + cfg * 13;
++		wf.seg[wf.nseg].size = size;
++		wf.seg[wf.nseg].type = type;
++		wf.nseg++;
++		printf("SWEET WLFW: REQUEST_MEM segment %u: size %#x type %u (%u cfg)\n", i, size, type, cfg);
++	}
++	if (wf.nseg != count) {
++		printf("SWEET WLFW: REQUEST_MEM %u segments, %u parsed\n", count, wf.nseg);
++	}
++}
++
++/* Called by sweet_ipcr.c for each QRTR data packet addressed to our port. */
++void
++sweet_wlfw_rx(const uint8_t *msg, uint32_t len)
++{
++	if (len < QMI_HDR) {
++		return;
++	}
++	uint8_t type = msg[0];
++	uint16_t txn = get16(msg + 1), id = get16(msg + 3), n;
++	if (type == QMI_RESPONSE) {
++		const uint8_t *r = q_find(msg, len, 0x02, &n);
++		if (txn != wf.txn || r == NULL || n < 4) {
++			printf("SWEET WLFW: stray response msg %#x txn %u (want %u)\n", id, txn, wf.txn);
++			return;
++		}
++		wf.result = get16(r);
++		wf.error = get16(r + 2);
++		wf.resp = true;
++	} else if (type == QMI_INDICATION) {
++		printf("SWEET WLFW: indication %#x, %u bytes\n", id, len);
++		if (id == WLFW_REQUEST_MEM_IND) {
++			wf_request_mem(msg, len);
++		}
++		wf.ind |= 1ull << (id & 63);
++	} else {
++		printf("SWEET WLFW: QMI type %u msg %#x, %u bytes\n", type, id, len);
++	}
++}
++
++/* Send a request, wait up to ms for its response; 0 if the firmware answered success. */
++static int
++wf_request(struct qmsg *m, const char *name, unsigned ms)
++{
++	wf.resp = false;
++	int r = sweet_ipcr_send(m->b, m->len);
++	if (r != 0) {
++		printf("SWEET WLFW: %s send failed %d\n", name, r);
++		return r;
++	}
++	for (unsigned t = 0; t < ms && !wf.resp; t += 10) {
++		sweet_ipcr_service(10);
++	}
++	if (!wf.resp) {
++		printf("SWEET WLFW: %s: no response in %u ms\n", name, ms);
++		return ETIMEDOUT;
++	}
++	printf("SWEET WLFW: %s: result %u error %u\n", name, wf.result, wf.error);
++	return wf.result == 0 ? 0 : EIO;
++}
++
++static void
++wf_begin(struct qmsg *m, uint16_t id)
++{
++	wf.txn++;
++	if (wf.txn == 0) {
++		wf.txn = 1;
++	}
++	q_begin(m, wf.txn, id);
++}
++
++/* Step 1: ask for the indications ath11k uses. */
++static int
++wf_ind_register(void)
++{
++	static struct qmsg m;
++	wf_begin(&m, WLFW_IND_REGISTER);
++	q_u8(&m, 0x10, 1);              /* fw_ready_enable */
++	q_u32(&m, 0x15, WLFW_CLIENT_ID);
++	q_u8(&m, 0x16, 1);              /* request_mem_enable */
++	q_u8(&m, 0x17, 1);              /* fw_mem_ready_enable */
++	q_u8(&m, 0x18, 1);              /* fw_init_done_enable */
++	q_u8(&m, 0x1b, 1);              /* cal_done_enable */
++	return wf_request(&m, "IND_REGISTER", 2000);
++}
++
++/* Step 2: host capabilities (ath11k_qmi_host_cap_send, qca6390 hw2.0). */
++static int
++wf_host_cap(void)
++{
++	static struct qmsg m;
++	wf_begin(&m, WLFW_HOST_CAP);
++	q_u32(&m, 0x10, 1);             /* num_clients */
++	q_u8(&m, 0x13, 0x1e);           /* nm_modem */
++	q_u8(&m, 0x14, 1);              /* bdf_support */
++	q_u8(&m, 0x16, 1);              /* m3_support */
++	q_u8(&m, 0x17, 1);              /* m3_cache_support */
++	q_u8(&m, 0x1a, 0);              /* cal_done */
++	q_u8(&m, 0x1c, 0);              /* mem_cfg_mode */
++	return wf_request(&m, "HOST_CAP", 2000);
++}
++
++/* Wait up to ms for indication id. */
++static int
++wf_wait_ind(uint16_t id, const char *name, unsigned ms)
++{
++	for (unsigned t = 0; t < ms && !(wf.ind & 1ull << (id & 63)); t += 10) {
++		sweet_ipcr_service(10);
++	}
++	if (!(wf.ind & 1ull << (id & 63))) {
++		printf("SWEET WLFW: no %s indication in %u ms\n", name, ms);
++		return ETIMEDOUT;
++	}
++	return 0;
++}
++
++/*
++ * Firmware memory: low RAM that XNU does not manage (sweetwlfwmem, default
++ * 0xd1000000, 16 MiB; after sweet_wlan.c's pool at 0xd0000000), mapped in
++ * kernel_map like that pool, zeroed (dma_alloc_coherent does). Each segment is
++ * aligned to its size rounded up to a power of two, at most 1 MiB.
++ */
++#define WLFW_MEM_PA     0xd1000000u
++#define WLFW_MEM_SIZE   0x01000000u
++
++static int
++wf_place_segments(void)
++{
++	static vm_offset_t mem;
++	static uint32_t mem_pa;
++	if (mem == 0) {
++		uint32_t pa = WLFW_MEM_PA;
++		(void)PE_parse_boot_argn("sweetwlfwmem", &pa, sizeof(pa));
++		mem = ml_io_map_unmappable(pa, WLFW_MEM_SIZE, 0x6u);   /* VM_WIMG_WCOMB */
++		mem_pa = pa;
++		if (mem == 0) {
++			printf("SWEET WLFW: cannot map %#x\n", pa);
++			return ENOMEM;
++		}
++	}
++	uint32_t off = 0;
++	for (unsigned i = 0; i < wf.nseg; ++i) {
++		uint32_t a = 0x1000;
++		while (a < wf.seg[i].size && a < 0x100000u) {
++			a <<= 1;
++		}
++		off = (off + a - 1) & ~(a - 1);
++		if (wf.seg[i].size > WLFW_MEM_SIZE - off) {
++			printf("SWEET WLFW: segment %u (%#x) does not fit at +%#x\n", i, wf.seg[i].size, off);
++			return ENOMEM;
++		}
++		wf.seg[i].pa = mem_pa + off;
++		bzero((void *)(mem + off), wf.seg[i].size);
++		off += wf.seg[i].size;
++	}
++	printf("SWEET WLFW: %u segments, %#x bytes at %#x\n", wf.nseg, off, mem_pa);
++	return 0;
++}
++
++/* Step 4: TLV 0x01 = u8 count, per segment u64 addr, u32 size, u32 type, u8 restore */
++static int
++wf_respond_mem(void)
++{
++	static struct qmsg m;
++	wf_begin(&m, WLFW_RESPOND_MEM);
++	uint8_t *p = q_tlv(&m, 0x01, (uint16_t)(1 + wf.nseg * 17));
++	if (p == NULL) {
++		return EMSGSIZE;
++	}
++	p[0] = (uint8_t)wf.nseg;
++	p++;
++	for (unsigned i = 0; i < wf.nseg; ++i, p += 17) {
++		put64(p, wf.seg[i].pa);
++		put32(p + 8, wf.seg[i].size);
++		put32(p + 12, wf.seg[i].type);
++		p[16] = 0;
++	}
++	return wf_request(&m, "RESPOND_MEM", 2000);
++}
++
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-5) that failed. */
++int
++sweet_wlfw_run(void)
++{
++	wf.ind = 0;
++	wf.nseg = 0;
++	if (wf_ind_register() != 0) {
++		return 1;
++	}
++	if (wf_host_cap() != 0) {
++		return 2;
++	}
++	if (wf_wait_ind(WLFW_REQUEST_MEM_IND, "REQUEST_MEM", 5000) != 0 || wf.nseg == 0) {
++		return 3;
++	}
++	if (wf_place_segments() != 0 || wf_respond_mem() != 0) {
++		return 4;
++	}
++	if (wf_wait_ind(WLFW_FW_MEM_READY_IND, "FW_MEM_READY", 5000) != 0) {
++		return 5;
++	}
++	printf("SWEET WLFW: firmware memory ready\n");
++	sweet_ipcr_service(500);        /* log whatever follows (FW_READY 0x21 is expected after M3) */
++	return 0;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

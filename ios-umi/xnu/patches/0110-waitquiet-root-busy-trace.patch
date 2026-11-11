@@ -1,0 +1,67 @@
+diff --git a/iokit/Kernel/IOUserClient.cpp b/iokit/Kernel/IOUserClient.cpp
+index 163fce1..8fee92b 100644
+--- a/iokit/Kernel/IOUserClient.cpp
++++ b/iokit/Kernel/IOUserClient.cpp
+@@ -4249,7 +4249,23 @@ is_io_service_wait_quiet(
+ 	timeoutNS *= kSecondScale;
+ 	timeoutNS += wait_time.tv_nsec;
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	/* SWEET: who waits for IOKit to be quiet, on what, and how it ends (configd's InterfaceNamer) */
++	static uint32_t sweet_wq_logged;
++	bool sweet_log = sweet_wq_logged++ < 60;
++	if (sweet_log) {
++		IOLog("SWEET WAITQUIET: %s waits on %s (busy %u) timeout %llu ms\n", proc_best_name(current_proc()),
++		    service->getName(), service->getBusyState(), timeoutNS / 1000000ULL);
++	}
++	IOReturn sweet_ret = service->waitQuiet(timeoutNS);
++	if (sweet_log) {
++		IOLog("SWEET WAITQUIET: %s on %s -> %#x (busy %u)\n", proc_best_name(current_proc()), service->getName(),
++		    sweet_ret, service->getBusyState());
++	}
++	return sweet_ret;
++#else
+ 	return service->waitQuiet(timeoutNS);
++#endif
+ }
+ 
+ /* Routine io_service_wait_quiet_with_options */
+@@ -4276,6 +4292,23 @@ is_io_service_wait_quiet_with_options(
+ 		options &= ~kIOWaitQuietPanicOnFailure;
+ 	}
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++	{
++		static uint32_t sweet_wqo_logged;
++		bool sweet_log = sweet_wqo_logged++ < 60;
++		if (sweet_log) {
++			IOLog("SWEET WAITQUIET: %s waits (options %#x) on %s (busy %u) timeout %llu ms\n",
++			    proc_best_name(current_proc()), options, service->getName(), service->getBusyState(),
++			    timeoutNS / 1000000ULL);
++		}
++		IOReturn sweet_ret = service->waitQuietWithOptions(timeoutNS, options);
++		if (sweet_log) {
++			IOLog("SWEET WAITQUIET: %s on %s -> %#x (busy %u)\n", proc_best_name(current_proc()),
++			    service->getName(), sweet_ret, service->getBusyState());
++		}
++		return sweet_ret;
++	}
++#endif
+ 	return service->waitQuietWithOptions(timeoutNS, options);
+ }
+ 
+diff --git a/iokit/Kernel/arm/SweetBusy.cpp b/iokit/Kernel/arm/SweetBusy.cpp
+index da7a3aa..09cbb33 100644
+--- a/iokit/Kernel/arm/SweetBusy.cpp
++++ b/iokit/Kernel/arm/SweetBusy.cpp
+@@ -32,7 +32,9 @@ sweet_busy_thread(void *arg __unused, wait_result_t wr __unused)
+ 			}
+ 			it->release();
+ 		}
+-		IOLog("SWEET BUSY: round %d: %u busy services\n", round, busy);
++		IOService *root = IOService::getServiceRoot();
++		IOLog("SWEET BUSY: round %d: %u busy services, root %s busy %u\n", round, busy,
++		    root ? root->getName() : "?", root ? (unsigned)root->getBusyState() : 0u);
+ 		IOSleep(30000);
+ 	}
+ 	thread_terminate(current_thread());

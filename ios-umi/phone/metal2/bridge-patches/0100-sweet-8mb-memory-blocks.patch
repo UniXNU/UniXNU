@@ -1,0 +1,16 @@
+diff --git a/crates/metal2vulkan-runtime/src/memory.rs b/crates/metal2vulkan-runtime/src/memory.rs
+index de3df1e..38dfa34 100644
+--- a/crates/metal2vulkan-runtime/src/memory.rs
++++ b/crates/metal2vulkan-runtime/src/memory.rs
+@@ -48,8 +48,9 @@ use std::ptr::NonNull;
+ use std::sync::Arc;
+ use std::sync::Mutex;
+ 
+-/// The size of a pooled block, at most the device's `maxMemoryAllocationSize`.
+-pub(super) const BLOCK_BYTES: u64 = 64 << 20;
++/// The size of a pooled block, at most the device's `maxMemoryAllocationSize`. SweetMetal2: 8 MB, not 64: the A640's
++/// kernel backs every block with RAM at once, and each process paid 64 MB per memory class it touched.
++pub(super) const BLOCK_BYTES: u64 = 8 << 20;
+ 
+ /// What memory a resource needs.
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]

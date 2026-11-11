@@ -1,0 +1,351 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 01bfea6..7e8c60f 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -27,7 +27,7 @@
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ 
+-int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage);
++int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);
+ int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ 
+ #define GPI_PA          0x00a00000u
+@@ -47,7 +47,39 @@ int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx
+ #define EV_DB(n, k)             (0x22100u + 0x4000u * (n) + 0x8u * (k))
+ #define CH_CMD(n)               (0x23008u + 0x4000u * (n))
+ #define EV_CMD(n)               (0x23010u + 0x4000u * (n))
++#define TYPE_IRQ(n)             (0x23080u + 0x4000u * (n))
+ #define TYPE_IRQ_MSK(n)         (0x23088u + 0x4000u * (n))
++#define SRC_CH_IRQ(n)           (0x23090u + 0x4000u * (n))
++#define SRC_EV_IRQ(n)           (0x23094u + 0x4000u * (n))
++#define SRC_CH_IRQ_MSK(n)       (0x23098u + 0x4000u * (n))
++#define SRC_EV_IRQ_MSK(n)       (0x2309cu + 0x4000u * (n))
++#define SRC_CH_IRQ_CLR(n)       (0x230a0u + 0x4000u * (n))
++#define SRC_EV_IRQ_CLR(n)       (0x230a4u + 0x4000u * (n))
++#define SRC_IEOB_IRQ(n)         (0x230b0u + 0x4000u * (n))
++#define SRC_IEOB_IRQ_MSK(n)     (0x230b8u + 0x4000u * (n))
++#define SRC_IEOB_IRQ_CLR(n)     (0x230c0u + 0x4000u * (n))
++#define GLOB_IRQ_EN(n)          (0x23108u + 0x4000u * (n))
++#define GLOB_IRQ_CLR(n)         (0x23110u + 0x4000u * (n))
++#define GPII_IRQ_STTS(n)        (0x23118u + 0x4000u * (n))
++#define GPII_IRQ_EN(n)          (0x23120u + 0x4000u * (n))
++#define GPII_IRQ_CLR(n)         (0x23128u + 0x4000u * (n))
++#define MSI_BASE_LSB(n)         (0x23188u + 0x4000u * (n))
++#define MSI_BASE_MSB(n)         (0x2318cu + 0x4000u * (n))
++#define CNTXT_SCRATCH(n, i)     (0x23400u + 0x4000u * (n) + 4u * (i))
++/* serial engine registers (qcom-geni-se.h) */
++#define SE_FORCE_DEFAULT        0x020u
++#define SE_OUTPUT_CTRL          0x024u
++#define SE_CGC_CTRL             0x028u
++#define SE_STATUS               0x040u
++#define SE_M_CLK_CFG            0x048u
++#define SE_CLK_SEL              0x07cu
++#define SE_I2C_SCL_COUNTERS     0x278u
++#define SE_M_CMD_CTRL           0x604u
++#define SE_M_IRQ_STATUS         0x610u
++#define SE_M_IRQ_CLEAR          0x618u
++#define SE_DMA_GENERAL_CFG      0xe30u
++#define M_GENI_CMD_ABORT        (1u << 1)
++#define M_CMD_ABORT_EN          (1u << 5)
+ #define GLOB_IRQ_STTS(n)        (0x23100u + 0x4000u * (n))
+ #define INTSET(n)               (0x23180u + 0x4000u * (n))
+ #define ERROR_LOG(n)            (0x23200u + 0x4000u * (n))
+@@ -117,6 +149,7 @@ static struct {
+ 	unsigned gpii, seid;
+ 	bool ready, cfg_sent;
+ 	bool norecover;          /* test stage 4: leave channels as the error left them */
++	unsigned irqlog;
+ 	uint32_t tx_wp, rx_wp;          /* ring indexes */
+ 	uint32_t ev_rp, ev_wp;
+ 	unsigned logged;
+@@ -156,11 +189,73 @@ ev_state(void)
+ 	return (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_CONFIG) >> 20) & 0xfu;
+ }
+ 
++static uint32_t
++se_rd(uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(g.se + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++se_wr(uint32_t off, uint32_t val)
++{
++	__asm__ volatile ("dsb sy" ::: "memory");
++	*(volatile uint32_t *)(g.se + off) = val;
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++static void
++se_dump(const char *why)
++{
++	printf("SWEET GPI: SE %s: status %#x m_irq %#x clk_sel %#x m_clk %#x scl %#x out %#x force %#x cgc %#x dma_mode %#x gsi_ev %#x\n",
++	    why, se_rd(SE_STATUS), se_rd(SE_M_IRQ_STATUS), se_rd(SE_CLK_SEL), se_rd(SE_M_CLK_CFG),
++	    se_rd(SE_I2C_SCL_COUNTERS), se_rd(SE_OUTPUT_CTRL), se_rd(SE_FORCE_DEFAULT), se_rd(SE_CGC_CTRL),
++	    se_rd(0x258), se_rd(0xe18));
++}
++
++/*
++ * Acknowledge the GPII's interrupt status as gpi_handle_irq does (the line itself stays
++ * unhandled: we poll). Global and GPII errors are logged with the error log, then cleared.
++ */
++static void
++gpi_ack(void)
++{
++	uint32_t type = gpi_rd(TYPE_IRQ(g.gpii));
++	if (type == 0) {
++		return;
++	}
++	uint32_t ch = gpi_rd(SRC_CH_IRQ(g.gpii)), ev = gpi_rd(SRC_EV_IRQ(g.gpii));
++	uint32_t ieob = gpi_rd(SRC_IEOB_IRQ(g.gpii)), glob = gpi_rd(GLOB_IRQ_STTS(g.gpii));
++	uint32_t gpii = gpi_rd(GPII_IRQ_STTS(g.gpii));
++	if ((glob | gpii) != 0 && g.irqlog++ < 16) {
++		printf("SWEET GPI: irq type %#x ch %#x ev %#x ieob %#x GLOB %#x GPII %#x error log %#x\n",
++		    type, ch, ev, ieob, glob, gpii, gpi_rd(ERROR_LOG(g.gpii)));
++	}
++	if (ch) {
++		gpi_wr(SRC_CH_IRQ_CLR(g.gpii), ch);
++	}
++	if (ev) {
++		gpi_wr(SRC_EV_IRQ_CLR(g.gpii), ev);
++	}
++	if (ieob) {
++		gpi_wr(SRC_IEOB_IRQ_CLR(g.gpii), ieob);
++	}
++	if (glob) {
++		gpi_wr(ERROR_LOG(g.gpii), 0);
++		gpi_wr(GLOB_IRQ_CLR(g.gpii), glob);
++	}
++	if (gpii) {
++		gpi_wr(GPII_IRQ_CLR(g.gpii), gpii);
++	}
++}
++
+ static bool
+ ch_cmd(unsigned k, uint32_t op, unsigned want)
+ {
+ 	gpi_wr(CH_CMD(g.gpii), (op << 24) | k);
+ 	for (unsigned i = 0; i < 2500; i++) {
++		gpi_ack();
+ 		if (ch_state(k) == want) {
+ 			return true;
+ 		}
+@@ -176,6 +271,7 @@ ev_cmd(uint32_t op, unsigned want)
+ {
+ 	gpi_wr(EV_CMD(g.gpii), (op << 24) | 0u);
+ 	for (unsigned i = 0; i < 2500; i++) {
++		gpi_ack();
+ 		if (ev_state() == want) {
+ 			return true;
+ 		}
+@@ -241,9 +337,26 @@ gpi_smmu_route(void)
+ 	return smr == ((1u << 31) | GPI_SID) && (s2cr & 0x300ff) == (uint32_t)displaycb;
+ }
+ 
++/* gpi_alloc_chan(chan, false): the channel context, its doorbell MSB, scratch and QoS */
++static void
++ch_program(unsigned k)
++{
++	uint32_t c = CH_CNTXT(g.gpii, k), ring = DMA_PA + (k ? OFF_RX : OFF_TX);
++	gpi_wr(c + CNTXT_CONFIG, (TRE_SIZE << 24) | (0u << 14) | ((k ? 0u : 1u) << 3) | 2u);
++	gpi_wr(c + CNTXT_LEN, CH_RING_N * TRE_SIZE);
++	gpi_wr(c + CNTXT_BASE_LSB, ring);
++	gpi_wr(c + CNTXT_BASE_MSB, 0);
++	gpi_wr(CH_DB(g.gpii, k) + 4, 0);
++	gpi_wr(CH_SCRATCH(g.gpii, k, 0), ((k ? 0u : 1u) << 16) | (3u << 4) | g.seid);  /* pair, I2C, SE */
++	gpi_wr(CH_SCRATCH(g.gpii, k, 1), 0);
++	gpi_wr(CH_SCRATCH(g.gpii, k, 2), 0);
++	gpi_wr(CH_SCRATCH(g.gpii, k, 3), 0);
++	gpi_wr(CH_QOS(g.gpii, k), 1);
++}
++
+ /* stage 1: SMMU route only; 2 and up: also the GPII, channels and SE GSI mode */
+ int
+-sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
++sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level)
+ {
+ 	g.se = se;
+ 	g.seid = seid;
+@@ -288,6 +401,19 @@ sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
+ 	for (uint32_t i = 0; i < DMA_SIZE / 4; i++) {
+ 		dma_ptr(0)[i] = 0;
+ 	}
++	/*
++	 * Serial engine: the I/O defaults (se_io_init) and the I2C clock setup
++	 * (qcom_geni_i2c_conf: DFS level, 100 kHz from 19.2 MHz) the FIFO path writes,
++	 * so the sequencer has a running serial clock and driven pins whatever ABL left.
++	 */
++	se_dump("as found");
++	se_wr(SE_CGC_CTRL, se_rd(SE_CGC_CTRL) | 0x7fu);
++	se_wr(SE_DMA_GENERAL_CFG, se_rd(SE_DMA_GENERAL_CFG) | 0x0fu);
++	se_wr(SE_OUTPUT_CTRL, 0x7f);
++	se_wr(SE_FORCE_DEFAULT, 1);
++	se_wr(SE_CLK_SEL, clk_level);
++	se_wr(SE_M_CLK_CFG, (I2C_CLK_DIV << 4) | 1u);
++	se_wr(SE_I2C_SCL_COUNTERS, (I2C_T_HIGH << 20) | (I2C_T_LOW << 10) | I2C_T_CYCLE);
+ 	/* Serial engine in GSI mode (geni_se_select_gsi_mode). */
+ 	uint32_t m_en = *(volatile uint32_t *)(se + 0x614) & ~(1u | (1u << 30) | (1u << 26) | (1u << 27));
+ 	uint32_t s_en = *(volatile uint32_t *)(se + 0x644) & ~1u;
+@@ -302,9 +428,19 @@ sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
+ 	*(volatile uint32_t *)(se + 0xe18) |= 0xfu;                     /* GSI_EVENT_EN: rx tx m s */
+ 	__asm__ volatile ("dsb sy" ::: "memory");
+ 
+-	/* Interrupts: none (polled), IRQ (not MSI) mode. */
+-	gpi_wr(TYPE_IRQ_MSK(g.gpii), 0);
++	/* gpi_config_interrupts(DEFAULT_IRQ_SETTINGS); the status is acknowledged by polling (gpi_ack). */
++	gpi_wr(TYPE_IRQ_MSK(g.gpii), 0x4fu);    /* GENERAL IEOB GLOB EV_CTRL CH_CTRL */
++	gpi_wr(SRC_IEOB_IRQ_MSK(g.gpii), 1);
++	gpi_wr(SRC_CH_IRQ_MSK(g.gpii), 3);
++	gpi_wr(SRC_EV_IRQ_MSK(g.gpii), 1);
++	gpi_wr(GLOB_IRQ_EN(g.gpii), 1);         /* ERROR_INT */
++	gpi_wr(GPII_IRQ_EN(g.gpii), 0xf);
++	gpi_wr(MSI_BASE_LSB(g.gpii), 0);
++	gpi_wr(MSI_BASE_MSB(g.gpii), 0);
++	gpi_wr(CNTXT_SCRATCH(g.gpii, 0), 0);
++	gpi_wr(CNTXT_SCRATCH(g.gpii, 1), 0);
+ 	gpi_wr(INTSET(g.gpii), 1);
++	gpi_wr(ERROR_LOG(g.gpii), 0);
+ 
+ 	/* Event ring: allocate, program, hand all but one element to the hardware. */
+ 	if (!ev_cmd(CMD_ALLOCATE, 1)) {
+@@ -330,17 +466,7 @@ sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
+ 		if (!ch_cmd(k, CMD_ALLOCATE, CH_STATE_ALLOCATED)) {
+ 			return EIO;
+ 		}
+-		uint32_t c = CH_CNTXT(g.gpii, k), ring = DMA_PA + (k ? OFF_RX : OFF_TX);
+-		gpi_wr(c + CNTXT_CONFIG, (TRE_SIZE << 24) | (0u << 14) | ((k ? 0u : 1u) << 3) | 2u);
+-		gpi_wr(c + CNTXT_LEN, CH_RING_N * TRE_SIZE);
+-		gpi_wr(c + CNTXT_BASE_LSB, ring);
+-		gpi_wr(c + CNTXT_BASE_MSB, 0);
+-		gpi_wr(CH_DB(g.gpii, k) + 4, 0);
+-		gpi_wr(CH_SCRATCH(g.gpii, k, 0), ((k ? 0u : 1u) << 16) | (3u << 4) | g.seid);  /* pair, I2C, SE */
+-		gpi_wr(CH_SCRATCH(g.gpii, k, 1), 0);
+-		gpi_wr(CH_SCRATCH(g.gpii, k, 2), 0);
+-		gpi_wr(CH_SCRATCH(g.gpii, k, 3), 0);
+-		gpi_wr(CH_QOS(g.gpii, k), 1);
++		ch_program(k);
+ 	}
+ 	for (unsigned k = 0; k < 2; k++) {
+ 		if (!ch_cmd(k, CMD_START, CH_STATE_STARTED)) {
+@@ -350,6 +476,7 @@ sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
+ 	g.tx_wp = g.rx_wp = 0;
+ 	g.cfg_sent = false;
+ 	g.ready = true;
++	se_dump("GSI mode");
+ 	printf("SWEET GPI: gpii%u ready: SE%u I2C, rings at %#x, ch0 %#x ch1 %#x ev %#x\n", g.gpii, g.seid,
+ 	    DMA_PA, gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)), gpi_rd(EV_CNTXT(g.gpii, 0)));
+ 	return 0;
+@@ -383,6 +510,7 @@ static int
+ gpi_wait(unsigned donech, uint32_t donetre, unsigned *got)
+ {
+ 	for (unsigned spin = 0; spin < 20000; spin++) {
++		gpi_ack();
+ 		uint32_t hwrp = (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB) - (DMA_PA + OFF_EV)) / TRE_SIZE;
+ 		while (g.ev_rp != hwrp % EV_RING_N) {
+ 			volatile uint32_t *e = dma_ptr(OFF_EV + g.ev_rp * TRE_SIZE);
+@@ -429,6 +557,44 @@ gpi_wait(unsigned donech, uint32_t donetre, unsigned *got)
+ 	return ETIMEDOUT;
+ }
+ 
++/*
++ * After an error: gpi_terminate_all (STOP both channels, RESET them, reprogram their
++ * contexts, START them) with the serial engine's primary command aborted in between
++ * (geni_abort_m_cmd), so neither the GPII nor the SE is left mid-transfer: a failed
++ * transfer left that way reset the phone 16 s later (0096 test stage 4).
++ */
++static void
++gpi_terminate(void)
++{
++	se_dump("error");
++	for (unsigned k = 0; k < 2; k++) {
++		if (ch_state(k) == CH_STATE_STARTED) {
++			(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);
++		}
++	}
++	if (se_rd(SE_STATUS) & 1u) {            /* M_GENI_CMD_ACTIVE */
++		se_wr(SE_M_CMD_CTRL, M_GENI_CMD_ABORT);
++		unsigned i = 0;
++		while (!(se_rd(SE_M_IRQ_STATUS) & M_CMD_ABORT_EN) && i++ < 1000) {
++			delay(10);
++		}
++		se_wr(SE_M_IRQ_CLEAR, 0xffffffffu);
++		printf("SWEET GPI: SE command aborted (%s), status %#x\n", i < 1000 ? "done" : "no ABORT_DONE",
++		    se_rd(SE_STATUS));
++	}
++	for (unsigned k = 0; k < 2; k++) {
++		(void)ch_cmd(k, CMD_RESET, CH_STATE_ALLOCATED);
++		ch_program(k);
++	}
++	for (unsigned k = 0; k < 2; k++) {
++		(void)ch_cmd(k, CMD_START, CH_STATE_STARTED);
++	}
++	gpi_ack();
++	g.tx_wp = g.rx_wp = 0;
++	g.cfg_sent = false;
++	printf("SWEET GPI: terminated: ch0 %#x ch1 %#x\n", gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)));
++}
++
+ /* One I2C message: write nt bytes or read nr bytes (exactly one of them). */
+ int
+ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch)
+@@ -472,23 +638,7 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 		    gpi_rd(CH_CNTXT(g.gpii, 1)));
+ 		g.ready = false;
+ 	} else if (err != 0) {
+-		/*
+-		 * Stop, reset and restart both channels so the rings start empty again
+-		 * (gpi_terminate_all); the next message re-sends CONFIG0.
+-		 */
+-		for (unsigned k = 0; k < 2; k++) {
+-			if (ch_state(k) == CH_STATE_STARTED) {
+-				(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);   /* may stay STOP_IN_PROC (4) */
+-			}
+-			(void)ch_cmd(k, CMD_RESET, CH_STATE_ALLOCATED);
+-		}
+-		for (unsigned k = 0; k < 2; k++) {
+-			uint32_t c = CH_CNTXT(g.gpii, k);
+-			gpi_wr(c + CNTXT_BASE_LSB, DMA_PA + (k ? OFF_RX : OFF_TX));
+-			(void)ch_cmd(k, CMD_START, CH_STATE_STARTED);
+-		}
+-		g.tx_wp = g.rx_wp = 0;
+-		g.cfg_sent = false;
++		gpi_terminate();
+ 	}
+ 	return err;
+ }
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index efe68f9..1e0fec9 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -28,7 +28,7 @@ extern kern_return_t thread_terminate(thread_t);
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
+-extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage);   /* sweet_gpi.c */
++extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);   /* sweet_gpi.c */
+ extern int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ void sweet_touch_init(void);
+ 
+@@ -703,7 +703,7 @@ touch_umi_start(void)
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
+-		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage ? st.test_stage : 9);
++		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage ? st.test_stage : 9, st.clk_level);
+ 		if (gerr) {
+ 			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);
+ 			return false;
+@@ -919,6 +919,10 @@ poll:;
+ 			}
+ 		}
+ 		touch_wait(10);
++		if (st.test_stage && ++ticks >= 1000u) {
++			printf("SWEET TEST: touch polled for 10 s without errors piling up (errors now %u)\n", errors);
++			break;          /* test mode: heartbeat and reboot below */
++		}
+ 	}
+ 	touch_report(0, st.x, st.y);
+ out:

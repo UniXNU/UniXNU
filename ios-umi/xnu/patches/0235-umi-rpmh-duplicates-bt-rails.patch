@@ -1,0 +1,201 @@
+From fe5ecbb76cb0a7209300716a0b154ea7cff4983d Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 23:40:20 +0100
+Subject: [PATCH] umi: RPMh votes accept cmd-db duplicates at one address;
+ Bluetooth's five rails: the QCA6390 answers
+
+umi's cmd-db lists smpa5, smpa6 and smpc8 twice (same register): every such vote was refused, so
+none went out (Wi-Fi's included). Accepted now when both entries name the same address, as the
+Mi 10 port (hackios-xnu-kernel-umi umi_rpmh.c, MIT) does. sweet_rpmh_bt_power() votes smpa6 950,
+smpf2 950, smpa5 1900, smpc8 1350, ldoa16 3025 mV. sweet_bt.c uses it and, if the ROM is silent,
+tries SW_CTRL driven high with 200 / 500 ms power-ups, logging the UART pin levels.
+Boot 0235d: ROM answers, firmware runs at 921600 baud, 15 LE advertisements + 2 classic devices.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_bt.c   | 53 ++++++++++++++++------------------------
+ bsd/dev/sweet_rpmh.c | 58 +++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 78 insertions(+), 33 deletions(-)
+
+diff --git a/bsd/dev/sweet_bt.c b/bsd/dev/sweet_bt.c
+index d948042..a5beccc 100644
+--- a/bsd/dev/sweet_bt.c
++++ b/bsd/dev/sweet_bt.c
+@@ -72,8 +72,7 @@
+ extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ extern void thread_set_thread_name(thread_t thread, const char *name);
+ extern kern_return_t thread_terminate(thread_t);
+-extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+-extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++extern int sweet_rpmh_bt_power(void);     /* sweet_rpmh.c */
+ extern int sweet_fat_read_file(const char *part, const char *dir, const char *name, void *dst, uint32_t max,
+     uint32_t *size);    /* sweet_wlan.c */
+ extern bool sweet_board_is_umi(void);
+@@ -216,31 +215,6 @@ bt_file(const char *name, unsigned int *size)
+ 	return *size ? (is_patch ? bt_patch : bt_nvm) : NULL;
+ }
+ 
+-/*
+- * The QCA6390's Bluetooth supplies, as Android's btpower and the Mi 10 port vote them: AON and
+- * digital (PM8150 S6, 950 mV), RFA1 (S5, 1.9 V), RFA2 (PM8150A S8, 1.35 V) -- the Wi-Fi's too --
+- * and ASD (PM8150 L16, 3.025 V). A vote that fails is only logged, as sweet_pcie.c does for the
+- * same SMPS rails: they are on from the bootloader (umi's cmd-db lists smpa6 twice, at the same
+- * address, and sweet_rpmh.c refuses such a lookup). Nothing is switched off.
+- */
+-static int
+-sweet_rpmh_bt_power(void)
+-{
+-	static const struct { const char *res; unsigned mv; bool ldo; } rails[] = {
+-		{ "smpa6", 950, false }, { "smpa5", 1900, false }, { "smpc8", 1350, false }, { "ldoa16", 3025, true },
+-	};
+-
+-	for (unsigned i = 0; i < sizeof(rails) / sizeof(rails[0]); i++) {
+-		int error = rails[i].ldo ? sweet_rpmh_vreg_enable(rails[i].res, rails[i].mv) :
+-		    sweet_rpmh_smps_enable(rails[i].res, rails[i].mv);
+-
+-		if (error == EBUSY) {
+-			return EBUSY;   /* the caller tries again */
+-		}
+-		printf("SWEET BT: rail %s %u mV: errno %d\n", rails[i].res, rails[i].mv, error);
+-	}
+-	return 0;
+-}
+ 
+ /*
+  * The UART set up as umi's (and Android's) driver has it: 8 bits, no parity, 1 stop bit, words of bytes;
+@@ -1245,7 +1219,7 @@ bt_chip(vm_offset_t gcc, vm_offset_t tlmm, vm_offset_t uart, unsigned steps)
+ 	uint32_t vote = bt_read(gcc, GCC_QUP_VOTE), added = GCC_QUP_BITS & ~vote;
+ 	uint32_t hwcg = bt_read(gcc, GCC_QUP_S_AHB) & 2u;
+ 	uint8_t event[BT_EVENT_MAX];
+-	unsigned length = 0, i;
++	unsigned length = 0, i, variant = 0;
+ 	int error, stopped;
+ 
+ 	for (unsigned p = 0; p < 4; p++) {
+@@ -1295,16 +1269,24 @@ again:
+ 				break;
+ 			}
+ 		}
++		/*
++		 * umi: when the ROM does not answer, two more power-ups in the same boot: SW_CTRL driven high
++		 * as the Mi 10 port does, BT_EN held low and high longer (200, then 500 ms).
++		 */
++		unsigned en_us = variant == 0 ? 56000 : variant == 1 ? 200000 : 500000;
++		bool drive = bt_swctrl_drive || variant > 0;
++
+ 		bt_gpio(tlmm, PIN_BT_EN, 0x241, false);             /* GPIO, 4 mA, pull-down, output */
+-		if (bt_swctrl_drive) {
++		if (drive) {
+ 			bt_gpio(tlmm, PIN_SW_CTRL, 0x240, true);    /* as umi: output, high */
+ 		} else {
+ 			bt_gpio(tlmm, PIN_SW_CTRL, 0x040, false);   /* an input, no pull, as Android */
+ 		}
+-		delay(56000);
++		delay(en_us);
+ 		bt_gpio(tlmm, PIN_BT_EN, 0x241, true);
+-		delay(56000);
+-		printf("SWEET BT: step 4: BT_EN high; SW_CTRL reads %u\n", bt_read(tlmm, TLMM_IO(PIN_SW_CTRL)) & 1);
++		delay(en_us);
++		printf("SWEET BT: step 4: power-up %u (SW_CTRL %s, %u ms): BT_EN high; SW_CTRL reads %u\n", variant,
++		    drive ? "driven high" : "an input", en_us / 1000, bt_read(tlmm, TLMM_IO(PIN_SW_CTRL)) & 1);
+ 		/* the UART's pins: QUP function 1; RTS (17) pulled down, TX (18) pulled up, as the DT's active state */
+ 		for (unsigned pin = 16; pin <= 19; pin++) {
+ 			bt_write(tlmm, TLMM_CFG(pin), pin == 17 ? 5u : pin == 18 ? 7u : 4u);
+@@ -1320,6 +1302,13 @@ again:
+ 			error = bt_hci_command(uart, 0x1001, NULL, 0, true, event, &length);
+ 		}
+ 		if (error || length != 15) {
++			printf("SWEET BT: step 4: no answer (errno %d); pins CTS %u RTS %u TX %u RX %u, GENI status %#x\n", error,
++			    bt_read(tlmm, TLMM_IO(16)) & 1, bt_read(tlmm, TLMM_IO(17)) & 1, bt_read(tlmm, TLMM_IO(18)) & 1,
++			    bt_read(tlmm, TLMM_IO(19)) & 1, bt_read(uart, GENI_STATUS));
++			if (error == ETIMEDOUT && attempt == variant && ++variant < 3) {
++				(void)bt_uart_quiesce(uart);
++				continue;
++			}
+ 			break;
+ 		}
+ 		printf("SWEET BT: step 4: THE CHIP ANSWERS from its ROM: HCI %#x, manufacturer %u, subversion %#x\n",
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+index 05fdf09..3b9d995 100644
+--- a/bsd/dev/sweet_rpmh.c
++++ b/bsd/dev/sweet_rpmh.c
+@@ -243,6 +243,15 @@ rh_lookup_type(const char *res, uint32_t *address, unsigned want)
+ 				printf("SWEET RPMH: invalid entry for %s (slave %u addr %#x)\n", res, slave, addr);
+ 				return EINVAL;
+ 			}
++			/*
++			 * umi's cmd-db lists some resources twice (smpa5, smpa6, smpc8 under two slave headers):
++			 * harmless when both name the same register, as the Mi 10 port (hackios-xnu-kernel-umi
++			 * umi_rpmh.c, MIT) accepts them.
++			 */
++			if (matches && *address != addr) {
++				printf("SWEET RPMH: %s at two addresses %#x and %#x; refusing\n", res, *address, addr);
++				return EINVAL;
++			}
+ 			*address = addr;
+ 			rh_last_aux_len = rh_db16(e + 20);
+ 			++matches;
+@@ -251,7 +260,7 @@ rh_lookup_type(const char *res, uint32_t *address, unsigned want)
+ 			    rh_read(rh_db, e + 8), rh_read(rh_db, e + 12));
+ 		}
+ 	}
+-	if (matches != 1) {
++	if (matches == 0) {
+ 		printf("SWEET RPMH: %s lookup matches=%u; refusing\n", res, matches);
+ 		return ENODEV;
+ 	}
+@@ -542,4 +551,51 @@ sweet_rpmh_arc_vote_max(const char *res)
+ 	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
+ 	return error;
+ }
++
++/*
++ * The QCA6390's Bluetooth supplies on umi (sweet_bt.c), as the Mi 10 port's umi_rpmh_bluetooth_power
++ * votes them from the stock DT: AON (PM8150 S6, 950 mV), digital (smpf2, 950 mV), RFA1 (S5,
++ * 1.9 V), RFA2 (PM8150A S8, 1.35 V), all shared with the Wi-Fi, and ASD (PM8150 L16, the lowest of
++ * the DT's 3.025-3.3 V). Voltage and enable only (no LDO mode); ACTIVE votes kept until reset.
++ */
++int sweet_rpmh_bt_power(void);
++
++int
++sweet_rpmh_bt_power(void)
++{
++	static const struct { const char *res; unsigned mv; } rails[] = {
++		{ "smpa6", 950 }, { "smpf2", 950 }, { "smpa5", 1900 }, { "smpc8", 1350 }, { "ldoa16", 3025 },
++	};
++	uint32_t addresses[sizeof(rails) / sizeof(rails[0])];
++	int error = EIO;
++
++	if (!sweet_board_is_umi()) {
++		return ENODEV;
++	}
++	if (__atomic_exchange_n(&rh_lock, 1, __ATOMIC_ACQUIRE)) {
++		return EBUSY;
++	}
++	if (rh_poisoned) {
++		printf("SWEET RPMH: previous uncertain transaction; refusing further access\n");
++		goto out;
++	}
++	error = rh_map();
++	/* every resource looked up before the first vote */
++	for (unsigned i = 0; !error && i < sizeof(rails) / sizeof(rails[0]); ++i) {
++		error = rh_lookup(rails[i].res, &addresses[i]);
++	}
++	for (unsigned i = 0; !error && i < sizeof(rails) / sizeof(rails[0]); ++i) {
++		const uint32_t addrs[2] = { addresses[i], addresses[i] + 4 };
++		const uint32_t values[2] = { rails[i].mv, 1 };
++
++		printf("SWEET RPMH: Bluetooth %s %u mV at %#x\n", rails[i].res, rails[i].mv, addresses[i]);
++		error = rh_send_cmds(addresses[i], addrs, values, 2, "Bluetooth voltage/enable");
++	}
++out:
++	if (error) {
++		printf("SWEET RPMH: Bluetooth rails failed errno=%d\n", error);
++	}
++	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
++	return error;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

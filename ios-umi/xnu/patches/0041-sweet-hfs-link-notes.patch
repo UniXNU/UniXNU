@@ -1,0 +1,55 @@
+--- a/bsd/sweet_hfs/core/hfs_catalog.c
++++ b/bsd/sweet_hfs/core/hfs_catalog.c
+@@ -757,6 +757,22 @@
+ }
+ 
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * SWEET: hard links made by Linux tools lack kHFSHasLinkChainBit and every
++ * lookup of them repairs (in memory) and reports it again; the console
++ * output slows boot down. Report the first few only.
++ */
++static int
++sweet_hfs_link_note(void)
++{
++	static volatile SInt32 notes;
++	return OSIncrementAtomic(&notes) < 8;
++}
++#else
++#define sweet_hfs_link_note() 1
++#endif
++
+ /*
+  * cat_lookupbykey - lookup a catalog node using a cnode key
+  */
+@@ -865,7 +881,9 @@
+ 		if (ilink) {
+ 			/* This is a hard link and the link count bit was not set */
+ 			if (!(attrp->ca_recflags & kHFSHasLinkChainMask)) {
+-				printf ("hfs: set hardlink bit on vol=%s cnid=%u inoid=%u\n", hfsmp->vcbVN, cnid, ilink);
++				if (sweet_hfs_link_note()) {
++					printf ("hfs: set hardlink bit on vol=%s cnid=%u inoid=%u\n", hfsmp->vcbVN, cnid, ilink);
++				}
+ 				attrp->ca_recflags |= kHFSHasLinkChainMask;
+ 			}
+ 		} else {
+@@ -877,12 +895,16 @@
+ 				(parentid != hfsmp->hfs_private_desc[DIR_HARDLINKS].cd_cnid)) {
+ 				/* This is not a hard link or inode and the link count bit was set */
+ 				if (attrp->ca_recflags & kHFSHasLinkChainMask) {
+-					printf ("hfs: clear hardlink bit on vol=%s cnid=%u\n", hfsmp->vcbVN, cnid);
++					if (sweet_hfs_link_note()) {
++						printf ("hfs: clear hardlink bit on vol=%s cnid=%u\n", hfsmp->vcbVN, cnid);
++					}
+ 					attrp->ca_recflags &= ~kHFSHasLinkChainMask;
+ 				}
+ 				/* This is a regular file and the link count was more than 1 */
+ 				if (S_ISREG(attrp->ca_mode) && (attrp->ca_linkcount > 1)) {
+-					printf ("hfs: set linkcount=1 on vol=%s cnid=%u old=%u\n", hfsmp->vcbVN, cnid, attrp->ca_linkcount);
++					if (sweet_hfs_link_note()) {
++						printf ("hfs: set linkcount=1 on vol=%s cnid=%u old=%u\n", hfsmp->vcbVN, cnid, attrp->ca_linkcount);
++					}
+ 					attrp->ca_linkcount = 1;
+ 				}
+ 			}

@@ -1,0 +1,409 @@
+From d41b836551621372edb882155e7f955b8718924b Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 14:11:55 +0100
+Subject: [PATCH] umi-0177-adreno-present-sync-and-hang-dump
+
+Metal on Turnip renders into SweetSurface objects and the frame
+swap reads them on the CPU, so the present path waits for the GPU now
+(sweet_adreno_finish: the latest fence, before directPresent's scanout
+and before present's copies) and drops the CPU's stale lines of
+GPU-written memory before reading or scanning it (clean+invalidate in
+present's copy path and directPresent; both surface-creation paths
+flush after their bzero; BoAlloc cleans its pages after bzero - the
+v2 test's words read back 0 before that). Turnip's bigger workloads:
+SA_TABLES_MAX 64 -> 1024 (every 2 MB of dense window VA costs an L3
+table; SpringBoard's 8 MB BoMaps hit NoResources at 64), and a fence
+wait "forever" fails after 120 s instead of hanging.
+
+A fence that will not signal dumps the core's state once after 2 s of
+failed waits (IOLog, so it reaches the live log): how far the CP read
+the ring, the fence word, RBBM status and interrupts, CP fault /
+interrupt / protection / status 1, the SQE's instruction address, the
+SMMU's fault registers, the last 8 submissions' IBs (the words the SQE
+is stopped on are read through context 0's page tables, from the
+kernel's map of the same pages). Submits, BoCpuMaps and wait-fence
+failures log with budgets of their own.
+
+First finding on the phone (umi-0177-metal.img): the fence-950 hang is
+CP_OPCODE_ERROR (CP_INTERRUPT_STATUS bit 0, a6xx.xml A6XX_CP_INT) with
+the core busy in backboardd's indirect buffers - a bad opcode in a
+command stream, not a lost fence write: ring fully read (1674 of 1674),
+fence word stuck at the previous submission, no SMMU fault, no
+protection violation.
+
+Co-Authored-By: Mistral Vibe <vibe@mistral.ai>
+---
+ bsd/dev/sweet_adreno.c                | 146 +++++++++++++++++++++++++-
+ iokit/Kernel/arm/SweetAdreno.cpp      |  22 +++-
+ iokit/Kernel/arm/SweetFramebuffer.cpp |  15 ++-
+ iokit/Kernel/arm/SweetSurface.cpp     |  15 +++
+ 4 files changed, 193 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 22aa279..9cfd45b 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -963,7 +963,7 @@ sa_zap_release(void)
+ #define PTE_NOT_GLOBAL          (1ull << 11)
+ #define PTE_ADDRESS             0x0000fffffffff000ull
+ #define PTE_GMU                 (PTE_SHARED | PTE_ACCESSED | PTE_NOT_GLOBAL)    /* privileged, uncached (MAIR 0) */
+-#define SA_TABLES_MAX           64
++#define SA_TABLES_MAX           1024
+ 
+ static uint64_t
+ sa_phys(vm_offset_t va)
+@@ -1945,6 +1945,7 @@ sa_step_zap_load(void)
+ #define CP_HW_FAULT             GPU_WORD(0x0821)
+ #define CP_INTERRUPT_STATUS     GPU_WORD(0x0823)
+ #define CP_PROTECT_STATUS       GPU_WORD(0x0824)
++#define CP_STATUS_1             GPU_WORD(0x0825)
+ #define CP_SQE_INSTR_BASE       GPU_WORD(0x0830)
+ #define CP_APRIV_CNTL           GPU_WORD(0x0844)
+ #define CP_PROTECT_CNTL         GPU_WORD(0x084f)
+@@ -2460,6 +2461,17 @@ struct sa_bo {
+ static uint64_t sa_bo_next = CORE_BO_ADDRESS;
+ static uint32_t sa_fence_seqno;
+ 
++/* The last few submissions (fence and indirect buffers): what a stuck fence is diagnosed from. */
++#define SA_SUBMIT_HISTORY 8
++struct sa_submit {
++	uint32_t       fence;
++	uint32_t       n;
++	uint64_t       iova[16];
++	uint32_t       dwords[16];
++};
++static struct sa_submit sa_submit_hist[SA_SUBMIT_HISTORY];
++static uint32_t sa_submit_next;
++
+ /* Page-table changes of context 0 out to memory, and the SMMU's cached translations dropped. */
+ static bool
+ sa_core_tlb_flush(void)
+@@ -3034,6 +3046,15 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 		sa_ring((uint32_t)(iova[i] >> 32));
+ 		sa_ring(dwords[i]);
+ 	}
++	struct sa_submit *h = &sa_submit_hist[sa_submit_next];
++
++	h->fence = seqno;
++	h->n = n;
++	for (uint32_t i = 0; i < n; i++) {
++		h->iova[i] = iova[i];
++		h->dwords[i] = dwords[i];
++	}
++	sa_submit_next = (sa_submit_next + 1) % SA_SUBMIT_HISTORY;
+ 	sa_ring_packet(CP_EVENT_WRITE, 4);
+ 	sa_ring(EVENT_CACHE_FLUSH_TS);
+ 	sa_ring(CORE_FENCE_ADDRESS);
+@@ -3047,11 +3068,104 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 	return seqno;
+ }
+ 
++/*
++ * A fence that will not signal: after 2 s of failed waits, the core's state is dumped once per
++ * fence (IOLog, so it reaches the live log): how far the command processor has read the ring,
++ * whether the core is busy, its fault and interrupt state, the SMMU's fault registers, what the
++ * last submissions sent, and the words the SQE is stuck on - read through context 0's page
++ * tables, from the kernel's map of the same pages. A faulted core shows up as a fault register
++ * or an SMMU status; a bad opcode as CP_INTERRUPT_STATUS's CP_OPCODE_ERROR with the SQE stopped
++ * inside one of the submissions' buffers.
++ */
++static uint32_t sa_hang_fence = ~0u;
++static uint64_t sa_hang_first;
++static bool sa_hang_dumped;
++
++extern void IOLog(const char *, ...);
++
++/* The page of a GPU address of context 0 as the kernel maps it (NULL: unmapped, or a page the
++ * kernel cannot reach - the low bank is outside its physmap on this highmem kernel). */
++static uint32_t *
++sa_gpu_page(uint64_t va)
++{
++	extern unsigned long gPhysBase, gVirtBase;
++	uint64_t *pte = sa_space_pte(&sa_core_space, va & ~0xfffull);
++
++	if (pte == NULL) {
++		return NULL;
++	}
++	uint64_t pa = *pte & PTE_ADDRESS;
++	if (pa < (uint64_t)gPhysBase || pa - (uint64_t)gPhysBase >= 0x200000000ull) {
++		return NULL;
++	}
++	uintptr_t page = (uintptr_t)(pa - (uint64_t)gPhysBase) + (uintptr_t)gVirtBase;
++
++	flush_dcache64((addr64_t)page, 4096, FALSE);
++	return (uint32_t *)page;
++}
++
++static void
++sa_hang_dump(uint32_t fence)
++{
++	uint32_t fsr = sa_rd(sa_smmu_cb0.base + SMMU_CB_FSR);
++	uint64_t far = (uint64_t)sa_rd(sa_smmu_cb0.base + SMMU_CB_FAR + 4) << 32 |
++	    sa_rd(sa_smmu_cb0.base + SMMU_CB_FAR);
++	uint64_t pc = (uint64_t)sa_rd(sa_gpu.base + CP_SQE_INSTR_BASE) |
++	    (uint64_t)sa_rd(sa_gpu.base + CP_SQE_INSTR_BASE + 4) << 32;
++
++	IOLog("SWEET ADRENO: fence %u does not signal: the core read the ring to %u of %u, fence word %#x; "
++	    "RBBM status %#x / interrupts %#x; CP fault %#x, interrupts %#x, protection %#x, status 1 %#x, "
++	    "SQE instruction at %#llx; SMMU status %#x, address %#llx, syndrome %#x\n", fence,
++	    sa_rd(sa_gpu.base + CP_RB_RPTR), sa_ring_sent, sa_fence_read(), sa_rd(sa_gpu.base + RBBM_STATUS),
++	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT),
++	    sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS), sa_rd(sa_gpu.base + CP_PROTECT_STATUS),
++	    sa_rd(sa_gpu.base + CP_STATUS_1), (unsigned long long)pc, fsr, (unsigned long long)far,
++	    sa_rd(sa_smmu_cb0.base + SMMU_CB_FSYNR0));
++	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
++		uint32_t at = (sa_submit_next + s) % SA_SUBMIT_HISTORY;       /* oldest first */
++		struct sa_submit *h = &sa_submit_hist[at];
++
++		for (uint32_t i = 0; i < h->n; i++) {
++			uint64_t bytes = 4ull * h->dwords[i];
++			bool stuck = pc >= h->iova[i] && pc < h->iova[i] + bytes;
++
++			IOLog("SWEET ADRENO: submission (fence %u): IB %u at %#llx, %u dwords%s\n", h->fence, i,
++			    (unsigned long long)h->iova[i], h->dwords[i], stuck ? " <- the SQE is here" : "");
++			if (stuck && h->dwords[i] >= 8) {
++				uint32_t *p = sa_gpu_page(h->iova[i]);
++
++				if (p != NULL) {
++					IOLog("SWEET ADRENO: that IB's head: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
++					    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++				}
++			}
++		}
++	}
++	uint32_t *page = sa_gpu_page(pc);
++
++	if (page == NULL) {
++		IOLog("SWEET ADRENO: the SQE's page at %#llx is not mapped for the kernel\n",
++		    (unsigned long long)(pc & ~0xfffull));
++		return;
++	}
++	uint32_t dw = (uint32_t)((pc >> 2) & 0x3ff);
++	uint32_t from = dw > 3 ? dw - 3 : 0;
++
++	for (uint32_t i = from; i < dw + 4 && i < 1024; i += 4) {
++		IOLog("SWEET ADRENO: SQE words at %#llx: %#x %#x %#x %#x\n",
++		    (unsigned long long)((pc & ~3ull) + 4ull * (i - from)), page[i], page[i + 1],
++		    page[i + 2], page[i + 3]);
++	}
++}
++
+ bool
+ sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns)
+ {
+ 	uint64_t deadline;
+ 
++	if (timeout_ns > 120000000000ull) {
++		timeout_ns = 120000000000ull;     /* 120 s: an "infinite" client wait must fail, not hang */
++	}
+ 	nanoseconds_to_absolutetime(timeout_ns, &deadline);
+ 	deadline += mach_absolute_time();
+ 	do {
+@@ -3060,7 +3174,24 @@ sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns)
+ 		}
+ 		delay_for_interval(100, NSEC_PER_USEC);
+ 	} while (mach_absolute_time() < deadline);
+-	return (int32_t)(sa_fence_read() - fence) >= 0;
++	if ((int32_t)(sa_fence_read() - fence) >= 0) {
++		return true;
++	}
++	uint64_t now = mach_absolute_time();
++	if (sa_hang_fence != fence) {
++		sa_hang_fence = fence;
++		sa_hang_first = now;
++		sa_hang_dumped = false;
++	} else if (!sa_hang_dumped) {
++		uint64_t two_seconds;
++
++		nanoseconds_to_absolutetime(2000000000ull, &two_seconds);
++		if (now - sa_hang_first > two_seconds) {
++			sa_hang_dumped = true;
++			sa_hang_dump(fence);
++		}
++	}
++	return false;
+ }
+ 
+ /* The always-on counter (a6xx.xml CP 0x0980/0x0981, as flame's a6_timestamp reads it). */
+@@ -3090,6 +3221,17 @@ sweet_adreno_clean(vm_offset_t kva, uint64_t len)
+ 	sa_to_memory(kva, len);
+ }
+ 
++/* Wait for everything submitted so far (the present path reads GPU-written surfaces). */
++void
++sweet_adreno_finish(void)
++{
++	uint32_t seqno = sa_fence_seqno;
++
++	if (seqno != 0) {
++		(void)sa_fence_wait(seqno, 500);
++	}
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index c2946ad..675fe40 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -207,6 +207,8 @@ public:
+ 	uint64_t      *fPageBuf;
+ 	uint64_t       fFaultsSeen;    /* faults when this client last looked */
+ 	uint32_t       fLastFence;
++	uint32_t       fLogged;        /* bring-up: first calls of each kind get a line */
++	uint32_t       fSubmitLogged;  /* the submit budget is its own: a shared one never reached it */
+ };
+ 
+ OSDefineMetaClassAndStructors(SweetAdrenoUserClient, IOUserClient);
+@@ -545,6 +547,7 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 			return kIOReturnNoMemory;
+ 		}
+ 		bzero((void *)kmap->getVirtualAddress(), rq->bytes);
++		sweet_adreno_clean((vm_offset_t)kmap->getVirtualAddress(), rq->bytes);
+ 		uint64_t h = 0;
+ 		IOReturn r = v2NewSlot(md, kmap, rq->bytes, false, &h);
+ 		if (r != kIOReturnSuccess) {
+@@ -647,6 +650,10 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		}
+ 		rp->token = (uint32_t)rq->handle;       /* clientMemoryForType type */
+ 		rp->bytes = bo->bytes;
++		if (fLogged++ < 8) {
++			IOLog("SWEET ADRENO: v2 BoCpuMap handle %llu -> token %u\n", (unsigned long long)rq->handle,
++			    rp->token);
++		}
+ 		return kIOReturnSuccess;
+ 	}
+ 	case NativeAdrenoMethodBoCpuUnmap:
+@@ -690,16 +697,27 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		bool busy = false;
+ 		uint32_t fence = sweet_adreno_submit_v2(iova, dw, rq->buffer_count, &busy);
+ 		if (fence == 0) {
++			IOLog("SWEET ADRENO: v2 submit refused (%s), %u IBs\n", busy ? "ring busy" : "not ready",
++			    rq->buffer_count);
+ 			return busy ? kIOReturnBusy : kIOReturnNotReady;
+ 		}
+ 		fLastFence = fence;
++		if (fSubmitLogged++ < 8) {
++			IOLog("SWEET ADRENO: v2 submit ok: fence %u, %u IBs (first %llu bytes at %#llx)\n", fence,
++			    rq->buffer_count, (unsigned long long)rq->buffers[0].bytes,
++			    (unsigned long long)rq->buffers[0].iova);
++		}
+ 		rp->fence = fence;
+ 		return kIOReturnSuccess;
+ 	}
+ 	case NativeAdrenoMethodWaitFence: {
+ 		V2_IN(NativeAdrenoAbiWaitFence);
+-		return sweet_adreno_wait_fence_ns((uint32_t)rq->fence, rq->timeout_ns) ?
+-		    kIOReturnSuccess : kIOReturnTimeout;
++		bool signalled = sweet_adreno_wait_fence_ns((uint32_t)rq->fence, rq->timeout_ns);
++		if (!signalled || fLogged++ < 8) {
++			IOLog("SWEET ADRENO: v2 wait fence %llu (%llu ns) %s\n", (unsigned long long)rq->fence,
++			    (unsigned long long)rq->timeout_ns, signalled ? "signalled" : "TIMED OUT");
++		}
++		return signalled ? kIOReturnSuccess : kIOReturnTimeout;
+ 	}
+ 	case NativeAdrenoMethodGetTimestamp: {
+ 		V2_OUT(NativeAdrenoAbiTimestamp);
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index c3e5ce0..a87c565 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -40,6 +40,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ extern "C" void sweet_busy_init(void);  /* iokit/Kernel/arm/SweetBusy.cpp (boot-arg sweetbusy=N) */
+ extern "C" bool sweet_board_is_umi(void);       /* bsd/dev/sweet_rpmh.c */
+ extern "C" void sweet_adreno_publish(IOService *provider);       /* iokit/Kernel/arm/SweetAdreno.cpp */
++extern "C" void sweet_adreno_finish(void);                     /* bsd/dev/sweet_adreno.c: wait for the GPU */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ extern "C" void ml_io_unmap(vm_offset_t addr, vm_size_t sz);
+ extern "C" void (*sweet_panic_display_hook)(void);      /* pexpert/arm/pe_identify_machine.c */
+@@ -930,6 +931,8 @@ bool
+ AppleCLCD::directPresent(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104), layer = SWEET_FB_LAYERS, n = 0;
++
++	sweet_adreno_finish();         /* the GPU rendered the surface; let it finish before scanout */
+ 	for (uint32_t i = 0; i < SWEET_FB_LAYERS; i++) {
+ 		if ((mask & (1u << i)) && get32(rec, 0x54 + 4 * i) != 0) {
+ 			layer = i;
+@@ -956,7 +959,7 @@ AppleCLCD::directPresent(const uint8_t *rec)
+ 		uintptr_t va = s->kernelAddress();
+ 		if ((pa & 0xf) == 0 && pa + len <= (1ull << 32) && off + len <= s->allocSize && va != 0 &&
+ 		    s->bytesPerRow <= 0xffff) {
+-			sweet_dcache_clean(va + off, len);
++			sweet_dcache_flush(va + off, len);
+ 			scanFrom(pa, s->bytesPerRow);
+ 			ok = true;
+ 			IOLockLock(fLock);
+@@ -977,6 +980,10 @@ AppleCLCD::present(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104);
+ 
++	/* the layers were rendered by the GPU (Metal on Turnip): wait for it before
++	 * the CPU reads them - CoreAnimation expects the Metal present to sync */
++	sweet_adreno_finish();
++
+ 	if (fDirect) {
+ 		fLastDirect = directPresent(rec);
+ 		if (!fLastDirect) {
+@@ -1065,11 +1072,17 @@ AppleCLCD::present(const uint8_t *rec)
+ 			src = 0;
+ 		}
+ 		if (src != 0 && bpe == 4) {
++			/* the GPU wrote the source (Metal on Turnip); its lines may sit stale in the
++			 * CPU cache - drop them so the copy reads memory, and write our lines out */
++			sweet_dcache_flush(src + s->offset + (uint64_t)sy * s->bytesPerRow + (uint64_t)sx * 4,
++			    (uint64_t)(h - 1) * s->bytesPerRow + (uint64_t)w * 4);
+ 			for (int32_t y = 0; y < h; y++) {
+ 				memcpy((void *)(fPixels + (uint64_t)(dy + y) * fRowBytes + (uint64_t)dx * 4),
+ 				    (const void *)(src + s->offset + (uint64_t)(sy + y) * s->bytesPerRow + (uint64_t)sx * 4),
+ 				    (size_t)w * 4);
+ 			}
++			sweet_dcache_clean(fPixels + (uint64_t)dy * fRowBytes + (uint64_t)dx * 4,
++			    (uint64_t)(h - 1) * fRowBytes + (uint64_t)w * 4);
+ 		}
+ 		s->release();
+ 	}
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index 68301fd..8fc765c 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -91,6 +91,19 @@ static IOLock       *sweet_surface_lock;
+ static SweetSurface *sweet_surface_table[SWEET_SURFACE_MAX_ID];
+ static uint32_t      sweet_surface_users[SWEET_SURFACE_MAX_ID];
+ static uint32_t      sweet_surface_next_id = 1;
++/* Clean and invalidate the data cache (memory the CPU wrote that the GPU will use). */
++static void
++sweet_dcache_flush(uintptr_t va, uint64_t len)
++{
++	uint64_t ctr;
++	__asm__ volatile ("mrs %0, ctr_el0" : "=r"(ctr));
++	uint64_t line = 4ull << ((ctr >> 16) & 0xf);
++	for (uintptr_t p = va & ~(line - 1); p < va + len; p += line) {
++		__asm__ volatile ("dc civac, %0" :: "r"(p) : "memory");
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
+ static uint32_t      sweet_surface_creates_logged;
+ static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
+ #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
+@@ -843,6 +856,7 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 					s->scanoutPhys = 0;
+ 				} else {
+ 					bzero((void *)va, s->allocSize);
++					sweet_dcache_flush(va, s->allocSize);   /* the GPU renders here: no dirty line may land on it */
+ 					if (!sweet_surface_publish(s)) {
+ 						ret = kIOReturnNoResources;
+ 					}
+@@ -864,6 +878,7 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 			ret = kIOReturnNoMemory;
+ 		} else {
+ 			bzero(mem->getBytesNoCopy(), s->allocSize);
++			sweet_dcache_flush((uintptr_t)mem->getBytesNoCopy(), s->allocSize);  /* the GPU renders here */
+ 			s->memory = mem;
+ 			s->mapCache = kIOMapDefaultCache;
+ 			if (!sweet_surface_publish(s)) {
+-- 
+2.54.0 (Apple Git-157)
+

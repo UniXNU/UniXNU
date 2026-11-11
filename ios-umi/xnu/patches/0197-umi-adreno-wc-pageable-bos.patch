@@ -1,0 +1,49 @@
+From 448f99e1c6478ef9b9147806134d775af15b79ce Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 21:16:31 +0100
+Subject: [PATCH] umi: allocate GPU buffers as pageable write-combined
+ descriptors
+
+0196 caught fresh command BOs whose GPU page table held one physical
+page while the BO's descriptor and kernel map - where Turnip's commands
+were - held another (GPU PTE page 0x1bd648000, BO page 0x1a281c000), on
+boots with every iova/connection issue removed. The buffer was a wired
+kernel IOBufferMemoryDescriptor, mapped cached into the kernel and
+write-combined into Turnip's task: not one set of pages for all aliases.
+
+Allocate it as kIOMemoryPageable | kIOMapWriteCombineCache instead: a
+VM object of its own in the WC cache mode, so the kernel view (now
+mapped WC too) and the task's mapping agree; prepare() wires the pages
+before BoMap reads them (ios-flame 0115's design).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 11 +++++++++--
+ 1 file changed, 9 insertions(+), 2 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 6644d2c..3d059cb 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -548,9 +548,16 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		    rq->align_log2 < 12 || rq->align_log2 > 24 || rq->contiguous > 1) {
+ 			return kIOReturnBadArgument;
+ 		}
++		/* Pageable with the write-combined cache mode: the buffer gets a VM object of its own
++		 * whose every mapping - this kernel view and Turnip's (clientMemoryForType, WC) - has
++		 * the same attributes (ios-flame 0115). A wired kernel buffer (kIOMemoryKernelUserShared)
++		 * mapped cached here and WC into the task did not stay one set of pages: 0196 caught
++		 * command BOs whose GPU page table held the page BoMap saw while the CPU's commands sat
++		 * in another (the CP_OPCODE_ERROR hangs). prepare() below wires the pages for good. */
+ 		IOBufferMemoryDescriptor *md = IOBufferMemoryDescriptor::inTaskWithOptions(kernel_task,
+-		    kIODirectionInOut | kIOMemoryKernelUserShared, rq->bytes, 1u << rq->align_log2);
+-		IOMemoryMap *kmap = md != NULL ? md->map() : NULL;
++		    kIODirectionInOut | kIOMemoryPageable | kIOMapWriteCombineCache, rq->bytes,
++		    1u << rq->align_log2);
++		IOMemoryMap *kmap = md != NULL ? md->map(kIOMapWriteCombineCache) : NULL;
+ 		if (md == NULL || kmap == NULL || md->prepare() != kIOReturnSuccess) {
+ 			IOLog("SWEET ADRENO: v2 BoAlloc of %llu bytes failed\n", rq->bytes);
+ 			OSSafeReleaseNULL(kmap);
+-- 
+2.54.0 (Apple Git-157)
+

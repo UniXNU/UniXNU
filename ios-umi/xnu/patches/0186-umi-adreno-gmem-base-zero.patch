@@ -1,0 +1,43 @@
+From 9709e90b0072ff1ce1ea8c4712dd68dc8e8b9852 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 18:25:51 +0100
+Subject: [PATCH] umi: report GMEM at 0 in UCHE space for the A650
+
+Linux v6.12 adreno_gpu.c (MSM_PARAM_GMEM_BASE) returns 0 for the A650
+family and 0x100000 only for older A6xx; it is also why hw_init skips
+UCHE_GMEM_RANGE for the a650 family. SweetAdreno told Turnip 0x100000,
+and Turnip adds gmem_base to every GMEM access made through a texture
+(tu_clear_blit.cc: the unaligned tile store path; tu_cmd_buffer.cc:
+input attachments), so those reads landed 1 MB past the tile data, in
+uninitialised SRAM.
+
+That was the composited frame's noise: random words with the ~63% set-bit
+bias of never-written memory, stable per surface until rewritten. With
+GMEM at 0 the iOS UI appears on the panel (copy path).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 7 ++++++-
+ 1 file changed, 6 insertions(+), 1 deletion(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 2db3146..c2abb21 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -519,7 +519,12 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		/* what the kernel brings up (a6xx_catalog.c / a6xx_set_ubwc_config for the A650) */
+ 		rp->chip_id = 0x06050002;
+ 		rp->gmem_bytes = 0x120000;
+-		rp->gmem_base = 0x100000;
++		/* GMEM sits at 0 in UCHE space on the A650 family (Linux v6.12 adreno_gpu.c
++		 * MSM_PARAM_GMEM_BASE; it is also why hw_init skips UCHE_GMEM_RANGE). 0x100000
++		 * is older A6xx: with it every GMEM access through a texture (Turnip's unaligned
++		 * tile stores, input attachments) read 1 MB past the tile data - uninitialised
++		 * SRAM, the noise in the composited frame. */
++		rp->gmem_base = 0;
+ 		rp->uche_trap_base = 0x0001fffffffff000ULL;        /* step 20's UCHE_TRAP_BASE */
+ 		rp->va_start = fWinBase;
+ 		rp->va_size = fWinSize;
+-- 
+2.54.0 (Apple Git-157)
+

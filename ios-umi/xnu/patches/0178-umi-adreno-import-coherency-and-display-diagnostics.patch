@@ -1,0 +1,354 @@
+From 0abb880dea2b504dd83bd5a497d9a1d3fa9ec639 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 17:02:18 +0100
+Subject: [PATCH] umi-0178-adreno-import-coherency-and-display-diagnostics
+
+The glitched UI on the panel was stale memory: BoImport handed the
+client's pages to the GPU window without a kernel map, and the
+submit-path clean only covers BOs that have one - so the CPU's writes
+(an image a decoder filled, a surface another task drew) stayed dirty
+in its cache while the GPU sampled what DRAM still held. BoImport now
+creates md->map() like BoAlloc, and BoMap cleans an import's pages
+through that view when they become GPU-visible. With it the composited
+framebuffer carries real content (sampled rows show image data instead
+of uniform black).
+
+Display diagnostics, found with them:
+- present() counts and logs gaps; directPresent logs each failure
+  reason (layer count, missing surface, shape, address) and on success
+  samples the scanned pixels (left/middle/right of nine rows, every
+  128th present, plus a whole-allocation walk and the panel geometry
+  for the first two).
+- scanDump(): every SSPP's fetch address/stride and the CTL states,
+  called after the second direct present - the pipe does hold our
+  surface address (VIG0 src 0x9ca36050 stride 4608), so a stale panel
+  is a fetch that does not happen, not a wrong address.
+- full-screen surface creations log without the 64-line budget.
+- The stuck-fence dump reads the offending opcode the way Linux's
+  a6xx_cp_hw_err_irq does (CP_SQE_STAT_ADDR = 1, then
+  CP_SQE_STAT_DATA), keeps the last 8 submissions (fence + IB
+  addresses/sizes) and dumps the newest one's first words through
+  context 0's page tables; CP_SQE_INSTR_BASE is the SQE microcode
+  base (our own init value), not the faulting address.
+
+Co-Authored-By: Mistral Vibe <vibe@mistral.ai>
+---
+ bsd/dev/sweet_adreno.c                |  59 +++++++--------
+ iokit/Kernel/arm/SweetAdreno.cpp      |  21 +++++-
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 103 ++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetSurface.cpp     |   5 +-
+ 4 files changed, 153 insertions(+), 35 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 9cfd45b..2fabc10 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -1946,6 +1946,8 @@ sa_step_zap_load(void)
+ #define CP_INTERRUPT_STATUS     GPU_WORD(0x0823)
+ #define CP_PROTECT_STATUS       GPU_WORD(0x0824)
+ #define CP_STATUS_1             GPU_WORD(0x0825)
++#define CP_SQE_STAT_ADDR        GPU_WORD(0x0908)  /* 1 there -> CP_SQE_STAT_DATA: the possible opcode */
++#define CP_SQE_STAT_DATA        GPU_WORD(0x0909)  /* Linux a6xx_cp_hw_err_irq (a6xx_gpu.c) */
+ #define CP_SQE_INSTR_BASE       GPU_WORD(0x0830)
+ #define CP_APRIV_CNTL           GPU_WORD(0x0844)
+ #define CP_PROTECT_CNTL         GPU_WORD(0x084f)
+@@ -3110,51 +3112,42 @@ sa_hang_dump(uint32_t fence)
+ 	uint32_t fsr = sa_rd(sa_smmu_cb0.base + SMMU_CB_FSR);
+ 	uint64_t far = (uint64_t)sa_rd(sa_smmu_cb0.base + SMMU_CB_FAR + 4) << 32 |
+ 	    sa_rd(sa_smmu_cb0.base + SMMU_CB_FAR);
+-	uint64_t pc = (uint64_t)sa_rd(sa_gpu.base + CP_SQE_INSTR_BASE) |
+-	    (uint64_t)sa_rd(sa_gpu.base + CP_SQE_INSTR_BASE + 4) << 32;
++	uint32_t cp_int = sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS);
++	uint32_t opcode = 0;
+ 
++	/* Linux a6xx_cp_hw_err_irq (a6xx_gpu.c): CP_SQE_STAT_ADDR = 1, then CP_SQE_STAT_DATA
++	 * is "the possible opcode" of the opcode error. */
++	if (cp_int & 1) {
++		sa_wr(sa_gpu.base + CP_SQE_STAT_ADDR, 1);
++		opcode = sa_rd(sa_gpu.base + CP_SQE_STAT_DATA);
++	}
+ 	IOLog("SWEET ADRENO: fence %u does not signal: the core read the ring to %u of %u, fence word %#x; "
+-	    "RBBM status %#x / interrupts %#x; CP fault %#x, interrupts %#x, protection %#x, status 1 %#x, "
+-	    "SQE instruction at %#llx; SMMU status %#x, address %#llx, syndrome %#x\n", fence,
++	    "RBBM status %#x / interrupts %#x; CP fault %#x, interrupts %#x, possible opcode %#x, "
++	    "protection %#x, status 1 %#x; SMMU status %#x, address %#llx, syndrome %#x\n", fence,
+ 	    sa_rd(sa_gpu.base + CP_RB_RPTR), sa_ring_sent, sa_fence_read(), sa_rd(sa_gpu.base + RBBM_STATUS),
+-	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT),
+-	    sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS), sa_rd(sa_gpu.base + CP_PROTECT_STATUS),
+-	    sa_rd(sa_gpu.base + CP_STATUS_1), (unsigned long long)pc, fsr, (unsigned long long)far,
+-	    sa_rd(sa_smmu_cb0.base + SMMU_CB_FSYNR0));
++	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT), cp_int, opcode,
++	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS), sa_rd(sa_gpu.base + CP_STATUS_1), fsr,
++	    (unsigned long long)far, sa_rd(sa_smmu_cb0.base + SMMU_CB_FSYNR0));
+ 	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
+ 		uint32_t at = (sa_submit_next + s) % SA_SUBMIT_HISTORY;       /* oldest first */
+ 		struct sa_submit *h = &sa_submit_hist[at];
+ 
+ 		for (uint32_t i = 0; i < h->n; i++) {
+-			uint64_t bytes = 4ull * h->dwords[i];
+-			bool stuck = pc >= h->iova[i] && pc < h->iova[i] + bytes;
+-
+-			IOLog("SWEET ADRENO: submission (fence %u): IB %u at %#llx, %u dwords%s\n", h->fence, i,
+-			    (unsigned long long)h->iova[i], h->dwords[i], stuck ? " <- the SQE is here" : "");
+-			if (stuck && h->dwords[i] >= 8) {
+-				uint32_t *p = sa_gpu_page(h->iova[i]);
+-
+-				if (p != NULL) {
+-					IOLog("SWEET ADRENO: that IB's head: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
+-					    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+-				}
+-			}
++			IOLog("SWEET ADRENO: submission (fence %u): IB %u at %#llx, %u dwords\n", h->fence, i,
++			    (unsigned long long)h->iova[i], h->dwords[i]);
+ 		}
+ 	}
+-	uint32_t *page = sa_gpu_page(pc);
++	/* the head of the newest submission's buffers, through the page tables */
++	uint32_t newest = (sa_submit_next + SA_SUBMIT_HISTORY - 1) % SA_SUBMIT_HISTORY;
++	struct sa_submit *h = &sa_submit_hist[newest];
+ 
+-	if (page == NULL) {
+-		IOLog("SWEET ADRENO: the SQE's page at %#llx is not mapped for the kernel\n",
+-		    (unsigned long long)(pc & ~0xfffull));
+-		return;
+-	}
+-	uint32_t dw = (uint32_t)((pc >> 2) & 0x3ff);
+-	uint32_t from = dw > 3 ? dw - 3 : 0;
++	for (uint32_t i = 0; i < h->n && i < 4; i++) {
++		uint32_t *p = sa_gpu_page(h->iova[i]);
+ 
+-	for (uint32_t i = from; i < dw + 4 && i < 1024; i += 4) {
+-		IOLog("SWEET ADRENO: SQE words at %#llx: %#x %#x %#x %#x\n",
+-		    (unsigned long long)((pc & ~3ull) + 4ull * (i - from)), page[i], page[i + 1],
+-		    page[i + 2], page[i + 3]);
++		if (p != NULL && h->dwords[i] >= 8) {
++			IOLog("SWEET ADRENO: fence %u IB %u words: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
++			    h->fence, i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++		}
+ 	}
+ }
+ 
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 675fe40..87b293f 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -574,9 +574,21 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		if (md == NULL) {
+ 			return kIOReturnBadArgument;
+ 		}
++		/* The kernel's cached view of the same pages: submit cleans every mapped BO through
++		 * it, so the CPU's writes (a decoded image, whatever the client drew before handing
++		 * the surface over) are out in memory before the GPU samples it - the import is the
++		 * IOSurface textures CoreAnimation composites, and without this the GPU reads stale
++		 * memory for every surface the CPU wrote (glitched columns). */
++		IOMemoryMap *kmap = md->map();
++		if (kmap == NULL) {
++			md->complete();
++			md->release();
++			return kIOReturnNoMemory;
++		}
+ 		uint64_t h = 0;
+-		IOReturn r = v2NewSlot(md, NULL, rq->bytes, true, &h);
++		IOReturn r = v2NewSlot(md, kmap, rq->bytes, true, &h);
+ 		if (r != kIOReturnSuccess) {
++			kmap->release();
+ 			md->complete();
+ 			md->release();
+ 			return r;
+@@ -627,6 +639,13 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		if (r == kIOReturnSuccess) {
+ 			bo->iova = rq->iova;
+ 			rp->iova = rq->iova;
++			/* an import's pages carry whatever the CPU wrote (the decoded image, the client's
++			 * drawing) - pushed out to memory here, before the GPU can sample them, because
++			 * the GPU's window mapping is uncached and reads what memory holds, not what the
++			 * CPU's cache still owes it */
++			if (bo->imported && bo->kmap != NULL) {
++				sweet_adreno_clean((vm_offset_t)bo->kmap->getVirtualAddress(), bo->bytes);
++			}
+ 		} else if (bo != NULL && bo->iova == 0 && r != kIOReturnBadArgument && r != kIOReturnBusy) {
+ 			sweet_adreno_unmap_at(rq->iova, bo->bytes);
+ 		}
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index a87c565..28e89f7 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -146,6 +146,7 @@ public:
+ 	void          setupScanout();
+ 	void          scanFrom(uint64_t pa, uint32_t stride);
+ 	void          scanBoot();
++	void          scanDump();
+ 	bool          directPresent(const uint8_t *rec);
+ 
+ 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+@@ -462,6 +463,12 @@ get32(const uint8_t *p, uint32_t off)
+ 
+ static uint32_t sweet_fb_swaps_logged;
+ static uint64_t sweet_fb_swap_count;
++/* present() visibility: how many frame swaps it has seen, and per-reason line budgets for
++ * directPresent's failures (the swap logging only covers the copy path - the direct path
++ * returns before it, so a direct-present boot logs nothing about its frames). */
++static uint64_t sweet_fb_present_count;
++static uint32_t sweet_fb_direct_fail[4];     /* 0: layer count, 1: no surface, 2: shape, 3: address */
++static uint32_t sweet_fb_direct_ok_logged;
+ 
+ /* Copy each enabled layer's surface into the panel memory (no scaling). */
+ /*
+@@ -791,6 +798,30 @@ AppleCLCD::scanBoot()
+ 	}
+ }
+ 
++/* What the DPU fetches right now: every source pipe's fetch address and stride, and the CTL
++ * states - called from the present path to see whether a present's address really stuck
++ * (a display power cycle may have reprogrammed the pipes that ABL's boot state pointed us at). */
++void
++AppleCLCD::scanDump()
++{
++	if (fMdp == NULL) {
++		return;
++	}
++	for (uint32_t i = 0; i < sizeof(sweet_sspp) / sizeof(sweet_sspp[0]); i++) {
++		if (!sweet_board_is_umi() && (i == 2 || i == 3 || i == 7)) {
++			continue;
++		}
++		volatile uint32_t *p = fMdp + sweet_sspp[i].off / 4;
++		IOLog("SWEET FB: MDP %s src %#x stride %u size %#x\n", sweet_sspp[i].name, p[0x14 / 4],
++		    p[0x24 / 4] & 0xffff, p[0x00 / 4]);
++	}
++	for (uint32_t n = 0; n < 6; n++) {
++		volatile uint32_t *c = fMdp + (0x1000 + 0x200 * n) / 4;
++		IOLog("SWEET FB: MDP CTL%u layer0 %#x top %#x flush %#x\n", n, c[0x00 / 4], c[0x14 / 4],
++		    c[0x18 / 4]);
++	}
++}
++
+ /* Clean and invalidate the data cache to the point of coherency (memory the GPU writes). */
+ static void
+ sweet_dcache_flush(uintptr_t va, uint64_t len)
+@@ -940,13 +971,20 @@ AppleCLCD::directPresent(const uint8_t *rec)
+ 		}
+ 	}
+ 	if (n != 1) {
++		if (sweet_fb_direct_fail[0]++ < 4) {
++			IOLog("SWEET FB: direct present: %u layers in mask %#x (want exactly one)\n", n, mask);
++		}
+ 		return false;
+ 	}
+ 	SweetSurface *s = sweet_surface_copy(get32(rec, 0x54 + 4 * layer));
+ 	if (s == NULL) {
++		if (sweet_fb_direct_fail[1]++ < 4) {
++			IOLog("SWEET FB: direct present: surface %u not found\n", get32(rec, 0x54 + 4 * layer));
++		}
+ 		return false;
+ 	}
+ 	bool ok = false;
++	uint32_t id = get32(rec, 0x54 + 4 * layer);
+ 	if (s->scanoutPhys != 0 && s->bytesPerElement == 4 && s->width >= fWidth && s->height >= fHeight) {
+ 		uint32_t ox = (s->width - fWidth) / 2, oy = (s->height - fHeight) / 2;
+ 		if (s->width == fLogicalW && s->height == fLogicalH) {
+@@ -962,6 +1000,51 @@ AppleCLCD::directPresent(const uint8_t *rec)
+ 			sweet_dcache_flush(va + off, len);
+ 			scanFrom(pa, s->bytesPerRow);
+ 			ok = true;
++			/* sampled on every 128th present (the first two log the whole-allocation walk):
++			 * left/middle/right of nine rows - the content's geometry at present time */
++			if (sweet_fb_direct_ok_logged < 2 || (sweet_fb_present_count % 128) == 0) {
++				sweet_fb_direct_ok_logged++;
++				IOLog("SWEET FB: direct present ok: surface %u %ux%u bpr %u scanout %#llx+%#llx "
++				    "[present %llu]\n", id, s->width, s->height, s->bytesPerRow, s->scanoutPhys,
++				    off, sweet_fb_present_count);
++				const uint32_t *base = (const uint32_t *)(va + off);
++				uint32_t mid = (uint32_t)fWidth / 2, right = fWidth - 1;
++
++				for (uint32_t r = 0; r <= (uint32_t)fHeight; r += (uint32_t)fHeight / 8) {
++					const uint32_t *row = base + (uint64_t)r * s->bytesPerRow / 4;
++					IOLog("SWEET FB: scan row %u: %08x %08x %08x\n", r,
++					    row[0], row[mid], row[right]);
++				}
++			}
++			if (sweet_fb_direct_ok_logged <= 2) {
++				/* what the panel will actually fetch: the surface was just flushed, so the
++				 * words are what memory holds - zero says nothing rendered into these
++				 * pages, structure says a format/stride mismatch */
++				const uint32_t *px = (const uint32_t *)(va + off);
++				uint32_t w4 = (uint32_t)(len / 4), mid = w4 / 2;
++
++				IOLog("SWEET FB: direct present ok: surface %u %ux%u bpr %u scanout %#llx+%#llx; "
++				    "px0 %08x %08x %08x %08x, mid %08x %08x %08x %08x, end %08x %08x\n",
++				    id, s->width, s->height, s->bytesPerRow, s->scanoutPhys, off,
++				    px[0], px[1], px[2], px[3], px[mid], px[mid + 1], px[mid + 2], px[mid + 3],
++				    px[w4 - 2], px[w4 - 1]);
++				/* where content actually sits: the whole allocation, 16 samples (the
++				 * geometry matters too: what the kernel scans against what the client laid
++				 * out) */
++				for (uint32_t sample = 0; sample < 16; sample++) {
++					uint64_t at = s->allocSize * sample / 16;
++
++					px = (const uint32_t *)(va + at & ~(uintptr_t)0xf);
++					IOLog("SWEET FB: surface walk +%#llx: %08x %08x\n",
++					    (unsigned long long)at, px[0], px[1]);
++				}
++				IOLog("SWEET FB: panel %ux%u logical %ux%u at %d,%d; surface offset %#llx "
++				    "alloc %#llx\n", fWidth, fHeight, fLogicalW, fLogicalH, fOffX, fOffY,
++				    (unsigned long long)s->offset, (unsigned long long)s->allocSize);
++				if (sweet_fb_direct_ok_logged == 2) {
++					scanDump();       /* did the write to the pipe stick? */
++				}
++			}
+ 			IOLockLock(fLock);
+ 			SweetSurface *old = fLastSurf;
+ 			s->retain();
+@@ -969,7 +1052,15 @@ AppleCLCD::directPresent(const uint8_t *rec)
+ 			fLastOff = off;
+ 			IOLockUnlock(fLock);
+ 			OSSafeReleaseNULL(old);
++		} else if (sweet_fb_direct_fail[3]++ < 4) {
++			IOLog("SWEET FB: direct present: surface %u: pa %#llx len %llu (above 4 GB? %d) or "
++			    "rows %u misaligned\n", id, pa, len,
++			    pa + len > (1ull << 32) ? 1 : 0, s->bytesPerRow);
+ 		}
++	} else if (sweet_fb_direct_fail[2]++ < 4) {
++		IOLog("SWEET FB: direct present: surface %u is %ux%u bpe %u bpr %u scanout %#llx - not the "
++		    "panel's shape (%ux%u)\n", id, s->width, s->height, s->bytesPerElement, s->bytesPerRow,
++		    s->scanoutPhys, fWidth, fHeight);
+ 	}
+ 	s->release();
+ 	return ok;
+@@ -980,6 +1071,18 @@ AppleCLCD::present(const uint8_t *rec)
+ {
+ 	uint32_t mask = get32(rec, 0x104);
+ 
++	sweet_fb_present_count++;
++	static uint64_t sweet_fb_last_present_t;      /* gaps in the frame swap */
++	uint64_t now = mach_absolute_time();
++
++	if (sweet_fb_present_count <= 8 || (sweet_fb_present_count % 1024) == 0 ||
++	    (sweet_fb_last_present_t != 0 && now - sweet_fb_last_present_t > 19200000ull)) {
++		IOLog("SWEET FB: present %llu mask %#x path %s (+%llu ms) [t %llu]\n", sweet_fb_present_count,
++		    mask, fDirect ? "direct" : "copy",
++		    sweet_fb_last_present_t != 0 ? (now - sweet_fb_last_present_t) / 19200ull : 0, now);
++	}
++	sweet_fb_last_present_t = now;
++
+ 	/* the layers were rendered by the GPU (Metal on Turnip): wait for it before
+ 	 * the CPU reads them - CoreAnimation expects the Metal present to sync */
+ 	sweet_adreno_finish();
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index 8fc765c..2c36918 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -886,7 +886,10 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 			}
+ 		}
+ 	}
+-	if (ret != kIOReturnSuccess || sweet_surface_creates_logged < 64) {
++	/* full-screen surfaces are always logged (their lifetime tells the framebuffer story); the
++	 * small ones keep their 64-line budget */
++	if (ret != kIOReturnSuccess || sweet_surface_creates_logged < 64 ||
++	    (s->height >= 2000 && s->width >= 1000 && sweet_surface_creates_logged < 512)) {
+ 		char name[32];
+ 		proc_selfname(name, sizeof(name));
+ 		sweet_surface_creates_logged++;
+-- 
+2.54.0 (Apple Git-157)
+

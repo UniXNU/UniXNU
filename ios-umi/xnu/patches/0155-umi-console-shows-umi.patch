@@ -1,0 +1,119 @@
+From 1eef813130ecde626e3c3d88b46382e7569c00fa Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 16:10:12 +0100
+Subject: [PATCH] umi-0155-console-name
+
+---
+ osfmk/console/serial_console.c | 74 +++++++++++++++++++++++++++++++++-
+ 1 file changed, 73 insertions(+), 1 deletion(-)
+
+diff --git a/osfmk/console/serial_console.c b/osfmk/console/serial_console.c
+index 99785e9..4b50cea 100644
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -44,6 +44,7 @@
+ #include <kern/startup.h>
+ #include <kern/thread.h>
+ #include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
+ #include <kern/cpu_data.h>
+ #include <kern/sched_prim.h>
+ #include <libkern/section_keywords.h>
+@@ -305,6 +306,73 @@ sweet_log_wanted(const char *line, int len)
+ 	}
+ 	return false;
+ }
++/*
++ * umi: the kernel is built as the SWEET board config, so most console lines say "SWEET ..."
++ * (log prefixes, RELEASE_ARM64_SWEET, xiaomi,sweet). On a board whose ADT root compatible
++ * has "xiaomi,umi" the drawn text says "UMI" / "umi" / "Umi" instead; the persistent and
++ * UDP logs keep the original text (tools grep for it). Boot-arg sweetrename=0 off.
++ */
++static int sweet_rename = -1;                   /* -1 not decided yet, 0 off, 1 umi */
++static char sweet_rename_held[5];
++static int sweet_rename_n;
++
++static int
++sweet_rename_board(void)
++{
++	DTEntry root;
++	void const *prop = NULL;
++	unsigned int size = 0;
++	uint32_t on = 1;
++
++	if (SecureDTLookupEntry(NULL, "/", &root) != kSuccess ||
++	    SecureDTGetProperty(root, "compatible", &prop, &size) != kSuccess) {
++		return -1;                              /* device tree not up yet: ask again */
++	}
++	(void)PE_parse_boot_argn("sweetrename", &on, sizeof(on));
++	for (unsigned int i = 0; on && i + 10 <= size; i++) {
++		if (memcmp((const char *)prop + i, "xiaomi,umi", 10) == 0) {
++			return 1;
++		}
++	}
++	return 0;
++}
++
++/* Draws c, with SWEET/sweet/Sweet drawn as UMI/umi/Umi on umi. */
++static void
++sweet_rename_putc(char c, bool poll)
++{
++	static const char up[] = "SWEET", low[] = "sweet";
++
++	if (sweet_rename < 0) {
++		sweet_rename = sweet_rename_board();
++	}
++	if (sweet_rename <= 0) {
++		_cnputc(c, poll);
++		return;
++	}
++	int n = sweet_rename_n;
++	if (n < 5 && (c == up[n] || c == low[n])) {
++		sweet_rename_held[sweet_rename_n++] = c;
++		if (sweet_rename_n == 5) {
++			const char *h = sweet_rename_held;
++			bool caps = h[1] == 'W';
++			_cnputc(h[0] == 'S' ? 'U' : 'u', poll);
++			_cnputc(caps ? 'M' : 'm', poll);
++			_cnputc(caps ? 'I' : 'i', poll);
++			sweet_rename_n = 0;
++		}
++		return;
++	}
++	for (int i = 0; i < n; i++) {
++		_cnputc(sweet_rename_held[i], poll);
++	}
++	sweet_rename_n = 0;
++	if (c == up[0] || c == low[0]) {
++		sweet_rename_held[sweet_rename_n++] = c;
++		return;
++	}
++	_cnputc(c, poll);
++}
+ #endif
+ 
+ static inline void
+@@ -331,7 +399,7 @@ _cnputs(char *c, int size, bool poll)
+ 			if (ch == '\n') {
+ 				if (sweet_log_wanted(sweet_log_line, sweet_log_len) && !disableConsoleOutput) {
+ 					for (int i = 0; i < sweet_log_len; i++) {
+-						_cnputc(sweet_log_line[i], poll);
++						sweet_rename_putc(sweet_log_line[i], poll);
+ 					}
+ 				}
+ 				sweet_log_len = 0;
+@@ -348,7 +416,11 @@ _cnputs(char *c, int size, bool poll)
+ 	assert(c != NULL);
+ 
+ 	while (size-- > 0) {
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++		sweet_rename_putc(*c, poll);
++#else
+ 		_cnputc(*c, poll);
++#endif
+ 		c++;
+ 	}
+ }
+-- 
+2.54.0 (Apple Git-157)
+

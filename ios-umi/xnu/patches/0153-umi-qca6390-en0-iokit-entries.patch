@@ -1,0 +1,323 @@
+From 9bf40d15906b7984e620f471186aea3b9ced3d1e Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 12:19:09 +0100
+Subject: [PATCH] umi-0153
+
+---
+ bsd/dev/sweet_wlif.c           | 55 ++++++++++++-------
+ iokit/Kernel/arm/SweetWLAN.cpp | 97 ++++++++++++++++++++++++++++++++++
+ iokit/conf/files.arm64         |  1 +
+ 3 files changed, 135 insertions(+), 18 deletions(-)
+ create mode 100644 iokit/Kernel/arm/SweetWLAN.cpp
+
+diff --git a/bsd/dev/sweet_wlif.c b/bsd/dev/sweet_wlif.c
+index 1311714..99a8847 100644
+--- a/bsd/dev/sweet_wlif.c
++++ b/bsd/dev/sweet_wlif.c
+@@ -1,5 +1,5 @@
+ /*
+- * umi Wi-Fi bring-up: the BSD network interface wl0 on top of the QCA6390
++ * umi Wi-Fi bring-up: the BSD network interface en0 (wl0 in 0150-0152) on top of the QCA6390
+  * data path (sweet_wldp.c), as sweet_usb.c does for ue0. Frames are Ethernet
+  * both ways: ifnet output copies the mbuf chain into a flat frame for
+  * sweet_wldp_tx, and frames from the REO rings become mbufs for ifnet_input.
+@@ -7,14 +7,19 @@
+  * copy engines and data rings (sweet_wlce.c's htc_poll) every 2 ms under the
+  * same mutex that transmit takes. The address comes from sweet_wlip.c's DHCP
+  * lease (no renewal yet); a DNS query to the router over an ordinary UDP
+- * socket checks that the BSD stack sends and receives through wl0.
+- * 0151: a default route via the router (scoped to wl0 if another default
++ * socket checks that the BSD stack sends and receives through en0.
++ * 0151: a default route via the router (scoped to en0 if another default
+  * route exists, e.g. over ue0), then HTTP HEAD to the address DNS gave for
+  * apple.com over a kernel TCP socket: the first traffic beyond the hotspot.
+  * 0152: DHCP lease renewal from the poll thread (sweet_wlip.c's RENEWING
+  * REQUEST at half the lease, every 60 s after that until an ACK; boot-arg
+  * sweetwlanrenew=<s> renews sooner, for testing), and the HTTP status line is
+  * read up to its end.
++ * 0153: the interface is en0 (iOS's Wi-Fi name) and iokit/Kernel/arm/SweetWLAN.cpp
++ * publishes the IO80211Controller / IONetworkInterface entries configd and
++ * wifid look for. Requests the interface does not handle are logged - the
++ * Apple80211 ones (SIOCGA80211 / SIOCSA80211, 'i' 201 / 200) with their request
++ * type - to learn what wifid asks; none is answered yet.
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <sys/param.h>
+@@ -48,17 +53,19 @@ extern bool sweet_wlip_dhcp_frame(const uint8_t *f, uint32_t n);
+ extern int sweet_wlip_renew(void);
+ extern bool sweet_wlip_renewed(void);
+ extern uint32_t sweet_wlip_lease_secs(void);
++extern int sweet_wlan_publish(const uint8_t mac[6], const char *prefix, uint32_t unit);
+ int sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void));
+ 
+ #define WLIF_FRAME_MAX  (ETHER_MAX_LEN - ETHER_CRC_LEN)
+ 
+ static struct {
+ 	ifnet_t ifp;
+-	unsigned int bound_if;          /* wl0's index when its default route is scoped (0151), else 0 */
++	unsigned int bound_if;          /* en0's index when its default route is scoped (0151), else 0 */
+ 	lck_mtx_t *lock;
+ 	void (*poll)(void);
+ 	uint8_t frame[WLIF_FRAME_MAX];  /* transmit staging, under lock */
+ 	uint64_t rx_frames, tx_frames, tx_drops;
++	uint32_t ioctl_logged;
+ } wl;
+ 
+ /* Called from the poll (lock held): one received Ethernet frame. */
+@@ -144,6 +151,17 @@ wlif_ioctl(ifnet_t ifp, unsigned long cmd, void *data)
+ 	case SIOCDELMULTI:
+ 		return 0;
+ 	default:
++		if (wl.ioctl_logged++ < 200) {
++			unsigned grp = IOCGROUP(cmd), num = cmd & 0xffu, len = IOCPARM_LEN(cmd);
++			if (grp == 'i' && (num == 200 || num == 201) && len >= 28) {
++				const uint32_t *req = (const uint32_t *)((const uint8_t *)data + 16);   /* after if name */
++				printf("SWEET WLIF: Apple80211 %s type %u value %u length %u\n", num == 201 ? "get" : "set",
++				    req[0], req[1], req[2]);
++			} else {
++				printf("SWEET WLIF: ioctl group '%c' (%u) number %u length %u not handled\n",
++				    grp >= 0x20 && grp < 0x7f ? grp : '?', grp, num, len);
++			}
++		}
+ 		return EOPNOTSUPP;
+ 	}
+ }
+@@ -195,7 +213,7 @@ wlif_poll_thread(void *arg __unused, wait_result_t wr __unused)
+ 		}
+ 		delay(2000);
+ 		if (++n % 30000 == 0) {         /* about once a minute */
+-			printf("SWEET WLIF: wl0 rx %llu tx %llu frames, %llu tx dropped\n", wl.rx_frames, wl.tx_frames,
++			printf("SWEET WLIF: en0 rx %llu tx %llu frames, %llu tx dropped\n", wl.rx_frames, wl.tx_frames,
+ 			    wl.tx_drops);
+ 		}
+ 	}
+@@ -213,7 +231,7 @@ wlif_sin(struct sockaddr *sa, uint32_t addr)
+ /*
+  * A DNS A query for apple.com to the router (the hotspot's resolver) from an
+  * ordinary kernel UDP socket: the reply has to come back through ARP, IP and
+- * UDP on wl0. 0 = answer received (rcode and answer count logged).
++ * UDP on en0. 0 = answer received (rcode and answer count logged).
+  */
+ static void
+ wlif_bind(socket_t so)
+@@ -290,7 +308,7 @@ wlif_dns_test(uint32_t router, uint32_t *answer)
+ 			n = 0;
+ 			errno_t re = sock_receive(so, &msg, MSG_DONTWAIT, &n);
+ 			if (re == 0 && n >= 12 && r[0] == 0x53 && r[1] == 0x57) {
+-				printf("SWEET WLIF: DNS reply over wl0: %u bytes, rcode %u, %u answers\n", (unsigned)n, r[3] & 0xfu,
++				printf("SWEET WLIF: DNS reply over en0: %u bytes, rcode %u, %u answers\n", (unsigned)n, r[3] & 0xfu,
+ 				    (unsigned)(r[6] << 8 | r[7]));
+ 				*answer = wlif_dns_a(r, n);
+ 				sock_close(so);
+@@ -302,7 +320,7 @@ wlif_dns_test(uint32_t router, uint32_t *answer)
+ 			delay(10000);
+ 		}
+ 	}
+-	printf("SWEET WLIF: no DNS reply over wl0 (err %d)\n", e);
++	printf("SWEET WLIF: no DNS reply over en0 (err %d)\n", e);
+ 	if (so != NULL) {
+ 		sock_close(so);
+ 	}
+@@ -311,8 +329,8 @@ wlif_dns_test(uint32_t router, uint32_t *answer)
+ 
+ /*
+  * Default route via the router (rtrequest RTM_ADD 0/0, RTF_GATEWAY | RTF_STATIC);
+- * if one already exists (EEXIST), the same route scoped to wl0 and the test
+- * sockets bound to wl0 with IP_BOUND_IF.
++ * if one already exists (EEXIST), the same route scoped to en0 and the test
++ * sockets bound to en0 with IP_BOUND_IF.
+  */
+ static int
+ wlif_default_route(uint32_t router)
+@@ -334,7 +352,7 @@ wlif_default_route(uint32_t router)
+ 		if (e == 0 || e == EEXIST) {
+ 			wl.bound_if = idx;
+ 		}
+-		how = "default route scoped to wl0 (another default exists)";
++		how = "default route scoped to en0 (another default exists)";
+ 	}
+ 	const uint8_t *g = (const uint8_t *)&router;
+ 	printf("SWEET WLIF: %s via %u.%u.%u.%u: err %d\n", how, g[0], g[1], g[2], g[3], e);
+@@ -345,7 +363,7 @@ wlif_default_route(uint32_t router)
+ static int
+ wlif_http_test(uint32_t addr)
+ {
+-	static const char req[] = "HEAD / HTTP/1.0\r\nHost: apple.com\r\nUser-Agent: sweet-wl0\r\n\r\n";
++	static const char req[] = "HEAD / HTTP/1.0\r\nHost: apple.com\r\nUser-Agent: sweet-en0\r\n\r\n";
+ 	const uint8_t *a = (const uint8_t *)&addr;
+ 	socket_t so = NULL;
+ 	struct sockaddr_in to;
+@@ -396,7 +414,7 @@ wlif_http_test(uint32_t addr)
+ 				k++;
+ 			}
+ 			r[k] = 0;
+-			printf("SWEET WLIF: HTTP reply over wl0: \"%s\"\n", r);
++			printf("SWEET WLIF: HTTP reply over en0: \"%s\"\n", r);
+ 			sock_close(so);
+ 			return 0;
+ 		}
+@@ -409,7 +427,7 @@ wlif_http_test(uint32_t addr)
+ 			delay(10000);
+ 		}
+ 	}
+-	printf("SWEET WLIF: no HTTP reply over wl0 (err %d)\n", e);
++	printf("SWEET WLIF: no HTTP reply over en0 (err %d)\n", e);
+ 	if (so != NULL) {
+ 		sock_close(so);
+ 	}
+@@ -417,7 +435,7 @@ wlif_http_test(uint32_t addr)
+ }
+ 
+ /*
+- * wl0 with the DHCP lease (all addresses in network byte order), then the poll
++ * en0 with the DHCP lease (all addresses in network byte order), then the poll
+  * thread, the DNS check, the default route and the HTTP check. 0 = HTTP status
+  * line received, 1 = no DNS reply, 2-4 = the interface could not be created,
+  * attached or addressed, 5 = no default route, 6 = no A record, 7 = no HTTP reply.
+@@ -436,7 +454,7 @@ sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t r
+ 	init.flags = IFNET_INIT_LEGACY;
+ 	init.uniqueid = "sweet-qca6390";
+ 	init.uniqueid_len = sizeof("sweet-qca6390") - 1;
+-	init.name = "wl";
++	init.name = "en";
+ 	init.unit = 0;
+ 	init.family = IFNET_FAMILY_ETHERNET;
+ 	init.type = IFT_ETHER;
+@@ -478,7 +496,7 @@ sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t r
+ 	if (err == 0) {
+ 		struct ifaliasreq ifra;
+ 		bzero(&ifra, sizeof(ifra));
+-		snprintf(ifra.ifra_name, sizeof(ifra.ifra_name), "wl0");
++		snprintf(ifra.ifra_name, sizeof(ifra.ifra_name), "en0");
+ 		wlif_sin(&ifra.ifra_addr, addr);
+ 		wlif_sin(&ifra.ifra_mask, mask);
+ 		wlif_sin(&ifra.ifra_broadaddr, addr | ~mask);
+@@ -487,8 +505,9 @@ sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t r
+ 	}
+ 	ifnet_set_flags(wl.ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
+ 	dlil_post_msg(wl.ifp, KEV_DL_SUBCLASS, KEV_DL_LINK_ON, NULL, 0, FALSE);
++	(void)sweet_wlan_publish(mac, "en", 0);
+ 	const uint8_t *a = (const uint8_t *)&addr;
+-	printf("SWEET WLIF: wl0 %u.%u.%u.%u/%u %s (err %d)\n", a[0], a[1], a[2], a[3], (unsigned)__builtin_popcount(mask),
++	printf("SWEET WLIF: en0 %u.%u.%u.%u/%u %s (err %d)\n", a[0], a[1], a[2], a[3], (unsigned)__builtin_popcount(mask),
+ 	    err ? "NOT configured" : "up", err);
+ 	if (err != 0) {
+ 		return 4;
+diff --git a/iokit/Kernel/arm/SweetWLAN.cpp b/iokit/Kernel/arm/SweetWLAN.cpp
+new file mode 100644
+index 0000000..b9c0488
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetWLAN.cpp
+@@ -0,0 +1,97 @@
++/*
++ * umi Wi-Fi: the registry entries by which iOS user space finds en0 (bsd/dev/sweet_wlif.c).
++ *
++ * en0 is made with the BSD interface KPI, so IONetworkingFamily / IO80211Family (not in this
++ * kernel) never publish objects for it. Two consumers look for them:
++ *  - SystemConfiguration (configd-1241 SCNetworkInterface.c createInterface /
++ *    processNetworkInterface): IOServiceMatching("IONetworkInterface"); IOInterfaceType 6 with a
++ *    parent conforming to "IO80211Controller" is Wi-Fi (kSCNetworkInterfaceTypeIEEE80211); the BSD
++ *    name, IOInterfaceNamePrefix / IOInterfaceUnit and IOBuiltin come from the interface, IOMACAddress
++ *    from the controller, and the controller's "SelfNamed" makes InterfaceNamer leave the name
++ *    alone (ifnamer.c: "Ignoring self-named interface") - our IONetworkStack cannot name anything.
++ *  - wifid / IO80211.framework: a service with IO80211InterfaceRole "Infrastructure" whose
++ *    IOInterfaceName is the BSD name. No user client is offered, so the framework falls back to
++ *    the ioctl path (SIOCGA80211 / SIOCSA80211 on a socket), which reaches en0's ioctl handler.
++ * Both classes carry properties only; they are named as Apple's families name theirs.
++ */
++#include <pexpert/arm64/board_config.h>
++
++#if defined(SWEET)
++#include <IOKit/IOLib.h>
++#include <IOKit/IOService.h>
++#include <IOKit/IOPlatformExpert.h>
++#include <libkern/c++/OSData.h>
++#include <libkern/c++/OSNumber.h>
++#include <libkern/c++/OSString.h>
++#include <libkern/c++/OSBoolean.h>
++
++class IO80211Controller : public IOService {
++	OSDeclareDefaultStructors(IO80211Controller);
++};
++
++OSDefineMetaClassAndStructors(IO80211Controller, IOService);
++
++class IONetworkInterface : public IOService {
++	OSDeclareDefaultStructors(IONetworkInterface);
++};
++
++OSDefineMetaClassAndStructors(IONetworkInterface, IOService);
++
++static void
++sweet_wlan_num(IOService *s, const char *key, uint32_t v)
++{
++	OSNumber *n = OSNumber::withNumber(v, 32);
++	if (n != NULL) {
++		s->setProperty(key, n);
++		n->release();
++	}
++}
++
++/* Called once by sweet_wlif.c when en0 is attached; prefix "en", unit from the BSD name. */
++extern "C" int
++sweet_wlan_publish(const uint8_t mac[6], const char *prefix, uint32_t unit)
++{
++	IOService *bus = IOService::getPlatform();
++	IO80211Controller *ctl = OSTypeAlloc(IO80211Controller);
++	IONetworkInterface *ifc = OSTypeAlloc(IONetworkInterface);
++	char bsd[16];
++	snprintf(bsd, sizeof(bsd), "%s%u", prefix, unit);
++	if (bus == NULL || ctl == NULL || ifc == NULL || !ctl->init() || !ifc->init()) {
++		OSSafeReleaseNULL(ctl);
++		OSSafeReleaseNULL(ifc);
++		return 1;
++	}
++	ctl->setName("wlan");
++	ctl->setProperty("IOMACAddress", (void *)mac, 6);
++	ctl->setProperty("SelfNamed", kOSBooleanTrue);
++	ctl->setProperty("IOVendor", "Qualcomm");
++	ctl->setProperty("IOModel", "QCA6390");
++	ifc->setName(bsd);
++	ifc->setProperty("BSD Name", bsd);
++	ifc->setProperty("IOInterfaceName", bsd);
++	ifc->setProperty("IOInterfaceNamePrefix", prefix);
++	sweet_wlan_num(ifc, "IOInterfaceUnit", unit);
++	sweet_wlan_num(ifc, "IOInterfaceType", 6);         /* IFT_ETHER */
++	sweet_wlan_num(ifc, "IOMaxTransferUnit", 1500);
++	sweet_wlan_num(ifc, "IOMediaAddressLength", 6);
++	sweet_wlan_num(ifc, "IOMediaHeaderLength", 14);
++	ifc->setProperty("IOBuiltin", kOSBooleanTrue);
++	ifc->setProperty("IOPrimaryInterface", kOSBooleanTrue);
++	ifc->setProperty("IOLocation", "");
++	ifc->setProperty("IO80211InterfaceRole", "Infrastructure");
++	int r = 2;
++	if (ctl->attach(bus)) {
++		ctl->registerService();
++		if (ifc->attach(ctl)) {
++			ifc->registerService();
++			r = 0;
++		}
++	}
++	IOLog("SWEET WLAN: IO80211Controller + IONetworkInterface %s published: %d\n", bsd, r);
++	ctl->release();
++	ifc->release();
++	return r;
++}
++#else
++extern "C" int sweet_wlan_publish(const uint8_t *, const char *, uint32_t) { return 1; }
++#endif
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+index 76306b9..aabe7dc 100644
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -17,6 +17,7 @@ iokit/Kernel/arm/SweetSurface.cpp                                optional iokitc
+ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitcpp
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetBusy.cpp                                   optional iokitcpp
++iokit/Kernel/arm/SweetWLAN.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEventServiceQueue.cpp                  optional iokitcpp
+-- 
+2.54.0 (Apple Git-157)
+

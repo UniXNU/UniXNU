@@ -1,0 +1,756 @@
+From 716839d19da5e4e25fb1f2d699d7d985b827ec2d Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 17:56:38 +0100
+Subject: [PATCH] umi: start the sensor DSP (SLPI) - first step to the light
+ sensor
+
+Every Mi 10 sensor, the ambient light sensor included, sits behind the
+SLPI. bsd/dev/sweet_slpi.c (boot-arg sweetslpi=1, after sweetslpidelay
+seconds) follows Linux qcom_q6v5_pas (sm8250 slpi), mdt_loader.c,
+qcom_aoss.c and smem.c: firmware from /private/var/sweet/slpi/ (the
+phone's modem partition), AOP QMP "load_state slpi on" (msgram 0xc300000,
+IPCC client 0 signal 0), lcx/lmx at their top level (new
+sweet_rpmh_arc_vote_max), pas_init_image / pas_mem_setup(12, 0x88c00000,
+0x2f00000), the 20 relocatable segments copied through a 2 MiB window of
+kernel address space (an ml_io_map of 47 MiB panicked, and ml_io_map
+windows cannot be unmapped), pas_auth_and_reset(12). Then SMEM is read:
+the APPS-SLPI partition's items, the SMP2P entries (item 481) and the
+crash reason (item 424).
+
+On the phone the SLPI starts: it creates its SMP2P item (481), the GLINK
+descriptor (478) and its FIFO (480) and waits for ours.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/conf/files                        |   1 +
+ bsd/dev/sweet_rpmh.c                  |  39 ++
+ bsd/dev/sweet_slpi.c                  | 608 ++++++++++++++++++++++++++
+ iokit/Kernel/arm/SweetFramebuffer.cpp |   2 +
+ 4 files changed, 650 insertions(+)
+ create mode 100644 bsd/dev/sweet_slpi.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index c1c5b37..ed3c73d 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -129,6 +129,7 @@ bsd/dev/redwood_sta.c			standard
+ bsd/dev/redwood_apple80211.c		standard
+ bsd/dev/sweet_wlsta.c			standard
+ bsd/dev/sweet_wlsec.c			standard
++bsd/dev/sweet_slpi.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+index de1b22a..05fdf09 100644
+--- a/bsd/dev/sweet_rpmh.c
++++ b/bsd/dev/sweet_rpmh.c
+@@ -15,6 +15,7 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
++int sweet_rpmh_arc_vote_max(const char *res);
+ bool sweet_board_is_umi(void);
+ 
+ /*
+@@ -83,6 +84,7 @@ sweet_board_is_umi(void)
+ #define RH_DB_HEADER    144u
+ #define RH_DB_ENTRY     24u
+ #define RH_DB_MAX       0x100000u /* policy bound, not a DT size */
++#define RH_ARC          3u      /* cmd-db slave id of power-level (ARC) resources */
+ #define RH_VRM          4u
+ #define RH_BCM          5u      /* cmd-db slave id of bandwidth/clock voters */
+ #define RH_TIMEOUT_US   100000u
+@@ -206,6 +208,8 @@ rh_map(void)
+ 	return 0;
+ }
+ 
++static unsigned rh_last_aux_len;        /* aux bytes of the last match: ARC level table */
++
+ static int
+ rh_lookup_type(const char *res, uint32_t *address, unsigned want)
+ {
+@@ -240,6 +244,7 @@ rh_lookup_type(const char *res, uint32_t *address, unsigned want)
+ 				return EINVAL;
+ 			}
+ 			*address = addr;
++			rh_last_aux_len = rh_db16(e + 20);
+ 			++matches;
+ 			printf("SWEET RPMH: %s addr=%#x slave=%u aux-version=%#x priority=%#x:%#x\n",
+ 			    res, addr, slave, rh_db16(h + 8),
+@@ -503,4 +508,38 @@ sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y)
+ 	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
+ 	return error;
+ }
++
++/*
++ * Power-level (ARC) vote at the resource's highest level, as Linux rpmhpd's proxy votes
++ * (performance state INT_MAX -> the last entry of the cmd-db level table, u16 each).
++ * umi: lcx / lmx for the sensor DSP (SLPI) while it starts (qcom_q6v5_pas proxy_pd).
++ */
++int
++sweet_rpmh_arc_vote_max(const char *res)
++{
++	if (!sweet_board_is_umi() || !res || (strcmp(res, "lcx.lvl") && strcmp(res, "lmx.lvl"))) {
++		return EINVAL;
++	}
++	if (__atomic_exchange_n(&rh_lock, 1, __ATOMIC_ACQUIRE)) {
++		return EBUSY;
++	}
++	int error = EIO;
++	uint32_t address = 0, level = 0;
++	if (!rh_poisoned) {
++		error = rh_map();
++		if (!error) {
++			error = rh_lookup_type(res, &address, RH_ARC);
++		}
++		if (!error && rh_last_aux_len < 2) {
++			error = ENODEV;
++		}
++		if (!error) {
++			level = rh_last_aux_len / 2 - 1;
++			error = rh_send_cmds(address, &address, &level, 1, "ARC level");
++		}
++	}
++	printf("SWEET RPMH: %s ARC level index %u at %#x -> %d\n", res, level, address, error);
++	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
++	return error;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+new file mode 100644
+index 0000000..fcba224
+--- /dev/null
++++ b/bsd/dev/sweet_slpi.c
+@@ -0,0 +1,608 @@
++/*
++ * SWEET umi: start the sensor DSP (SLPI), first step towards the ambient light
++ * sensor (auto-brightness). Every sensor of the Mi 10 hangs off the SLPI; Linux
++ * reaches them through GLINK + QRTR + the SEE QMI service once the SLPI runs.
++ *
++ * What runs here (boot-arg sweetslpi=1, after sweetslpidelay seconds, default 60):
++ *   - firmware from the iOS root: /private/var/sweet/slpi/slpi.mdt + slpi.bNN (the
++ *     phone's modem partition, image/; not in git)
++ *   - AOP: "{class: image, res: load_state, name: slpi, val: on}" over the QMP
++ *     mailbox (Linux qcom_aoss.c; msgram 0xc300000, doorbell IPCC client 0 signal 0)
++ *   - RPMh: lcx.lvl and lmx.lvl at their highest level (Linux qcom_q6v5_pas sm8250
++ *     slpi proxy power domains)
++ *   - TrustZone: pas_init_image(12, slpi.mdt), pas_mem_setup(12, 0x88c00000,
++ *     0x2f00000 = dt pil_slpi_region), the loadable segments relocated into that
++ *     region (Linux mdt_loader.c), pas_auth_and_reset(12)
++ *   - then watch SMEM: the SLPI's SMP2P entry "slave-kernel" (item 481: bit 0
++ *     err-fatal, 1 ready, 2 handover, 3 stop-ack; dt smp2p-dsps) and the crash
++ *     reason (item 424). Linux smem.c / smp2p.c layouts.
++ * The proxy votes stay on (Linux drops them at handover). Nothing talks to the
++ * SLPI yet (no GLINK).
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <sys/fcntl.h>
++#include <sys/proc.h>
++#include <sys/vnode.h>
++#include <sys/vnode_internal.h>
++#include <sys/kernel.h>
++#include <sys/uio.h>
++#include <kern/kalloc.h>
++#include <kern/thread.h>
++#include <vm/vm_kern.h>
++#include <vm/pmap.h>
++#include <pexpert/pexpert.h>
++#include <machine/machine_routines.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
++extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
++#include <arm/caches_internal.h>
++extern bool sweet_board_is_umi(void);
++extern int sweet_rpmh_arc_vote_max(const char *res);
++extern void IOSleep(unsigned int milliseconds);
++extern kern_return_t thread_terminate(thread_t);
++void sweet_slpi_start(void);
++
++#define SL_DIR                  "/private/var/sweet/slpi/"
++#define SL_PAS_ID               12
++#define SL_REGION               0x88c00000ull
++#define SL_REGION_SIZE          0x2f00000u
++#define SL_MDT_MAX              (64 * 1024)
++#define SL_SEGMENTS_MAX         64
++
++#define SL_IPCC                 0x00408000ull
++#define SL_IPCC_SEND_ID         0x0c
++#define SL_AOP_MSGRAM           0x0c300000ull
++#define SL_SMEM                 0x80900000ull
++#define SL_SMEM_SIZE            0x200000u
++
++static void
++sl_sleep_ms(unsigned ms)
++{
++	IOSleep(ms);
++}
++
++/* ---- IPCC doorbell (Linux qcom-ipcc.c) ---- */
++
++static volatile uint32_t *sl_ipcc;
++
++static void
++sl_ipcc_ring(uint32_t client, uint32_t signal)
++{
++	if (sl_ipcc == NULL) {
++		sl_ipcc = (volatile uint32_t *)ml_io_map(SL_IPCC, 0x1000);
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sl_ipcc[SL_IPCC_SEND_ID / 4] = (client << 16) | (signal & 0xffff);
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++/* ---- AOP QMP (Linux qcom_aoss.c) ---- */
++
++#define QMP_MAGIC               0x4d41494c
++#define QMP_STATE_UP            0x0000ffffu
++#define QMP_DESC_MAGIC          0x00
++#define QMP_DESC_VERSION        0x04
++#define QMP_DESC_UCORE_LINK_STATE       0x0c
++#define QMP_DESC_UCORE_LINK_STATE_ACK   0x10
++#define QMP_DESC_UCORE_CH_STATE         0x14
++#define QMP_DESC_UCORE_CH_STATE_ACK     0x18
++#define QMP_DESC_MCORE_LINK_STATE       0x24
++#define QMP_DESC_MCORE_LINK_STATE_ACK   0x28
++#define QMP_DESC_MCORE_CH_STATE         0x2c
++#define QMP_DESC_MCORE_CH_STATE_ACK     0x30
++#define QMP_DESC_MCORE_MBOX_SIZE        0x34
++#define QMP_DESC_MCORE_MBOX_OFFSET      0x38
++
++static volatile uint32_t *sl_qmp;
++
++static uint32_t
++sl_qmp_rd(uint32_t off)
++{
++	return sl_qmp[off / 4];
++}
++
++static void
++sl_qmp_wr(uint32_t off, uint32_t v)
++{
++	sl_qmp[off / 4] = v;
++	__asm__ volatile ("dsb sy" ::: "memory");
++}
++
++static bool
++sl_qmp_wait(uint32_t off, uint32_t want)
++{
++	for (int i = 0; i < 1000; i++) {
++		if (sl_qmp_rd(off) == want) {
++			return true;
++		}
++		sl_sleep_ms(1);
++	}
++	return false;
++}
++
++static int
++sl_qmp_send(const char *msg)
++{
++	if (sl_qmp == NULL) {
++		sl_qmp = (volatile uint32_t *)ml_io_map(SL_AOP_MSGRAM, 0x1000);
++	}
++	uint32_t magic = sl_qmp_rd(QMP_DESC_MAGIC), version = sl_qmp_rd(QMP_DESC_VERSION);
++	uint32_t off = sl_qmp_rd(QMP_DESC_MCORE_MBOX_OFFSET), size = sl_qmp_rd(QMP_DESC_MCORE_MBOX_SIZE);
++	printf("SWEET SLPI: AOP QMP magic %#x version %u mbox %#x+%#x link %#x/%#x ch %#x/%#x\n", magic, version,
++	    off, size, sl_qmp_rd(QMP_DESC_MCORE_LINK_STATE), sl_qmp_rd(QMP_DESC_UCORE_LINK_STATE),
++	    sl_qmp_rd(QMP_DESC_MCORE_CH_STATE), sl_qmp_rd(QMP_DESC_UCORE_CH_STATE));
++	if (magic != QMP_MAGIC || version != 1 || size < 8 || off + size > 0x1000) {
++		return ENODEV;
++	}
++	if (sl_qmp_rd(QMP_DESC_MCORE_CH_STATE_ACK) != QMP_STATE_UP) {
++		/* qmp_open: ack the remote link, raise ours, then the channels both ways */
++		sl_qmp_wr(QMP_DESC_UCORE_LINK_STATE_ACK, sl_qmp_rd(QMP_DESC_UCORE_LINK_STATE));
++		sl_qmp_wr(QMP_DESC_MCORE_LINK_STATE, QMP_STATE_UP);
++		sl_ipcc_ring(0, 0);
++		if (!sl_qmp_wait(QMP_DESC_MCORE_LINK_STATE_ACK, QMP_STATE_UP)) {
++			printf("SWEET SLPI: AOP did not ack our link\n");
++			return ETIMEDOUT;
++		}
++		sl_qmp_wr(QMP_DESC_MCORE_CH_STATE, QMP_STATE_UP);
++		sl_ipcc_ring(0, 0);
++		if (!sl_qmp_wait(QMP_DESC_UCORE_CH_STATE, QMP_STATE_UP)) {
++			printf("SWEET SLPI: AOP channel not up\n");
++			return ETIMEDOUT;
++		}
++		sl_qmp_wr(QMP_DESC_UCORE_CH_STATE_ACK, QMP_STATE_UP);
++		sl_ipcc_ring(0, 0);
++		if (!sl_qmp_wait(QMP_DESC_MCORE_CH_STATE_ACK, QMP_STATE_UP)) {
++			printf("SWEET SLPI: AOP did not ack our channel\n");
++			return ETIMEDOUT;
++		}
++		printf("SWEET SLPI: AOP QMP link opened\n");
++	}
++	size_t len = strlen(msg) + 1, padded = (len + 3) & ~(size_t)3;
++	if (padded + 4 > size) {
++		return E2BIG;
++	}
++	if (sl_qmp_rd(off) != 0) {
++		printf("SWEET SLPI: AOP mailbox busy (%#x)\n", sl_qmp_rd(off));
++		return EBUSY;
++	}
++	uint32_t words[32] = { 0 };
++	memcpy(words, msg, len);
++	for (size_t i = 0; i < padded / 4; i++) {
++		sl_qmp[(off + 4) / 4 + i] = words[i];
++	}
++	sl_qmp_wr(off, (uint32_t)padded);
++	sl_ipcc_ring(0, 0);
++	bool taken = sl_qmp_wait(off, 0);
++	printf("SWEET SLPI: AOP \"%s\" %s\n", msg, taken ? "taken" : "NOT taken");
++	return taken ? 0 : ETIMEDOUT;
++}
++
++/* ---- SMEM (Linux smem.c), read only ---- */
++
++static volatile uint8_t *sl_smem;
++
++static uint32_t
++sl_rd32(uint32_t off)
++{
++	return *(volatile uint32_t *)(sl_smem + off);
++}
++
++static uint16_t
++sl_rd16(uint32_t off)
++{
++	return *(volatile uint16_t *)(sl_smem + off);
++}
++
++/* Item in the partition shared by hosts a and b (0xfffe both = global); offset or 0. */
++static uint32_t
++sl_smem_get(uint16_t a, uint16_t b, uint16_t item, uint32_t *size)
++{
++	if (sl_smem == NULL) {
++		sl_smem = (volatile uint8_t *)ml_io_map(SL_SMEM, SL_SMEM_SIZE);
++	}
++	uint32_t pt = SL_SMEM_SIZE - 0x1000;
++	if (sl_rd32(pt) != 0x434f5424) {        /* "$TOC" */
++		return 0;
++	}
++	uint32_t n = sl_rd32(pt + 8);
++	for (uint32_t i = 0; i < n && i < 64; i++) {
++		uint32_t e = pt + 32 + 48 * i;
++		uint16_t h0 = sl_rd16(e + 12), h1 = sl_rd16(e + 14);
++		if (!((h0 == a && h1 == b) || (h0 == b && h1 == a))) {
++			continue;
++		}
++		uint32_t p = sl_rd32(e), psize = sl_rd32(e + 4);
++		if (p == 0 || p + psize > SL_SMEM_SIZE || sl_rd32(p) != 0x54525024) {    /* "$PRT" */
++			return 0;
++		}
++		uint32_t end = p + sl_rd32(p + 12);     /* offset_free_uncached */
++		for (uint32_t q = p + 32; q + 16 <= end;) {
++			if (sl_rd16(q) != 0xa5a5) {
++				break;
++			}
++			uint32_t isize = sl_rd32(q + 4);
++			uint16_t pad_data = sl_rd16(q + 8), pad_hdr = sl_rd16(q + 10);
++			if (sl_rd16(q + 2) == item) {
++				*size = isize - pad_data;
++				return q + 16 + pad_hdr;
++			}
++			q += 16 + pad_hdr + isize;
++		}
++		return 0;
++	}
++	return 0;
++}
++
++/*
++ * The SLPI's SMP2P entry "slave-kernel" (item 481, between hosts 0 and 3), or ~0. Linux
++ * smp2p.c reads dt qcom,smem = <481 430> as { inbound, outbound }.
++ */
++static uint32_t
++sl_smp2p_value(bool log)
++{
++	uint32_t size = 0, it = sl_smem_get(0, 3, 481, &size);
++	if (it == 0 || sl_rd32(it) != 0x504d5324) {     /* "$SMP" */
++		return ~0u;
++	}
++	uint16_t valid = sl_rd16(it + 14);
++	for (uint16_t i = 0; i < valid && i < 16; i++) {
++		uint32_t e = it + 20 + 20 * i;
++		char name[17];
++		for (int c = 0; c < 16; c++) {
++			name[c] = (char)sl_smem[e + c];
++		}
++		name[16] = 0;
++		if (log) {
++			printf("SWEET SLPI: smp2p in entry %u \"%s\" = %#x\n", i, name, sl_rd32(e + 16));
++		}
++		if (strcmp(name, "slave-kernel") == 0) {
++			return sl_rd32(e + 16);
++		}
++	}
++	return ~0u;
++}
++
++/* Every item in the APPS-SLPI partition (GLINK's 478-480, SMP2P's 430 / 481 ...). */
++static void
++sl_smem_list(void)
++{
++	uint32_t pt = SL_SMEM_SIZE - 0x1000;
++	if (sl_smem == NULL || sl_rd32(pt) != 0x434f5424) {
++		return;
++	}
++	for (uint32_t i = 0; i < sl_rd32(pt + 8) && i < 64; i++) {
++		uint32_t e = pt + 32 + 48 * i;
++		uint16_t h0 = sl_rd16(e + 12), h1 = sl_rd16(e + 14);
++		if (!((h0 == 0 && h1 == 3) || (h0 == 3 && h1 == 0))) {
++			continue;
++		}
++		uint32_t p = sl_rd32(e), end = p + sl_rd32(p + 12);
++		printf("SWEET SLPI: SMEM partition %u-%u at %#x, %#x bytes, uncached end %#x\n", h0, h1, p, sl_rd32(e + 4),
++		    sl_rd32(p + 12));
++		for (uint32_t q = p + 32; q + 16 <= end && sl_rd16(q) == 0xa5a5;) {
++			uint32_t isize = sl_rd32(q + 4);
++			printf("SWEET SLPI:   item %u, %u bytes\n", sl_rd16(q + 2), isize - sl_rd16(q + 8));
++			q += 16 + sl_rd16(q + 10) + isize;
++		}
++	}
++}
++
++static void
++sl_crash_reason(void)
++{
++	uint32_t size = 0, it = sl_smem_get(0xfffe, 0xfffe, 424, &size);
++	if (it == 0 || size == 0) {
++		printf("SWEET SLPI: no crash reason in SMEM\n");
++		return;
++	}
++	char text[161];
++	uint32_t n = size < 160 ? size : 160;
++	for (uint32_t i = 0; i < n; i++) {
++		char c = (char)sl_smem[it + i];
++		text[i] = (c >= 32 && c < 127) ? c : (c == 0 ? 0 : '.');
++	}
++	text[n] = 0;
++	printf("SWEET SLPI: crash reason (item 424, %u bytes): \"%s\"\n", size, text);
++}
++
++/* ---- TrustZone (Linux qcom_scm-smc.c; same calls as the GPU zap shader) ---- */
++
++#define SCM_64                  (1ull << 30)
++#define SCM_SIP                 (2ull << 24)
++#define SCM_CALL(service, command) ((uint64_t)(service) << 8 | (command))
++#define SCM_PAS_INIT_IMAGE      SCM_CALL(2, 1)
++#define SCM_PAS_MEM_SETUP       SCM_CALL(2, 2)
++#define SCM_PAS_AUTH_AND_RESET  SCM_CALL(2, 5)
++#define SCM_PAS_SHUTDOWN        SCM_CALL(2, 6)
++#define SCM_ONE_VALUE           1
++#define SCM_THREE_VALUES        3
++#define SCM_VALUE_AND_BUFFER    (2 | 2 << 6)
++#define SCM_INTERRUPTED         1
++
++static int32_t
++sl_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t a, uint64_t b, uint64_t c)
++{
++	uint64_t session = 0;
++	for (int i = 0; i < 1000; i++) {
++		register uint64_t x0 __asm__("x0") = i == 0 ? (SCM_64 | SCM_SIP | function) : SCM_INTERRUPTED;
++		register uint64_t x1 __asm__("x1") = arguments;
++		register uint64_t x2 __asm__("x2") = a;
++		register uint64_t x3 __asm__("x3") = b;
++		register uint64_t x4 __asm__("x4") = c;
++		register uint64_t x5 __asm__("x5") = 0;
++		register uint64_t x6 __asm__("x6") = session;
++		register uint64_t x7 __asm__("x7") = 0;
++		__asm__ volatile ("smc #0" : "+r" (x0), "+r" (x1), "+r" (x2), "+r" (x3), "+r" (x4), "+r" (x5), "+r" (x6),
++		    "+r" (x7) : : "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
++		session = x6;
++		if (x0 != SCM_INTERRUPTED) {
++			printf("SWEET SLPI: TrustZone %s -> %d, answer %#llx\n", what, (int32_t)x0, x1);
++			return (int32_t)x0 != 0 ? (int32_t)x0 : (int32_t)x1;
++		}
++	}
++	printf("SWEET SLPI: TrustZone %s: still interrupted\n", what);
++	return -1;
++}
++
++/* ---- firmware files ---- */
++
++static uint8_t *
++sl_read(const char *name, size_t *size_out)
++{
++	char path[96];
++	snprintf(path, sizeof(path), SL_DIR "%s", name);
++	vfs_context_t ctx = vfs_context_kernel();
++	vnode_t vp = NULLVP;
++	off_t size = 0;
++	int err = vnode_open(path, FREAD, 0, 0, &vp, ctx);
++	if (!err) {
++		err = vnode_size(vp, &size, ctx);
++	}
++	uint8_t *buf = NULL;
++	if (!err && size > 0 && size < 16 * 1024 * 1024) {
++		buf = kalloc_data((vm_size_t)size, Z_WAITOK);
++		int resid = 0;
++		err = buf == NULL ? ENOMEM : vn_rdwr(UIO_READ, vp, (caddr_t)buf, (int)size, 0, UIO_SYSSPACE, IO_UNIT,
++		    vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
++		if (!err && resid != 0) {
++			err = EIO;
++		}
++	}
++	if (vp != NULLVP) {
++		vnode_close(vp, FREAD, ctx);
++	}
++	if (err || buf == NULL) {
++		if (buf != NULL) {
++			kfree_data(buf, (vm_size_t)size);
++		}
++		printf("SWEET SLPI: %s: error %d\n", path, err);
++		return NULL;
++	}
++	*size_out = (size_t)size;
++	return buf;
++}
++
++/* ---- the start ---- */
++
++/*
++ * The 47 MiB region through a 2 MiB window of kernel address space whose pages are
++ * pointed at each part in turn (pmap_enter / pmap_remove). One ml_io_map of all of it
++ * panicked (kmem_alloc of 0x2f00000 bytes of I/O space, 0208), and ml_io_map windows
++ * cannot be given back (permanent map entries: vm_map_delete panic, 0208b).
++ */
++#define SL_WINDOW               0x200000u
++#define VM_WIMG_WCOMB_SL        0x6     /* arm/memory_types.h VM_WIMG_WCOMB */
++
++extern kern_return_t pmap_enter(pmap_t, vm_map_offset_t, ppnum_t, vm_prot_t, vm_prot_t, unsigned int, boolean_t);
++extern void pmap_remove(pmap_t, vm_map_offset_t, vm_map_offset_t);
++
++static vm_offset_t sl_window;
++
++static int
++sl_region_write(uint64_t at, const uint8_t *data, uint32_t filesz, uint32_t memsz)
++{
++	if (sl_window == 0 && kmem_alloc(kernel_map, &sl_window, SL_WINDOW, KMA_VAONLY | KMA_PERMANENT,
++	    VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		sl_window = 0;
++		return ENOMEM;
++	}
++	for (uint64_t b = 0; b < memsz;) {
++		uint64_t base = (at + b) & ~(uint64_t)(SL_WINDOW - 1);
++		uint64_t end = MIN(base + SL_WINDOW, at + memsz);
++		uint64_t pages = (end - base + PAGE_SIZE - 1) & ~(uint64_t)PAGE_MASK;
++		for (uint64_t o = 0; o < pages; o += PAGE_SIZE) {
++			if (pmap_enter(kernel_pmap, sl_window + o, (ppnum_t)atop_64(SL_REGION + base + o),
++			    VM_PROT_READ | VM_PROT_WRITE, VM_PROT_NONE, VM_WIMG_WCOMB_SL, TRUE) != KERN_SUCCESS) {
++				pmap_remove(kernel_pmap, sl_window, sl_window + o);
++				return EFAULT;
++			}
++		}
++		volatile uint8_t *w = (volatile uint8_t *)sl_window;
++		for (; at + b < end; b += 8) {          /* aligned 8-byte stores: write-combined memory */
++			uint64_t v = 0;
++			if (b < filesz) {
++				memcpy(&v, data + b, MIN(8u, filesz - (uint32_t)b));
++			}
++			*(volatile uint64_t *)(w + (at + b - base)) = v;
++		}
++		__asm__ volatile ("dsb sy" ::: "memory");
++		pmap_remove(kernel_pmap, sl_window, sl_window + pages);
++	}
++	return 0;
++}
++
++static int
++sl_load_and_start(void)
++{
++	size_t mdt_size = 0;
++	uint8_t *mdt = sl_read("slpi.mdt", &mdt_size);
++	if (mdt == NULL) {
++		return ENOENT;
++	}
++	int err = EINVAL;
++	uint32_t phoff = 0, phnum = 0;
++	if (mdt_size >= 52 && memcmp(mdt, "\177ELF\1", 5) == 0) {
++		memcpy(&phoff, mdt + 28, 4);
++		phnum = (uint32_t)(mdt[44] | mdt[45] << 8);
++	}
++	if (phnum == 0 || phnum > SL_SEGMENTS_MAX || phoff + 32 * phnum > mdt_size || mdt_size > SL_MDT_MAX) {
++		printf("SWEET SLPI: slpi.mdt is not the expected ELF header (%zu bytes, %u segments)\n", mdt_size, phnum);
++		goto out;
++	}
++	/* lowest physical address of the loadable segments = the start of the region (relocatable image) */
++	uint64_t min_addr = ~0ull, max_addr = 0;
++	for (uint32_t i = 0; i < phnum; i++) {
++		const uint8_t *ph = mdt + phoff + 32 * i;
++		uint32_t type, paddr, memsz, flags;
++		memcpy(&type, ph, 4);
++		memcpy(&paddr, ph + 12, 4);
++		memcpy(&memsz, ph + 20, 4);
++		memcpy(&flags, ph + 24, 4);
++		if (type != 1 || (flags & 0x7000000) == 0x2000000 || memsz == 0) {
++			continue;       /* not PT_LOAD, or the hash segment */
++		}
++		min_addr = MIN(min_addr, paddr);
++		max_addr = MAX(max_addr, (uint64_t)paddr + memsz);
++	}
++	printf("SWEET SLPI: slpi.mdt %zu bytes, %u segments, image %#llx-%#llx (%#llx bytes) -> %#llx\n", mdt_size, phnum,
++	    min_addr, max_addr, max_addr - min_addr, SL_REGION);
++	if (min_addr == ~0ull || max_addr - min_addr > SL_REGION_SIZE) {
++		goto out;
++	}
++
++	/* proxy votes, as Linux before loading */
++	(void)sl_qmp_send("{class: image, res: load_state, name: slpi, val: on}");
++	(void)sweet_rpmh_arc_vote_max("lcx.lvl");
++	(void)sweet_rpmh_arc_vote_max("lmx.lvl");
++
++	/* the header (+ hashes) in contiguous memory for TrustZone; kept for good */
++	vm_offset_t meta = 0;
++	if (kmem_alloc_contig(kernel_map, &meta, round_page(mdt_size), PAGE_MASK, 0, 0,
++	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		err = ENOMEM;
++		goto out;
++	}
++	memcpy((void *)meta, mdt, mdt_size);
++	flush_dcache64((addr64_t)meta, (unsigned)round_page(mdt_size), FALSE);
++	uint64_t meta_phys = ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)meta));
++	if (sl_scm("pas_init_image(12)", SCM_PAS_INIT_IMAGE, SCM_VALUE_AND_BUFFER, SL_PAS_ID, meta_phys, 0) != 0) {
++		err = EPERM;
++		goto out;
++	}
++	if (sl_scm("pas_mem_setup(12)", SCM_PAS_MEM_SETUP, SCM_THREE_VALUES, SL_PAS_ID, SL_REGION, SL_REGION_SIZE) != 0) {
++		err = EPERM;
++		goto shutdown;
++	}
++
++	uint32_t loaded = 0;
++	for (uint32_t i = 0; i < phnum; i++) {
++		const uint8_t *ph = mdt + phoff + 32 * i;
++		uint32_t type, offset, paddr, filesz, memsz, flags;
++		memcpy(&type, ph, 4);
++		memcpy(&offset, ph + 4, 4);
++		memcpy(&paddr, ph + 12, 4);
++		memcpy(&filesz, ph + 16, 4);
++		memcpy(&memsz, ph + 20, 4);
++		memcpy(&flags, ph + 24, 4);
++		if (type != 1 || (flags & 0x7000000) == 0x2000000 || memsz == 0) {
++			continue;
++		}
++		uint64_t at = paddr - min_addr;
++		if (at + memsz > SL_REGION_SIZE || filesz > memsz) {
++			printf("SWEET SLPI: segment %u does not fit\n", i);
++			err = EINVAL;
++			goto shutdown;
++		}
++		size_t got = 0;
++		uint8_t *data = NULL;
++		if (filesz != 0) {
++			char name[16];
++			snprintf(name, sizeof(name), "slpi.b%02u", i);
++			data = sl_read(name, &got);
++			if (data == NULL || got < filesz) {
++				printf("SWEET SLPI: %s: %zu bytes, segment wants %u\n", name, got, filesz);
++				if (data != NULL) {
++					kfree_data(data, got);
++				}
++				err = EIO;
++				goto shutdown;
++			}
++		}
++		int werr = sl_region_write(at, data, filesz, memsz);
++		if (data != NULL) {
++			kfree_data(data, got);
++		}
++		if (werr) {
++			printf("SWEET SLPI: segment %u: region write error %d\n", i, werr);
++			err = werr;
++			goto shutdown;
++		}
++		loaded++;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	printf("SWEET SLPI: %u segments in the region\n", loaded);
++
++	printf("SWEET SLPI: smp2p before start: %#x\n", sl_smp2p_value(true));
++	if (sl_scm("pas_auth_and_reset(12)", SCM_PAS_AUTH_AND_RESET, SCM_ONE_VALUE, SL_PAS_ID, 0, 0) != 0) {
++		err = EPERM;
++		sl_crash_reason();
++		goto shutdown;
++	}
++	printf("SWEET SLPI: TRUSTZONE AUTHENTICATED AND STARTED THE SLPI\n");
++	uint32_t last = ~0u;
++	for (int t = 0; t < 300; t++) {         /* 30 s */
++		uint32_t v = sl_smp2p_value(last == ~0u && t > 0);
++		if (v != last) {
++			printf("SWEET SLPI: slave-kernel bits %#x (fatal %u ready %u handover %u stop-ack %u) at %d ms\n", v,
++			    v & 1, (v >> 1) & 1, (v >> 2) & 1, (v >> 3) & 1, t * 100);
++			last = v;
++		}
++		if (v != ~0u && (v & 1)) {
++			sl_crash_reason();
++			break;
++		}
++		if (v != ~0u && (v & 6) == 6 && t > 50) {
++			break;
++		}
++		sl_sleep_ms(100);
++	}
++	sl_smem_list();
++	sl_crash_reason();
++	err = 0;
++	goto out;
++
++shutdown:
++	(void)sl_scm("pas_shutdown(12)", SCM_PAS_SHUTDOWN, SCM_ONE_VALUE, SL_PAS_ID, 0, 0);
++out:
++	kfree_data(mdt, mdt_size);
++	return err;
++}
++
++static void
++sl_thread(__unused void *arg, __unused wait_result_t wr)
++{
++	uint32_t delay = 60;
++	PE_parse_boot_argn("sweetslpidelay", &delay, sizeof(delay));
++	sl_sleep_ms(delay * 1000);
++	printf("SWEET SLPI: start -> %d\n", sl_load_and_start());
++	thread_terminate(current_thread());
++}
++
++void
++sweet_slpi_start(void)
++{
++	uint32_t on = 0;
++	PE_parse_boot_argn("sweetslpi", &on, sizeof(on));
++	if (!on || !sweet_board_is_umi()) {
++		return;
++	}
++	thread_t thread;
++	if (kernel_thread_start(sl_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 51c236c..1a8cbb1 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -1780,6 +1780,7 @@ OSDefineMetaClassAndStructors(AppleARMBacklight, IOService);
+ 
+ static uint32_t sweet_bl_reads;         /* property reads logged */
+ extern "C" void sweet_user_bt_current(const char *tag);        /* osfmk/kern/exception.c */
++extern "C" void sweet_slpi_start(void);                         /* bsd/dev/sweet_slpi.c */
+ 
+ /* Which keys user space reads, first 200, with boot-arg sweetbl_trace=1 (bring-up). */
+ OSPtr<OSObject>
+@@ -2060,6 +2061,7 @@ sweet_backlight_publish(IOService *provider)
+ 		IOReturn r = sweet_panel_set_level(init > SWEET_BL_LEVEL_MAX ? SWEET_BL_LEVEL_MAX : init);
+ 		IOLog("SWEET BL: sweetbl_init level %u -> %#x\n", init, r);
+ 	}
++	sweet_slpi_start();                     /* bsd/dev/sweet_slpi.c: sensor DSP (boot-arg sweetslpi=1) */
+ 	AppleARMBacklight *bl = OSTypeAlloc(AppleARMBacklight);
+ 	if (bl == NULL || !bl->init() || !bl->startBacklight(provider)) {
+ 		IOLog("SWEET BL: no backlight service\n");
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,78 @@
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -15,7 +15,12 @@
+  *   5  SwapEnd, struct 0x46c: +0x50 swap id, +0x54 IOSurface id per layer
+  *      (4 layers), +0x64 rect a / +0xc4 rect b per layer (int x,y,w,h),
+  *      +0x104 enabled layer mask
+- *   6  SwapWait, 7 GetID, 8 GetDisplaySize -> [w, h], 18 IsMainDisplay,
++ *   6  SwapWait, 7 GetID, 8 GetDisplaySize -> [w, h],
++ *   12 RequestPowerChange [state]: 0 = display off (backboardd, power
++ *      button / auto-lock), else on. Off fades the panel out over a few
++ *      vsyncs (halving each pixel) and keeps it black until on again;
++ *      the panel itself stays powered (AMOLED black pixels are off).
++ *   18 IsMainDisplay,
+  *   28 GetDotPitch, 72 Enable/DisableNotifications [func, refcon, type, 0]
+  * Everything else is accepted and logged once.
+  *
+@@ -53,6 +58,7 @@
+ 	kSweetFBSwapWait                = 6,
+ 	kSweetFBGetID                   = 7,
+ 	kSweetFBGetDisplaySize          = 8,
++	kSweetFBRequestPowerChange      = 12,
+ 	kSweetFBIsMainDisplay           = 18,
+ 	kSweetFBGetDotPitch             = 28,
+ 	kSweetFBNotifications           = 72,
+@@ -108,6 +114,8 @@
+ 	uint8_t       fPending[SWEET_FB_SWAP_REC_SIZE];     /* latest swap, not yet shown */
+ 	bool          fDirty;
+ 	uint32_t      fFlushTicks;    /* vsync ticks between panel copies */
++	bool          fPowerOff;      /* RequestPowerChange(0) */
++	uint32_t      fFadeStep;      /* fade-out steps done while off */
+ 
+ 	bool start(IOService *provider) APPLE_KEXT_OVERRIDE;
+ 	void addClient(IOMobileFramebufferUserClient *client);
+@@ -216,6 +224,24 @@
+ 		    (IOMobileFramebufferUserClient *)fb->fClients->getObject(i);
+ 		client->notify(SWEET_FB_NOTIFY_VSYNC, values, 6);
+ 	}
++	if (fb->fPowerOff) {
++		/* Fade out: halve every channel each vsync, then black, then idle. */
++		uint32_t step = fb->fFadeStep;
++		if (step <= 6) {
++			fb->fFadeStep = step + 1;
++		}
++		IOLockUnlock(fb->fLock);
++		if (step <= 6) {
++			for (uint32_t y = 0; y < fb->fHeight; y++) {
++				volatile uint32_t *row = (volatile uint32_t *)(fb->fPixels + (uint64_t)y * fb->fRowBytes);
++				for (uint32_t x = 0; x < fb->fWidth; x++) {
++					row[x] = step < 6 ? (row[x] >> 1) & 0x7f7f7f7f : 0;
++				}
++			}
++		}
++		sender->setTimeoutUS(SWEET_FB_VSYNC_US);
++		return;
++	}
+ 	bool flush = fb->fDirty && (count % fb->fFlushTicks) == 0;
+ 	uint8_t *rec = NULL;
+ 	if (flush) {
+@@ -506,6 +532,19 @@
+ 			    args->scalarInput[0] ? "on" : "off");
+ 		}
+ 		break;
++	case kSweetFBRequestPowerChange:
++		if (args->scalarInputCount >= 1) {
++			bool off = args->scalarInput[0] == 0;
++			IOLockLock(fFB->fLock);
++			if (off != fFB->fPowerOff) {
++				fFB->fPowerOff = off;
++				fFB->fFadeStep = 0;
++				fFB->fDirty = true;     /* on: redraw the latest frame */
++			}
++			IOLockUnlock(fFB->fLock);
++			IOLog("SWEET FB: display %s\n", off ? "off" : "on");
++		}
++		break;
+ 	case kSweetFBSwapWait:
+ 	default:
+ 		break;

@@ -1,0 +1,559 @@
+diff --git a/crates/metal2vulkan-runtime/src/render.rs b/crates/metal2vulkan-runtime/src/render.rs
+index 119119d..3767b60 100644
+--- a/crates/metal2vulkan-runtime/src/render.rs
++++ b/crates/metal2vulkan-runtime/src/render.rs
+@@ -296,7 +296,7 @@ use super::render_pass::{
+     self, check_memoryless, AspectTarget, Attachment, DepthStencilTarget, PassLayout,
+     RenderPassDescriptor, RenderPassProblem, Target, HIDDEN_DEPTH_FORMAT, MAX_COLOR_ATTACHMENTS,
+ };
+-use super::render_state::{self, DepthBiasRecord, EncoderState, MAX_VIEWPORTS};
++use super::render_state::{self, DepthBiasRecord, EncoderState, PerViewport, MAX_VIEWPORTS};
+ use super::render_state::{Compensation, DepthBiasEffect, WrittenDepthClamp};
+ use super::render_target::{self, covers, PassShape, Position, RenderPassObject};
+ use super::render_values::{LoadAction, ScissorRect, StoreAction, StoreActionOptions, Viewport};
+@@ -612,8 +612,8 @@ struct DrawSettings {
+ /// (`render_state.rs`).
+ #[derive(Clone)]
+ struct DrawState {
+-    viewports: Vec<vk::Viewport>,
+-    scissors: Vec<vk::Rect2D>,
++    viewports: PerViewport<vk::Viewport>,
++    scissors: PerViewport<vk::Rect2D>,
+     fixed: FixedState,
+     /// The front and back stencil references.
+     stencil_reference: [u32; 2],
+@@ -1197,11 +1197,12 @@ impl LastRetained {
+ /// A variant, plan and specialization under which `Device::degrade_bound_values` was quiet: no
+ /// clause of a note it tested held. Which hold is a function of the three alone, so a draw of
+ /// the same three announces nothing there. The variant and the plan are held, so a pointer seen
+-/// again is the same object.
++/// again is the same object. The specialization is the plan's own where `specialization` is
++/// `None` (every draw but a mesh draw of its own key), so a draw keeps no copy of it.
+ struct QuietBoundValues {
+     variant: Arc<RenderVariant>,
+     plan: Arc<BindingPlan>,
+-    specialization: SpecializationKey,
++    specialization: Option<SpecializationKey>,
+ }
+ 
+ impl QuietBoundValues {
+@@ -1214,7 +1215,11 @@ impl QuietBoundValues {
+     ) -> bool {
+         Arc::ptr_eq(&self.variant, variant)
+             && Arc::ptr_eq(&self.plan, plan)
+-            && self.specialization == *specialization
++            && self
++                .specialization
++                .as_ref()
++                .unwrap_or(&self.plan.specialization)
++                == specialization
+     }
+ }
+ 
+@@ -6498,7 +6503,7 @@ impl RenderCommandEncoder {
+         // offsetting bias folded into the compensation (`EncoderState::compensation`).
+         let depth = compensation.and_then(|c| c.depth);
+         let viewports = match depth {
+-            Some(_) => self.state.used_viewports(selects).to_vec(),
++            Some(_) => self.state.used_viewports(selects).iter().copied().collect(),
+             None => self
+                 .state
+                 .draw_viewports(selects, topology, profile, native)?,
+@@ -6553,12 +6558,12 @@ impl RenderCommandEncoder {
+                                 let [min_depth, max_depth] =
+                                     depth.unwrap_or([viewport.min_depth, viewport.max_depth]);
+                                 DrawState {
+-                                    viewports: vec![vk::Viewport {
++                                    viewports: PerViewport::one(vk::Viewport {
+                                         min_depth,
+                                         max_depth,
+                                         ..viewport
+-                                    }],
+-                                    scissors: vec![scissor],
++                                    }),
++                                    scissors: PerViewport::one(scissor),
+                                     ..draw_state.clone()
+                                 }
+                             })
+@@ -6620,7 +6625,7 @@ impl RenderCommandEncoder {
+             self.quiet_bound_values = Some(QuietBoundValues {
+                 variant: Arc::clone(&variant),
+                 plan: Arc::clone(&plan),
+-                specialization: specialization.clone(),
++                specialization: commands.specialization.clone(),
+             });
+         }
+         device.degrade_cross_class(&plan.diagnostics, &formats);
+diff --git a/crates/metal2vulkan-runtime/src/render/bound.rs b/crates/metal2vulkan-runtime/src/render/bound.rs
+index 0060cfc..be326c0 100644
+--- a/crates/metal2vulkan-runtime/src/render/bound.rs
++++ b/crates/metal2vulkan-runtime/src/render/bound.rs
+@@ -32,7 +32,7 @@ use ash::vk;
+ use super::{DrawState, IndexBind};
+ use crate::binding::PushWrite;
+ use crate::pipeline::FixedState;
+-use crate::render_state::DepthBiasSetting;
++use crate::render_state::{DepthBiasSetting, PerViewport};
+ 
+ /// The state commands recorded into one secondary command buffer that still hold (the module
+ /// docs).
+@@ -63,8 +63,8 @@ pub(super) struct Bound {
+ /// The values a draw sets its dynamic states to: the encoder's state at the draw and its input
+ /// assembly.
+ pub(super) struct Values {
+-    viewports: Vec<vk::Viewport>,
+-    scissors: Vec<vk::Rect2D>,
++    viewports: PerViewport<vk::Viewport>,
++    scissors: PerViewport<vk::Rect2D>,
+     fixed: FixedState,
+     stencil_reference: [u32; 2],
+     depth_bias: DepthBiasSetting,
+@@ -226,8 +226,8 @@ impl Values {
+     fn of(now: Now<'_>) -> Values {
+         let s = now.state;
+         Values {
+-            viewports: s.viewports.clone(),
+-            scissors: s.scissors.clone(),
++            viewports: s.viewports,
++            scissors: s.scissors,
+             fixed: s.fixed,
+             stencil_reference: s.stencil_reference,
+             depth_bias: s.depth_bias.setting(),
+@@ -302,14 +302,8 @@ impl Values {
+         let s = now.state;
+         let (ds, now_ds) = (&mut self.fixed.depth_stencil, &s.fixed.depth_stencil);
+         match state {
+-            vk::DynamicState::VIEWPORT => {
+-                self.viewports.clear();
+-                self.viewports.extend_from_slice(&s.viewports);
+-            }
+-            vk::DynamicState::SCISSOR => {
+-                self.scissors.clear();
+-                self.scissors.extend_from_slice(&s.scissors);
+-            }
++            vk::DynamicState::VIEWPORT => self.viewports = s.viewports,
++            vk::DynamicState::SCISSOR => self.scissors = s.scissors,
+             vk::DynamicState::DEPTH_BIAS => self.depth_bias = s.depth_bias.setting(),
+             vk::DynamicState::BLEND_CONSTANTS => self.blend_color = s.blend_color,
+             vk::DynamicState::STENCIL_COMPARE_MASK => {
+diff --git a/crates/metal2vulkan-runtime/src/render_state.rs b/crates/metal2vulkan-runtime/src/render_state.rs
+index f6f5ffd..e231b10 100644
+--- a/crates/metal2vulkan-runtime/src/render_state.rs
++++ b/crates/metal2vulkan-runtime/src/render_state.rs
+@@ -113,6 +113,70 @@ use metal2vulkan::pipeline::{GraphicsState, ViewportCompensation};
+ /// Metal's most viewports and scissor rectangles.
+ pub(super) const MAX_VIEWPORTS: usize = 16;
+ 
++/// One value per viewport a draw uses, held in place: its viewports and scissors, which every draw
++/// makes, without allocating. A draw uses at most [`MAX_VIEWPORTS`] (the setters refuse more,
++/// `check_count`, and a draw uses the viewports set or the first).
++#[derive(Clone, Copy, Debug)]
++pub(super) struct PerViewport<T> {
++    items: [T; MAX_VIEWPORTS],
++    len: u8,
++}
++
++impl<T: Copy + Default> PerViewport<T> {
++    /// `item` alone.
++    pub(super) fn one(item: T) -> PerViewport<T> {
++        std::iter::once(item).collect()
++    }
++}
++
++impl<T> std::ops::Deref for PerViewport<T> {
++    type Target = [T];
++
++    fn deref(&self) -> &[T] {
++        &self.items[..usize::from(self.len)]
++    }
++}
++
++impl<T> std::ops::DerefMut for PerViewport<T> {
++    fn deref_mut(&mut self) -> &mut [T] {
++        &mut self.items[..usize::from(self.len)]
++    }
++}
++
++impl<T: Copy + Default> FromIterator<T> for PerViewport<T> {
++    fn from_iter<I: IntoIterator<Item = T>>(iter: I) -> PerViewport<T> {
++        let mut items = [T::default(); MAX_VIEWPORTS];
++        let mut len = 0;
++        for item in iter {
++            assert!(len < MAX_VIEWPORTS, "a draw of more than {MAX_VIEWPORTS} viewports");
++            items[len] = item;
++            len += 1;
++        }
++        PerViewport {
++            items,
++            len: len as u8,
++        }
++    }
++}
++
++impl<'a, T> IntoIterator for &'a PerViewport<T> {
++    type Item = &'a T;
++    type IntoIter = std::slice::Iter<'a, T>;
++
++    fn into_iter(self) -> Self::IntoIter {
++        self.iter()
++    }
++}
++
++impl<'a, T> IntoIterator for &'a mut PerViewport<T> {
++    type Item = &'a mut T;
++    type IntoIter = std::slice::IterMut<'a, T>;
++
++    fn into_iter(self) -> Self::IntoIter {
++        self.iter_mut()
++    }
++}
++
+ /// What a viewport, scissor rectangle or depth/stencil setter did wrong.
+ #[non_exhaustive]
+ #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+@@ -335,7 +399,7 @@ impl EncoderState {
+         topology: metal2vulkan::vk::PrimitiveTopology,
+         profile: &DeviceProfile,
+         native: bool,
+-    ) -> Result<Vec<Viewport>, Error> {
++    ) -> Result<PerViewport<Viewport>, Error> {
+         let used = self.used_viewports(selects);
+         let clamps = self.clip_mode == DepthClipMode::Clamp;
+         // In clamp mode a range past `[0, 1]` whose one clamp holds one depth stores that depth
+@@ -766,7 +830,7 @@ impl EncoderState {
+         viewports: &[Viewport],
+         depth: Option<[f32; 2]>,
+         guard: Option<[f64; 2]>,
+-    ) -> Vec<vk::Viewport> {
++    ) -> PerViewport<vk::Viewport> {
+         viewports
+             .iter()
+             .map(|v| {
+@@ -808,7 +872,7 @@ impl EncoderState {
+     /// its index, the one rectangle where the encoder holds one, and an empty one past two or
+     /// more (the module docs), each clipped to the pixels its viewport overlaps, Metal's implicit
+     /// scissor ([`viewport_pixels`]).
+-    pub(super) fn vk_scissors(&self, selects: bool) -> Vec<vk::Rect2D> {
++    pub(super) fn vk_scissors(&self, selects: bool) -> PerViewport<vk::Rect2D> {
+         self.each_vk_scissor(selects).collect()
+     }
+ 
+diff --git a/crates/metal2vulkan/src/bind/dispatch.rs b/crates/metal2vulkan/src/bind/dispatch.rs
+index f8a62bb..3536491 100644
+--- a/crates/metal2vulkan/src/bind/dispatch.rs
++++ b/crates/metal2vulkan/src/bind/dispatch.rs
+@@ -897,7 +897,8 @@ fn instantiate(
+                 stride.to_le_bytes().to_vec()
+             }
+             field => slot_field(field, &bound.residuals, &t.resources, state)
+-                .ok_or_else(|| internal(format!("a compute push field {field:?}")))?,
++                .ok_or_else(|| internal(format!("a compute push field {field:?}")))?
++                .to_vec(),
+         };
+         put(&mut push, push_start, &mut table, f.loc, &bytes)?;
+     }
+diff --git a/crates/metal2vulkan/src/bind/graphics.rs b/crates/metal2vulkan/src/bind/graphics.rs
+index a477fab..850f28a 100644
+--- a/crates/metal2vulkan/src/bind/graphics.rs
++++ b/crates/metal2vulkan/src/bind/graphics.rs
+@@ -234,8 +234,8 @@ use std::collections::BTreeMap;
+ use crate::bind::heap::{planner, HeapPlanner};
+ use crate::bind::instantiate::{
+     bind_buffers, descriptor_range, put, slot_field, BufferExtent, BufferRange, DescriptorBytes,
+-    DescriptorRange, IndexBufferRef, IndirectRef, PushConstantWrite, PushHole, RangeError,
+-    RootTable,
++    DescriptorRange, FieldBytes, IndexBufferRef, IndirectRef, PushConstantWrite, PushHole,
++    RangeError, RootTable,
+ };
+ use crate::bind::neutral::{zero_buffer_bytes, NeutralResource};
+ use crate::bind::plan::compute::{internal, not_implemented, spec_key, tile_memory};
+@@ -3326,7 +3326,7 @@ fn instantiate(
+             }
+         ];
+         for f in &st.fields {
+-            let bytes: Vec<u8> = match f.field {
++            let bytes: FieldBytes = match f.field {
+                 PushField::RootTableAddress
+                 | PushField::ExecutionStatusAddress
+                 | PushField::CaptureAddress
+@@ -3355,27 +3355,27 @@ fn instantiate(
+                     let Some(shadow) = &t.shadow_stencil else {
+                         return Err(internal("a stencil state without its shader-side stencil"));
+                     };
+-                    shadow_stencil_words(shadow, state)?
++                    shadow_stencil_words(shadow, state)?.into()
+                 }
+                 PushField::ShaderTestsState => {
+                     if t.shader_tests.is_none() {
+                         return Err(internal("a depth state without its in-shader depth test"));
+                     }
+-                    shader_tests_words(state)
++                    shader_tests_words(state).into()
+                 }
+                 PushField::ShaderStencilState => {
+                     if t.shader_tests.is_none() {
+                         return Err(internal("a stencil state without its in-shader tests"));
+                     }
+-                    shader_stencil_words(state)
++                    shader_stencil_words(state).into()
+                 }
+                 PushField::DispatchRegion => match mesh.as_ref().and_then(|m| m.region(st.stage)) {
+-                    Some(region) => region.to_vec(),
++                    Some(region) => FieldBytes::of(&region),
+                     None => return Err(internal("a dispatch region outside a mesh draw")),
+                 },
+-                PushField::ViewportCount => state.viewport_count.to_le_bytes().to_vec(),
++                PushField::ViewportCount => FieldBytes::of(&state.viewport_count.to_le_bytes()),
+                 PushField::RenderTargetArrayLength => {
+-                    state.render_target_array_length.to_le_bytes().to_vec()
++                    FieldBytes::of(&state.render_target_array_length.to_le_bytes())
+                 }
+                 // The identity where the state holds none: a plan states its variant, so
+                 // instantiation under another shape asks for the other one first.
+@@ -3392,11 +3392,12 @@ fn instantiate(
+                     .flat_map(|v| v.to_le_bytes())
+                     .collect(),
+                 // No viewport mirrored where the state holds none.
+-                PushField::ViewportMirrors => state
+-                    .viewport_compensation
+-                    .map_or(0, |c| c.mirrors)
+-                    .to_le_bytes()
+-                    .to_vec(),
++                PushField::ViewportMirrors => FieldBytes::of(
++                    &state
++                        .viewport_compensation
++                        .map_or(0, |c| c.mirrors)
++                        .to_le_bytes(),
++                ),
+                 // No vertex's depth clamped where the state holds none.
+                 PushField::VertexDepthClamp => state
+                     .viewport_compensation
+@@ -3411,11 +3412,11 @@ fn instantiate(
+                     .iter()
+                     .flat_map(|v| v.to_le_bytes())
+                     .collect(),
+-                PushField::StorageKeptChannels => t.storage_kept.to_le_bytes().to_vec(),
++                PushField::StorageKeptChannels => FieldBytes::of(&t.storage_kept.to_le_bytes()),
+                 // The attachment's rule word, as link derived it from the pipeline's attachment.
+                 PushField::ColorWriteRule(color) => {
+                     match t.color_write_rules.iter().find(|(c, _)| *c == color) {
+-                        Some((_, word)) => word.to_le_bytes().to_vec(),
++                        Some((_, word)) => FieldBytes::of(&word.to_le_bytes()),
+                         None => return Err(internal("a color write rule link gave no word")),
+                     }
+                 }
+@@ -3437,16 +3438,12 @@ fn instantiate(
+                 // The first amplification's; `amplifications` writes each before its draw.
+                 PushField::AmplificationId
+                 | PushField::AmplificationLayerOffset
+-                | PushField::AmplificationViewportOffset => {
+-                    amplification_word(f.field, 0, &t.amplifications)?
+-                        .to_le_bytes()
+-                        .to_vec()
+-                }
++                | PushField::AmplificationViewportOffset => FieldBytes::of(
++                    &amplification_word(f.field, 0, &t.amplifications)?.to_le_bytes(),
++                ),
+                 PushField::BaseVertexInstance => {
+                     reads_base = true;
+-                    let mut b = base[0].to_le_bytes().to_vec();
+-                    b.extend_from_slice(&base[1].to_le_bytes());
+-                    b
++                    base.iter().flat_map(|b| b.to_le_bytes()).collect()
+                 }
+                 PushField::VertexBufferStride(layout) => {
+                     let fixed = t.pulled_strides.iter().find(|(l, _)| *l == layout);
+@@ -3471,7 +3468,7 @@ fn instantiate(
+                             )))
+                         }
+                     };
+-                    stride.to_le_bytes().to_vec()
++                    FieldBytes::of(&stride.to_le_bytes())
+                 }
+                 field => slot_field(field, &bound.residuals, &t.resources, state)
+                     .ok_or_else(|| internal(format!("a render push field {field:?}")))?,
+@@ -3961,21 +3958,22 @@ fn draw_uses(
+         };
+         uses.push(control(UseTarget::ControlPointIndices, range));
+     }
+-    uses.extend(match *draw {
++    // At most two, in place: a draw's own uses allocate nothing past `uses`.
++    let own: [Option<ResourceUse>; 2] = match *draw {
+         // A mesh draw's arguments are its pipeline's to decide (`instantiate`).
+         DrawCall::Primitives { .. }
+         | DrawCall::Patches { .. }
+         | DrawCall::MeshThreadgroups { .. }
+         | DrawCall::MeshThreads { .. }
+-        | DrawCall::MeshThreadgroupsIndirect { .. } => Vec::new(),
++        | DrawCall::MeshThreadgroupsIndirect { .. } => [None, None],
+         DrawCall::Indexed {
+             index_type,
+             index_buffer,
+             index_count,
+             index_offset,
+             ..
+-        } => vec![index(index_bytes(index_type).map(|size| {
+-            ByteRange {
++        } => [
++            Some(index(index_bytes(index_type).map(|size| ByteRange {
+                 offset: 0,
+                 len: match overrun {
+                     None => u64::from(index_count) * size,
+@@ -3986,15 +3984,17 @@ fn draw_uses(
+                         u64::from(index_count.saturating_sub(past_end)) * size
+                     }
+                 },
+-            }
+-        }))],
++            }))),
++            None,
++        ],
+         DrawCall::Indirect { indexed: None, .. } | DrawCall::PatchesIndirect { .. } => {
+-            vec![indirect_use(16)]
++            [Some(indirect_use(16)), None]
+         }
+         DrawCall::Indirect {
+             indexed: Some(_), ..
+-        } => vec![index(None), indirect_use(20)],
+-    });
++        } => [Some(index(None)), Some(indirect_use(20))],
++    };
++    uses.extend(own.into_iter().flatten());
+     uses
+ }
+ 
+diff --git a/crates/metal2vulkan/src/bind/instantiate.rs b/crates/metal2vulkan/src/bind/instantiate.rs
+index 3eb2f84..62d9d3f 100644
+--- a/crates/metal2vulkan/src/bind/instantiate.rs
++++ b/crates/metal2vulkan/src/bind/instantiate.rs
+@@ -611,6 +611,67 @@ pub(crate) fn bind_buffers(
+     Ok(out)
+ }
+ 
++/// A push field's bytes as instantiation writes them: up to [`FieldBytes::INLINE`] bytes in place
++/// (every word and vector field, so a draw's fields allocate nothing), more in a vector (a capture
++/// layout, a dispatch region).
++pub(crate) enum FieldBytes {
++    Inline {
++        bytes: [u8; FieldBytes::INLINE],
++        len: u8,
++    },
++    Heap(Vec<u8>),
++}
++
++impl FieldBytes {
++    /// The most bytes held in place.
++    pub(crate) const INLINE: usize = 32;
++
++    /// `bytes`, copied.
++    pub(crate) fn of(bytes: &[u8]) -> FieldBytes {
++        bytes.iter().copied().collect()
++    }
++}
++
++impl std::ops::Deref for FieldBytes {
++    type Target = [u8];
++
++    fn deref(&self) -> &[u8] {
++        match self {
++            FieldBytes::Inline { bytes, len } => &bytes[..usize::from(*len)],
++            FieldBytes::Heap(bytes) => bytes,
++        }
++    }
++}
++
++impl From<Vec<u8>> for FieldBytes {
++    fn from(bytes: Vec<u8>) -> FieldBytes {
++        FieldBytes::Heap(bytes)
++    }
++}
++
++impl FromIterator<u8> for FieldBytes {
++    fn from_iter<I: IntoIterator<Item = u8>>(iter: I) -> FieldBytes {
++        let mut bytes = [0u8; FieldBytes::INLINE];
++        let mut iter = iter.into_iter();
++        for len in 0..=FieldBytes::INLINE {
++            let Some(byte) = iter.next() else {
++                return FieldBytes::Inline {
++                    bytes,
++                    len: len as u8,
++                };
++            };
++            if len == FieldBytes::INLINE {
++                let mut heap = bytes.to_vec();
++                heap.push(byte);
++                heap.extend(iter);
++                return FieldBytes::Heap(heap);
++            }
++            bytes[len] = byte;
++        }
++        unreachable!("the loop returns by its last pass")
++    }
++}
++
+ /// The bytes of a slot push field (`SlotBindOffset`: the residual, 0 unbound; `SlotGuestBase`: the
+ /// slot's `gpu_address + offset`, which is Metal's `nil`; `TextureLevels`: the level count the plan
+ /// bound; `InstanceCount`: the bound structure's instance count; `Specialized`: the value the plan
+@@ -621,7 +682,7 @@ pub(crate) fn slot_field(
+     residuals: &[(SlotRef, u32)],
+     resources: &crate::bind::plan::ResourceTemplate,
+     state: &BindState,
+-) -> Option<Vec<u8>> {
++) -> Option<FieldBytes> {
+     match field {
+         // The bound structure's instance count, 0 for an unbound slot.
+         PushField::InstanceCount(slot) => {
+@@ -630,38 +691,38 @@ pub(crate) fn slot_field(
+                 .get(&slot.stage)
+                 .and_then(|t| t.acceleration_structures.get(&slot.index))
+                 .map_or(0, |s| s.instance_count);
+-            Some(count.to_le_bytes().to_vec())
++            Some(FieldBytes::of(&count.to_le_bytes()))
+         }
+         // The level count the plan bound.
+         PushField::TextureLevels(slot) => resources
+             .texture_levels
+             .iter()
+             .find(|(s, _)| *s == slot)
+-            .map(|(_, levels)| levels.to_le_bytes().to_vec()),
++            .map(|(_, levels)| FieldBytes::of(&levels.to_le_bytes())),
+         // The value the bound resources decide, as the plan recorded it.
+         PushField::Specialized(key) => resources
+             .specialized
+             .iter()
+             .find(|(k, _)| *k == key)
+-            .map(|(_, value)| value.to_le_bytes().to_vec()),
++            .map(|(_, value)| FieldBytes::of(&value.to_le_bytes())),
+         // Whether the texture the plan bound holds 16-bit float channels.
+         PushField::TextureHalfChannels(slot) => resources
+             .texture_half_channels
+             .iter()
+             .find(|(s, _)| *s == slot)
+-            .map(|(_, half)| half.to_le_bytes().to_vec()),
++            .map(|(_, half)| FieldBytes::of(&half.to_le_bytes())),
+         // The integer channel widths of the texture the plan bound.
+         PushField::TextureIntegerChannels(slot) => resources
+             .texture_integer_channels
+             .iter()
+             .find(|(s, _)| *s == slot)
+-            .map(|(_, word)| word.to_le_bytes().to_vec()),
++            .map(|(_, word)| FieldBytes::of(&word.to_le_bytes())),
+         PushField::SlotBindOffset(slot) => {
+             let r = residuals
+                 .iter()
+                 .find(|(s, _)| *s == slot)
+                 .map_or(0, |r| r.1);
+-            Some(r.to_le_bytes().to_vec())
++            Some(FieldBytes::of(&r.to_le_bytes()))
+         }
+         PushField::SlotGuestBase(slot) => {
+             let base = match state
+@@ -676,7 +737,7 @@ pub(crate) fn slot_field(
+                 }) => gpu_address.wrapping_add(offset),
+                 _ => 0,
+             };
+-            Some(base.to_le_bytes().to_vec())
++            Some(FieldBytes::of(&base.to_le_bytes()))
+         }
+         _ => None,
+     }

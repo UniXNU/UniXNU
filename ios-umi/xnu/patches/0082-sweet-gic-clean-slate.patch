@@ -1,0 +1,105 @@
+diff --git a/osfmk/arm64/sleh.c b/osfmk/arm64/sleh.c
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -1887,6 +1887,8 @@ sleh_irq(arm_saved_state_t *state)
+ 			    cdp->interrupt_refCon,
+ 			    cdp->interrupt_nub,
+ 			    intid);
++		} else {
++			sweet_gic_mask(intid);
+ 		}
+ 		__builtin_arm_wsr64("ICC_EOIR1_EL1", iar);
+ 	}
+diff --git a/pexpert/arm/pe_fiq.c b/pexpert/arm/pe_fiq.c
+--- a/pexpert/arm/pe_fiq.c
++++ b/pexpert/arm/pe_fiq.c
+@@ -175,6 +175,30 @@ pe_init_fiq()
+ 	for (unsigned int i = 0; i < 32; i += 4) {
+ 		gicr_write32(GICR_IPRIORITYR0 + i, 0xA0A0A0A0);
+ 	}
++	/*
++	 * Start from a clean slate. The Mi 10 (umi) bootloader leaves sources
++	 * enabled (e.g. its physical timer); nothing services them, so a
++	 * level-triggered one refires right after every EOI and starves the
++	 * CPU. Our drivers poll: only the virtual timer and the IPI SGI are
++	 * used. Secure (Group 0) bits ignore these non-secure writes.
++	 */
++	uint32_t left_ppi = gicr_read32(GICR_ISENABLER0);
++	gicr_write32(GICR_ICENABLER0, 0xFFFFFFFF);
++	gicr_write32(GICR_ICPENDR0, 0xFFFFFFFF);
++	if (ml_get_cpu_number_local() == 0) {
++		uint32_t lines = 32 * ((gicd_read32(GICD_TYPER) & 0x1F) + 1);
++		uint32_t left_spi = 0;
++		for (uint32_t i = 32; i < lines && i < 1020; i += 32) {
++			left_spi += __builtin_popcount(gicd_read32(GICD_ISENABLER + i / 8));
++			gicd_write32(GICD_ICENABLER + i / 8, 0xFFFFFFFF);
++			gicd_write32(GICD_ICPENDR + i / 8, 0xFFFFFFFF);
++		}
++		while (gicd_read32(GICD_CTLR) & GICD_CTLR_RWP) {
++			;
++		}
++		kprintf("SWEET GIC: bootloader left SGI/PPI enables 0x%08x and %u SPIs; all disabled\n",
++		    left_ppi, left_spi);
++	}
+ 	gicr_write32(GICR_ISENABLER0, (1U << sweet_vtimer_intid) | (1U << SWEET_IPI_SGI));
+ #else
+ 	// Configure timers and legacy FIQ to be group 0
+@@ -228,3 +252,23 @@ pe_init_fiq()
+ {
+ }
+ #endif
++
++#if HAS_GIC_V3 && defined(SWEET)
++/*
++ * sleh_irq: an interrupt nobody handles. Disable it so a level-triggered
++ * source cannot refire forever; sweet_gic_masked keeps the last one.
++ */
++uint32_t sweet_gic_masked;
++
++void
++sweet_gic_mask(uint32_t intid)
++{
++	if (intid < 32) {
++		vm_offset_t gicr_pe_base = find_gicr_pe_base();
++		gicr_write32(GICR_ICENABLER0, 1U << intid);
++	} else if (intid < 1020) {
++		gicd_write32(GICD_ICENABLER + (intid / 32) * 4, 1U << (intid % 32));
++	}
++	sweet_gic_masked = intid;
++}
++#endif
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -38,6 +38,8 @@ int uart_getc(void);
+ void pe_init_fiq(void);
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ extern uint32_t sweet_vtimer_intid;
++extern uint32_t sweet_gic_masked;
++extern void sweet_gic_mask(uint32_t intid);
+ #endif
+ 
+ #ifdef PRIVATE
+diff --git a/pexpert/pexpert/arm64/SWEET.h b/pexpert/pexpert/arm64/SWEET.h
+--- a/pexpert/pexpert/arm64/SWEET.h
++++ b/pexpert/pexpert/arm64/SWEET.h
+@@ -56,6 +56,10 @@
+ 
+ /* GICv3 register definitions; see GICv3 spec (Arm IHI 0069G) */
+ #define GICD_CTLR                 0x0
++#define GICD_TYPER                0x4
++#define GICD_ISENABLER            0x100
++#define GICD_ICENABLER            0x180
++#define GICD_ICPENDR              0x280
+ 
+ /* Non-secure view of GICD_CTLR (DS=0) */
+ #define GICD_CTLR_ENABLEGRP1      0x1
+@@ -67,6 +71,8 @@
+ #define GICR_WAKER                              0x14
+ #define GICR_IGROUPR0                           0x10080
+ #define GICR_ISENABLER0                         0x10100
++#define GICR_ICENABLER0                         0x10180
++#define GICR_ICPENDR0                           0x10280
+ #define GICR_IPRIORITYR0                        0x10400
+ 
+ #define GICR_TYPER_AFFINITY_VALUE_SHIFT         32

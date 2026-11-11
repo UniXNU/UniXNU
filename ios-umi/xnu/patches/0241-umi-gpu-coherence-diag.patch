@@ -1,0 +1,146 @@
+From 814cb72148e923ef1c058f63bb69c4feee0aedc8 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 10:59:30 +0100
+Subject: [PATCH] umi: GPU coherence diagnostics: command-page cache modes
+ (sweetgpucoh), all-core DSB before the doorbell (sweetgpudsb, off)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 79 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 79 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index e3dee94..19865f2 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -2586,6 +2586,12 @@ static uint32_t sa_irq_empty;                   /* interrupts in a row with noth
+ static struct {
+ 	uint64_t irqs, waits, polls, slept, sleeps, waited_abs, timeouts;
+ } sa_stat, sa_stat_last;
++/* sweetgpucoh=1 (0241): sa_coh_check's counters */
++static uint32_t sa_coh_on = 2;                  /* 2: boot-arg not read yet */
++static struct {
++	uint64_t pages, dirty_pages, stale_pages, dirty_words, stale_words;
++} sa_coh, sa_coh_last;
++static uint32_t sa_coh_logged;
+ 
+ static void
+ sa_irq(uint32_t intid)
+@@ -2709,6 +2715,12 @@ sweet_adreno_top(uint32_t secs)
+ 	    sa_stat.slept - sa_stat_last.slept, ns / NSEC_PER_MSEC, sa_stat.sleeps - sa_stat_last.sleeps,
+ 	    sa_stat.irqs - sa_stat_last.irqs, sa_irq_on ? "on" : "off");
+ 	sa_stat_last = sa_stat;
++	if (sa_coh_on == 1) {
++		printf("SWEET ADRENO: coherence %u s: %llu command pages checked, %llu write-combined, %llu NOT\n", secs,
++		    sa_coh.pages - sa_coh_last.pages, sa_coh.stale_pages - sa_coh_last.stale_pages,
++		    sa_coh.dirty_pages - sa_coh_last.dirty_pages);
++		sa_coh_last = sa_coh;
++	}
+ 	sweet_adreno_method_top();
+ }
+ 
+@@ -3252,6 +3264,37 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ static void sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords);
+ extern void IOLog(const char *, ...);
+ 
++/*
++ * (0241) Every core drains its write buffer before the doorbell. Turnip writes command streams and draw state with
++ * write-combined stores (0241c: all 600000 command pages the walk saw were WIMG 0x6) on CoreAnimation's recording
++ * threads, and another thread submits; a DSB on the submitting core does not drain another core's buffer, so the
++ * CP could fetch words still on their way (stale draw state = "previous frames", 0240e). The submit walk hid it by
++ * taking milliseconds. One cross-call running DSB SY everywhere costs microseconds. TESTED (0241d, walk off):
++ * did NOT help ("really glitchy") - so not a write-buffer race either; off by default, sweetgpudsb=1 turns it on.
++ */
++typedef void (*sa_broadcast_fn)(void *);
++extern unsigned int cpu_broadcast_xcall_simple(boolean_t self_xcall, sa_broadcast_fn func, void *parm);
++
++static void
++sa_dsb(__unused void *arg)
++{
++	__builtin_arm_dsb(0xf);     /* DSB SY */
++}
++
++static void
++sa_drain_all_cores(void)
++{
++	static int drain = -1;
++	if (drain < 0) {
++		uint32_t v = 0;
++		(void)PE_parse_boot_argn("sweetgpudsb", &v, sizeof(v));
++		drain = v != 0;
++	}
++	if (drain) {
++		(void)cpu_broadcast_xcall_simple(TRUE, sa_dsb, NULL);
++	}
++}
++
+ /* One command stream of up to n indirect buffers, one fence when it all ran (0: not submitted). */
+ uint32_t
+ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n, bool *busy)
+@@ -3263,6 +3306,7 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 	for (uint32_t i = 0; i < n; i++) {
+ 		sa_ib_check(sa_fence_seqno + 1, i, iova[i], dwords[i]);   /* before the lock: it reads through it */
+ 	}
++	sa_drain_all_cores();
+ 	sa_service_take_lock();
+ 	uint32_t need = 6 + 4 * n;
+ 	*busy = false;
+@@ -3392,6 +3436,34 @@ struct sa_word_cache {
+ 	vm_offset_t kva;
+ };
+ 
++/*
++ * (0241, sweetgpucoh=1) What cache mode does XNU keep for the physical pages the CP fetches commands and draw state
++ * from? pmap_cache_attributes() is the page's WIMG (pp_attr_table) that every mapping of a managed page takes:
++ * 0x2 = write-back cached, 0x6 = write-combined, 0x7 = device. Turnip maps its BOs WC, so command pages should be
++ * 0x6; a cached page would explain why the walk's clean+invalidate is what keeps frames right (0240e). No extra
++ * mappings: 0241's first two builds mapped each page uncached and panicked unmapping (16 KB pages, then
++ * ml_io_map's permanent entries).
++ */
++extern unsigned int pmap_cache_attributes(ppnum_t pn);
++
++static void
++sa_coh_check(uint64_t va, uint64_t pa, __unused vm_offset_t cached)
++{
++	unsigned int wimg = pmap_cache_attributes((ppnum_t)(pa >> PAGE_SHIFT)) & 0xff;
++
++	sa_coh.pages++;
++	if (wimg == 0x6) {
++		sa_coh.stale_pages++;           /* write-combined (the counters' names predate this) */
++	} else {
++		sa_coh.dirty_pages++;           /* anything else, cached first of all */
++		if (sa_coh_logged < 24) {
++			sa_coh_logged++;
++			IOLog("SWEET ADRENO: coherence: command page %#llx (pa %#llx) has cache mode %#x, not write-combined "
++			    "[fence %u]\n", (unsigned long long)va, (unsigned long long)pa, wimg, sa_fence_seqno + 1);
++		}
++	}
++}
++
+ static vm_offset_t
+ sa_gpu_page_kva(uint64_t va)
+ {
+@@ -3421,6 +3493,9 @@ sa_gpu_page_kva(uint64_t va)
+ 		if ((entry & 3) == PTE_PAGE && pmap_valid_address(pa) && pmap_valid_address(pa + 4095)) {
+ 			vm_offset_t k = phystokv(pa);
+ 			if (sa_phys(k) == pa) {
++				if (sa_coh_on == 1) {
++					sa_coh_check(va, pa, k);
++				}
+ 				flush_dcache64((addr64_t)k, 4096, FALSE);
+ 				kva = k;
+ 			}
+@@ -3595,6 +3670,10 @@ sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
+ 	/* (0240) sweetgpucheck=0 turns the walk off - which shows stale frames (see sa_gpu_word): the walk
+ 	 * cleans the command and draw-state pages the CP will fetch. Default on, a page at a time. */
+ 	static int check = -1;
++	if (sa_coh_on == 2) {
++		sa_coh_on = 0;
++		(void)PE_parse_boot_argn("sweetgpucoh", &sa_coh_on, sizeof(sa_coh_on));
++	}
+ 	if (check < 0) {
+ 		uint32_t v = 1;
+ 		(void)PE_parse_boot_argn("sweetgpucheck", &v, sizeof(v));
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,554 @@
+From 416a2941bf8516519501729c33890a1125ff778b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Fri, 23 Oct 2026 21:32:17 +0200
+Subject: [PATCH] umi-0116
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_pcie.c |   4 +-
+ bsd/dev/sweet_ufs.c  | 102 ++++++++++++
+ bsd/dev/sweet_usb.c  |  10 ++
+ bsd/dev/sweet_wlan.c | 363 +++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 479 insertions(+), 1 deletion(-)
+ create mode 100644 bsd/dev/sweet_wlan.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index c04e54e..f5b66e7 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -114,6 +114,7 @@ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/sweet_pcie.c			standard
+ bsd/dev/sweet_mon.c			standard
++bsd/dev/sweet_wlan.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+index fdadd19..2ae319e 100644
+--- a/bsd/dev/sweet_pcie.c
++++ b/bsd/dev/sweet_pcie.c
+@@ -20,6 +20,7 @@ extern bool sweet_board_is_umi(void);
+ extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ void sweet_pcie_init(void);
+ int sweet_pcie_run(unsigned stage);
++extern int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ 
+ #define PCIE_GCC_PA      0x00100000u
+ #define PCIE_GCC_SIZE    0x000a0000u
+@@ -468,7 +469,8 @@ pcie_bringup(void)
+ 	if (id != 0x110117cbu) {
+ 		return 4;
+ 	}
+-	return sp.stage >= 4 ? pcie_bar0() : 0;
++	int r = sp.stage >= 4 ? pcie_bar0() : 0;
++	return r == 0 && sp.stage >= 5 ? sweet_wlan_fw_boot(sp.bar0, sp.stage) : r;
+ }
+ 
+ int
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 2348284..23d4ccc 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -354,6 +354,108 @@ ufs_find_partition(const char *want)
+ 	return ENOENT;
+ }
+ 
++/*
++ * Read-only access to other GPT partitions on LUNs 0-5 (from topaz; umi reads the
++ * QCA6390 firmware from "modem"). Never writes; the LUN0 GPT fence state is untouched.
++ */
++static struct { char name[37]; uint8_t lun; uint64_t first, nblocks; } part_cache[8];
++static unsigned part_cached;
++
++static int
++ufs_lookup_part(const char *want, unsigned *slot)
++{
++	const uint8_t *b = (const uint8_t *)(su.dma + DMA_BOUNCE);
++
++	for (unsigned i = 0; i < part_cached; i++) {
++		if (strcmp(part_cache[i].name, want) == 0) {
++			*slot = i;
++			return 0;
++		}
++	}
++	if (part_cached == sizeof(part_cache) / sizeof(part_cache[0]) || strlen(want) > 36) {
++		return ENOSPC;
++	}
++	for (uint8_t lun = 0; lun < 6; lun++) {
++		su.lun = lun;
++		if (ufs_read_blocks(1, 1) != 0 || memcmp(b, "EFI PART", 8) != 0) {
++			continue;
++		}
++		uint64_t entry_lba;
++		uint32_t nent, esz;
++		memcpy(&entry_lba, b + 72, 8);
++		memcpy(&nent, b + 80, 4);
++		memcpy(&esz, b + 84, 4);
++		if (esz != 128 || nent == 0 || nent * esz > BOUNCE_SIZE ||
++		    ufs_read_blocks(entry_lba, (nent * esz + UFS_BLOCK - 1) / UFS_BLOCK) != 0) {
++			continue;
++		}
++		for (uint32_t i = 0; i < nent; i++) {
++			const uint8_t *e = b + i * esz;
++			char name[37];
++			unsigned c;
++			for (c = 0; c < 36; c++) {
++				uint16_t ch = (uint16_t)(e[56 + 2 * c] | e[57 + 2 * c] << 8);
++				if (ch == 0 || ch > 0x7f) {
++					break;
++				}
++				name[c] = (char)ch;
++			}
++			name[c] = 0;
++			uint64_t first, last;
++			memcpy(&first, e + 32, 8);
++			memcpy(&last, e + 40, 8);
++			if (strcmp(name, want) != 0 || last < first) {
++				continue;
++			}
++			unsigned k = part_cached++;
++			strlcpy(part_cache[k].name, want, sizeof(part_cache[k].name));
++			part_cache[k].lun = lun;
++			part_cache[k].first = first;
++			part_cache[k].nblocks = last - first + 1;
++			printf("SWEET UFS: partition %s: LUN %u blocks 0x%llx+0x%llx (read-only)\n",
++			    want, lun, first, last - first + 1);
++			*slot = k;
++			return 0;
++		}
++	}
++	return ENOENT;
++}
++
++int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len);
++int
++sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len)
++{
++	unsigned slot = 0;
++	int error;
++
++	if (!su.ready) {
++		return EAGAIN;
++	}
++	lck_mtx_lock(&sweet_ufs_lock);
++	uint8_t saved = su.lun;
++	error = ufs_lookup_part(want, &slot);
++	uint64_t bytes = error ? 0 : part_cache[slot].nblocks * UFS_BLOCK;
++	if (!error && (off > bytes || len > bytes - off)) {
++		error = EINVAL;
++	}
++	for (uint64_t done = 0; !error && done < len;) {
++		uint64_t pos = off + done;
++		uint32_t skip = (uint32_t)(pos % UFS_BLOCK);
++		uint32_t want_b = (uint32_t)MIN(len - done, (uint64_t)(BOUNCE_SIZE - skip));
++		uint32_t blocks = (skip + want_b + UFS_BLOCK - 1) / UFS_BLOCK;
++		su.lun = part_cache[slot].lun;
++		error = ufs_read_blocks(part_cache[slot].first + pos / UFS_BLOCK, blocks);
++		if (!error) {
++			memcpy((uint8_t *)dst + done, (const uint8_t *)(su.dma + DMA_BOUNCE) + skip, want_b);
++			done += want_b;
++		}
++	}
++	su.lun = saved;
++	lck_mtx_unlock(&sweet_ufs_lock);
++	return error;
++}
++
++
+ static int
+ ufs_take_over_host(void)
+ {
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+index 5604a4c..64d8382 100644
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -760,6 +760,16 @@ ud_event(uint32_t ev)
+ 		uint32_t type = (ev >> 8) & 0xf;
+ 		if (type == 1) {        /* USB reset */
+ 			dwc_wr(DCFG, dwc_rd(DCFG) & ~(0x7fu << 3));
++			/* The host configures us again (macOS resets idle devices): endpoints are gone. */
++			if (ud.configured) {
++				ud.configured = false;
++				ud.data_alt = 0;
++				ud.notify_connect = false;
++				ud_link_event(false);
++				lck_mtx_lock(ud.lock);
++				ud.tx_busy = false;
++				lck_mtx_unlock(ud.lock);
++			}
+ 			printf("SWEET USB: bus reset\n");
+ 		} else if (type == 2) { /* connect done */
+ 			uint32_t speed = dwc_rd(DSTS) & 7;
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+new file mode 100644
+index 0000000..cefa69f
+--- /dev/null
++++ b/bsd/dev/sweet_wlan.c
+@@ -0,0 +1,363 @@
++/*
++ * umi QCA6390 firmware boot over MHI (after sweet_pcie.c stage 4 has BAR0).
++ * The firmware stays where Xiaomi put it: image/qca6390/amss20.bin on the FAT
++ * "modem" partition, read through sweet_ufs_read_part (read-only).
++ *   stage 5: BHI - the first 512 KiB (SBL) from DMA memory, PBL starts it
++ *   stage 6: BHIe - the whole image as 512 KiB segments (Linux fbc_download)
++ * DMA memory: low RAM that highmem XNU does not manage (sweetwlanpool, default
++ * 0xd0000000, 32 MiB; the chip is a 32-bit DMA master), mapped write-combined.
++ * The chip masters through SMMU streams 0x1c00/0x1c01 (DT pcie0 iommu-map).
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
++extern int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len);
++extern bool sweet_smmu_route_sid(uint32_t sid);
++int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
++
++#define WLAN_POOL_PA            0xd0000000u
++#define WLAN_POOL_SIZE          0x02000000u
++#define WLAN_FW_OFF             0x000000u       /* amss20.bin, up to 8 MiB */
++#define WLAN_FW_MAX             0x800000u
++#define WLAN_VEC_OFF            0x800000u       /* BHIe vector table */
++#define WLAN_SBL_SIZE           0x80000u        /* ath11k sbl_size = seg_len = 512 KiB */
++#define WLAN_SEG_LEN            0x80000u
++
++#define MHI_BHIOFF              0x28u
++#define MHI_BHIEOFF             0x2cu
++#define MHI_CTRL                0x38u
++#define MHI_STATUS              0x48u
++#define BHI_IMGADDR_LOW         0x08u
++#define BHI_IMGADDR_HIGH        0x0cu
++#define BHI_IMGSIZE             0x10u
++#define BHI_IMGTXDB             0x18u
++#define BHI_INTVEC              0x20u
++#define BHI_EXECENV             0x28u
++#define BHI_STATUS              0x2cu
++#define BHI_ERRCODE             0x30u
++#define BHI_ERRDBG1             0x34u
++#define BHIE_TXVECADDR_LOW      0x2cu
++#define BHIE_TXVECADDR_HIGH     0x30u
++#define BHIE_TXVECSIZE          0x34u
++#define BHIE_TXVECDB            0x3cu
++#define BHIE_TXVECSTATUS        0x44u
++
++static struct {
++	vm_offset_t pool;
++	uint32_t pool_pa;
++	uint32_t fw_size;
++	uint32_t seq;
++	bool routed;
++	/* FAT */
++	uint32_t bps, spc, fat_start, root_start, root_secs, data_start, root_clus;
++	bool fat32;
++} sw;
++
++static uint8_t fat_buf[65536];
++
++static uint32_t
++wl_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++wl_wr(vm_offset_t base, uint32_t off, uint32_t val)
++{
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + off) = val;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static uint16_t
++le16(const uint8_t *p)
++{
++	return (uint16_t)(p[0] | p[1] << 8);
++}
++
++static uint32_t
++le32(const uint8_t *p)
++{
++	return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
++}
++
++static int
++fat_mount(void)
++{
++	uint8_t bs[512];
++	int err = sweet_ufs_read_part("modem", 0, bs, sizeof(bs));
++	if (err) {
++		printf("SWEET WLAN: modem partition read failed %d\n", err);
++		return err;
++	}
++	sw.bps = le16(bs + 11);
++	sw.spc = bs[13];
++	uint32_t rsvd = le16(bs + 14), nfats = bs[16], rootent = le16(bs + 17);
++	uint32_t fatsz = le16(bs + 22) ? le16(bs + 22) : le32(bs + 36);
++	uint32_t total = le16(bs + 19) ? le16(bs + 19) : le32(bs + 32);
++	if (bs[510] != 0x55 || bs[511] != 0xaa || sw.bps < 512 || sw.bps > 4096 || sw.spc == 0 ||
++	    sw.bps * sw.spc > sizeof(fat_buf) || nfats == 0 || fatsz == 0) {
++		printf("SWEET WLAN: modem is not FAT (bps %u spc %u sig %02x%02x)\n", sw.bps, sw.spc, bs[510], bs[511]);
++		return EINVAL;
++	}
++	sw.fat_start = rsvd;
++	sw.root_start = rsvd + nfats * fatsz;
++	sw.root_secs = (rootent * 32 + sw.bps - 1) / sw.bps;
++	sw.data_start = sw.root_start + sw.root_secs;
++	uint32_t clusters = (total - sw.data_start) / sw.spc;
++	sw.fat32 = clusters >= 65525;
++	sw.root_clus = sw.fat32 ? le32(bs + 44) : 0;
++	printf("SWEET WLAN: modem FAT%u, %u-byte sectors, %u per cluster, %u clusters\n",
++	    sw.fat32 ? 32 : 16, sw.bps, sw.spc, clusters);
++	return clusters < 4085 ? EINVAL : 0;
++}
++
++static uint32_t
++fat_next(uint32_t clus)
++{
++	uint8_t e[4] = {0};
++	uint64_t off = (uint64_t)sw.fat_start * sw.bps + clus * (sw.fat32 ? 4u : 2u);
++	if (sweet_ufs_read_part("modem", off, e, sw.fat32 ? 4 : 2)) {
++		return 0x0ffffff7;
++	}
++	uint32_t n = sw.fat32 ? le32(e) & 0x0fffffffu : le16(e);
++	if (!sw.fat32 && n >= 0xfff7) {
++		n |= 0x0fff0000u;
++	}
++	return n;
++}
++
++static uint64_t
++clus_off(uint32_t clus)
++{
++	return ((uint64_t)sw.data_start + (uint64_t)(clus - 2) * sw.spc) * sw.bps;
++}
++
++/* Look for an 8.3 name ("AMSS20  BIN") in a directory; dir_clus 0 = FAT16 root. */
++static int
++fat_find(uint32_t dir_clus, const char *name83, uint32_t *clus, uint32_t *size)
++{
++	uint32_t csize = sw.bps * sw.spc;
++	uint32_t c = dir_clus ? dir_clus : sw.root_clus;
++	uint32_t root_left = (!dir_clus && !sw.fat32) ? sw.root_secs * sw.bps : 0;
++	uint64_t pos = (uint64_t)sw.root_start * sw.bps;
++	for (unsigned guard = 0; guard < 4096; ++guard) {
++		uint32_t n;
++		if (root_left) {
++			n = MIN(root_left, (uint32_t)sizeof(fat_buf));
++			if (sweet_ufs_read_part("modem", pos, fat_buf, n)) {
++				return EIO;
++			}
++			pos += n;
++			root_left -= n;
++		} else {
++			if (c < 2 || c >= 0x0ffffff7) {
++				return ENOENT;
++			}
++			n = csize;
++			if (sweet_ufs_read_part("modem", clus_off(c), fat_buf, n)) {
++				return EIO;
++			}
++			c = fat_next(c);
++		}
++		for (uint32_t i = 0; i + 32 <= n; i += 32) {
++			const uint8_t *d = fat_buf + i;
++			if (d[0] == 0) {
++				return ENOENT;
++			}
++			if (d[0] == 0xe5 || (d[11] & 0x0f) == 0x0f || (d[11] & 0x08)) {
++				continue;
++			}
++			if (memcmp(d, name83, 11) == 0) {
++				*clus = (uint32_t)le16(d + 20) << 16 | le16(d + 26);
++				*size = le32(d + 28);
++				return 0;
++			}
++		}
++		if (!dir_clus && !sw.fat32 && root_left == 0) {
++			return ENOENT;
++		}
++	}
++	return ENOENT;
++}
++
++/* Read a file's cluster chain into dst, merging contiguous runs. */
++static int
++fat_read(uint32_t clus, uint32_t size, uint8_t *dst)
++{
++	uint32_t csize = sw.bps * sw.spc, done = 0;
++	while (done < size) {
++		if (clus < 2 || clus >= 0x0ffffff7) {
++			return EIO;
++		}
++		uint32_t run = 1, next = fat_next(clus);
++		while (next == clus + run && (run + 1) * csize < 0x100000u && done + run * csize < size) {
++			++run;
++			next = fat_next(clus + run - 1);
++		}
++		uint32_t n = MIN(run * csize, size - done);
++		int err = sweet_ufs_read_part("modem", clus_off(clus), dst + done, n);
++		if (err) {
++			return err;
++		}
++		done += n;
++		clus = next;
++	}
++	return 0;
++}
++
++static int
++wlan_load_fw(void)
++{
++	uint32_t c = 0, sz = 0, img = 0, fw = 0;
++	int err = fat_mount();
++	if (!err) {
++		err = fat_find(0, "IMAGE      ", &img, &sz);
++	}
++	if (!err) {
++		err = fat_find(img, "QCA6390    ", &c, &sz);
++	}
++	if (!err) {
++		err = fat_find(c, "AMSS20  BIN", &fw, &sz);
++	}
++	if (!err && (sz == 0 || sz > WLAN_FW_MAX)) {
++		err = EFBIG;
++	}
++	if (!err) {
++		err = fat_read(fw, sz, (uint8_t *)(sw.pool + WLAN_FW_OFF));
++	}
++	if (err) {
++		printf("SWEET WLAN: image/qca6390/amss20.bin: error %d\n", err);
++		return err;
++	}
++	sw.fw_size = sz;
++	const uint8_t *p = (const uint8_t *)(sw.pool + WLAN_FW_OFF);
++	printf("SWEET WLAN: amss20.bin %u bytes from cluster %u, starts %02x %02x %02x %02x\n",
++	    sz, fw, p[0], p[1], p[2], p[3]);
++	return 0;
++}
++
++static void
++wlan_state(vm_offset_t bar0, vm_offset_t bhi, const char *when)
++{
++	printf("SWEET WLAN: %s: execenv %u bhi status %#x errcode %#x dbg1 %#x mhictrl %#x mhistatus %#x\n", when,
++	    wl_rd(bhi, BHI_EXECENV), wl_rd(bhi, BHI_STATUS), wl_rd(bhi, BHI_ERRCODE), wl_rd(bhi, BHI_ERRDBG1),
++	    wl_rd(bar0, MHI_CTRL), wl_rd(bar0, MHI_STATUS));
++}
++
++static bool
++wlan_poll(vm_offset_t base, uint32_t off, uint32_t shift, uint32_t mask, uint32_t want, unsigned ms, uint32_t *last)
++{
++	for (unsigned i = 0; i < ms * 10u; ++i) {
++		*last = wl_rd(base, off);
++		if (((*last >> shift) & mask) == want) {
++			return true;
++		}
++		delay(100);
++	}
++	return false;
++}
++
++static int
++wlan_bhi(vm_offset_t bar0, vm_offset_t bhi)
++{
++	uint32_t st = 0, size = MIN(sw.fw_size, WLAN_SBL_SIZE);
++	sw.seq = (sw.seq + 0x1357) & 0x3fffffffu;
++	if (sw.seq == 0) {
++		sw.seq = 1;
++	}
++	wl_wr(bhi, BHI_INTVEC, 0);
++	wl_wr(bhi, BHI_STATUS, 0);
++	wl_wr(bhi, BHI_IMGADDR_HIGH, 0);
++	wl_wr(bhi, BHI_IMGADDR_LOW, sw.pool_pa + WLAN_FW_OFF);
++	wl_wr(bhi, BHI_IMGSIZE, size);
++	wl_wr(bhi, BHI_IMGTXDB, sw.seq);
++	bool done = false;
++	for (unsigned i = 0; i < 20000 && !done; ++i) {
++		st = wl_rd(bhi, BHI_STATUS);
++		done = (st >> 30) != 0;
++		delay(100);
++	}
++	wlan_state(bar0, bhi, "after BHI");
++	if ((st >> 30) != 2) {
++		printf("SWEET WLAN: BHI %s (status %#x)\n", (st >> 30) == 3 ? "ERROR" : "timeout", st);
++		return EIO;
++	}
++	bool sbl = wlan_poll(bhi, BHI_EXECENV, 0, 0xff, 1, 2000, &st);
++	printf("SWEET WLAN: BHI ok, %u bytes; execenv %u%s\n", size, st, sbl ? " (SBL)" : "");
++	return 0;
++}
++
++static int
++wlan_bhie(vm_offset_t bar0, vm_offset_t bhi)
++{
++	uint32_t bhie_off = wl_rd(bar0, MHI_BHIEOFF), st = 0;
++	if (bhie_off == 0 || bhie_off >= 0x100000u) {
++		return EINVAL;
++	}
++	vm_offset_t bhie = bar0 + bhie_off;
++	uint32_t nseg = (sw.fw_size + WLAN_SEG_LEN - 1) / WLAN_SEG_LEN;
++	volatile uint64_t *vec = (volatile uint64_t *)(sw.pool + WLAN_VEC_OFF);
++	for (uint32_t i = 0; i < nseg; ++i) {
++		vec[2 * i] = sw.pool_pa + WLAN_FW_OFF + (uint64_t)i * WLAN_SEG_LEN;
++		vec[2 * i + 1] = MIN(WLAN_SEG_LEN, sw.fw_size - i * WLAN_SEG_LEN);
++	}
++	__asm__ volatile("dsb sy" ::: "memory");
++	sw.seq = (sw.seq + 0x1357) & 0x3fffffffu;
++	wl_wr(bhie, BHIE_TXVECADDR_HIGH, 0);
++	wl_wr(bhie, BHIE_TXVECADDR_LOW, sw.pool_pa + WLAN_VEC_OFF);
++	wl_wr(bhie, BHIE_TXVECSIZE, nseg * 16);
++	wl_wr(bhie, BHIE_TXVECDB, (wl_rd(bhie, BHIE_TXVECDB) & ~0x3fffffffu) | sw.seq);
++	bool done = wlan_poll(bhie, BHIE_TXVECSTATUS, 30, 3, 2, 5000, &st);
++	printf("SWEET WLAN: BHIe %u segments: txvecstatus %#x %s\n", nseg, st, done ? "complete" : "NOT complete");
++	bool amss = wlan_poll(bhi, BHI_EXECENV, 0, 0xff, 2, 3000, &st);
++	wlan_state(bar0, bhi, amss ? "AMSS running" : "after BHIe");
++	return done ? 0 : EIO;
++}
++
++int
++sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
++{
++	uint32_t bhi_off = wl_rd(bar0, MHI_BHIOFF);
++	if (bhi_off == 0 || bhi_off >= 0x100000u) {
++		return 10;
++	}
++	vm_offset_t bhi = bar0 + bhi_off;
++	if (!sw.routed) {
++		bool a = sweet_smmu_route_sid(0x1c00), b = sweet_smmu_route_sid(0x1c01);
++		printf("SWEET WLAN: SMMU streams 0x1c00 %d 0x1c01 %d\n", a, b);
++		sw.routed = a && b;
++		if (!sw.routed) {
++			return 11;
++		}
++	}
++	if (sw.pool == 0) {
++		uint32_t pa = WLAN_POOL_PA;
++		(void)PE_parse_boot_argn("sweetwlanpool", &pa, sizeof(pa));
++		sw.pool = ml_io_map_wcomb(pa, WLAN_POOL_SIZE);
++		sw.pool_pa = pa;
++		if (sw.pool == 0) {
++			return 12;
++		}
++	}
++	if (sw.fw_size == 0 && wlan_load_fw() != 0) {
++		return 13;
++	}
++	wlan_state(bar0, bhi, "before BHI");
++	if (wl_rd(bhi, BHI_EXECENV) == 0 && wlan_bhi(bar0, bhi) != 0) {
++		return 14;
++	}
++	if (stage < 6) {
++		return 0;
++	}
++	return wlan_bhie(bar0, bhi) ? 15 : 0;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,381 @@
+From f96d86c240730cf6d2b305e7334c0cf4876aff3a Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 18:24:36 +0100
+Subject: [PATCH] umi: QRTR and a service locator for the SLPI
+
+QRTR v1 (Linux net/qrtr) over the GLINK "IPCRTR" channel: the SLPI's
+receive intents are tracked and data goes out as TX_DATA into them; the
+kernel answers its HELLO as node 1, announces a service locator
+(service 0x40, Linux qcom_pd_mapper.c with the sm8250 domain table and
+qcom_pdr_msg.c TLVs), answers NEW_LOOKUP as ns.c does, RESUME_TX when
+asked, and logs the servers the SLPI announces.
+
+On the phone: HELLO both ways; the SLPI announces services 0x42, 0x2b,
+0x0f (2), 0x190 (SEE, the sensor client service), 0x33 (2), 0x18; it
+asks the locator for tms/pdr_enabled and tms/pddump_disabled (none, as
+Linux) and files a fault report for sensor_process, whose user PD still
+stalls at 36 s: it waits for its configuration over FastRPC.
+
+(The locator's string parsing was fixed after that boot: top-level QMI
+strings have no length byte.)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_slpi.c | 301 +++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 289 insertions(+), 12 deletions(-)
+
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index e12df47..bcd99cf 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -540,6 +540,279 @@ gl_open(void)
+ 	gl_tx_msg(m, 16);
+ }
+ 
++/* The SLPI's receive intents on "IPCRTR": what we may send into. */
++#define GL_REMOTE_INTENTS       64
++static struct {
++	uint32_t size, iid;
++	bool used, valid;
++} gl_ri[GL_REMOTE_INTENTS];
++static uint8_t gl_rx_buf[0x4400];
++static uint32_t gl_rx_used;
++
++static void
++gl_remote_intent_add(uint32_t size, uint32_t iid)
++{
++	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
++		if (!gl_ri[i].valid) {
++			gl_ri[i].size = size;
++			gl_ri[i].iid = iid;
++			gl_ri[i].used = false;
++			gl_ri[i].valid = true;
++			return;
++		}
++	}
++}
++
++static void
++gl_remote_intent_done(uint32_t iid, bool reuse)
++{
++	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
++		if (gl_ri[i].valid && gl_ri[i].iid == iid) {
++			gl_ri[i].used = false;
++			gl_ri[i].valid = reuse;
++			return;
++		}
++	}
++}
++
++/* One GLINK data message (TX_DATA, param1 = our lcid, param2 = the SLPI's intent). */
++static bool
++gl_send(const uint8_t *data, uint32_t len)
++{
++	int best = -1;
++	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
++		if (gl_ri[i].valid && !gl_ri[i].used && gl_ri[i].size >= len &&
++		    (best < 0 || gl_ri[i].size < gl_ri[best].size)) {
++			best = i;
++		}
++	}
++	if (best < 0) {
++		printf("SWEET SLPI: GLINK: no SLPI intent for %u bytes; asking for one\n", len);
++		gl_cmd(GL_RX_INTENT_REQ, GL_LCID, len);
++		return false;
++	}
++	static uint8_t m[16 + 0x2100];
++	if (len > sizeof(m) - 16) {
++		return false;
++	}
++	uint16_t cmd = GL_TX_DATA, lcid = GL_LCID;
++	uint32_t left = 0;
++	memcpy(m, &cmd, 2);
++	memcpy(m + 2, &lcid, 2);
++	memcpy(m + 4, &gl_ri[best].iid, 4);
++	memcpy(m + 8, &len, 4);
++	memcpy(m + 12, &left, 4);
++	memcpy(m + 16, data, len);
++	if (!gl_tx_msg(m, 16 + len)) {
++		return false;
++	}
++	gl_ri[best].used = true;
++	return true;
++}
++
++/* ---- QRTR (Linux net/qrtr: af_qrtr.c v1 header, ns.c name service) ---- */
++
++#define QR_TYPE_DATA            1
++#define QR_TYPE_HELLO           2
++#define QR_TYPE_BYE             3
++#define QR_TYPE_NEW_SERVER      4
++#define QR_TYPE_DEL_SERVER      5
++#define QR_TYPE_DEL_CLIENT      6
++#define QR_TYPE_RESUME_TX       7
++#define QR_TYPE_NEW_LOOKUP      10
++#define QR_TYPE_DEL_LOOKUP      11
++#define QR_NODE_APPS            1
++#define QR_PORT_CTRL            0xfffffffeu
++#define QR_PORT_PDM             1               /* our service locator */
++#define SERVREG_LOC_SERVICE     0x40
++#define SERVREG_LOC_INSTANCE    0x101           /* version 0x101 | instance 0 << 8 (qmi_add_server) */
++
++static uint32_t qr_remote_node = 9;
++static unsigned qr_logged;
++
++static void
++qr_send(uint32_t type, uint32_t src_port, uint32_t dst_node, uint32_t dst_port, const void *payload, uint32_t len)
++{
++	uint8_t pkt[32 + 512];
++	uint32_t h[8] = { 1, type, QR_NODE_APPS, src_port, 0, len, dst_node, dst_port };
++	uint32_t padded = (len + 3) & ~3u;
++	if (padded > sizeof(pkt) - 32) {
++		return;
++	}
++	memcpy(pkt, h, 32);
++	memset(pkt + 32, 0, padded);
++	memcpy(pkt + 32, payload, len);
++	(void)gl_send(pkt, 32 + padded);
++}
++
++static void
++qr_ctrl(uint32_t cmd, uint32_t dst_node, const uint32_t *args, unsigned n)
++{
++	uint32_t p[5] = { cmd, 0, 0, 0, 0 };
++	for (unsigned i = 0; i < n && i < 4; i++) {
++		p[1 + i] = args[i];
++	}
++	qr_send(cmd, QR_PORT_CTRL, dst_node, QR_PORT_CTRL, p, 20);
++}
++
++static void
++qr_announce_pdm(uint32_t dst_node)
++{
++	uint32_t a[4] = { SERVREG_LOC_SERVICE, SERVREG_LOC_INSTANCE, QR_NODE_APPS, QR_PORT_PDM };
++	qr_ctrl(QR_TYPE_NEW_SERVER, dst_node, a, 4);
++}
++
++/* ---- the service locator (Linux qcom_pd_mapper.c, sm8250 table; qcom_pdr_msg.c TLVs) ---- */
++
++static const struct {
++	const char *service, *domain;
++	uint32_t instance;
++} pdm_table[] = {
++	{ "tms/servreg", "msm/adsp/audio_pd", 74 },
++	{ "tms/servreg", "msm/adsp/root_pd", 74 },
++	{ "tms/servreg", "msm/cdsp/root_pd", 76 },
++	{ "tms/servreg", "msm/slpi/root_pd", 90 },
++	{ "tms/servreg", "msm/slpi/sensor_pd", 90 },
++	{ "avs/audio", "msm/adsp/audio_pd", 74 },
++};
++
++static uint32_t
++qmi_tlv(uint8_t *out, uint32_t at, uint8_t type, const void *v, uint16_t len)
++{
++	out[at] = type;
++	memcpy(out + at + 1, &len, 2);
++	memcpy(out + at + 3, v, len);
++	return at + 3 + len;
++}
++
++static void
++pdm_request(uint32_t src_node, uint32_t src_port, const uint8_t *q, uint32_t len)
++{
++	if (len < 7) {
++		return;
++	}
++	uint16_t txn, msg, mlen;
++	memcpy(&txn, q + 1, 2);
++	memcpy(&msg, q + 3, 2);
++	memcpy(&mlen, q + 5, 2);
++	char name[66] = { 0 };
++	for (uint32_t at = 7; at + 3 <= len && at + 3 <= 7u + mlen;) {
++		uint16_t tl;
++		memcpy(&tl, q + at + 1, 2);
++		if (q[at] == 0x01 && at + 3 + tl <= len) {   /* a top-level QMI string has no length byte */
++			memcpy(name, q + at + 3, MIN(64u, (uint32_t)tl));
++		}
++		at += 3 + tl;
++	}
++	uint8_t r[512];
++	uint32_t at = 7;
++	uint16_t res[2] = { 0, 0 };
++	at = qmi_tlv(r, at, 0x02, res, 4);
++	if (msg == 0x21) {
++		uint8_t list[400];
++		uint32_t ln = 1;
++		uint16_t total = 0;
++		for (unsigned i = 0; i < sizeof(pdm_table) / sizeof(pdm_table[0]); i++) {
++			if (strcmp(name, pdm_table[i].service) != 0) {
++				continue;
++			}
++			uint8_t dl = (uint8_t)strlen(pdm_table[i].domain);
++			list[ln++] = dl;
++			memcpy(list + ln, pdm_table[i].domain, dl);
++			ln += dl;
++			memcpy(list + ln, &pdm_table[i].instance, 4);     /* instance */
++			ln += 4;
++			list[ln++] = 0;                                     /* service_data_valid */
++			memset(list + ln, 0, 4);                            /* service_data */
++			ln += 4;
++			total++;
++		}
++		list[0] = (uint8_t)total;
++		uint16_t rev = 1;
++		at = qmi_tlv(r, at, 0x10, &total, 2);
++		at = qmi_tlv(r, at, 0x11, &rev, 2);
++		if (total > 0) {
++			at = qmi_tlv(r, at, 0x12, list, (uint16_t)ln);
++		}
++		printf("SWEET SLPI: service locator: \"%s\" -> %u domains\n", name, total);
++	} else {
++		printf("SWEET SLPI: service locator: request %#x (\"%s\") -> success\n", msg, name);
++	}
++	uint16_t rlen = (uint16_t)(at - 7);
++	r[0] = 2;                               /* response */
++	memcpy(r + 1, &txn, 2);
++	memcpy(r + 3, &msg, 2);
++	memcpy(r + 5, &rlen, 2);
++	qr_send(QR_TYPE_DATA, QR_PORT_PDM, src_node, src_port, r, at);
++}
++
++static void
++qr_rx(const uint8_t *pkt, uint32_t len)
++{
++	if (len < 32) {
++		return;
++	}
++	uint32_t h[8];
++	memcpy(h, pkt, 32);
++	uint32_t type = h[1], src_node = h[2], src_port = h[3], confirm = h[4], size = h[5];
++	uint32_t dst_node = h[6], dst_port = h[7];
++	const uint8_t *p = pkt + 32;
++	if (h[0] != 1 || size > len - 32) {
++		printf("SWEET SLPI: QRTR: not a v1 packet (%u, %u bytes)\n", h[0], len);
++		return;
++	}
++	uint32_t c[5] = { 0 };
++	memcpy(c, p, MIN(size, 20u));
++	switch (type) {
++	case QR_TYPE_HELLO:
++		qr_remote_node = src_node;
++		printf("SWEET SLPI: QRTR <- HELLO from node %u; answering, announcing the service locator\n", src_node);
++		qr_ctrl(QR_TYPE_HELLO, src_node, NULL, 0);
++		qr_announce_pdm(src_node);
++		break;
++	case QR_TYPE_NEW_SERVER:
++	case QR_TYPE_DEL_SERVER:
++		printf("SWEET SLPI: QRTR <- %s service %#x (%u) instance %#x at node %u port %#x\n",
++		    type == QR_TYPE_NEW_SERVER ? "NEW_SERVER" : "DEL_SERVER", c[1], c[1], c[2], c[3], c[4]);
++		break;
++	case QR_TYPE_NEW_LOOKUP: {
++		printf("SWEET SLPI: QRTR <- NEW_LOOKUP service %#x instance %#x from node %u port %#x\n", c[1], c[2],
++		    src_node, src_port);
++		if (c[1] == SERVREG_LOC_SERVICE || c[1] == 0) {
++			uint32_t a[4] = { SERVREG_LOC_SERVICE, SERVREG_LOC_INSTANCE, QR_NODE_APPS, QR_PORT_PDM };
++			qr_send(QR_TYPE_NEW_SERVER, QR_PORT_CTRL, src_node, src_port, (uint32_t[5]){ QR_TYPE_NEW_SERVER,
++			    a[0], a[1], a[2], a[3] }, 20);
++		}
++		uint32_t end[5] = { QR_TYPE_NEW_SERVER, 0, 0, 0, 0 };  /* ns.c: an empty server ends the list */
++		qr_send(QR_TYPE_NEW_SERVER, QR_PORT_CTRL, src_node, src_port, end, 20);
++		break;
++	}
++	case QR_TYPE_DATA:
++		if (dst_port == QR_PORT_PDM) {
++			pdm_request(src_node, src_port, p, size);
++		} else if (qr_logged++ < 20) {
++			printf("SWEET SLPI: QRTR <- DATA %u bytes from %u:%#x to %u:%#x\n", size, src_node, src_port, dst_node,
++			    dst_port);
++		}
++		break;
++	case QR_TYPE_RESUME_TX:
++	case QR_TYPE_BYE:
++	case QR_TYPE_DEL_CLIENT:
++	case QR_TYPE_DEL_LOOKUP:
++	default:
++		if (qr_logged++ < 20) {
++			printf("SWEET SLPI: QRTR <- type %u from %u:%#x (%u bytes) %#x %#x %#x %#x\n", type, src_node, src_port,
++			    size, c[1], c[2], c[3], c[4]);
++		}
++		break;
++	}
++	if (confirm && type == QR_TYPE_DATA) {
++		uint32_t a[2] = { dst_node, dst_port };         /* af_qrtr.c qrtr_send_resume_tx */
++		uint32_t pk[3] = { QR_TYPE_RESUME_TX, a[0], a[1] };
++		qr_send(QR_TYPE_RESUME_TX, QR_PORT_CTRL, src_node, src_port, pk, 12);
++	}
++}
++
+ /* Handle what the SLPI sent; false when the FIFO holds an incomplete message. */
+ static bool
+ gl_rx_one(void)
+@@ -607,10 +880,10 @@ gl_rx_one(void)
+ 		if (avail < len) {
+ 			return false;
+ 		}
+-		for (uint32_t i = 0; i < p2 && i < 8; i++) {
++		for (uint32_t i = 0; i < p2; i++) {
+ 			uint32_t sz[2];
+ 			gl_peek(sz, 8 + 8 * i, 8);
+-			printf("SWEET SLPI: GLINK <- INTENT cid %u size %#x iid %u\n", p1, sz[0], sz[1]);
++			gl_remote_intent_add(sz[0], sz[1]);
+ 		}
+ 		gl_advance(len);
+ 		return true;
+@@ -634,17 +907,18 @@ gl_rx_one(void)
+ 		if (avail < len) {
+ 			return false;
+ 		}
+-		uint8_t d[48] = { 0 };
+-		gl_peek(d, 16, MIN(chunk, 48u));
+-		gl_advance(len);
+-		if (gl_data_logged++ < 40) {
+-			printf("SWEET SLPI: GLINK <- DATA cid %u iid %u %u bytes (%u left): %02x %02x %02x %02x %02x %02x %02x %02x "
+-			    "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", p1, p2, chunk, left,
+-			    d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], d[10], d[11], d[12], d[13], d[14], d[15],
+-			    d[16], d[17], d[18], d[19], d[20], d[21], d[22], d[23]);
++		if (cmd == GL_TX_DATA) {
++			gl_rx_used = 0;
++		}
++		if (gl_rx_used + chunk <= sizeof(gl_rx_buf)) {
++			gl_peek(gl_rx_buf + gl_rx_used, 16, chunk);
++			gl_rx_used += chunk;
+ 		}
++		gl_advance(len);
++		gl_data_logged++;
+ 		if (left == 0) {
+ 			gl_cmd(GL_RX_DONE_W_REUSE, GL_LCID, p2);     /* the intent is ours again */
++			qr_rx(gl_rx_buf, gl_rx_used);
+ 		}
+ 		return true;
+ 	}
+@@ -654,6 +928,9 @@ gl_rx_one(void)
+ 		return true;
+ 	case GL_RX_DONE:
+ 	case GL_RX_DONE_W_REUSE:
++		gl_advance(8);
++		gl_remote_intent_done(p2, cmd == GL_RX_DONE_W_REUSE);
++		return true;
+ 	case GL_RX_INTENT_REQ_ACK:
+ 	case GL_SIGNALS:
+ 		gl_advance(8);
+@@ -683,7 +960,7 @@ sl_glink(void)
+ 	gl_cmd(GL_VERSION, 1, GL_FEATURE_INTENT_REUSE);
+ 	printf("SWEET SLPI: GLINK -> VERSION 1\n");
+ 	uint32_t last = ~0u;
+-	for (int t = 0; t < 6000; t++) {        /* 60 s */
++	for (int t = 0; t < 12000; t++) {       /* 120 s */
+ 		while (gl_rx_one()) {
+ 		}
+ 		uint32_t v = sl_smp2p_value(false);
+@@ -701,7 +978,7 @@ sl_glink(void)
+ 		}
+ 		sl_sleep_ms(10);
+ 	}
+-	printf("SWEET SLPI: GLINK: 60 s done; %u data messages\n", gl_data_logged);
++	printf("SWEET SLPI: GLINK: 120 s done; %u data messages\n", gl_data_logged);
+ }
+ 
+ /* ---- TrustZone (Linux qcom_scm-smc.c; same calls as the GPU zap shader) ---- */
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,107 @@
+From 64858a0051b0f39207037fcc66b05b1ff58c12e7 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 12:11:42 +0200
+Subject: [PATCH] umi-0123
+
+---
+ bsd/dev/sweet_pcie.c | 39 +++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlan.c |  5 +++++
+ 2 files changed, 44 insertions(+)
+
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+index 1c5df50..01e8917 100644
+--- a/bsd/dev/sweet_pcie.c
++++ b/bsd/dev/sweet_pcie.c
+@@ -20,6 +20,7 @@ extern bool sweet_board_is_umi(void);
+ extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ void sweet_pcie_init(void);
+ int sweet_pcie_run(unsigned stage);
++int sweet_pcie_msi(uint32_t addr, uint32_t data);
+ extern int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ 
+ #define PCIE_GCC_PA      0x00100000u
+@@ -487,6 +488,44 @@ pcie_bringup(void)
+ 	return r == 0 && sp.stage >= 5 ? sweet_wlan_fw_boot(sp.bar0, sp.stage) : r;
+ }
+ 
++/*
++ * Point the endpoint's MSI at addr (Linux enables MSI before MHI; the QCA6390
++ * PBL raises a BHI interrupt and errors out without one). The write lands in
++ * RAM through the SMMU bypass: no interrupt controller involved, the caller
++ * can poll it. All vectors the function asks for.
++ */
++int
++sweet_pcie_msi(uint32_t addr, uint32_t data)
++{
++	if (sp.conf == 0) {
++		return -1;
++	}
++	uint32_t ptr = pcie_rd(sp.conf, 0x34) & 0xfcu;
++	for (unsigned guard = 0; ptr >= 0x40u && guard < 48; ++guard) {
++		uint32_t hdr = pcie_rd(sp.conf, ptr);
++		if ((hdr & 0xffu) == 0x05u) {
++			uint32_t ctl = hdr >> 16;
++			bool is64 = (ctl & (1u << 7)) != 0;
++			unsigned mmc = (ctl >> 1) & 7u;
++			pcie_wr(sp.conf, ptr + 4, addr);
++			if (is64) {
++				pcie_wr(sp.conf, ptr + 8, 0);
++				pcie_wr(sp.conf, ptr + 12, data);
++			} else {
++				pcie_wr(sp.conf, ptr + 8, data);
++			}
++			ctl = (ctl & ~(7u << 4)) | (mmc << 4) | 1u;     /* MME = MMC, enable */
++			pcie_wr(sp.conf, ptr, (hdr & 0xffffu) | (ctl << 16));
++			printf("SWEET PCIE: MSI cap at %#x: %u vectors, %s, address %#x data %#x, ctl %#x\n",
++			    ptr, 1u << mmc, is64 ? "64-bit" : "32-bit", addr, data, pcie_rd(sp.conf, ptr) >> 16);
++			return 0;
++		}
++		ptr = (hdr >> 8) & 0xfcu;
++	}
++	printf("SWEET PCIE: no MSI capability\n");
++	return -1;
++}
++
+ int
+ sweet_pcie_run(unsigned stage)
+ {
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index a7aa657..08a9e88 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -24,6 +24,7 @@ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
++extern int sweet_pcie_msi(uint32_t addr, uint32_t data);
+ 
+ #define WLAN_POOL_PA            0xd0000000u
+ #define WLAN_POOL_SIZE          0x00490000u
+@@ -31,6 +32,7 @@ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ #define WLAN_FW_MAX             0x480000u        /* amss20.bin is 4352144 bytes */
+ #define WLAN_VEC_OFF            0x480000u       /* BHIe vector table */
+ #define WLAN_MHI_OFF            0x484000u       /* MHI contexts and rings (sweet_mhi.c), 24 KiB */
++#define WLAN_MSI_OFF            0x48c000u       /* MSI writes land here (polled) */
+ #define WLAN_SBL_SIZE           0x80000u        /* ath11k sbl_size = seg_len = 512 KiB */
+ #define WLAN_SEG_LEN            0x80000u
+ 
+@@ -323,6 +325,7 @@ wlan_bhi(vm_offset_t bar0, vm_offset_t bhi)
+ 		delay(100);
+ 	}
+ 	wlan_state(bar0, bhi, "after BHI");
++	printf("SWEET WLAN: MSI word after BHI: %#x\n", *(volatile uint32_t *)(sw.pool + WLAN_MSI_OFF));
+ 	if ((st >> 30) != 2) {
+ 		printf("SWEET WLAN: BHI %s (status %#x)\n", (st >> 30) == 3 ? "ERROR" : "timeout", st);
+ 		return EIO;
+@@ -462,6 +465,8 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (prep) {
+ 		wlan_prep(bar0);
+ 	}
++	*(volatile uint32_t *)(sw.pool + WLAN_MSI_OFF) = 0xffffffffu;
++	(void)sweet_pcie_msi(sw.pool_pa + WLAN_MSI_OFF, 0);
+ 	wlan_state(bar0, bhi, "before BHI");
+ 	if (wl_rd(bhi, BHI_EXECENV) == 0 && wlan_bhi(bar0, bhi) != 0) {
+ 		return 14;
+-- 
+2.54.0 (Apple Git-157)
+

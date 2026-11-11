@@ -1,0 +1,87 @@
+From 2fea1be13457536a175576a923719e8256d24aa5 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 13:19:46 +0200
+Subject: [PATCH] umi-0126
+
+---
+ bsd/dev/sweet_ipcr.c |  8 ++++----
+ bsd/dev/sweet_mhi.c  | 10 +++++-----
+ 2 files changed, 9 insertions(+), 9 deletions(-)
+
+diff --git a/bsd/dev/sweet_ipcr.c b/bsd/dev/sweet_ipcr.c
+index 595289f..d90aa2d 100644
+--- a/bsd/dev/sweet_ipcr.c
++++ b/bsd/dev/sweet_ipcr.c
+@@ -92,7 +92,7 @@ tre(uint32_t off, uint64_t ptr, uint32_t d0, uint32_t d1)
+ static void
+ chan_init(unsigned ch, bool in, uint32_t ring)
+ {
+-	uint32_t c = MEM_CHCTX + ch * 40u;
++	uint32_t c = MEM_CHCTX + ch * 44u;
+ 	m32(c)[0] = 1u | (2u << 8);
+ 	m32(c)[1] = in ? 2u : 1u;
+ 	m32(c)[2] = 1u;                         /* event ring 1 */
+@@ -106,7 +106,7 @@ static void
+ chan_ring(unsigned ch, uint32_t ring, uint32_t wp)
+ {
+ 	uint64_t a = ip.pa + ring + wp * EL;
+-	m64(MEM_CHCTX + ch * 40u + 36, a);
++	m64(MEM_CHCTX + ch * 44u + 36, a);
+ 	ip_db(ip.chdb + 8u * ch, a);
+ }
+ 
+@@ -131,7 +131,7 @@ chan_start(unsigned ch)
+ 		}
+ 		delay(100);
+ 	}
+-	printf("SWEET IPCR: ch %u start: no completion (ctx state %#x)\n", ch, m32(MEM_CHCTX + ch * 40u)[0]);
++	printf("SWEET IPCR: ch %u start: no completion (ctx state %#x)\n", ch, m32(MEM_CHCTX + ch * 44u)[0]);
+ 	return ETIMEDOUT;
+ }
+ 
+@@ -198,7 +198,7 @@ q_rx(const uint8_t *p, uint32_t len)
+ static void
+ er1_poll(void)
+ {
+-	uint32_t ctx = MEM_ERCTX + 40;
++	uint32_t ctx = MEM_ERCTX + 44;
+ 	uint64_t devrp = (uint64_t)m32(ctx + 28)[0] | (uint64_t)m32(ctx + 28)[1] << 32;
+ 	uint32_t idx = (uint32_t)((devrp - (ip.pa + MEM_ER1)) / EL);
+ 	while (idx < ER1_N && ip.er1_rp != idx) {
+diff --git a/bsd/dev/sweet_mhi.c b/bsd/dev/sweet_mhi.c
+index bf4398a..3742faf 100644
+--- a/bsd/dev/sweet_mhi.c
++++ b/bsd/dev/sweet_mhi.c
+@@ -17,9 +17,9 @@ void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint3
+ bool sweet_mhi_er0_next(uint64_t *ptr, uint32_t *d0, uint32_t *d1);
+ 
+ /* Layout inside the caller's block (each ring aligned to its size) */
+-#define MEM_CHCTX       0x0000u         /* 128 x 40 bytes */
+-#define MEM_ERCTX       0x2000u         /* 2 x 40 */
+-#define MEM_CMDCTX      0x2100u         /* 1 x 40 */
++#define MEM_CHCTX       0x0000u         /* 128 x 44 bytes (packed: 3 words, 4 quads) */
++#define MEM_ERCTX       0x2000u         /* 2 x 44 */
++#define MEM_CMDCTX      0x2100u         /* 1 x 44 */
+ #define MEM_ER0         0x3000u         /* 32 x 16 */
+ #define MEM_ER1         0x4000u         /* 256 x 16 */
+ #define MEM_CMD         0x5000u         /* 64 x 16 */
+@@ -145,14 +145,14 @@ sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa)
+ 	 */
+ 	static const uint8_t chans[4][3] = { { 0, 1, 0 }, { 1, 2, 0 }, { 20, 1, 1 }, { 21, 2, 1 } };
+ 	for (unsigned i = 0; i < 4; ++i) {
+-		uint32_t c = MEM_CHCTX + chans[i][0] * 40u;
++		uint32_t c = MEM_CHCTX + chans[i][0] * 44u;
+ 		mem_wr32(c, 2u << 8);
+ 		mem_wr32(c + 4, chans[i][1]);
+ 		mem_wr32(c + 8, chans[i][2]);
+ 	}
+ 	/* Event rings: type valid (1), MSI vector = Linux irq index; wp = last element. */
+ 	ctx_set(MEM_ERCTX, 0, 1, 1, MEM_ER0, ER0_N * EL, MEM_ER0 + (ER0_N - 1) * EL);
+-	ctx_set(MEM_ERCTX + 40, 1u << 16, 1, 2, MEM_ER1, ER1_N * EL, MEM_ER1 + (ER1_N - 1) * EL);
++	ctx_set(MEM_ERCTX + 44, 1u << 16, 1, 2, MEM_ER1, ER1_N * EL, MEM_ER1 + (ER1_N - 1) * EL);
+ 	ctx_set(MEM_CMDCTX, 0, 0, 0, MEM_CMD, CMD_N * EL, MEM_CMD);
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	mh.rp = 0;
+-- 
+2.54.0 (Apple Git-157)
+

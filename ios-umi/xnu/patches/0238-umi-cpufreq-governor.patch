@@ -1,0 +1,562 @@
+From 084245ecd52bd78591cfc89087f05b27df71a304 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 00:55:52 +0100
+Subject: [PATCH] umi: CPU frequency scaling: an EPSS governor for the three
+ clusters (sweet_cpufreq.c)
+
+SM8250's EPSS cpufreq-hw: each domain's level table at 0x100, the request at
+0x320. A thread every 16 ms reads each core's idle time (recount, through
+machine_routines.c sweet_cpu_sample()) and picks the level its busiest core
+needs (schedutil-like, x1.5 headroom, the top at 75% busy; up at once, down
+after 64 ms). TSENS caps the gold and prime clusters over 75 C (sweetthermal).
+A touch boosts every cluster to its cap for 250 ms (sweetboost). A stats line
+every 10 s (sweetcpustats). sweetcpufreq=0: measure only; sweetcpugov=0: all at top.
+
+Adapted from ios-apollo (xnu 0095, 0098, 0153, 0160; MIT, notice in the file).
+First boot on the Mi 10: idle at 288 / 710 / 844 MHz, hottest core 57-60 C.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/conf/files                 |   1 +
+ bsd/dev/sweet_cpufreq.c        | 433 +++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_touch.c          |   4 +
+ bsd/dev/sweet_ufs.c            |   3 +
+ osfmk/arm64/machine_routines.c |  30 +++
+ 5 files changed, 471 insertions(+)
+ create mode 100644 bsd/dev/sweet_cpufreq.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 6811786..ceec8a2 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -112,6 +112,7 @@ bsd/dev/sweet_gpi.c			standard
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
++bsd/dev/sweet_cpufreq.c		standard
+ bsd/dev/sweet_files.c			standard
+ bsd/dev/sweet_pcie.c			standard
+ bsd/dev/sweet_adreno.c			standard
+diff --git a/bsd/dev/sweet_cpufreq.c b/bsd/dev/sweet_cpufreq.c
+new file mode 100644
+index 0000000..a78adb4
+--- /dev/null
++++ b/bsd/dev/sweet_cpufreq.c
+@@ -0,0 +1,433 @@
++/*
++ * umi (Mi 10, SM8250): CPU frequency scaling through the EPSS hardware ("qcom,cpufreq-hw-epss",
++ * upstream sm8250.dtsi cpufreq@18591000). Under fastboot boot nothing sets the CPU clock: Android's
++ * qcom-cpufreq-hw driver does, XNU has none, so the cores stayed at the bootloader's level.
++ *
++ * Per frequency domain (silver cpu0-3, gold cpu4-6, prime cpu7) the firmware's table has one 4-byte
++ * row per level at 0x100: [31:30] source (0 = 300 MHz alternate PLL, else 19.2 MHz XO x [7:0]); a
++ * repeated row ends the table (40 rows max). Writing a row index to 0x320 requests that level (the
++ * hardware sets the voltage); 0x020 [7:0] is the multiplier running now.
++ *
++ * A governor: every GOV_PERIOD_MS a thread reads how long each core was idle (machine_routines.c
++ * sweet_cpu_sample(): XNU's own per-processor accounting) and gives each domain the level its
++ * busiest core needs, as Linux's schedutil does: the work done (busy share x the clock it ran at)
++ * with 50% headroom; at 75% busy or more straight to the domain's cap. Up at once, down only after
++ * GOV_DOWN_HOLD samples asking for less. A touch (sweet_touch.c: sweet_cpufreq_boost()) puts every
++ * domain at its cap for BOOST_MS so an animation that starts with the finger starts at full speed.
++ *   - Temperature: the chip's TSENS sensors, every THERMAL_EVERY samples; over sweetthermal (degrees
++ *     C, default 75; 0: no limit) the gold and prime domains' cap is lowered a step each time (three
++ *     steps at 10 over; silver too at 5 over), never under a third of the table, and given back a
++ *     step each time it is 5 under.
++ *   - Every sweetcpustats=N s (default 10, 0: never) a line: each domain's average clock, the clock
++ *     the hardware reports running now, the busiest core's average share, how many level changes,
++ *     the cap if lowered; the hottest core sensor and the GPU's.
++ * Boot-args: sweetcpufreq=0 only measures (the governor thread logs, nothing is written: the
++ * bootloader's clocks, for comparison), 1 = the whole table (default), N > 1 = levels at or below N
++ * MHz only. sweetcpugov=0: no governor, every domain at its top (or the sweetcpufreq cap) for good.
++ * sweetboost=N ms (default 250, 0: off). The governor starts GOV_START_S into the boot.
++ *
++ * Adapted from ios-apollo (github.com/aTechGeekDev/ios-apollo, xnu 0095, 0098, 0153, 0160:
++ * bsd/dev/sweet_cpufreq.c; MIT, Copyright (c) 2026 Leo Malik, dipa-studio), the same SoC. Left
++ * out for now: their memory-bus (DDR) voting, their in-kernel top (umi has sweettop in
++ * sweet_sample.c) and their CPU budget for runaway background processes.
++ *
++ * ios-apollo's licence, for this file:
++ *   Copyright (c) 2026 Leo Malik
++ *   Copyright (c) 2026 dipa-studio
++ *   Permission is hereby granted, free of charge, to any person obtaining a copy of this software
++ *   and associated documentation files (the "Software"), to deal in the Software without
++ *   restriction, including without limitation the rights to use, copy, modify, merge, publish,
++ *   distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
++ *   Software is furnished to do so, subject to the following conditions: The above copyright
++ *   notice and this permission notice shall be included in all copies or substantial portions of
++ *   the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
++ *   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
++ *   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
++ *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ *   IN THE SOFTWARE.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern bool sweet_cpu_sample(unsigned int cpu, uint32_t *mpidr, uint64_t *idle_abs);    /* machine_routines.c */
++extern void thread_set_thread_name(thread_t thread, const char *name);
++void sweet_cpufreq_boost(uint32_t ms);
++void sweet_cpufreq_init(void);
++
++#define CPUFREQ_DOMAIN_PA(d)  (0x18591000u + 0x1000u * (d))
++#define CPUFREQ_DOMAINS       3u
++#define CPUFREQ_ENABLE        0x000u
++#define CPUFREQ_DOMAIN_STATE  0x020u      /* [7:0] multiplier running now */
++#define CPUFREQ_FREQ_LUT      0x100u
++#define CPUFREQ_PERF_STATE    0x320u
++#define CPUFREQ_LUT_ROW       4u
++#define CPUFREQ_LUT_MAX       40u
++#define CPUFREQ_ALT_KHZ       300000u     /* GPLL0 600 MHz / 2 */
++#define CPUFREQ_XO_KHZ        19200u
++
++#define GOV_CPUS              8u
++#define GOV_PERIOD_MS         16u
++#define GOV_DOWN_HOLD         4u          /* samples asking for less before a domain goes down (64 ms) */
++#define GOV_FULL_PERMILLE     750u        /* this busy or more: the cap at once */
++#define GOV_START_S           15u
++#define THERMAL_EVERY         16u         /* samples (~256 ms) */
++#define BOOST_MS              250u
++
++/*
++ * TSENS v2 (Linux drivers/thermal/qcom/tsens-v2.c; sm8250.dtsi): tsens0's TM region at 0xc263000;
++ * sensor n's status at TM + 0xa0 + 4n: [11:0] the last temperature in tenths of a degree C (signed,
++ * 12 bits), [21] valid. 1-4 the silver cores, 7-14 the gold and prime cores, 15 the GPU. Read only.
++ */
++#define TSENS0_TM_PA          0x0c263000u
++#define TSENS_STATUS(n)       (0xa0u + 4u * (n))
++#define TSENS_VALID           (1u << 21)
++#define TSENS_GPU             15u
++#define TEMP_NONE             (-100000)
++
++static const char *const cpufreq_names[CPUFREQ_DOMAINS] = { "silver", "gold", "prime" };
++
++struct cpufreq_domain {
++	vm_offset_t base;
++	unsigned n, top, cap, level, hold, changes;
++	unsigned khz[CPUFREQ_LUT_MAX];
++	uint64_t sum_khz, sum_busy;     /* for the stats line: summed per sample */
++	unsigned busiest;               /* this sample: the busiest core's share, per mille */
++};
++
++static struct cpufreq_domain cpufreq_dom[CPUFREQ_DOMAINS];
++static volatile uint64_t boost_until;
++static uint32_t boost_ms = BOOST_MS;
++static bool governing, measuring_only;
++static vm_offset_t tsens0;
++
++static uint32_t
++cpufreq_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++cpufreq_wr(vm_offset_t base, uint32_t off, uint32_t val)
++{
++	__asm__ volatile ("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + off) = val;
++	__asm__ volatile ("dsb osh" ::: "memory");
++}
++
++/* Microseconds for a fixed dependent-add loop on this core: relative speed. */
++static uint64_t
++cpufreq_bench(void)
++{
++	volatile uint64_t acc = 0;
++	uint64_t t0 = mach_absolute_time(), ns;
++	for (uint64_t i = 0; i < 20000000ull; ++i) {
++		acc += i;
++	}
++	absolutetime_to_nanoseconds(mach_absolute_time() - t0, &ns);
++	return ns / 1000;
++}
++
++static unsigned
++cpufreq_khz(uint32_t row)
++{
++	return (row >> 30) ? CPUFREQ_XO_KHZ * (row & 0xffu) : CPUFREQ_ALT_KHZ;
++}
++
++static unsigned
++cpufreq_running_mhz(const struct cpufreq_domain *dom)
++{
++	return (cpufreq_rd(dom->base, CPUFREQ_DOMAIN_STATE) & 0xffu) * CPUFREQ_XO_KHZ / 1000u;
++}
++
++/* A touch: every domain at its cap for `ms` (0: the default) from now. Anything may call it. */
++void
++sweet_cpufreq_boost(uint32_t ms)
++{
++	uint64_t span;
++
++	if (!governing || boost_ms == 0) {
++		return;
++	}
++	nanoseconds_to_absolutetime((uint64_t)(ms ? ms : boost_ms) * NSEC_PER_MSEC, &span);
++	boost_until = mach_absolute_time() + span;
++}
++
++/* A sensor's temperature in tenths of a degree C, or TEMP_NONE. */
++static int32_t
++tsens_read(vm_offset_t tm, unsigned sensor)
++{
++	uint32_t status;
++
++	if (tm == 0) {
++		return TEMP_NONE;
++	}
++	status = cpufreq_rd(tm, TSENS_STATUS(sensor));
++	if (!(status & TSENS_VALID)) {
++		return TEMP_NONE;
++	}
++	return (int32_t)(status << 20) >> 20;
++}
++
++/* The hottest core sensor (tenths of a degree C) and which; TEMP_NONE if none read. */
++static int32_t
++tsens_hottest(unsigned *which)
++{
++	static const uint8_t cores[] = { 1, 2, 3, 4, 7, 8, 9, 10, 11, 12, 13, 14 };
++	int32_t hottest = TEMP_NONE;
++
++	for (unsigned i = 0; i < sizeof(cores); i++) {
++		int32_t t = tsens_read(tsens0, cores[i]);
++		if (t > hottest) {
++			hottest = t;
++			*which = cores[i];
++		}
++	}
++	return hottest;
++}
++
++static void
++cpufreq_set(struct cpufreq_domain *dom, unsigned level)
++{
++	if (level != dom->level) {
++		dom->level = level;
++		dom->changes++;
++		cpufreq_wr(dom->base, CPUFREQ_PERF_STATE, level);
++	}
++}
++
++/* The lowest level whose clock is at least khz, at most the cap. */
++static unsigned
++cpufreq_level_for(const struct cpufreq_domain *dom, uint64_t khz)
++{
++	for (unsigned i = 0; i < dom->cap; i++) {
++		if (dom->khz[i] >= khz) {
++			return i;
++		}
++	}
++	return dom->cap;
++}
++
++static void
++cpufreq_temp_text(char *out, size_t size, int32_t t)
++{
++	if (t == TEMP_NONE) {
++		snprintf(out, size, "?");
++	} else {
++		snprintf(out, size, "%s%d.%d C", t < 0 ? "-" : "", (t < 0 ? -t : t) / 10, (t < 0 ? -t : t) % 10);
++	}
++}
++
++static void
++cpufreq_governor(__unused void *arg, __unused wait_result_t result)
++{
++	uint32_t limit = 75, stats_s = 10;
++	uint64_t idle_prev[GOV_CPUS] = { 0 }, at_prev, stats_abs, stats_since;
++	bool have_prev[GOV_CPUS] = { false };
++	unsigned samples = 0, stat_samples = 0;
++
++	(void)PE_parse_boot_argn("sweetthermal", &limit, sizeof(limit));
++	(void)PE_parse_boot_argn("sweetcpustats", &stats_s, sizeof(stats_s));
++	(void)PE_parse_boot_argn("sweetboost", &boost_ms, sizeof(boost_ms));
++	nanoseconds_to_absolutetime((uint64_t)stats_s * NSEC_PER_SEC, &stats_abs);
++	delay_for_interval(GOV_START_S * 1000, NSEC_PER_MSEC);
++	if (measuring_only) {
++		printf("SWEET CPUFREQ: measuring only (sweetcpufreq=0): the bootloader's clocks stay\n");
++	} else {
++		printf("SWEET CPUFREQ: the governor runs: every %u ms, temperature limit %u C%s, touch boost %u ms\n",
++		    GOV_PERIOD_MS, limit, limit ? "" : " (none)", boost_ms);
++	}
++	stats_since = at_prev = mach_absolute_time();
++	governing = !measuring_only;
++
++	for (;;) {
++		uint64_t now = mach_absolute_time(), span = now - at_prev;
++
++		at_prev = now;
++		for (unsigned d = 0; d < CPUFREQ_DOMAINS; d++) {
++			cpufreq_dom[d].busiest = 0;
++		}
++		for (unsigned cpu = 0; cpu < GOV_CPUS; cpu++) {
++			uint32_t mpidr;
++			uint64_t idle;
++
++			if (!sweet_cpu_sample(cpu, &mpidr, &idle)) {
++				continue;
++			}
++			unsigned core = (mpidr >> 8) & 0xffu;
++			unsigned d = core < 4 ? 0 : core < 7 ? 1 : 2;
++			if (have_prev[cpu] && span != 0) {
++				uint64_t idled = idle - idle_prev[cpu];
++				unsigned busy = idled >= span ? 0 : (unsigned)((span - idled) * 1000 / span);
++				if (busy > cpufreq_dom[d].busiest) {
++					cpufreq_dom[d].busiest = busy;
++				}
++			}
++			idle_prev[cpu] = idle;
++			have_prev[cpu] = true;
++		}
++
++		/* each domain's level: the work x 1.5, up at once, down after GOV_DOWN_HOLD */
++		for (unsigned d = 0; d < CPUFREQ_DOMAINS; d++) {
++			struct cpufreq_domain *dom = &cpufreq_dom[d];
++			unsigned want;
++
++			if (dom->base == 0 || dom->n == 0) {
++				continue;
++			}
++			if (!measuring_only) {
++				if (dom->busiest >= GOV_FULL_PERMILLE || now < boost_until) {
++					want = dom->cap;
++				} else {
++					uint64_t khz = (uint64_t)dom->khz[dom->level] * dom->busiest * 150 / 100000;
++					want = cpufreq_level_for(dom, khz);
++				}
++				if (want >= dom->level) {
++					dom->hold = 0;
++					cpufreq_set(dom, want);
++				} else if (++dom->hold >= GOV_DOWN_HOLD) {
++					dom->hold = 0;
++					cpufreq_set(dom, want);
++				}
++				if (dom->level > dom->cap) {
++					cpufreq_set(dom, dom->cap);
++				}
++			}
++			dom->sum_khz += dom->khz[dom->level];
++			dom->sum_busy += dom->busiest;
++		}
++		stat_samples++;
++
++		/* the temperature: the gold and prime domains' (and if need be silver's) cap */
++		if (++samples % THERMAL_EVERY == 0 && limit != 0 && !measuring_only) {
++			unsigned which = 0;
++			int32_t t = tsens_hottest(&which);
++			int32_t over = t == TEMP_NONE ? TEMP_NONE : t - (int32_t)limit * 10;
++
++			for (unsigned d = 0; d < CPUFREQ_DOMAINS && over != TEMP_NONE; d++) {
++				struct cpufreq_domain *dom = &cpufreq_dom[d];
++				unsigned floor = dom->n > 4 ? dom->n / 3 : 0;
++
++				if (dom->n == 0) {
++					continue;
++				}
++				if (over >= 0 && (d != 0 || over >= 50)) {
++					unsigned steps = over >= 100 ? 3 : 1;
++					dom->cap = dom->cap > floor + steps ? dom->cap - steps : floor;
++				} else if (over <= -50 && dom->cap < dom->top) {
++					dom->cap++;
++				}
++				if (dom->level > dom->cap) {
++					cpufreq_set(dom, dom->cap);
++				}
++			}
++		}
++
++		if (stats_s != 0 && now - stats_since >= stats_abs && stat_samples != 0) {
++			char line[400], temp[16], gpu[16];
++			unsigned which = 0;
++			int at = 0;
++
++			cpufreq_temp_text(temp, sizeof(temp), tsens_hottest(&which));
++			cpufreq_temp_text(gpu, sizeof(gpu), tsens_read(tsens0, TSENS_GPU));
++			for (unsigned d = 0; d < CPUFREQ_DOMAINS; d++) {
++				struct cpufreq_domain *dom = &cpufreq_dom[d];
++				if (dom->n == 0 || dom->base == 0) {
++					continue;
++				}
++				at += snprintf(line + at, sizeof(line) - (size_t)at,
++				    "%s%s avg %llu MHz (now %u), busiest core %llu%%, %u changes",
++				    at ? "; " : "", cpufreq_names[d], dom->sum_khz / stat_samples / 1000,
++				    cpufreq_running_mhz(dom), dom->sum_busy / stat_samples / 10, dom->changes);
++				if (dom->cap < dom->top) {
++					at += snprintf(line + at, sizeof(line) - (size_t)at, " (hot: capped at %u MHz)",
++					    dom->khz[dom->cap] / 1000);
++				}
++				dom->sum_khz = dom->sum_busy = 0;
++				dom->changes = 0;
++			}
++			printf("SWEET CPUFREQ: %u s: %s; hottest core %s (sensor %u), GPU %s\n",
++			    stats_s, line, temp, which, gpu);
++			stats_since = now;
++			stat_samples = 0;
++		}
++		delay_for_interval(GOV_PERIOD_MS, NSEC_PER_MSEC);
++	}
++}
++
++void
++sweet_cpufreq_init(void)
++{
++	unsigned mode = 1, governor = 1;
++	char temp[16];
++	unsigned which = 0;
++
++	(void)PE_parse_boot_argn("sweetcpufreq", &mode, sizeof(mode));
++	(void)PE_parse_boot_argn("sweetcpugov", &governor, sizeof(governor));
++	measuring_only = (mode == 0);
++	tsens0 = ml_io_map(TSENS0_TM_PA, 0x1000);
++	cpufreq_temp_text(temp, sizeof(temp), tsens_hottest(&which));
++	uint64_t before = cpufreq_bench();
++
++	for (unsigned d = 0; d < CPUFREQ_DOMAINS; ++d) {
++		vm_offset_t base = ml_io_map(CPUFREQ_DOMAIN_PA(d), 0x1000);
++		if (!base) {
++			printf("SWEET CPUFREQ: domain %u map failed\n", d);
++			continue;
++		}
++		struct cpufreq_domain *dom = &cpufreq_dom[d];
++		unsigned n = 0, top = 0, prev = 0;
++		unsigned *khz = dom->khz;
++		for (unsigned i = 0; i < CPUFREQ_LUT_MAX; ++i) {
++			uint32_t row = cpufreq_rd(base, CPUFREQ_FREQ_LUT + i * CPUFREQ_LUT_ROW);
++			if (row == 0 || (i > 0 && row == prev)) {
++				break;  /* repeated row = end of table */
++			}
++			khz[i] = cpufreq_khz(row);
++			n = i + 1;
++			if (mode <= 1 || khz[i] / 1000u <= mode) {
++				top = i;
++			}
++			prev = row;
++		}
++		uint32_t perf = cpufreq_rd(base, CPUFREQ_PERF_STATE);
++		dom->base = base;
++		printf("SWEET CPUFREQ: %s (enable %#x): %u levels %u..%u MHz, request %u, running %u MHz\n",
++		    cpufreq_names[d], cpufreq_rd(base, CPUFREQ_ENABLE), n, n ? khz[0] / 1000u : 0,
++		    n ? khz[n - 1] / 1000u : 0, perf, cpufreq_running_mhz(dom));
++		dom->n = n;
++		dom->level = perf < n ? perf : 0;
++		dom->top = dom->cap = top;
++		if (mode == 0 || n == 0) {
++			continue;
++		}
++		cpufreq_wr(base, CPUFREQ_PERF_STATE, top);
++		delay(1000);
++		dom->level = top;
++		printf("SWEET CPUFREQ: %s -> level %u (%u MHz): request reads %u, running %u MHz\n",
++		    cpufreq_names[d], top, khz[top] / 1000u, cpufreq_rd(base, CPUFREQ_PERF_STATE),
++		    cpufreq_running_mhz(dom));
++	}
++	printf("SWEET CPUFREQ: busy loop %llu us before, %llu us after (mode %u); hottest core %s (sensor %u)\n",
++	    (unsigned long long)before, (unsigned long long)cpufreq_bench(), mode, temp, which);
++
++	if (governor != 0 || mode == 0) {
++		thread_t thread;
++
++		if (kernel_thread_start(cpufreq_governor, NULL, &thread) == KERN_SUCCESS) {
++			thread_set_thread_name(thread, "sweet cpufreq governor");
++			thread_deallocate(thread);
++		} else {
++			printf("SWEET CPUFREQ: no thread for the governor: every domain stays at its top\n");
++		}
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 563cd73..829f2b6 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -30,6 +30,7 @@ extern int sweet_pmic_read(uint16_t ppid, uint8_t reg, uint8_t *val);    /* swee
+ extern int sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val);
+ extern int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
++extern void sweet_cpufreq_boost(uint32_t ms);                                   /* sweet_cpufreq.c */
+ extern bool sweet_board_is_umi(void);
+ extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);   /* sweet_gpi.c */
+ extern int sweet_gpi_nop(void);
+@@ -447,6 +448,9 @@ touch_checksum(const uint8_t *buf, unsigned len)
+ static void
+ touch_report(uint32_t mask, const int *x, const int *y)
+ {
++	if (mask) {
++		sweet_cpufreq_boost(0);     /* the clocks up before the animation starts */
++	}
+ 	for (unsigned id = 0; id < TOUCH_MAX; ++id) {
+ 		uint32_t bit = 1u << id;
+ 		if (mask & bit) {
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 6b7b53f..3db967f 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -50,6 +50,7 @@ extern void thread_deallocate(thread_t);
+ extern int hz;
+ static void sweet_log_start(void);
+ extern void sweet_sample_start(void);
++extern void sweet_cpufreq_init(void);
+ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+ extern void sweet_usb_probe(void);
+@@ -760,6 +761,8 @@ sweet_ufs_init(void)
+ 	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+ 	    su.writable ? "read-write" : "read-only", su.dma_pa);
++	/* CPU clocks first: the bootloader leaves them where it was (sweet_cpufreq.c). */
++	sweet_cpufreq_init();
+ 	sweet_log_start();
+ 	sweet_sample_start();
+ 	/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+index e4c15f2..24160a3 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2818,3 +2818,33 @@ ml_get_backtrace_pc(struct arm_saved_state *state)
+ 
+ 	return get_saved_state_pc(state);
+ }
++
++#if defined(SWEET)
++#include <kern/processor.h>
++#include <kern/recount.h>
++
++/*
++ * For bsd/dev/sweet_cpufreq.c's governor (from ios-apollo xnu 0153, MIT; see there): logical CPU
++ * `cpu`'s MPIDR and the time it has spent idle so far (mach absolute time; recount counts an idle
++ * period still going on up to now). false: no such CPU, or not up yet.
++ */
++bool sweet_cpu_sample(unsigned int cpu, uint32_t *mpidr, uint64_t *idle_abs);
++
++bool
++sweet_cpu_sample(unsigned int cpu, uint32_t *mpidr, uint64_t *idle_abs)
++{
++	struct recount_usage usage = { 0 };
++	processor_t processor;
++
++	if (cpu >= topology_info.num_cpus || cpu >= MAX_SCHED_CPUS) {
++		return false;
++	}
++	processor = processor_array[cpu];
++	if (processor == PROCESSOR_NULL) {
++		return false;
++	}
++	*mpidr = topology_info.cpus[cpu].phys_id;
++	recount_processor_usage(&processor->pr_recount, &usage, idle_abs);
++	return true;
++}
++#endif /* SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

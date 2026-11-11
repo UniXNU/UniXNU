@@ -1,0 +1,126 @@
+From af1ddc5fc7de1d17d96f6a7624513d5ccbfe86d9 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 18:04:40 +0100
+Subject: [PATCH] umi-0167-adreno-core-smr-0x401
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 37 +++++++++++++++++++++----------------
+ 1 file changed, 21 insertions(+), 16 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 860d056..31e8ed6 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -51,7 +51,8 @@
+  *              has power nothing is undone (collapsing CX under a powered GX has hung a phone in
+  *              HackiOS's runs), and TrustZone keeps the zap shader; the next restart resets the SoC.
+  *  18  writes  page tables for the 3D core (its ring, a650_sqe.fw read-only, a scratch page) and SMMU
+- *              context 0 with its streams 0 and 1 through it (dt gfx3d_user: iommus 0 / 0x401)
++ *              context 0 with its streams 0 and 1 through it (one stream match, exactly dt gfx3d_user:
++ *              iommus 0 / 0x401; the hypervisor refuses other pairs)
+  *  19  asks    TrustZone to load the zap shader: header again, place (pil_gpu_region@8681a000),
+  *              a650_zap.b02 copied there, authenticate and run
+  *  20  writes  the 3D core's registers (Linux a6xx_gpu.c hw_init for the A650, without clock gating,
+@@ -1084,7 +1085,7 @@ sa_block_new(struct sa_space *space, struct sa_gpu_block *block, uint64_t addres
+ #define SMMU_CBA2R_64_BIT       1
+ #define SMMU_CBAR_STAGE_1       (1u << 16 | 3u << 8 | 0xfu << 12)
+ #define SMMU_SMR_VALID          (1u << 31)
+-#define SMMU_STREAM_MASK        0x400
++#define SMMU_STREAM_MASK        0x400           /* the GMU's (dt iommus 5 / 0x400) */
+ #define SMMU_SCTLR_ON           (1u << 0 | 1u << 1 | 1u << 2 | 1u << 5 | 1u << 12)
+ #define SMMU_TCR_39_BITS        (25u | 1u << 8 | 1u << 10 | 3u << 12 | 1u << 23)
+ #define SMMU_TCR2               (1u | 1u << 4 | 7u << 15)
+@@ -1106,16 +1107,21 @@ sa_space_faulted(struct sa_block *cb, const char *who)
+ 	return true;
+ }
+ 
+-/* Stream match register `match` sends `stream` through the space's context (the hypervisor grants the global registers). */
++/*
++ * Stream match register `match` sends `stream` (bits in `mask` ignored) through the space's context. The
++ * hypervisor grants the global registers, and only for the device tree's own stream / mask pairs (0166:
++ * stream 0 with mask 0x400 was refused for the 3D core, whose dt pair is 0 / 0x401).
++ */
+ static bool
+-sa_space_stream(struct sa_space *space, uint32_t match, uint32_t stream)
++sa_space_stream(struct sa_space *space, uint32_t match, uint32_t stream, uint32_t mask)
+ {
+-	uint32_t smr = SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream;
++	uint32_t smr = SMMU_SMR_VALID | mask << 16 | stream;
+ 
+ 	sa_put(&sa_smmu, "s2cr", SMMU_S2CR(match), space->context);
+ 	sa_put(&sa_smmu, "smr", SMMU_SMR(match), smr);
+-	if (sa_get(&sa_smmu, "smr", SMMU_SMR(match)) != smr ||
+-	    (sa_get(&sa_smmu, "s2cr", SMMU_S2CR(match)) & 0x300ff) != space->context) {
++	uint32_t smr_now = sa_get(&sa_smmu, "smr", SMMU_SMR(match));
++	uint32_t s2cr_now = sa_get(&sa_smmu, "s2cr", SMMU_S2CR(match));
++	if (smr_now != smr || (s2cr_now & 0x300ff) != space->context) {
+ 		printf("SWEET GPU: %u: the SMMU did not take what was written: stream %u is not going through context %u\n",
+ 		    sa_step, stream, space->context);
+ 		return false;
+@@ -1125,7 +1131,7 @@ sa_space_stream(struct sa_space *space, uint32_t match, uint32_t stream)
+ 
+ /* `sctlr`: bits wanted in the context's SCTLR besides SMMU_SCTLR_ON. */
+ static bool
+-sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_t stream, uint32_t sctlr)
++sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_t stream, uint32_t mask, uint32_t sctlr)
+ {
+ 	uint64_t root = space->table_phys[0] | (uint64_t)space->context << 48;
+ 
+@@ -1151,7 +1157,7 @@ sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_
+ 		return false;
+ 	}
+ 	sa_put(cb, "sctlr", SMMU_CB_SCTLR, SMMU_SCTLR_ON | sctlr);
+-	if (!sa_space_stream(space, match, stream)) {
++	if (!sa_space_stream(space, match, stream, mask)) {
+ 		return false;
+ 	}
+ 	/* the global registers are the hypervisor's to grant: see what it made of them */
+@@ -1244,7 +1250,7 @@ sa_step_gmu_space(void)
+ 	}
+ 	sa_smmu_gmu_cb.phys = SMMU_PHYS + (sa_smmu_pages + GMU_CONTEXT) * sa_smmu_page;
+ 	sa_gmu_space_on = true;
+-	return sa_space_on(&sa_gmu_space, &sa_smmu_gmu_cb, GMU_MATCH, GMU_STREAM, 0);
++	return sa_space_on(&sa_gmu_space, &sa_smmu_gmu_cb, GMU_MATCH, GMU_STREAM, SMMU_STREAM_MASK, 0);
+ }
+ 
+ /* ---- step 14: the GMU's firmware ---- */
+@@ -1784,8 +1790,8 @@ sa_step_core_power(void)
+ 
+ /*
+  * The 3D core reads its orders from a ring of memory, through a processor of its own (SQE) that
+- * runs a650_sqe.fw. It reaches memory through the SMMU like the GMU: dt gfx3d_user iommus <0 0x401>,
+- * streams 0 and 1, both through context 0 here. The addresses are ours to choose.
++ * runs a650_sqe.fw. It reaches memory through the SMMU like the GMU: dt gfx3d_user iommus <0 0x401>:
++ * one stream match with that mask takes streams 0 and 1 through context 0. The addresses are ours to choose.
+  */
+ #define PTE_UNPRIVILEGED        (1ull << 6)     /* io-pgtable-arm.c: a mapping without IOMMU_PRIV */
+ #define PTE_READ_ONLY           (1ull << 7)     /* without IOMMU_WRITE (Linux: MSM_BO_GPU_READONLY) */
+@@ -1793,7 +1799,7 @@ sa_step_core_power(void)
+ #define SMMU_SCTLR_HUPCF        (1u << 8)       /* serve the core's other requests after a fault (qcom_adreno_smmu_write_sctlr) */
+ #define CORE_CONTEXT            0
+ #define CORE_MATCH              0
+-#define CORE_MATCH_2            2               /* entry 1 is the GMU's */
++#define CORE_STREAM_MASK        0x401           /* dt gfx3d_user: streams 0 and 1 */
+ #define CORE_RING_ADDRESS       0x01000000u
+ #define CORE_RING_SIZE          0x8000u         /* Linux's MSM_GPU_RINGBUFFER_SZ */
+ #define CORE_SQE_ADDRESS        0x01100000u
+@@ -1829,13 +1835,12 @@ sa_step_core_space(void)
+ 	memcpy((void *)sa_core_sqe.memory, sqe + 4, size - 4);         /* the file's first word is not firmware */
+ 	sa_to_memory(sa_core_sqe.memory, round_page(sa_core_sqe.size));
+ 
+-	sa_announce("give SMMU context 0 these tables and send the 3D core's streams 0 and 1 through it");
++	sa_announce("give SMMU context 0 these tables and send the 3D core's streams 0 and 1 through it (stream 0, mask 0x401)");
+ 	if (sa_smmu_cb0.phys == 0 && !sa_smmu_layout()) {
+ 		return false;
+ 	}
+ 	sa_core_space_on = true;
+-	if (!sa_space_on(&sa_core_space, &sa_smmu_cb0, CORE_MATCH, 0, SMMU_SCTLR_HUPCF) ||
+-	    !sa_space_stream(&sa_core_space, CORE_MATCH_2, 1)) {
++	if (!sa_space_on(&sa_core_space, &sa_smmu_cb0, CORE_MATCH, 0, CORE_STREAM_MASK, SMMU_SCTLR_HUPCF)) {
+ 		return false;
+ 	}
+ 	sa_get(&sa_smmu_cb0, "sctlr", SMMU_CB_SCTLR);
+-- 
+2.54.0 (Apple Git-157)
+

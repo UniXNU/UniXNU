@@ -1,0 +1,37 @@
+From c7acbedd1e55bb985276a88faaa6ac6d5187bfde Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 11:51:41 +0200
+Subject: [PATCH] umi-0122
+
+---
+ bsd/dev/sweet_pcie.c | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+index 2ae319e..1c5df50 100644
+--- a/bsd/dev/sweet_pcie.c
++++ b/bsd/dev/sweet_pcie.c
+@@ -461,6 +461,20 @@ pcie_bringup(void)
+ 		return 3;
+ 	}
+ 
++	/*
++	 * BDF -> SMMU stream table (pci-msm msm_pcie_config_sid): the controller hashes
++	 * the requester's BDF (CRC8, poly 0x07, big-endian) into PARF + 0x2000 and adds
++	 * the entry's SID field to qcom,smmu-sid-base 0x1c00. Left as ABL leaves it the
++	 * table is garbage, the chip's DMA goes out on a random stream, and the PBL reads
++	 * junk (0121: BHI "success", then ERRCODE 0xef0e0003 with our address in DBG1).
++	 * BDF 0x000 -> SID 0 (hash 0x00, value 0), BDF 0x100 -> SID 1 (hash 0x15).
++	 */
++	for (unsigned i = 0; i < 256; ++i) {
++		pcie_wr(sp.parf, 0x2000u + 4u * i, 0);
++	}
++	pcie_wr(sp.parf, 0x2000u + 4u * 0x15u, 0x0100u << 16 | 1u << 8);
++	printf("SWEET PCIE: BDF->SID table: 0x100 -> 0x1c01 (entry 0x15 = %#x)\n", pcie_rd(sp.parf, 0x2000u + 4u * 0x15u));
++
+ 	pcie_cfg_window();
+ 	uint32_t id = pcie_rd(sp.conf, 0x00);
+ 	uint32_t cls = pcie_rd(sp.conf, 0x08);
+-- 
+2.54.0 (Apple Git-157)
+

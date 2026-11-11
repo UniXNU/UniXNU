@@ -1,0 +1,133 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 40dcca3..0197dc9 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -696,6 +696,91 @@ touch_se_init(void)
+ 	return true;
+ }
+ 
++/* write w (stretch) then read n bytes, like fts_writeRead; logs the first 8 bytes */
++static int
++touch_fts_wr(const uint8_t *w, unsigned nw, uint8_t *r, unsigned n, const char *what)
++{
++	int err = touch_msg(STFTS_ADDR, w, nw, NULL, 0, n != 0);
++	if (!err && n) {
++		err = touch_msg(STFTS_ADDR, NULL, 0, r, n, false);
++	}
++	printf("SWEET TOUCH: linux replay %s -> %d", what, err);
++	for (unsigned i = 0; !err && i < n && i < 8; i++) {
++		printf(" %02x", r[i]);
++	}
++	printf("\n");
++	return err;
++}
++
++/* drain the FIFO, logging what is there; returns true if CONTROLLER_READY was seen */
++static bool
++touch_fts_drain(const char *what)
++{
++	uint8_t ev[STFTS_EVENT_LEN];
++	bool ready = false;
++	for (unsigned i = 0; i < 16; i++) {
++		if (touch_read(STFTS_ADDR, STFTS_FIFO_READ, false, ev, sizeof(ev)) != 0) {
++			break;
++		}
++		if (ev[0] == STFTS_EVT_NONE) {
++			break;
++		}
++		if (ev[0] == 0xff) {
++			touch_wait(2);
++			continue;
++		}
++		ready |= ev[0] == STFTS_EVT_READY;
++		printf("SWEET TOUCH: linux replay %s event %02x %02x %02x %02x %02x %02x %02x %02x\n", what,
++		    ev[0], ev[1], ev[2], ev[3], ev[4], ev[5], ev[6], ev[7]);
++	}
++	return ready;
++}
++
++static void
++touch_fts_reset(const char *what)
++{
++	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, false);
++	touch_wait(10);
++	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, true);
++	for (unsigned i = 0; i < 30; i++) {
++		touch_wait(10);
++		if (touch_fts_drain(what)) {
++			return;
++		}
++	}
++	printf("SWEET TOUCH: linux replay %s: no CONTROLLER_READY\n", what);
++}
++
++static void
++touch_fts_linux_replay(void)
++{
++	static uint8_t buf[208];
++	static const uint8_t fb[3] = {0xa6, 0x00, 0x00}, lockdown[3] = {0xa4, 0x06, 0x70};
++	static const uint8_t hwreg[5] = {0xfa, 0x20, 0x00, 0x00, 0x78}, c105[2] = {0xc1, 0x05};
++	static const uint8_t on[3] = {0xa0, 0x00, 0x01}, off[3] = {0xa0, 0x00, 0x00};
++	static const uint8_t gest[6] = {0xa2, 0x03, 0x00, 0x00, 0x00, 0x03}, charger[3] = {0xa2, 0x02, 0x01};
++	(void)touch_fts_wr(fb, sizeof(fb), buf, 208, "A6 00 00 sysinfo (208)");
++	(void)touch_fts_wr(fb, sizeof(fb), buf, 4, "A6 00 00 (4)");
++	(void)touch_fts_wr(lockdown, sizeof(lockdown), NULL, 0, "A4 06 70 load lockdown");
++	touch_wait(10);
++	(void)touch_fts_drain("after A4");
++	(void)touch_fts_wr(fb, sizeof(fb), buf, 28, "A6 00 00 lockdown (28)");
++	(void)touch_fts_wr(hwreg, sizeof(hwreg), buf, 1, "FA 20000078 (1)");
++	touch_fts_reset("reset 2");
++	touch_fts_reset("reset 3");
++	touch_wait(20);
++	(void)touch_fts_wr(on, sizeof(on), NULL, 0, "A0 00 01");
++	(void)touch_fts_wr(gest, sizeof(gest), NULL, 0, "A2 03 gestures");
++	(void)touch_fts_wr(off, sizeof(off), NULL, 0, "A0 00 00");
++	touch_wait(50);
++	(void)touch_fts_wr(on, sizeof(on), NULL, 0, "A0 00 01");
++	(void)touch_fts_drain("after sense on");
++	touch_wait(30);
++	(void)touch_fts_wr(c105, sizeof(c105), buf, 7, "C1 05 (7)");
++	(void)touch_fts_drain("after C1");
++	(void)touch_fts_wr(charger, sizeof(charger), NULL, 0, "A2 02 01 charger");
++}
++
+ /* Returns true with st.kind = TOUCH_STFTS once the IC answered and scans. */
+ static bool
+ touch_umi_start(void)
+@@ -838,6 +923,18 @@ touch_umi_start(void)
+ 		    STFTS_ADDR, err, st.dead);
+ 		return false;
+ 	}
++	/*
++	 * sweetftslinux=1 (default): replay what Xiaomi's fts_521 sends at probe, captured with
++	 * i2c ftrace in TWRP (research/logs/twrp-fts-i2c-trace.txt): system info and lockdown
++	 * reads, a HW register read, two more resets, then sense on + gestures + sense off/on,
++	 * C1 05 and charger mode. In TWRP our bare A0 00 01 re-enabled touch, but only after
++	 * Linux had run all of this once.
++	 */
++	uint32_t replay = 1;
++	(void)PE_parse_boot_argn("sweetftslinux", &replay, sizeof(replay));
++	if (replay && st.gpi) {
++		touch_fts_linux_replay();
++	}
+ 	/*
+ 	 * fts_init_sensing (FOD build): sense off (A0 00 00), WAIT_AFTER_SENSEOFF, then sense on
+ 	 * setScanMode(SCAN_MODE_ACTIVE, 0x01) = A0 00 01. sweetftsscan=N picks the active-scan bits.
+@@ -845,10 +942,14 @@ touch_umi_start(void)
+ 	uint32_t scanbits = 0x01;
+ 	(void)PE_parse_boot_argn("sweetftsscan", &scanbits, sizeof(scanbits));
+ 	static const uint8_t senseoff[3] = {0xa0, 0x00, 0x00};
+-	(void)touch_msg(STFTS_ADDR, senseoff, sizeof(senseoff), NULL, 0, false);
+-	touch_wait(20);
+ 	uint8_t scan[3] = {0xa0, 0x00, (uint8_t)scanbits};
+-	err = touch_msg(STFTS_ADDR, scan, sizeof(scan), NULL, 0, false);
++	if (replay && st.gpi) {
++		err = 0;                /* the replay ended with sense on */
++	} else {
++		(void)touch_msg(STFTS_ADDR, senseoff, sizeof(senseoff), NULL, 0, false);
++		touch_wait(20);
++		err = touch_msg(STFTS_ADDR, scan, sizeof(scan), NULL, 0, false);
++	}
+ 	st.probing = false;
+ 	if (err) {
+ 		printf("SWEET TOUCH: scan-mode command failed %d; stopping\n", err);

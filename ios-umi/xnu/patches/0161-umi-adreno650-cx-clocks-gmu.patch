@@ -1,0 +1,304 @@
+From a9fd699e4c991b8f0db41cbd7e96cb5ef5e8bf96 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 20:36:05 +0100
+Subject: [PATCH] umi-0161-adreno-cx-clocks-gmu
+
+---
+ bsd/dev/sweet_adreno.c | 252 ++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 251 insertions(+), 1 deletion(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 75e5b80..15d186b 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -14,6 +14,16 @@
+  *   2  reads   the speed-bin fuse
+  *   3  reads   the GPU's clock controller as the boot loader left it (only if the clock of its
+  *              registers, gcc_gpu_cfg_ahb, already runs: nothing is switched on here)
++ *   4  writes  the CX power switch on (gpu_cx_gdsc): the GMU, the bus interface, the GPU's SMMU
++ *   5  writes  the clocks of that half on: the 300 MHz GPLL0 tap vote, the GPU's bus clocks in
++ *              GCC, the GMU's clock to 200 MHz (gpucc-sm8250.c: GPLL0 div / 1.5), and the GMU's,
++ *              register bus, crystal and SMMU-vote clocks in the GPU's clock controller
++ *   6  reads   the first words of the GMU (reset, firmware result, the always-on counter, which
++ *              should be seen counting)
++ *
++ * Every write is recorded; when the steps are over they are undone in reverse order (CX off
++ * again), so nothing of the GPU block outlives the run and the next boot starts from what the
++ * boot loader leaves (HackiOS does the same).
+  *
+  * An access the hypervisor does not allow can reset the phone without a word, so before every
+  * group of accesses a step says what it is about to read and waits sweetgpupause ms (default
+@@ -100,6 +110,82 @@ sa_get8(struct sa_block *b, const char *name, uint32_t offset)
+ 	return value;
+ }
+ 
++/* Writes, recorded so that the end of the run can put every register back (newest first). */
++#define SA_UNDO_MAX 64
++static struct {
++	struct sa_block *b;
++	uint32_t offset, value;
++} sa_undo[SA_UNDO_MAX];
++static unsigned sa_undo_count;
++
++static void __attribute__((noinline))
++sa_wr(vm_offset_t address, uint32_t value)
++{
++	__asm__ volatile ("str %w0, [%1]" : : "r" (value), "r" (address) : "memory");
++}
++
++static void
++sa_put(struct sa_block *b, const char *name, uint32_t offset, uint32_t value)
++{
++	sa_need(b);
++	uint32_t was = sa_rd(b->base + offset);
++	if (sa_undo_count < SA_UNDO_MAX) {
++		sa_undo[sa_undo_count].b = b;
++		sa_undo[sa_undo_count].offset = offset;
++		sa_undo[sa_undo_count].value = was;
++		sa_undo_count++;
++	}
++	printf("SWEET GPU: %u: about to write %s %s at %#x: %#x (was %#x)\n", sa_step, b->name, name, b->phys + offset,
++	    value, was);
++	if (sa_step == sa_steps && sa_pause_ms) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++	sa_wr(b->base + offset, value);
++}
++
++/* Set bits unless set; what the register holds afterwards. */
++static uint32_t
++sa_set(struct sa_block *b, const char *name, uint32_t offset, uint32_t bits)
++{
++	uint32_t was = sa_get(b, name, offset);
++	if ((was & bits) == bits) {
++		return was;
++	}
++	sa_put(b, name, offset, was | bits);
++	return sa_get(b, name, offset);
++}
++
++static bool
++sa_wait_for(struct sa_block *b, uint32_t offset, uint32_t mask, uint32_t value, uint32_t ms)
++{
++	for (uint32_t i = 0; i < ms * 10; i++) {
++		if ((sa_rd(b->base + offset) & mask) == value) {
++			return true;
++		}
++		delay_for_interval(100, NSEC_PER_USEC);
++	}
++	return (sa_rd(b->base + offset) & mask) == value;
++}
++
++/* Put back everything the steps wrote, newest first (CX power last, as it was turned on first). */
++static void
++sa_undo_all(void)
++{
++	if (sa_undo_count == 0) {
++		return;
++	}
++	printf("SWEET GPU: putting back %u writes\n", sa_undo_count);
++	while (sa_undo_count > 0) {
++		sa_undo_count--;
++		struct sa_block *b = sa_undo[sa_undo_count].b;
++		uint32_t offset = sa_undo[sa_undo_count].offset;
++		sa_wr(b->base + offset, sa_undo[sa_undo_count].value);
++		delay_for_interval(100, NSEC_PER_USEC);
++		printf("SWEET GPU: put back %s %#x = %#x (now %#x)\n", b->name, b->phys + offset, sa_undo[sa_undo_count].value,
++		    sa_rd(b->base + offset));
++	}
++}
++
+ /* ---- step 1: the clocks from outside, and RPMh's names ---- */
+ 
+ /* dt: clock-controller@100000 (gcc-kona); offsets: Linux gcc-sm8250.c (the same as SC7280's). */
+@@ -109,6 +195,8 @@ static struct sa_block sa_gcc = { "gcc", 0x00100000, 0x80000 };
+ #define GCC_GPU_MEMNOC_GFX_CBCR 0x7100c
+ #define GCC_GPU_SNOC_DVM_GFX_CBCR 0x71018
+ #define GCC_DDRSS_GPU_AXI_CBCR  0x71154
++#define GCC_PLL_VOTE_GPU_DIV    (1u << 16)
++#define CBCR_ENABLE             (1u << 0)
+ #define CBCR_OFF                (1u << 31)
+ 
+ /* dt: reserved-memory cmd_db@80860000 (Linux cmd-db.c layout). */
+@@ -288,8 +376,169 @@ sa_step_gpucc(void)
+ 	return true;
+ }
+ 
++
++/* ---- step 4: CX power ---- */
++
++#define GDSC_SW_COLLAPSE        (1u << 0)
++#define GDSC_HW_CONTROL         (1u << 1)
++#define GDSC_POWER_ON           (1u << 31)
++
++static bool
++sa_gpucc_answers(void)
++{
++	sa_need(&sa_gcc);
++	sa_need(&sa_gpucc);
++	uint32_t ahb = sa_rd(sa_gcc.base + GCC_GPU_CFG_AHB_CBCR);
++	if (ahb & CBCR_OFF) {
++		printf("SWEET GPU: %u: gcc gpu_cfg_ahb is off (%#x): not touching the GPU clock controller\n", sa_step, ahb);
++		return false;
++	}
++	return true;
++}
++
++static bool
++sa_cx_is_on(void)
++{
++	return ((sa_rd(sa_gpucc.base + GPUCC_CX_GDSCR) | sa_rd(sa_gpucc.base + GPUCC_CX_HW_CTRL)) & GDSC_POWER_ON) != 0;
++}
++
++static bool
++sa_step_cx_power(void)
++{
++	if (!sa_gpucc_answers()) {
++		return false;
++	}
++	sa_announce("switch the CX half of the GPU block on (gpu_cx_gdsc): clear its collapse bit");
++	uint32_t gdscr = sa_get(&sa_gpucc, "cx_gdscr", GPUCC_CX_GDSCR);
++	if (sa_cx_is_on()) {
++		printf("SWEET GPU: %u: CX is on already (left on by someone): not going on\n", sa_step);
++		return false;
++	}
++	if (gdscr & GDSC_HW_CONTROL) {
++		printf("SWEET GPU: %u: the switch is under hardware control: not ours to operate\n", sa_step);
++		return false;
++	}
++	sa_put(&sa_gpucc, "cx_gdscr", GPUCC_CX_GDSCR, gdscr & ~GDSC_SW_COLLAPSE);
++	for (int i = 0; i < 500 && !sa_cx_is_on(); i++) {
++		delay_for_interval(100, NSEC_PER_USEC);
++	}
++	sa_get(&sa_gpucc, "cx_gdscr", GPUCC_CX_GDSCR);
++	sa_get(&sa_gpucc, "cx_hw_ctrl", GPUCC_CX_HW_CTRL);
++	if (!sa_cx_is_on()) {
++		printf("SWEET GPU: %u: CX does not come on\n", sa_step);
++		return false;
++	}
++	printf("SWEET GPU: %u: CX is on\n", sa_step);
++	if (sa_rd(sa_gpucc.base + GPUCC_GX_GDSCR) & GDSC_POWER_ON) {
++		printf("SWEET GPU: %u: the 3D core (GX) has power already: not going on\n", sa_step);
++		return false;
++	}
++	return true;
++}
++
++/* ---- step 5: clocks ---- */
++
++#define RCG_UPDATE              (1u << 0)       /* clk-rcg2.c: take the new source and divider */
++#define RCG_SOURCE_MASK         0x371fu         /* [4:0] 2*divider-1, [10:8] source, [13:12] mode */
++#define RCG_GMU_200MHZ          (6u << 8 | 2u)  /* source 6 GPLL0 div (300 MHz) / 1.5 (gpucc-sm8250.c) */
++
++static bool
++sa_clock_on(struct sa_block *b, const char *name, uint32_t cbcr, bool must)
++{
++	if (!(sa_set(b, name, cbcr, CBCR_ENABLE) & CBCR_OFF) || sa_wait_for(b, cbcr, CBCR_OFF, 0, 10)) {
++		sa_get(b, name, cbcr);
++		return true;
++	}
++	printf("SWEET GPU: %u: %s %s stays off (%#x)%s\n", sa_step, b->name, name, sa_rd(b->base + cbcr),
++	    must ? "" : "; its status bit may not be reliable, going on");
++	return !must;
++}
++
++static bool
++sa_step_clocks(void)
++{
++	if (!sa_gpucc_answers()) {
++		return false;
++	}
++	if (!sa_cx_is_on()) {
++		printf("SWEET GPU: %u: CX is off: step 4\n", sa_step);
++		return false;
++	}
++	sa_announce("GCC: vote the 300 MHz GPLL0 tap for the GPU; the GPU's bus and memory clocks on");
++	sa_set(&sa_gcc, "pll votes", GCC_PLL_VOTE, GCC_PLL_VOTE_GPU_DIV);
++	if (!sa_clock_on(&sa_gcc, "gpu_memnoc_gfx", GCC_GPU_MEMNOC_GFX_CBCR, false) ||
++	    !sa_clock_on(&sa_gcc, "gpu_snoc_dvm_gfx", GCC_GPU_SNOC_DVM_GFX_CBCR, false) ||
++	    !sa_clock_on(&sa_gcc, "ddrss_gpu_axi", GCC_DDRSS_GPU_AXI_CBCR, false)) {
++		return false;
++	}
++
++	sa_announce("gpucc: the GMU's clock source to 200 MHz (GPLL0 div / 1.5)");
++	uint32_t cfg = sa_get(&sa_gpucc, "gmu_clk_src config", GPUCC_GMU_RCGR + 4);
++	if ((cfg & RCG_SOURCE_MASK) != RCG_GMU_200MHZ) {
++		sa_put(&sa_gpucc, "gmu_clk_src config", GPUCC_GMU_RCGR + 4, (cfg & ~RCG_SOURCE_MASK) | RCG_GMU_200MHZ);
++		sa_put(&sa_gpucc, "gmu_clk_src command", GPUCC_GMU_RCGR, sa_rd(sa_gpucc.base + GPUCC_GMU_RCGR) | RCG_UPDATE);
++		if (!sa_wait_for(&sa_gpucc, GPUCC_GMU_RCGR, RCG_UPDATE, 0, 10)) {
++			printf("SWEET GPU: %u: gmu_clk_src does not take its new source (command %#x)\n", sa_step,
++			    sa_rd(sa_gpucc.base + GPUCC_GMU_RCGR));
++			return false;
++		}
++		sa_get(&sa_gpucc, "gmu_clk_src command", GPUCC_GMU_RCGR);
++		sa_get(&sa_gpucc, "gmu_clk_src config", GPUCC_GMU_RCGR + 4);
++	}
++
++	sa_announce("gpucc: the crystal, register bus, GMU and SMMU-vote clocks on");
++	if (!sa_clock_on(&sa_gpucc, "cxo", GPUCC_CXO_CBCR, true) ||
++	    !sa_clock_on(&sa_gpucc, "ahb", GPUCC_AHB_CBCR, true) ||
++	    !sa_clock_on(&sa_gpucc, "cx_gmu", GPUCC_CX_GMU_CBCR, true) ||
++	    !sa_clock_on(&sa_gpucc, "smmu vote", GPUCC_SMMU_VOTE_CBCR, false)) {
++		return false;
++	}
++	return true;
++}
++
++/* ---- step 6: the first words from the GMU ---- */
++
++/* dt: qcom,gmu "kgsl_gmu_reg" 0x3d6a000, 0x30000 long; offsets of a6xx_gmu.xml (words). */
++static struct sa_block sa_gmu = { "gmu", 0x03d6a000, 0x30000 };
++#define GMU_WORD(n)             (4u * (n))
++#define GMU_CM3_SYSRESET        GMU_WORD(0x5000)
++#define GMU_CM3_BOOT_CONFIG     GMU_WORD(0x5001)
++#define GMU_CM3_FW_INIT_RESULT  GMU_WORD(0x501c)
++#define GMU_ALWAYS_ON_COUNTER_L GMU_WORD(0x5088)
++#define GMU_ALWAYS_ON_COUNTER_H GMU_WORD(0x5089)
++#define GMU_SPTPRAC_PWR_CLK_STATUS GMU_WORD(0x50d0)
++#define GMU_RPMH_POWER_STATE    GMU_WORD(0x50ec)
++#define GMU_HFI_CTRL_STATUS     GMU_WORD(0x5180)
++#define GMU_AHB_FENCE_STATUS    GMU_WORD(0x9313)
++
++static bool
++sa_step_gmu_read(void)
++{
++	if (!sa_gpucc_answers() || !sa_cx_is_on() ||
++	    (sa_rd(sa_gpucc.base + GPUCC_CX_GMU_CBCR) & (CBCR_ENABLE | CBCR_OFF)) != CBCR_ENABLE ||
++	    (sa_rd(sa_gpucc.base + GPUCC_AHB_CBCR) & CBCR_OFF)) {
++		printf("SWEET GPU: %u: needs CX on and the GMU and register bus clocks running: steps 4 and 5\n", sa_step);
++		return false;
++	}
++	sa_announce("read the GMU (0x3d6a000): the first accesses inside the GPU block");
++	sa_get(&sa_gmu, "cm3_sysreset", GMU_CM3_SYSRESET);
++	sa_get(&sa_gmu, "cm3_boot_config", GMU_CM3_BOOT_CONFIG);
++	sa_get(&sa_gmu, "cm3_fw_init_result", GMU_CM3_FW_INIT_RESULT);
++	uint32_t a = sa_get(&sa_gmu, "always_on_counter_l", GMU_ALWAYS_ON_COUNTER_L);
++	sa_sleep_ms(1);
++	uint32_t b = sa_get(&sa_gmu, "always_on_counter_l", GMU_ALWAYS_ON_COUNTER_L);
++	sa_get(&sa_gmu, "always_on_counter_h", GMU_ALWAYS_ON_COUNTER_H);
++	printf("SWEET GPU: %u: always-on counter %s (%u ticks in ~1 ms; 19200 expected)\n", sa_step,
++	    a != b ? "COUNTS" : "stands still", b - a);
++	sa_get(&sa_gmu, "sptprac_pwr_clk_status", GMU_SPTPRAC_PWR_CLK_STATUS);
++	sa_get(&sa_gmu, "rpmh_power_state", GMU_RPMH_POWER_STATE);
++	sa_get(&sa_gmu, "hfi_ctrl_status", GMU_HFI_CTRL_STATUS);
++	sa_get(&sa_gmu, "ahb_fence_status", GMU_AHB_FENCE_STATUS);
++	return true;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+-	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc,
++	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ };
+ 
+ static void
+@@ -306,6 +555,7 @@ sa_thread(__unused void *arg, __unused wait_result_t wr)
+ 			break;
+ 		}
+ 	}
++	sa_undo_all();
+ 	printf("SWEET GPU: done\n");
+ 	(void)thread_terminate(current_thread());
+ }
+-- 
+2.54.0 (Apple Git-157)
+

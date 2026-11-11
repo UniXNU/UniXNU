@@ -1,0 +1,170 @@
+From d859c38ae02681304bc1206d7e83d7ff0336b7c1 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 19:21:35 +0100
+Subject: [PATCH] umi: X55 UIM - slot status (0x47), card status events (0x2e),
+ power up per slot (0x31), switch slot opt-in (sweetmdmslot), card error names
+ (0271)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 110 +++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 88 insertions(+), 22 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index fc18b47..e2ad8c3 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -1622,7 +1622,7 @@ static struct {
+ 	uint32_t svc_node[0x60], svc_port[0x60];   /* where each QMI service (< 0x60) is */
+ 	uint16_t txn;
+ 	bool asked, online_asked, restart_wanted, lpm_sent;
+-	unsigned online_at;
++	unsigned online_at, sim_at, sim_step;
+ 	unsigned answers, opmode, opmode5;
+ 	bool v2;                /* the modem speaks QRTR v2 headers (version 3, 16 bytes) on IPCR: answered the same way */
+ } mq;
+@@ -2189,6 +2189,37 @@ mx_opmode(unsigned m)
+ 	return m < 9 ? n[m] : "?";
+ }
+ 
++
++/* UIM card status (TLV 0x10 of get card status / the card status indication). */
++static void
++mx_uim_cards(const uint8_t *v, uint16_t tl)
++{
++	unsigned nslots = v[8], o = 9;
++	printf("SWEET MDM: UIM card status: %u slot(s)\n", nslots);
++	for (unsigned sl = 0; sl < nslots && o + 6 <= tl; ++sl) {
++		unsigned card = v[o], napps = v[o + 5];
++		static const char *const cs[] = { "absent", "PRESENT", "error" };
++		static const char *const ce[] = { "unknown", "power down", "poll error", "no ATR", "volt mismatch", "parity error",
++			                          "unknown removed", "technical problem", "null bytes", "SAP connected", "command timeout" };
++		printf("SWEET MDM: UIM slot %u: card %u (%s) upin state %u error %u (%s), %u application(s)\n", sl + 1, card,
++		    card < 3 ? cs[card] : "?", v[o + 1], v[o + 4], v[o + 4] < 11 ? ce[v[o + 4]] : "?", napps);
++		o += 6;
++		for (unsigned a = 0; a < napps && o + 7 <= tl; ++a) {
++			unsigned at = v[o], as = v[o + 1], aidlen = v[o + 6];
++			if (o + 7 + aidlen + 8 > tl) {
++				break;
++			}
++			const uint8_t *pin = v + o + 7 + aidlen;
++			static const char *const ats[] = { "unknown", "SIM", "USIM", "RUIM", "CSIM", "ISIM" };
++			static const char *const ass[] = { "unknown", "detected", "PIN1 required", "PUK1 required",
++				                           "perso", "PIN1 blocked", "illegal", "READY" };
++			printf("SWEET MDM: UIM slot %u app %u: %s, state %u (%s), pin1 state %u retries %u\n", sl + 1, a + 1,
++			    at < 6 ? ats[at] : "?", as, as < 8 ? ass[as] : "?", pin[1], pin[2]);
++			o += 7 + aidlen + 8;
++		}
++	}
++}
++
+ static void
+ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ {
+@@ -2206,6 +2237,18 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 	const uint8_t *r = mx_tlv(m, len, 0x02, &tl);
+ 	unsigned res = r && tl >= 4 ? (unsigned)(r[0] | r[1] << 8) : 0xffff;
+ 	unsigned err = r && tl >= 4 ? (unsigned)(r[2] | r[3] << 8) : 0;
++	if (type == 4 && svc == 0x0b && msg == 0x32) {
++		const uint8_t *cv = mx_tlv(m, len, 0x10, &tl);
++		printf("SWEET MDM: UIM card status INDICATION\n");
++		if (cv != NULL && tl >= 9) {
++			mx_uim_cards(cv, tl);
++		}
++		return;
++	}
++	if (type == 4 && svc == 0x0b && msg == 0x48) {
++		printf("SWEET MDM: UIM slot status INDICATION (%u bytes)\n", len);
++		return;
++	}
+ 	if (type != 2) {
+ 		static unsigned inds;
+ 		if (inds++ < 30) {
+@@ -2243,29 +2286,27 @@ mx_qmi_rx(uint32_t node, uint32_t port, const uint8_t *m, uint32_t len)
+ 			}
+ 		}
+ 	} else if (svc == 0x0b && msg == 0x2f && (v = mx_tlv(m, len, 0x10, &tl)) != NULL && tl >= 9) {
+-		/* card status: 4 x u16 indexes, number of slots, then per slot card / UPIN state, apps */
+-		unsigned nslots = v[8], o = 9;
+-		printf("SWEET MDM: UIM card status: %u slot(s)\n", nslots);
+-		for (unsigned sl = 0; sl < nslots && o + 6 <= tl; ++sl) {
+-			unsigned card = v[o], napps = v[o + 5];
+-			static const char *const cs[] = { "absent", "PRESENT", "error" };
+-			printf("SWEET MDM: UIM slot %u: card %u (%s) upin state %u error %u, %u application(s)\n", sl + 1, card,
+-			    card < 3 ? cs[card] : "?", v[o + 1], v[o + 4], napps);
+-			o += 6;
+-			for (unsigned a = 0; a < napps && o + 7 <= tl; ++a) {
+-				unsigned at = v[o], as = v[o + 1], aidlen = v[o + 6];
+-				if (o + 7 + aidlen + 8 > tl) {
+-					break;
+-				}
+-				const uint8_t *pin = v + o + 7 + aidlen;
+-				static const char *const ats[] = { "unknown", "SIM", "USIM", "RUIM", "CSIM", "ISIM" };
+-				static const char *const ass[] = { "unknown", "detected", "PIN1 required", "PUK1 required",
+-					                           "perso", "PIN1 blocked", "illegal", "READY" };
+-				printf("SWEET MDM: UIM slot %u app %u: %s, state %u (%s), pin1 state %u retries %u\n", sl + 1, a + 1,
+-				    at < 6 ? ats[at] : "?", as, as < 8 ? ass[as] : "?", pin[1], pin[2]);
+-				o += 7 + aidlen + 8;
++		mx_uim_cards(v, tl);
++	} else if (svc == 0x0b && msg == 0x47) {
++		/* get slot status: TLV 0x10 physical slots: count, then per slot card status u32 (0 unknown, 1 absent, 2 present),
++		   slot state u32 (0 inactive, 1 active), logical slot u8, ICCID length u8 + ICCID (not logged) */
++		if ((v = mx_tlv(m, len, 0x10, &tl)) != NULL && tl >= 1) {
++			unsigned n = v[0], o = 1;
++			printf("SWEET MDM: UIM slot status: %u physical slot(s)\n", n);
++			for (unsigned i = 0; i < n && o + 10 <= tl; ++i) {
++				uint32_t cs, st;
++				memcpy(&cs, v + o, 4);
++				memcpy(&st, v + o + 4, 4);
++				unsigned lg = v[o + 8], il = v[o + 9];
++				static const char *const csn[] = { "unknown", "ABSENT", "PRESENT" };
++				printf("SWEET MDM: UIM physical slot %u: card %u (%s), slot %s, logical slot %u, ICCID %u bytes (not logged)\n",
++				    i + 1, cs, cs < 3 ? csn[cs] : "?", st ? "ACTIVE" : "inactive", lg, il);
++				o += 10 + il;
+ 			}
+ 		}
++	} else if (svc == 0x0b && (msg == 0x30 || msg == 0x31 || msg == 0x2e || msg == 0x46)) {
++		printf("SWEET MDM: UIM %s: %s (error %#x)\n", msg == 0x31 ? "power up" : msg == 0x30 ? "power down" :
++		    msg == 0x46 ? "switch slot" : "event registration", res == 0 ? "ok" : "refused", err);
+ 	} else if (svc == 0x03 && msg == 0x24 && (v = mx_tlv(m, len, 0x01, &tl)) != NULL && tl >= 5) {
+ 		static const char *const rs[] = { "not registered", "REGISTERED", "searching", "denied", "unknown" };
+ 		printf("SWEET MDM: NAS serving system: %s, cs attach %u ps attach %u, network %u, %u radio(s)\n",
+@@ -2330,10 +2371,35 @@ mx_qmi_survey(unsigned t_ms)
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);        /* NAS get serving system */
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);        /* NAS get signal strength */
+ 
++		mq.sim_at = t_ms + 3000;
++	} else if (mq.asked && mq.sim_step < 6 && t_ms >= mq.sim_at) {
++		/* the SIM: slot status, card status indications, power up per slot (UIM 0x31), card status again */
++		static const uint8_t ev[7] = { 0x01, 0x04, 0x00, 0x01, 0x00, 0x00, 0x00 };   /* TLV 1: card status events */
++		static const uint8_t s1[4] = { 0x01, 0x01, 0x00, 0x01 }, s2[4] = { 0x01, 0x01, 0x00, 0x02 };
++		switch (mq.sim_step++) {
++		case 0: mx_qmi_req(0x0b, 0x47, NULL, 0); break;         /* get slot status */
++		case 1: mx_qmi_req(0x0b, 0x2e, ev, 7); break;           /* register events */
++		case 2: printf("SWEET MDM: QMI: UIM power up slot 1\n"); mx_qmi_req(0x0b, 0x31, s1, 4); break;
++		case 3: printf("SWEET MDM: QMI: UIM power up slot 2\n"); mx_qmi_req(0x0b, 0x31, s2, 4); break;
++		case 4: mx_qmi_req(0x0b, 0x2f, NULL, 0); break;         /* card status after 5 s */
++		case 5: mx_qmi_req(0x0b, 0x47, NULL, 0); break;
++		}
++		mq.sim_at = t_ms + (mq.sim_step == 4 ? 5000 : 1000);
++		unsigned slot = 0;
++		(void)PE_parse_boot_argn("sweetmdmslot", &slot, sizeof(slot));
++		if (mq.sim_step == 1 && slot) {
++			/* switch slot (UIM 0x46): logical slot 1 -> physical slot `slot` (opt-in) */
++			uint8_t sw[11] = { 0x01, 0x01, 0x00, 0x01, 0x02, 0x04, 0x00, (uint8_t)slot, 0, 0, 0 };
++			printf("SWEET MDM: QMI: UIM switch slot: logical 1 -> physical %u\n", slot);
++			mx_qmi_req(0x0b, 0x46, sw, 11);
++		}
+ 	} else if (mq.asked && t_ms % 10000 == 0) {
+ 		mx_qmi_req(0x03, 0x24, NULL, 0);
+ 		mx_qmi_req(0x03, 0x20, NULL, 0);
+ 		mx_qmi_req(0x02, 0x2d, NULL, 0);
++		if (t_ms % 30000 == 0) {
++			mx_qmi_req(0x0b, 0x2f, NULL, 0);
++		}
+ 	}
+ }
+ 
+-- 
+2.54.0 (Apple Git-157)
+

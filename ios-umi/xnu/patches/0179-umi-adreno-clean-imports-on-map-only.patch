@@ -1,0 +1,35 @@
+From 761390e9dea534d6c26a408177ac3380646123b3 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 20:22:49 +0100
+Subject: [PATCH] umi: clean imported GPU buffers only when mapped
+
+Preserve GPU-written IOSurface render targets by excluding imported BOs from submit-time cache cleaning. CPU data is cleaned when BoMap makes the import GPU-visible. Per-file cross-compile passed.
+
+Co-Authored-By: OpenAI Codex <noreply@openai.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 7 +++++--
+ 1 file changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 87b293f..2db3146 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -699,10 +699,13 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		}
+ 		/* what the CPU wrote is out to memory before the GPU reads it: clean every mapped BO
+ 		 * that overlaps the submitted buffers (a WC user mapping has no dirty lines anyway;
+-		 * a cached one would be cleaned here through the kernel's own view of the pages) */
++		 * a cached one would be cleaned here through the kernel's own view of the pages).
++		 * Imports are NOT cleaned here: their pages are also render targets the GPU writes,
++		 * and a stale CPU line would be pushed over the frame the GPU just drew (horizontal
++		 * stripe corruption, 0183) - the CPU's writes are cleaned once, at BoMap */
+ 		for (uint32_t i = 0; i < fBOCap; i++) {
+ 			BO *bo = &fBO[i];
+-			if (bo->md == NULL || bo->iova == 0 || bo->kmap == NULL) {
++			if (bo->md == NULL || bo->iova == 0 || bo->kmap == NULL || bo->imported) {
+ 				continue;
+ 			}
+ 			for (uint32_t b = 0; b < rq->buffer_count; b++) {
+-- 
+2.54.0 (Apple Git-157)
+

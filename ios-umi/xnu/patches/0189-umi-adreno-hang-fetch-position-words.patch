@@ -1,0 +1,128 @@
+From 5d19c6827870e766593b6cb9e269ff325d4b9219 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 18:55:31 +0100
+Subject: [PATCH] umi: hang dump prints the words at the CP's fetch position
+
+The 0188 dump (fence 713: CP busy, no error, IB1 0x206374000 with 1100
+dwords left, first word 0x70450008 = CP_COND_WRITE5) could not place
+the packet: fence 713 had left the 8-entry submission history, and the
+long dump lost lines over UDP. CP_IB1_BASE read back page-aligned, so it
+is the buffer's start, not an advancing pointer.
+
+Keep 64 submissions, print only the stuck one, find the IB that
+CP_IB1_BASE names and print the 64 dwords before start + (size - left),
+where the executing packet lies (the CP prefetches); for IB2, whose size
+the kernel does not know, its first 32 dwords.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 74 +++++++++++++++++++++---------------------
+ 1 file changed, 37 insertions(+), 37 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 3cc32d3..e59725d 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -2471,7 +2471,7 @@ static uint64_t sa_bo_next = CORE_BO_ADDRESS;
+ static uint32_t sa_fence_seqno;
+ 
+ /* The last few submissions (fence and indirect buffers): what a stuck fence is diagnosed from. */
+-#define SA_SUBMIT_HISTORY 8
++#define SA_SUBMIT_HISTORY 64      /* the stuck fence must still be here when its dump runs */
+ struct sa_submit {
+ 	uint32_t       fence;
+ 	uint32_t       n;
+@@ -3157,18 +3157,22 @@ sa_hang_dump(uint32_t fence)
+ 	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT), cp_int, opcode,
+ 	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS), sa_rd(sa_gpu.base + CP_STATUS_1), fsr,
+ 	    (unsigned long long)far, sa_rd(sa_smmu_cb0.base + SMMU_CB_FSYNR0));
++	/* the stuck submission (only it: the UDP relay drops lines of long dumps) */
++	struct sa_submit *h = NULL;
+ 	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
+-		uint32_t at = (sa_submit_next + s) % SA_SUBMIT_HISTORY;       /* oldest first */
+-		struct sa_submit *h = &sa_submit_hist[at];
+-
+-		for (uint32_t i = 0; i < h->n; i++) {
+-			IOLog("SWEET ADRENO: submission (fence %u): IB %u at %#llx, %u dwords\n", h->fence, i,
+-			    (unsigned long long)h->iova[i], h->dwords[i]);
++		if (sa_submit_hist[s].fence == fence && sa_submit_hist[s].n != 0) {
++			h = &sa_submit_hist[s];
+ 		}
+ 	}
+-	/* where the CP's fetch stands in the first- and second-level buffers (Linux a6xx_dump):
+-	 * the base advances with the fetch, the remaining size counts what is left of the
+-	 * buffer. The words are read from the 32-byte line around each position. */
++	for (uint32_t i = 0; h != NULL && i < h->n; i++) {
++		IOLog("SWEET ADRENO: submission (fence %u): IB %u at %#llx, %u dwords\n", h->fence, i,
++		    (unsigned long long)h->iova[i], h->dwords[i]);
++	}
++	/* where the CP's fetch stands (Linux a6xx_dump): CP_IBn_BASE is the buffer's start (0188's
++	 * IB1 read back page-aligned), CP_IBn_REM_SIZE what is left of it to fetch. With the
++	 * buffer's size from the history, the fetch position is start + (size - left) dwords; the
++	 * packet being executed lies at or before it (the CP prefetches), so the 64 dwords before
++	 * the position are printed. IB2's size is not known here: its first 32 dwords. */
+ 	uint64_t ib_base[2];
+ 	uint32_t ib_rem[2];
+ 	ib_base[0] = (uint64_t)sa_rd(sa_gpu.base + CP_IB1_BASE + 4) << 32 | sa_rd(sa_gpu.base + CP_IB1_BASE);
+@@ -3176,35 +3180,31 @@ sa_hang_dump(uint32_t fence)
+ 	ib_base[1] = (uint64_t)sa_rd(sa_gpu.base + CP_IB2_BASE + 4) << 32 | sa_rd(sa_gpu.base + CP_IB2_BASE);
+ 	ib_rem[1] = sa_rd(sa_gpu.base + CP_IB2_REM_SIZE);
+ 	for (uint32_t l = 0; l < 2; l++) {
+-		uint32_t p[8];
+-		uint64_t line = ib_base[l] & ~31ull;
+-		if (ib_base[l] != 0 && sa_gpu_words(line, p)) {
+-			IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left; words from %#llx: "
+-			    "%#x %#x %#x %#x / %#x %#x %#x %#x\n", fence, l + 1, (unsigned long long)ib_base[l],
+-			    ib_rem[l], (unsigned long long)line, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+-		} else {
+-			IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left (words unavailable)\n", fence,
+-			    l + 1, (unsigned long long)ib_base[l], ib_rem[l]);
++		uint64_t start = ib_base[l], from = start;
++		uint32_t count = 32, which = ~0u, size = 0;
++		for (uint32_t i = 0; l == 0 && h != NULL && i < h->n; i++) {
++			if (h->iova[i] == start) {
++				which = i;
++				size = h->dwords[i];
++			}
+ 		}
+-	}
+-	/* the head of the stuck submission's buffers (the newest one's if it left the history),
+-	 * through the page tables */
+-	uint32_t newest = (sa_submit_next + SA_SUBMIT_HISTORY - 1) % SA_SUBMIT_HISTORY;
+-	struct sa_submit *h = &sa_submit_hist[newest];
+-
+-	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
+-		if (sa_submit_hist[s].fence == fence && sa_submit_hist[s].n != 0) {
+-			h = &sa_submit_hist[s];
++		if (which != ~0u && ib_rem[0] <= size) {
++			uint64_t pos = start + 4ull * (size - ib_rem[0]);
++			from = pos >= start + 256 ? pos - 256 : start;
++			count = 64;
+ 		}
+-	}
+-	for (uint32_t i = 0; i < h->n && i < 8; i++) {
+-		uint32_t p[8];
+-		if (h->dwords[i] >= 8 && sa_gpu_words(h->iova[i], p)) {
+-			IOLog("SWEET ADRENO: fence %u IB %u words: %#x %#x %#x %#x / %#x %#x %#x %#x\n",
+-			    h->fence, i, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
+-		} else {
+-			IOLog("SWEET ADRENO: fence %u IB %u head unavailable (unmapped, unmanaged, or short)\n",
+-			    h->fence, i);
++		IOLog("SWEET ADRENO: fence %u IB%u at %#llx, %u dwords left (stuck submission's IB %d of %u "
++		    "dwords); words from %#llx:\n", fence, l + 1, (unsigned long long)start, ib_rem[l],
++		    which == ~0u ? -1 : (int)which, size, (unsigned long long)from);
++		from &= ~31ull;
++		for (uint32_t k = 0; start != 0 && k < count; k += 8) {
++			uint32_t p[8];
++			if (sa_gpu_words(from + 4ull * k, p)) {
++				IOLog("SWEET ADRENO: IB%u %#llx: %#x %#x %#x %#x %#x %#x %#x %#x\n", l + 1,
++				    (unsigned long long)(from + 4ull * k), p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++			} else {
++				IOLog("SWEET ADRENO: IB%u %#llx: unavailable\n", l + 1, (unsigned long long)(from + 4ull * k));
++			}
+ 		}
+ 	}
+ }
+-- 
+2.54.0 (Apple Git-157)
+

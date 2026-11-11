@@ -1,0 +1,148 @@
+From a552fe725b2a446d09e27b7ac054365d719ebdcd Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 14:34:22 +0200
+Subject: [PATCH] umi-0129
+
+---
+ bsd/dev/sweet_wlan.c |  2 +-
+ bsd/dev/sweet_wlfw.c | 65 +++++++++++++++++++++++++++++++++++---------
+ 2 files changed, 53 insertions(+), 14 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 90698d5..3a003d2 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI: 21-27 = step 1-7 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI: 21-29 = step 1-9 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 1396449..1c4a2d5 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -2,7 +2,8 @@
+  * umi QCA6390: WLFW QMI client (service 0x45) over QRTR, carried by sweet_ipcr.c.
+  * Follows Linux ath11k qmi.c for "qca6390 hw2.0". Stage 8 (sweetwlan=8):
+  *   IND_REGISTER, HOST_CAP, REQUEST_MEM indication -> RESPOND_MEM, FW_MEM_READY,
+- *   CAP, BDF_DOWNLOAD (board data from the modem partition, sweet_wlan.c).
++ *   CAP, BDF_DOWNLOAD (board data from the modem partition, sweet_wlan.c),
++ *   M3_INFO (m3.bin in the firmware memory window), FW_READY indication.
+  * QMI: u8 type (0 request, 2 response, 4 indication), u16 transaction, u16 message,
+  * u16 length, then TLVs (u8 type, u16 length, value). Little endian. Polled.
+  */
+@@ -140,6 +141,7 @@ q_find(const uint8_t *msg, uint32_t len, uint8_t type, uint16_t *n)
+ #define WLFW_FW_MEM_READY_IND   0x37u
+ #define WLFW_CAP                0x24u
+ #define WLFW_BDF_DOWNLOAD       0x25u
++#define WLFW_M3_INFO            0x3cu
+ #define WLFW_CLIENT_ID          0x4b4e454cu     /* ath11k ATH11K_QMI_WLFW_CLIENT_ID "KNEL" */
+ #define WLFW_SEG_MAX            32u             /* ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01 */
+ 
+@@ -150,7 +152,9 @@ static struct {
+ 	uint8_t rbuf[1024];             /* the response itself, for CAP */
+ 	uint32_t rlen;
+ 	uint32_t board_id;
+-	uint64_t ind;                  /* indications seen, bit (id & 63) */
++	vm_offset_t mem;                /* firmware memory window (wf_place_segments) */
++	uint32_t mem_pa, mem_used;
++	uint64_t ind;                 /* indications seen, bit (id & 63) */
+ 	unsigned nseg;
+ 	struct {
+ 		uint32_t size, type;
+@@ -303,14 +307,12 @@ wf_wait_ind(uint16_t id, const char *name, unsigned ms)
+ static int
+ wf_place_segments(void)
+ {
+-	static vm_offset_t mem;
+-	static uint32_t mem_pa;
+-	if (mem == 0) {
++	if (wf.mem == 0) {
+ 		uint32_t pa = WLFW_MEM_PA;
+ 		(void)PE_parse_boot_argn("sweetwlfwmem", &pa, sizeof(pa));
+-		mem = ml_io_map_unmappable(pa, WLFW_MEM_SIZE, 0x6u);   /* VM_WIMG_WCOMB */
+-		mem_pa = pa;
+-		if (mem == 0) {
++		wf.mem = ml_io_map_unmappable(pa, WLFW_MEM_SIZE, 0x6u);   /* VM_WIMG_WCOMB */
++		wf.mem_pa = pa;
++		if (wf.mem == 0) {
+ 			printf("SWEET WLFW: cannot map %#x\n", pa);
+ 			return ENOMEM;
+ 		}
+@@ -326,11 +328,12 @@ wf_place_segments(void)
+ 			printf("SWEET WLFW: segment %u (%#x) does not fit at +%#x\n", i, wf.seg[i].size, off);
+ 			return ENOMEM;
+ 		}
+-		wf.seg[i].pa = mem_pa + off;
+-		bzero((void *)(mem + off), wf.seg[i].size);
++		wf.seg[i].pa = wf.mem_pa + off;
++		bzero((void *)(wf.mem + off), wf.seg[i].size);
+ 		off += wf.seg[i].size;
+ 	}
+-	printf("SWEET WLFW: %u segments, %#x bytes at %#x\n", wf.nseg, off, mem_pa);
++	wf.mem_used = off;
++	printf("SWEET WLFW: %u segments, %#x bytes at %#x\n", wf.nseg, off, wf.mem_pa);
+ 	return 0;
+ }
+ 
+@@ -456,7 +459,36 @@ wf_bdf(void)
+ 	return r;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-7) that failed. */
++/*
++ * Step 8: m3.bin into the firmware memory window, 1 MiB aligned after the
++ * REQUEST_MEM segments, then M3_INFO: TLV 0x01 u64 address, 0x02 u32 size.
++ */
++static int
++wf_m3(void)
++{
++	static struct qmsg m;
++	uint32_t off = (wf.mem_used + 0xfffffu) & ~0xfffffu, size = 0;
++	if (wf.mem == 0 || off >= WLFW_MEM_SIZE) {
++		return ENOMEM;
++	}
++	int r = sweet_wlan_read_file("m3.bin", (void *)(wf.mem + off), WLFW_MEM_SIZE - off, &size);
++	if (r != 0) {
++		return r;
++	}
++	const uint8_t *p = (const uint8_t *)(wf.mem + off);
++	printf("SWEET WLFW: m3.bin %u bytes at %#x, starts %02x %02x %02x %02x\n",
++	    size, wf.mem_pa + off, p[0], p[1], p[2], p[3]);
++	wf_begin(&m, WLFW_M3_INFO);
++	uint8_t *a = q_tlv(&m, 0x01, 8);
++	if (a == NULL) {
++		return EMSGSIZE;
++	}
++	put64(a, (uint64_t)wf.mem_pa + off);
++	q_u32(&m, 0x02, size);
++	return wf_request(&m, "M3_INFO", 2000);
++}
++
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-9) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -485,7 +517,14 @@ sweet_wlfw_run(void)
+ 		return 7;
+ 	}
+ 	printf("SWEET WLFW: board data sent\n");
+-	sweet_ipcr_service(500);        /* log whatever follows (FW_READY 0x21 is expected after M3) */
++	if (wf_m3() != 0) {
++		return 8;
++	}
++	if (wf_wait_ind(WLFW_FW_READY_IND, "FW_READY", 10000) != 0) {
++		return 9;
++	}
++	printf("SWEET WLFW: firmware ready\n");
++	sweet_ipcr_service(500);        /* log whatever follows (FW_INIT_DONE 0x38 may come) */
+ 	return 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

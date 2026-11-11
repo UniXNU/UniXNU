@@ -1,0 +1,43 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -42,6 +42,7 @@
+ /* osfmk/arm/machine_routines.h, not exported to the BSD layer */
+ extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ 
++#define REG_CAP         0x00
+ #define REG_IS          0x20
+ #define REG_IE          0x24
+ #define REG_HCS         0x30
+@@ -54,6 +55,7 @@
+ 
+ #define HCS_DP          (1u << 0)
+ #define HCS_UTRLRDY     (1u << 1)
++#define CAP_64AS        (1u << 24)              /* 64-bit DMA addressing */
+ 
+ #define UFS_BLOCK       4096u
+ #define BOUNCE_SIZE     (1u << 20)
+@@ -305,6 +307,12 @@
+ 		printf("SWEET UFS: requests outstanding from the bootloader\n");
+ 		return EBUSY;
+ 	}
++	/* With RAM above 4 GiB (mkadt.py --highmem) the DMA memory can be there too. */
++	if (((su.dma_pa + DMA_SIZE - 1) >> 32) && !(ufs_rd(REG_CAP) & CAP_64AS)) {
++		printf("SWEET UFS: DMA memory at 0x%llx but the host has no 64-bit addressing\n",
++		    su.dma_pa);
++		return ENXIO;
++	}
+ 	ufs_wr(REG_IE, 0);                      /* polled operation */
+ 	ufs_wr(REG_IS, ufs_rd(REG_IS));
+ 	ufs_wr(REG_UTRLRSR, 0);
+@@ -580,9 +588,9 @@
+ 	/* Only now, with the partition bounds known, can writes be allowed. */
+ 	su.writable = (rw != 0);
+ 	su.ready = true;
+-	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s\n",
++	printf("SWEET UFS: \"%s\" on LUN %u: first block 0x%llx, %llu MiB, %s, DMA at 0x%llx\n",
+ 	    want, su.lun, su.first_block, su.nblocks * UFS_BLOCK >> 20,
+-	    su.writable ? "read-write" : "read-only");
++	    su.writable ? "read-write" : "read-only", su.dma_pa);
+ 	return 0;
+ }
+ 

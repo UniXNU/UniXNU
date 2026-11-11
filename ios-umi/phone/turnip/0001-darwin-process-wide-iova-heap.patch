@@ -1,0 +1,87 @@
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -227,38 +227,73 @@
+ 
+ /* ---- GPU address space: the client picks addresses out of [va_start, va_start + va_size). ---- */
+ 
++/* One allocator for the whole process. The kernel gives each TASK one window, and this backend
++ * keeps one connection per process (dw), but every tu_device made its own heap (device->vma)
++ * over that same window: two VkDevices in one process (backboardd and SpringBoard each make two)
++ * handed out the same addresses, and the second BoMap silently replaced the first one's pages
++ * in the shared GPU page table - a command buffer of one device then called into the other's
++ * image or fresh zeroed memory (the CP_OPCODE_ERROR hangs). device->vma stays unused here. */
++static struct {
++   mtx_t mutex;
++   once_flag once;
++   bool ready;
++   struct util_vma_heap heap;
++} dw_vma = { .once = ONCE_FLAG_INIT };
++
++static uint64_t dw_vma_start, dw_vma_size;
++
++static void
++dw_vma_init(void)
++{
++   mtx_init(&dw_vma.mutex, mtx_plain);
++   util_vma_heap_init(&dw_vma.heap, dw_vma_start, dw_vma_size);
++   dw_vma.ready = true;
++}
++
++static struct util_vma_heap *
++dw_vma_lock(struct tu_device *dev)
++{
++   if (!dw_vma.ready) {
++      dw_vma_start = dev->physical_device->va_start;
++      dw_vma_size = dev->physical_device->va_size;
++      call_once(&dw_vma.once, dw_vma_init);
++   }
++   mtx_lock(&dw_vma.mutex);
++   return &dw_vma.heap;
++}
++
+ static VkResult
+ darwin_allocate_iova(struct tu_device *dev, uint64_t size, uint64_t client_iova,
+                      enum tu_bo_alloc_flags flags, uint64_t *iova)
+ {
+    *iova = 0;
+-   mtx_lock(&dev->vma_mutex);
++   struct util_vma_heap *heap = dw_vma_lock(dev);
+    if (flags & TU_BO_ALLOC_REPLAYABLE) {
+       if (client_iova) {
+-         if (util_vma_heap_alloc_addr(&dev->vma, client_iova, size))
++         if (util_vma_heap_alloc_addr(heap, client_iova, size))
+             *iova = client_iova;
+          else {
+-            mtx_unlock(&dev->vma_mutex);
++            mtx_unlock(&dw_vma.mutex);
+             return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
+          }
+       } else {
+-         dev->vma.alloc_high = true;
+-         *iova = util_vma_heap_alloc(&dev->vma, size, os_page_size);
++         heap->alloc_high = true;
++         *iova = util_vma_heap_alloc(heap, size, os_page_size);
+       }
+    } else {
+-      dev->vma.alloc_high = false;
+-      *iova = util_vma_heap_alloc(&dev->vma, size, os_page_size);
++      heap->alloc_high = false;
++      *iova = util_vma_heap_alloc(heap, size, os_page_size);
+    }
+-   mtx_unlock(&dev->vma_mutex);
++   mtx_unlock(&dw_vma.mutex);
+    return *iova ? VK_SUCCESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
+ }
+ 
+ static void
+ darwin_free_iova(struct tu_device *dev, uint64_t iova, uint64_t size)
+ {
+-   mtx_lock(&dev->vma_mutex);
+-   util_vma_heap_free(&dev->vma, iova, size);
+-   mtx_unlock(&dev->vma_mutex);
++   struct util_vma_heap *heap = dw_vma_lock(dev);
++   util_vma_heap_free(heap, iova, size);
++   mtx_unlock(&dw_vma.mutex);
+ }
+ 
+ /* Called under retire->lock. All fence polls are nonblocking. Failed/uncertain

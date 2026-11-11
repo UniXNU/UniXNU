@@ -1,0 +1,247 @@
+From 8a31d995f791fd81c780ebe67215a66d5d97dca1 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 21:23:02 +0100
+Subject: [PATCH] umi: sample completed frames away from present time
+
+The COPY-path pixel dumps only fired when a present carried a rect at
+least 64x32: CoreAnimation mostly presents small damage rects (the
+lock-screen clock), so the first capture at a full-screen present was
+also the last, and later full-screen presents during an unlock never
+dumped. The present-time copy also races the GPU (sweet_adreno_finish
+waits at most 500 ms; CA frames take seconds at 305 MHz), so what it
+samples may be a half-rendered frame.
+
+- sweet_adreno_finish returns whether the newest fence signalled within
+  the cap, and present() logs the outcome (32 lines): mid-render copies
+  are now countable.
+- present() logs the swap rect per layer (64 lines): what CA actually
+  hands over, damage rects included.
+- the copy dump's regions are the surface's own fixed points (top-left,
+  centre, the clock band) instead of positions inside the present rect,
+  so any present dumps.
+- new idledump: every 30 s the vsync timer samples the pending frame's
+  surface at the same fixed points, away from present - what a completed
+  frame holds in memory, six captures, sweetfb_dump=N as before.
+
+Co-Authored-By: Mistral Vibe <vibe@mistral.ai>
+---
+ bsd/dev/sweet_adreno.c                |   9 +-
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 127 ++++++++++++++++++++++++--
+ 2 files changed, 127 insertions(+), 9 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 08cb027..ae4585d 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3241,15 +3241,18 @@ sweet_adreno_clean(vm_offset_t kva, uint64_t len)
+ 	sa_to_memory(kva, len);
+ }
+ 
+-/* Wait for everything submitted so far (the present path reads GPU-written surfaces). */
+-void
++/* Wait for everything submitted so far (the present path reads GPU-written surfaces).
++ * Returns false when the wait gave up: the newest fence had not signalled within the
++ * cap, so a frame read right after it may be mid-render (its tiles not all stored). */
++bool
+ sweet_adreno_finish(void)
+ {
+ 	uint32_t seqno = sa_fence_seqno;
+ 
+ 	if (seqno != 0) {
+-		(void)sa_fence_wait(seqno, 500);
++		return sa_fence_wait(seqno, 500);
+ 	}
++	return true;
+ }
+ 
+ static bool (*const sa_step_fn[])(void) = {
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index 44c5962..b541e00 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -40,7 +40,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ extern "C" void sweet_busy_init(void);  /* iokit/Kernel/arm/SweetBusy.cpp (boot-arg sweetbusy=N) */
+ extern "C" bool sweet_board_is_umi(void);       /* bsd/dev/sweet_rpmh.c */
+ extern "C" void sweet_adreno_publish(IOService *provider);       /* iokit/Kernel/arm/SweetAdreno.cpp */
+-extern "C" void sweet_adreno_finish(void);                     /* bsd/dev/sweet_adreno.c: wait for the GPU */
++extern "C" bool sweet_adreno_finish(void);                     /* bsd/dev/sweet_adreno.c: wait for the GPU */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
+ extern "C" void ml_io_unmap(vm_offset_t addr, vm_size_t sz);
+ extern "C" void (*sweet_panic_display_hook)(void);      /* pexpert/arm/pe_identify_machine.c */
+@@ -332,6 +332,9 @@ AppleCLCD::start(IOService *provider)
+ 	return true;
+ }
+ 
++/* defined below: samples the pending frame's surface away from present time */
++static void sweet_fb_dump_idle(AppleCLCD *fb);
++
+ void
+ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ {
+@@ -431,6 +434,7 @@ AppleCLCD::vsyncFired(OSObject *owner, IOTimerEventSource *sender)
+ 		memcpy(fb->fShowHold, taken, sizeof(taken));
+ 		IOLockUnlock(fb->fLock);
+ 	}
++	sweet_fb_dump_idle(fb);
+ 	sender->setTimeoutUS(SWEET_FB_VSYNC_US);
+ }
+ 
+@@ -490,7 +494,7 @@ sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
+ 		enabled = 0;
+ 		PE_parse_boot_argn("sweetfb_dump", &enabled, sizeof(enabled));
+ 	}
+-	if (!enabled || captures >= 3 || w < 64 || h < 32) {
++	if (!enabled || captures >= 3) {
+ 		return;
+ 	}
+ 	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
+@@ -505,9 +509,29 @@ sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
+ 	    captures, s->id, s->width, s->height, s->pixelFormat, s->bytesPerElement,
+ 	    s->offset, s->allocSize, (uint64_t)s->memory->getLength(), s->bytesPerRow,
+ 	    bpr, sx, sy, w, h, ns);
+-	for (uint32_t region = 0; region < 2; region++) {
+-		uint32_t x0 = sx + (region ? (w - 64) / 2 : 0);
+-		uint32_t y0 = sy + (region ? (h - 32) / 2 : 0);
++	/* The regions are the SURFACE's own (a present's rect is often a small damage
++	 * update; the first capture at a full-screen present sampled the whole story
++	 * once, then never fired again because later rects fell under the size gate).
++	 * Sampled read-only on the WC map: what memory holds, not any cached view. */
++	for (uint32_t region = 0; region < 3; region++) {
++		uint32_t x0, y0;
++		switch (region) {
++		case 0:                     /* top-left, under the status bar */
++			x0 = 16;
++			y0 = 64;
++			break;
++		case 1:                     /* centre */
++			x0 = s->width > 64 ? (s->width - 64) / 2 : 0;
++			y0 = s->height > 32 ? (s->height - 32) / 2 : 0;
++			break;
++		default:                    /* the lock-screen clock band */
++			x0 = s->width > 64 ? (s->width - 64) / 2 : 0;
++			y0 = 960;
++			break;
++		}
++		if (s->width < x0 + 64 || s->height < y0 + 32) {
++			continue;
++		}
+ 		for (uint32_t y = y0; y < y0 + 32; y++) {
+ 			for (uint32_t x = x0; x < x0 + 64; x += 8) {
+ 				const uint32_t *p = (const uint32_t *)(src + s->offset + (uint64_t)y * bpr + x * 4);
+@@ -531,6 +555,85 @@ sweet_fb_dump_copy(SweetSurface *s, uintptr_t src, uint32_t bpr,
+ 	IOLog("SWEET FB: copydump %u end\n", captures);
+ }
+ 
++/* Idle-time sampling of the pending frame's surface: presents carry small damage
++ * rects most of the time and the present path may read a frame the GPU is still
++ * drawing, so this walks the LATEST recorded surface at its own fixed points, once
++ * per interval, away from any present - what a completed frame holds in memory. */
++static void
++sweet_fb_dump_idle(AppleCLCD *fb)
++{
++	static int enabled = -1;
++	static uint32_t captures;
++	static uint64_t last;
++	uint64_t ns;
++
++	if (enabled == -1) {
++		enabled = 0;
++		PE_parse_boot_argn("sweetfb_dump", &enabled, sizeof(enabled));
++	}
++	if (!enabled || captures >= 6) {
++		return;
++	}
++	absolutetime_to_nanoseconds(mach_absolute_time(), &ns);
++	uint64_t start_seconds = enabled > 1 ? (uint64_t)enabled : 180;
++	if (ns < start_seconds * NSEC_PER_SEC || (last && ns - last < 30 * NSEC_PER_SEC)) {
++		return;
++	}
++	last = ns;
++	captures++;
++	uint8_t rec[SWEET_FB_SWAP_REC_SIZE];
++	IOLockLock(fb->fLock);
++	memcpy(rec, fb->fPending, sizeof(rec));
++	IOLockUnlock(fb->fLock);
++	uint32_t id = get32(rec, 0x54);
++	SweetSurface *s = sweet_surface_copy(id);
++	if (s == NULL) {
++		IOLog("SWEET FB: idledump %u: no surface %u tns %llu\n", captures, id, ns);
++		return;
++	}
++	uintptr_t src = s->kernelAddress();
++	if (src == 0 || s->memory == NULL || s->bytesPerElement != 4 ||
++	    s->width < 64 || s->height < 32) {
++		IOLog("SWEET FB: idledump %u surface %u unusable (%ux%u bpe %u)\n", captures, id,
++		    s->width, s->height, s->bytesPerElement);
++		s->release();
++		return;
++	}
++	uint32_t bpr = s->bytesPerRow;
++	IOLog("SWEET FB: idledump %u surface %u %ux%u bpr %u fmt %#x tns %llu\n", captures, id,
++	    s->width, s->height, bpr, s->pixelFormat, ns);
++	for (uint32_t region = 0; region < 3; region++) {
++		uint32_t x0, y0;
++		switch (region) {
++		case 0:
++			x0 = 16;
++			y0 = 64;
++			break;
++		case 1:
++			x0 = (s->width - 64) / 2;
++			y0 = (s->height - 32) / 2;
++			break;
++		default:
++			x0 = (s->width - 64) / 2;
++			y0 = 960;
++			break;
++		}
++		if (s->width < x0 + 64 || s->height < y0 + 32 ||
++		    (uint64_t)s->offset + ((uint64_t)y0 + 32) * bpr > s->memory->getLength()) {
++			continue;
++		}
++		for (uint32_t y = y0; y < y0 + 32; y++) {
++			for (uint32_t x = x0; x < x0 + 64; x += 8) {
++				const uint32_t *p = (const uint32_t *)(src + s->offset + (uint64_t)y * bpr + x * 4);
++				IOLog("SWEET FB: idlehex %u %u,%u %08x %08x %08x %08x %08x %08x %08x %08x\n",
++				    captures, x, y, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7]);
++			}
++		}
++	}
++	IOLog("SWEET FB: idledump %u end\n", captures);
++	s->release();
++}
++
+ /* Copy each enabled layer's surface into the panel memory (no scaling). */
+ /*
+  * A swap only records the frame: copying 10 MB into the panel on every
+@@ -1146,7 +1249,12 @@ AppleCLCD::present(const uint8_t *rec)
+ 
+ 	/* the layers were rendered by the GPU (Metal on Turnip): wait for it before
+ 	 * the CPU reads them - CoreAnimation expects the Metal present to sync */
+-	sweet_adreno_finish();
++	bool fin = sweet_adreno_finish();
++	static uint32_t fin_logged;
++	if (fin_logged++ < 32) {
++		IOLog("SWEET FB: present %llu finish fence wait %s (500 ms cap)\n",
++		    sweet_fb_present_count, fin ? "ok" : "TIMED OUT");
++	}
+ 
+ 	if (fDirect) {
+ 		fLastDirect = directPresent(rec);
+@@ -1188,6 +1296,13 @@ AppleCLCD::present(const uint8_t *rec)
+ 			    s ? s->pixelFormat : 0, s ? s->bytesPerRow : 0, sx, sy, get32(a, 8),
+ 			    get32(a, 12), dx, dy, w, h);
+ 		}
++		/* what CA actually hands over per present: CoreAnimation mostly presents
++		 * small damage rects, which the pixel dumps' old size gate never saw */
++		static uint32_t presrect_logged;
++		if (presrect_logged++ < 64) {
++			IOLog("SWEET FB: presrect %u surface %u src %d,%d %ux%u dst %d,%d\n",
++			    layer, id, sx, sy, w, h, dx, dy);
++		}
+ 		if (s == NULL || s == fSurface) {
+ 			OSSafeReleaseNULL(s);
+ 			continue;
+-- 
+2.54.0 (Apple Git-157)
+

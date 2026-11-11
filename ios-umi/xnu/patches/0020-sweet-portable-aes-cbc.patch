@@ -1,0 +1,258 @@
+diff --git a/libkern/crypto/corecrypto_aes.c b/libkern/crypto/corecrypto_aes.c
+--- a/libkern/crypto/corecrypto_aes.c
++++ b/libkern/crypto/corecrypto_aes.c
+@@ -32,10 +32,21 @@
+ #include <corecrypto/ccaes.h>
+ #include <kern/debug.h>
+ 
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/* SWEET has a built-in portable AES provider for the legacy CBC/ECB API. */
++extern const struct ccmode_cbc sweet_aes_cbc_encrypt;
++extern const struct ccmode_cbc sweet_aes_cbc_decrypt;
++#define AES_CBC_ENCRYPT_MODE (&sweet_aes_cbc_encrypt)
++#define AES_CBC_DECRYPT_MODE (&sweet_aes_cbc_decrypt)
++#else
++#define AES_CBC_ENCRYPT_MODE (g_crypto_funcs->ccaes_cbc_encrypt)
++#define AES_CBC_DECRYPT_MODE (g_crypto_funcs->ccaes_cbc_decrypt)
++#endif
++
+ aes_rval
+ aes_encrypt_key(const unsigned char *key, int key_len, aes_encrypt_ctx cx[1])
+ {
+-	const struct ccmode_cbc *cbc = g_crypto_funcs->ccaes_cbc_encrypt;
++	const struct ccmode_cbc *cbc = AES_CBC_ENCRYPT_MODE;
+ 
+ 	/* Make sure the context size for the mode fits in the one we have */
+ 	if (cbc->size > sizeof(aes_encrypt_ctx)) {
+@@ -49,7 +60,7 @@
+ aes_encrypt_cbc(const unsigned char *in_blk, const unsigned char *in_iv, unsigned int num_blk,
+     unsigned char *out_blk, aes_encrypt_ctx cx[1])
+ {
+-	const struct ccmode_cbc *cbc = g_crypto_funcs->ccaes_cbc_encrypt;
++	const struct ccmode_cbc *cbc = AES_CBC_ENCRYPT_MODE;
+ 	cccbc_iv_decl(cbc->block_size, ctx_iv);
+ 
+ 	int rc = cccbc_set_iv(cbc, ctx_iv, in_iv);
+@@ -72,7 +83,7 @@
+ aes_rval
+ aes_decrypt_key(const unsigned char *key, int key_len, aes_decrypt_ctx cx[1])
+ {
+-	const struct ccmode_cbc *cbc = g_crypto_funcs->ccaes_cbc_decrypt;
++	const struct ccmode_cbc *cbc = AES_CBC_DECRYPT_MODE;
+ 
+ 	/* Make sure the context size for the mode fits in the one we have */
+ 	if (cbc->size > sizeof(aes_decrypt_ctx)) {
+@@ -86,7 +97,7 @@
+ aes_decrypt_cbc(const unsigned char *in_blk, const unsigned char *in_iv, unsigned int num_blk,
+     unsigned char *out_blk, aes_decrypt_ctx cx[1])
+ {
+-	const struct ccmode_cbc *cbc = g_crypto_funcs->ccaes_cbc_decrypt;
++	const struct ccmode_cbc *cbc = AES_CBC_DECRYPT_MODE;
+ 	cccbc_iv_decl(cbc->block_size, ctx_iv);
+ 
+ 	int rc = cccbc_set_iv(cbc, ctx_iv, in_iv);
+diff --git a/libkern/conf/files b/libkern/conf/files
+--- a/libkern/conf/files
++++ b/libkern/conf/files
+@@ -97,6 +97,12 @@
+ libkern/crypto/corecrypto_md5.c			optional crypto
+ libkern/crypto/corecrypto_des.c			optional crypto
+ libkern/crypto/corecrypto_aes.c			optional crypto
++libkern/crypto/sweet_aes.c	optional crypto
++libkern/crypto/sweet_aes_ct.c	optional crypto
++libkern/crypto/sweet_aes_ct_enc.c	optional crypto
++libkern/crypto/sweet_aes_ct_dec.c	optional crypto
++libkern/crypto/sweet_aes_ct_cbcenc.c	optional crypto
++libkern/crypto/sweet_aes_ct_cbcdec.c	optional crypto
+ libkern/crypto/corecrypto_aesxts.c		optional crypto
+ libkern/crypto/corecrypto_rand.c		optional crypto
+ libkern/crypto/corecrypto_rsa.c		    optional crypto
+diff --git a/libkern/conf/Makefile.template b/libkern/conf/Makefile.template
+--- a/libkern/conf/Makefile.template
++++ b/libkern/conf/Makefile.template
+@@ -18,6 +18,24 @@
+ #
+ CFLAGS+= -include meta_features.h -DLIBKERN_KERNEL_PRIVATE -DOSALLOCDEBUG=1
+ SFLAGS+= -include meta_features.h
++
++ifeq ($(CURRENT_MACHINE_CONFIG),SWEET)
++SWEET_AES_ROOT = $(SRCROOT)/libkern/crypto/sweet_bearssl
++SWEET_AES_INC = -I$(SWEET_AES_ROOT)/inc -I$(SWEET_AES_ROOT)/src
++sweet_aes.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes_ct.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes_ct_enc.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes_ct_dec.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes_ct_cbcenc.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes_ct_cbcdec.o_INCFLAGS = $(SWEET_AES_INC)
++sweet_aes.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_aes_ct.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_aes_ct_enc.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_aes_ct_dec.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_aes_ct_cbcenc.o_CFLAGS_ADD += -mgeneral-regs-only
++sweet_aes_ct_cbcdec.o_CFLAGS_ADD += -mgeneral-regs-only
++corecrypto_aes.o_CFLAGS_ADD += -mgeneral-regs-only
++endif
+ 
+ # Runtime support functions don't interact well with LTO (9294679)
+ stack_protector.o_CFLAGS_ADD += $(CFLAGS_NOLTO_FLAG)
+diff --git a/libkern/crypto/sweet_aes.c b/libkern/crypto/sweet_aes.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes.c
+@@ -0,0 +1,111 @@
++/*
++ * SWEET legacy AES CBC/ECB provider backed by BearSSL's portable bitslice AES.
++ * Upstream sources and MIT license are staged by 0020-stage-bearssl.sh.
++ * No heap, SIMD or CPU crypto extension is needed. Contexts can be copied:
++ * their only pointer is the immutable BearSSL class descriptor.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <libkern/libkern.h>
++#include <libkern/crypto/aes.h>
++#include <corecrypto/ccmode.h>
++#include <corecrypto/cc_error.h>
++#include "sweet_bearssl/inc/bearssl_block.h"
++
++_Static_assert(sizeof(br_aes_ct_cbcenc_keys) <= sizeof(aes_encrypt_ctx),
++    "BearSSL encryption context does not fit the XNU AES ABI");
++_Static_assert(sizeof(br_aes_ct_cbcdec_keys) <= sizeof(aes_decrypt_ctx),
++    "BearSSL decryption context does not fit the XNU AES ABI");
++
++static int
++sweet_aes_encrypt_init(const struct ccmode_cbc *mode, cccbc_ctx *ctx,
++    size_t key_len, const void *key)
++{
++    (void)mode;
++    if (ctx == NULL) {
++        return CCERR_PARAMETER;
++    }
++    cc_clear(sizeof(br_aes_ct_cbcenc_keys), ctx);
++    if (key == NULL || (key_len != 16 && key_len != 24 && key_len != 32)) {
++        return CCERR_PARAMETER;
++    }
++    br_aes_ct_cbcenc_init((br_aes_ct_cbcenc_keys *)(void *)ctx, key, key_len);
++    return CCERR_OK;
++}
++
++static int
++sweet_aes_decrypt_init(const struct ccmode_cbc *mode, cccbc_ctx *ctx,
++    size_t key_len, const void *key)
++{
++    (void)mode;
++    if (ctx == NULL) {
++        return CCERR_PARAMETER;
++    }
++    cc_clear(sizeof(br_aes_ct_cbcdec_keys), ctx);
++    if (key == NULL || (key_len != 16 && key_len != 24 && key_len != 32)) {
++        return CCERR_PARAMETER;
++    }
++    br_aes_ct_cbcdec_init((br_aes_ct_cbcdec_keys *)(void *)ctx, key, key_len);
++    return CCERR_OK;
++}
++
++static int
++sweet_aes_check(const void *ctx, const void *iv, size_t nblocks,
++    const void *in, void *out, unsigned rounds)
++{
++    if (ctx == NULL || iv == NULL ||
++        (rounds != 10 && rounds != 12 && rounds != 14)) {
++        return CCERR_PARAMETER;
++    }
++    if (nblocks > SIZE_MAX / 16) {
++        return CCERR_OVERFLOW;
++    }
++    if (nblocks != 0 && (in == NULL || out == NULL)) {
++        return CCERR_PARAMETER;
++    }
++    return CCERR_OK;
++}
++
++static int
++sweet_aes_encrypt_cbc(const cccbc_ctx *ctx, cccbc_iv *iv, size_t nblocks,
++    const void *in, void *out)
++{
++    const br_aes_ct_cbcenc_keys *key = (const void *)ctx;
++    int error = sweet_aes_check(ctx, iv, nblocks, in, out,
++        key == NULL ? 0 : key->num_rounds);
++    if (error != CCERR_OK || nblocks == 0) {
++        return error;
++    }
++    /* BearSSL is in-place; copy first so both corecrypto API forms work. */
++    memmove(out, in, nblocks * 16);
++    br_aes_ct_cbcenc_run(key, iv, out, nblocks * 16);
++    return CCERR_OK;
++}
++
++static int
++sweet_aes_decrypt_cbc(const cccbc_ctx *ctx, cccbc_iv *iv, size_t nblocks,
++    const void *in, void *out)
++{
++    const br_aes_ct_cbcdec_keys *key = (const void *)ctx;
++    int error = sweet_aes_check(ctx, iv, nblocks, in, out,
++        key == NULL ? 0 : key->num_rounds);
++    if (error != CCERR_OK || nblocks == 0) {
++        return error;
++    }
++    memmove(out, in, nblocks * 16);
++    br_aes_ct_cbcdec_run(key, iv, out, nblocks * 16);
++    return CCERR_OK;
++}
++
++const struct ccmode_cbc sweet_aes_cbc_encrypt = {
++    .size = sizeof(br_aes_ct_cbcenc_keys),
++    .block_size = 16,
++    .init = sweet_aes_encrypt_init,
++    .cbc = sweet_aes_encrypt_cbc,
++};
++const struct ccmode_cbc sweet_aes_cbc_decrypt = {
++    .size = sizeof(br_aes_ct_cbcdec_keys),
++    .block_size = 16,
++    .init = sweet_aes_decrypt_init,
++    .cbc = sweet_aes_decrypt_cbc,
++};
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/libkern/crypto/sweet_aes_ct.c b/libkern/crypto/sweet_aes_ct.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes_ct.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/symcipher/aes_ct.c"
++#endif
+diff --git a/libkern/crypto/sweet_aes_ct_enc.c b/libkern/crypto/sweet_aes_ct_enc.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes_ct_enc.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/symcipher/aes_ct_enc.c"
++#endif
+diff --git a/libkern/crypto/sweet_aes_ct_dec.c b/libkern/crypto/sweet_aes_ct_dec.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes_ct_dec.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/symcipher/aes_ct_dec.c"
++#endif
+diff --git a/libkern/crypto/sweet_aes_ct_cbcenc.c b/libkern/crypto/sweet_aes_ct_cbcenc.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes_ct_cbcenc.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/symcipher/aes_ct_cbcenc.c"
++#endif
+diff --git a/libkern/crypto/sweet_aes_ct_cbcdec.c b/libkern/crypto/sweet_aes_ct_cbcdec.c
+new file mode 100644
+--- /dev/null
++++ b/libkern/crypto/sweet_aes_ct_cbcdec.c
+@@ -0,0 +1,4 @@
++/* BearSSL sources are fetched at an immutable commit by 0020-stage-bearssl.sh. */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include "sweet_bearssl/src/symcipher/aes_ct_cbcdec.c"
++#endif

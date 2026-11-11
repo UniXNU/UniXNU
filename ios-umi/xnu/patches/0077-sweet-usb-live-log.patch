@@ -1,0 +1,107 @@
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -700,6 +700,36 @@
+ 	}
+ }
+ 
++/*
++ * Copy console bytes [*pos, total) (at most max) for live log streaming
++ * (sweet_usb.c). A reader that fell more than the ring behind skips ahead.
++ * Returns the byte count; *pos advances.
++ */
++uint32_t sweet_log_copy(uint64_t *pos, char *out, uint32_t max);
++
++uint32_t
++sweet_log_copy(uint64_t *pos, char *out, uint32_t max)
++{
++	uint64_t total = os_atomic_load(&sweet_log_total, relaxed);
++	if (total - *pos > SWEET_LOG_SIZE) {
++		*pos = total - SWEET_LOG_SIZE;
++	}
++	uint32_t n = (uint32_t)MIN((uint64_t)max, total - *pos);
++	for (uint32_t i = 0; i < n; i++) {
++		out[i] = sweet_log_ring[(*pos + i) % SWEET_LOG_SIZE];
++	}
++	*pos += n;
++	return n;
++}
++
++uint64_t sweet_log_position(void);
++
++uint64_t
++sweet_log_position(void)
++{
++	return os_atomic_load(&sweet_log_total, relaxed);
++}
++
+ struct sweet_log_header {
+ 	char magic[8];
+ 	uint32_t version, size;
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -764,6 +764,54 @@
+ 	}
+ }
+ 
++/*
++ * Live console log over USB Ethernet: every 100 ms the new bytes of the
++ * console ring (bsd/dev/sweet_ufs.c) go as UDP datagrams to
++ * 192.168.7.1:5140 (on the PC: nc -ukl 5140). Starts with the last 64 KiB
++ * so the boot is included. Nothing here may print (it would feed itself).
++ * Boot-arg sweetusblog=0 disables it.
++ */
++extern uint32_t sweet_log_copy(uint64_t *pos, char *out, uint32_t max);
++extern uint64_t sweet_log_position(void);
++
++static void
++ud_log_thread(void *arg __unused, wait_result_t wr __unused)
++{
++	static char chunk[1400];
++	socket_t so = NULL;
++	struct sockaddr_in to;
++	uint64_t pos = sweet_log_position();
++
++	pos = pos > 65536 ? pos - 65536 : 0;
++	bzero(&to, sizeof(to));
++	to.sin_len = sizeof(to);
++	to.sin_family = AF_INET;
++	to.sin_port = htons(5140);
++	to.sin_addr.s_addr = htonl(0xc0a80701);         /* 192.168.7.1 */
++	for (;;) {
++		ud_sleep_ms(100);
++		if (!ud.configured) {
++			continue;
++		}
++		if (so == NULL && sock_socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, NULL, &so) != 0) {
++			so = NULL;
++			continue;
++		}
++		uint32_t n;
++		while ((n = sweet_log_copy(&pos, chunk, sizeof(chunk))) > 0) {
++			struct iovec iov = { .iov_base = chunk, .iov_len = n };
++			struct msghdr msg = {
++				.msg_name = &to, .msg_namelen = sizeof(to),
++				.msg_iov = &iov, .msg_iovlen = 1,
++			};
++			size_t sent = 0;
++			if (sock_send(so, &msg, 0, &sent) != 0) {
++				break;          /* no route/ARP yet: retry later */
++			}
++		}
++	}
++}
++
+ static void
+ sweet_usb_gadget_start(vm_offset_t dwc)
+ {
+@@ -838,5 +886,10 @@
+ 	if (kernel_thread_start(ud_thread, NULL, &thread) == KERN_SUCCESS) {
+ 		thread_deallocate(thread);
+ 	}
++	int livelog = 1;
++	PE_parse_boot_argn("sweetusblog", &livelog, sizeof(livelog));
++	if (livelog && ud.ifp != NULL && kernel_thread_start(ud_log_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */

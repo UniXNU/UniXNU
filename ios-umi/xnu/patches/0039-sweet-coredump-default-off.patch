@@ -1,0 +1,24 @@
+--- a/bsd/kern/kern_core.c
++++ b/bsd/kern/kern_core.c
+@@ -34,6 +34,7 @@
+  */
+ #if CONFIG_COREDUMP
+ 
++#include <pexpert/arm64/board_config.h>
+ #include <mach/vm_param.h>
+ #include <mach/thread_status.h>
+ #include <sys/content_protection.h>
+@@ -116,7 +117,12 @@
+     thread_state_t tstate, mach_msg_type_number_t *count);
+ void task_act_iterate_wth_args(task_t, void (*)(thread_t, void *), void *);
+ 
+-#ifdef SECURE_KERNEL
++#if defined(SECURE_KERNEL) || defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * SWEET: off by default (sysctl kern.coredump=1 enables it). A crashing iOS
++ * daemon maps the whole shared region, so one core is gigabytes on the root
++ * volume and takes minutes on the phone's UFS.
++ */
+ __XNU_PRIVATE_EXTERN int do_coredump = 0;       /* default: don't dump cores */
+ #else
+ __XNU_PRIVATE_EXTERN int do_coredump = 1;       /* default: dump cores */

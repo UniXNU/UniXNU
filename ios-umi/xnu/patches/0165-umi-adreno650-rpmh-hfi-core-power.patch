@@ -1,0 +1,397 @@
+From 7009847dd2b1aa60198372bbbe4495bc965288a5 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 23:15:56 +0100
+Subject: [PATCH] umi-0165-adreno-rpmh-hfi-core-power
+
+---
+ bsd/dev/sweet_adreno.c | 343 ++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 337 insertions(+), 6 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 1058a04..dfb85c1 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -38,10 +38,18 @@
+  *              A650), and SMMU context 1 with the GMU's stream 5 through it (dt: iommus 5 / 0x400)
+  *  14  writes  a650_gmu.bin: its code and data memory through the GMU's registers, the other
+  *              blocks into the memory of step 13; the GMU's memory is read back
+- *  15  writes  the GMU's configuration (Linux a6xx_gmu_fw_start / power_config for the A650:
+- *              chip ID 0x06050200, fence range 0xa / 0xa0), wakes its RPMh channel
+- *              (a6xx_rpmh_start), and lets its processor out of reset: the firmware runs when
+- *              fw_init_result says so
++ *  15  writes  the GMU's RPMh channel program and the GPU's PDC enable (Linux a6xx_gmu_rpmh_init:
++ *              the A650's PDC sequence is the always-on processor's), channel to sleep, then the
++ *              GMU's configuration (a6xx_gmu_fw_start / power_config: chip ID 0x06050200, fence
++ *              range 0xa / 0xa0), wakes the channel (a6xx_rpmh_start), and lets its processor out
++ *              of reset: the firmware runs when fw_init_result says so
++ *  16  writes  HFI_CTRL_INIT: the GMU starts its message queues (a6xx_gmu_hfi_start)
++ *  17  talks   to the GMU (Linux a6xx_hfi_start for the A650, then a6xx_gmu_set_oob GPU_SET): the
++ *              speed table (umi's gpu-opp-table_v2 levels), the A650 bandwidth table, core firmware
++ *              start, start, the speed wanted (boot-arg sweetgpuspeed, default 1 = 305 MHz), and
++ *              the request to power the 3D core; then its registers are read. Once the 3D core
++ *              has power nothing is undone (collapsing CX under a powered GX has hung a phone in
++ *              HackiOS's runs); the next restart resets the SoC.
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -1333,6 +1341,59 @@ sa_gmu_post_mortem(void)
+ 	}
+ }
+ 
++
++/* ---- the GMU's RPMh channel and the GPU's PDC (Linux a6xx_gmu_rpmh_init, a6xx_rpmh_stop) ---- */
++
++/* dt: qcom,gmu "kgsl_gmu_pdc_cfg" 0xb290000 (0x10000); offsets in words (a6xx_gmu.xml). */
++static struct sa_block sa_pdc = { "pdc", 0x0b290000, 0x10000 };
++#define PDC_GPU_ENABLE_PDC      (4 * 0x1140)
++#define PDC_GPU_SEQ_START_ADDR  (4 * 0x1148)
++#define RSCC_PDC_SEQ_START_ADDR (4 * 0x008)
++#define RSCC_PDC_MATCH_VALUE_LO (4 * 0x009)
++#define RSCC_PDC_MATCH_VALUE_HI (4 * 0x00a)
++#define RSCC_HIDDEN_TCS_CMD0_ADDR (4 * 0x00d)
++#define RSCC_HIDDEN_TCS_CMD0_DATA (4 * 0x00e)
++#define RSCC_OVERRIDE_START_ADDR (4 * 0x100)
++#define RSCC_ASLEEP             (1u << 16)
++
++static bool
++sa_rpmh_init(void)
++{
++	static const uint32_t program[5] = { 0xeaaae5a0, 0xe1a1ebab, 0xa2e0a581, 0xecac82e2, 0x0020edad };   /* a650 family */
++
++	sa_announce("program the GMU's RPMh channel (rscc 0x3de0000) and enable the GPU's PDC (0xb294500, 0xb294520: not "
++	    "touched before); the PDC's own sequence is the always-on processor's on the A650");
++	sa_put(&sa_rscc, "rsc_status0_drv0", RSCC_RSC_STATUS0_DRV0, 1u << 24);
++	sa_put(&sa_rscc, "pdc_slave_id_drv0", RSCC_PDC_SLAVE_ID_DRV0, 1);
++	sa_put(&sa_rscc, "hidden_tcs_cmd0_data", RSCC_HIDDEN_TCS_CMD0_DATA, 0);
++	sa_put(&sa_rscc, "hidden_tcs_cmd0_addr", RSCC_HIDDEN_TCS_CMD0_ADDR, 0);
++	sa_put(&sa_rscc, "hidden_tcs_cmd1_data", RSCC_HIDDEN_TCS_CMD0_DATA + 4 * 2, 0);
++	sa_put(&sa_rscc, "hidden_tcs_cmd1_addr", RSCC_HIDDEN_TCS_CMD0_ADDR + 4 * 2, 0);
++	sa_put(&sa_rscc, "hidden_tcs_cmd2_data", RSCC_HIDDEN_TCS_CMD0_DATA + 4 * 4, 0x80000000);    /* not a740 */
++	sa_put(&sa_rscc, "hidden_tcs_cmd2_addr", RSCC_HIDDEN_TCS_CMD0_ADDR + 4 * 4, 0);
++	sa_put(&sa_rscc, "override_start_addr", RSCC_OVERRIDE_START_ADDR, 0);
++	sa_put(&sa_rscc, "pdc_seq_start_addr", RSCC_PDC_SEQ_START_ADDR, 0x4520);
++	sa_put(&sa_rscc, "pdc_match_value_lo", RSCC_PDC_MATCH_VALUE_LO, 0x4510);
++	sa_put(&sa_rscc, "pdc_match_value_hi", RSCC_PDC_MATCH_VALUE_HI, 0x4514);
++	for (unsigned i = 0; i < 5; i++) {
++		sa_put(&sa_rscc, "seq_mem_drv0", RSCC_SEQ_MEM_0_DRV0 + 4 * i, program[i]);
++	}
++	sa_get(&sa_pdc, "gpu_enable_pdc", PDC_GPU_ENABLE_PDC);
++	sa_get(&sa_pdc, "gpu_seq_start_addr", PDC_GPU_SEQ_START_ADDR);
++	sa_put(&sa_pdc, "gpu_seq_start_addr", PDC_GPU_SEQ_START_ADDR, 0);
++	sa_put(&sa_pdc, "gpu_enable_pdc", PDC_GPU_ENABLE_PDC, 0x80000001);
++	__asm__ volatile ("dsb sy" ::: "memory");
++	/* a6xx_rpmh_stop: hand the channel to its sleep state; a6xx_rpmh_start wakes it */
++	sa_put(&sa_gmu, "rscc_control_req", GMU_RSCC_CONTROL_REQ, 1);
++	if (!sa_wait_for(&sa_rscc, RSCC_RSC_STATUS0_DRV0, RSCC_ASLEEP, RSCC_ASLEEP, 10)) {
++		printf("SWEET GPU: %u: the GMU's RPMh channel does not go to sleep (status0 %#x)\n", sa_step,
++		    sa_rd(sa_rscc.base + RSCC_RSC_STATUS0_DRV0));
++	}
++	sa_get(&sa_rscc, "rsc_status0_drv0", RSCC_RSC_STATUS0_DRV0);
++	sa_put(&sa_gmu, "rscc_control_req", GMU_RSCC_CONTROL_REQ, 0);
++	return true;
++}
++
+ static bool
+ sa_step_gmu_start(void)
+ {
+@@ -1367,6 +1428,9 @@ sa_step_gmu_start(void)
+ 	sa_put(&sa_gmu, "cx_falnext_intf", GMU_CX_FALNEXT_INTF, 1);
+ 	sa_put(&sa_gmu, "cx_fal_intf", GMU_CX_FAL_INTF, 1);
+ 	sa_put(&sa_gmu, "general_7", GMU_GENERAL_7, 1);
++	if (!sa_rpmh_init()) {
++		return false;
++	}
+ 	/* a6xx_rpmh_start */
+ 	sa_put(&sa_gmu, "rscc_control_req", GMU_RSCC_CONTROL_REQ, 2);
+ 	if (!sa_wait_for(&sa_gmu, GMU_RSCC_CONTROL_ACK, 2, 2, 10) || !sa_wait_for(&sa_rscc, RSCC_SEQ_BUSY_DRV0, ~0u, 0, 10)) {
+@@ -1415,10 +1479,272 @@ sa_step_gmu_start(void)
+ 	return true;
+ }
+ 
++/* ---- step 16: the GMU's message queues ---- */
++
++#define GMU_HFI_CTRL_INIT       GMU_WORD(0x5186)
++#define GMU_HOST2GMU_INTR_SET   GMU_WORD(0x5194)
++static bool sa_gmu_talks, sa_core_on;
++
++static bool
++sa_step_gmu_queues(void)
++{
++	if (!sa_cx_ready() || sa_rd(sa_gmu.base + GMU_CM3_SYSRESET) != 0) {
++		printf("SWEET GPU: %u: the GMU's firmware is not running: step 15\n", sa_step);
++		return false;
++	}
++	sa_announce("ask the GMU to start its message queues (hfi_ctrl_init)");
++	sa_put(&sa_gmu, "hfi_ctrl_init", GMU_HFI_CTRL_INIT, 1);
++	if (!sa_wait_for(&sa_gmu, GMU_HFI_CTRL_STATUS, 1, 1, 100)) {
++		sa_get(&sa_gmu, "hfi_ctrl_status", GMU_HFI_CTRL_STATUS);
++		printf("SWEET GPU: %u: the GMU does not start its message queues\n", sa_step);
++		sa_gmu_post_mortem();
++		return false;
++	}
++	sa_get(&sa_gmu, "hfi_ctrl_status", GMU_HFI_CTRL_STATUS);
++	sa_gmu_talks = true;
++	printf("SWEET GPU: %u: THE GMU'S MESSAGE QUEUES ARE UP\n", sa_step);
++	return !sa_space_faulted(&sa_smmu_gmu_cb, "the GMU");
++}
++
++/* ---- step 17: talk to the GMU; the 3D core powered ---- */
++
++/*
++ * A message: word 0 = id (7:0) | words (15:8) | kind (19:16, 1 = answer) | number (31:20); an
++ * answer repeats the number in word 1 and has the verdict in word 2 (0 = done). Linux a6xx_hfi.c.
++ */
++#define HFI_BW_TABLE            3
++#define HFI_PERF_TABLE          4
++#define HFI_START               10
++#define HFI_CORE_FW_START       14
++#define HFI_GX_BW_PERF_VOTE     30
++#define HFI_ERROR               100
++#define HFI_ANSWER              1
++
++struct sa_hfi_perf_table {
++	uint32_t header, gpu_levels, gmu_levels;
++	struct {
++		uint32_t vote, acd, khz;
++	} gpu[16];
++	struct {
++		uint32_t vote, khz;
++	} gmu[4];
++};
++struct sa_hfi_bw_table {
++	uint32_t header, levels, cnoc_commands, ddr_commands, cnoc_wait, ddr_wait;
++	uint32_t cnoc_address[6], cnoc_data[2][6], ddr_address[8], ddr_data[16][8];
++};
++
++static uint32_t sa_hfi_number;
++
++static bool
++sa_hfi_receive(unsigned which, uint32_t number, uint32_t *verdict)
++{
++	volatile struct sa_hfi_queue *queue = &sa_hfi->queue[which];
++	volatile uint32_t *data = (volatile uint32_t *)((vm_offset_t)sa_hfi + HFI_QUEUE_AT(which));
++	bool answered = false;
++
++	while (queue->read != queue->write) {
++		uint32_t message[8] = { 0 }, at = queue->read % HFI_QUEUE_WORDS, words = data[at] >> 8 & 0xff;
++		for (uint32_t i = 0; i < words; i++) {
++			if (i < 8) {
++				message[i] = data[at];
++			}
++			at = (at + 1) % HFI_QUEUE_WORDS;
++		}
++		queue->read = (at + 3) / 4 * 4 % HFI_QUEUE_WORDS;
++		if ((message[0] >> 16 & 0xf) == HFI_ANSWER && message[1] >> 20 == number) {
++			*verdict = message[2];
++			answered = true;
++		} else if ((message[0] & 0xff) == HFI_ERROR) {
++			message[7] = 0;
++			printf("SWEET GPU: %u: THE GMU REPORTS AN ERROR: %u, %u, \"%s\"\n", sa_step, message[1] >> 16,
++			    message[1] & 0xffff, (const char *)&message[2]);
++		} else {
++			printf("SWEET GPU: %u: the GMU says (queue %u, %u words): %#x %#x %#x %#x %#x %#x\n", sa_step, which, words,
++			    message[0], message[1], message[2], message[3], message[4], message[5]);
++		}
++		if (words == 0) {
++			break;
++		}
++	}
++	return answered;
++}
++
++static bool
++sa_hfi_send(const char *what, uint32_t id, uint32_t *message, uint32_t words)
++{
++	volatile struct sa_hfi_queue *queue = &sa_hfi->queue[0];
++	volatile uint32_t *data = (volatile uint32_t *)((vm_offset_t)sa_hfi + HFI_QUEUE_AT(0));
++	uint32_t at = queue->write % HFI_QUEUE_WORDS, number = ++sa_hfi_number & 0xfff, verdict = 0, waiting = 0;
++	bool answered = false;
++
++	message[0] = id | words << 8 | number << 20;
++	printf("SWEET GPU: %u: about to send the GMU %s: message %u, %u words, number %u\n", sa_step, what, id, words, number);
++	if (sa_step == sa_steps && sa_pause_ms) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++	for (uint32_t i = 0; i < (words + 3) / 4 * 4; i++) {
++		data[at] = i < words ? message[i] : 0xfafafafa;
++		at = (at + 1) % HFI_QUEUE_WORDS;
++	}
++	queue->write = at;
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sa_wr(sa_gmu.base + GMU_HOST2GMU_INTR_SET, 1);
++	for (int i = 0; i < 10000 && !answered; i++) {
++		delay_for_interval(100, NSEC_PER_USEC);
++		waiting = sa_rd(sa_gmu.base + GMU_GMU2HOST_INTR_INFO);
++		if (waiting & 1) {
++			sa_wr(sa_gmu.base + GMU_GMU2HOST_INTR_CLR, 1);
++			answered = sa_hfi_receive(1, number, &verdict);
++		}
++	}
++	(void)sa_hfi_receive(2, ~0u, &waiting);
++	if (!answered || verdict != 0) {
++		printf("SWEET GPU: %u: the GMU %s (%#x) to %s; fw_init_result %#x, gmu2host_intr_info %#x\n", sa_step,
++		    answered ? "says no" : "does not answer", verdict, what, sa_rd(sa_gmu.base + GMU_CM3_FW_INIT_RESULT),
++		    sa_rd(sa_gmu.base + GMU_GMU2HOST_INTR_INFO));
++		sa_gmu_post_mortem();
++		return false;
++	}
++	printf("SWEET GPU: %u: the GMU accepts %s\n", sa_step, what);
++	return true;
++}
++
++/* Linux a6xx_gmu_rpmh_arc_votes_init: (primary level << 16) | (secondary index << 8) | primary index. */
++static bool
++sa_arc_vote(uint32_t level, const uint16_t *pri, unsigned pri_count, const uint16_t *sec, unsigned sec_count, uint32_t *vote)
++{
++	unsigned p, si = 0;
++	for (p = 0; p < pri_count && pri[p] < level; p++) {
++	}
++	if (p == pri_count || sec_count == 0) {
++		return false;
++	}
++	for (unsigned j = 0; j < sec_count; j++) {
++		if (sec[j] >= level) {
++			si = j;
++			break;
++		} else if (sec[j]) {
++			si = j;
++		}
++	}
++	*vote = ((uint32_t)pri[p] & 0xffff) << 16 | si << 8 | p;
++	return true;
++}
++
++/* dt: kgsl_3d0_reg_memory 0x3d00000; a6xx.xml offsets in words. */
++static struct sa_block sa_gpu = { "gpu", 0x03d00000, 0x40000 };
++#define GPU_WORD(n)             (4u * (n))
++#define RBBM_STATUS             GPU_WORD(0x0210)
++#define RBBM_INT_0_STATUS       GPU_WORD(0x0201)
++#define RBBM_CLOCK_CNTL         GPU_WORD(0x00ae)
++#define CP_RB_BASE              GPU_WORD(0x0800)
++#define GMU_OOB_GPU_SET         (1u << 30)      /* host2gmu_intr_set (non-legacy GMU) */
++#define GMU_OOB_GPU_ACK         (1u << 31)      /* gmu2host_intr_info */
++
++static bool
++sa_step_core_power(void)
++{
++	/* umi gpu-opp-table_v2 (speed bin 0): 305 MHz @ 64, 400 MHz @ 128, 490 MHz @ 192 (the three lowest the
++	 * phone uses besides 441 @ 144) */
++	static const struct {
++		uint32_t khz, level;
++	} speeds[] = { { 0, 0 }, { 305000, 64 }, { 400000, 128 }, { 490000, 192 } };
++	static struct sa_hfi_perf_table perf;
++	static struct sa_hfi_bw_table bw;
++	uint32_t core_start[2] = { 0, 0 }, start[1] = { 0 }, vote[4] = { 0, 1, 1, 0 }, granted = 0, speed = 1;
++	uint16_t gfx[16], cx[16], mx[16];
++	unsigned gfx_levels, cx_levels, mx_levels;
++
++	if (!sa_cx_ready() || !sa_gmu_talks) {
++		return false;
++	}
++	if (!sa_rpmh_resource("gfx.lvl", gfx, &gfx_levels) || !sa_rpmh_resource("cx.lvl", cx, &cx_levels) ||
++	    !sa_rpmh_resource("mx.lvl", mx, &mx_levels)) {
++		printf("SWEET GPU: %u: cmd-db lacks one of the rails\n", sa_step);
++		return false;
++	}
++	perf.gpu_levels = sizeof(speeds) / sizeof(speeds[0]);
++	for (unsigned i = 0; i < perf.gpu_levels; i++) {
++		perf.gpu[i].khz = speeds[i].khz;
++		perf.gpu[i].acd = 0xffffffff;
++		if (!sa_arc_vote(speeds[i].level, gfx, gfx_levels, mx, mx_levels, &perf.gpu[i].vote)) {
++			printf("SWEET GPU: %u: RPMh has no level %u for gfx\n", sa_step, speeds[i].level);
++			return false;
++		}
++	}
++	perf.gmu_levels = 2;
++	perf.gmu[1].khz = 200000;
++	if (!sa_arc_vote(0, cx, cx_levels, mx, mx_levels, &perf.gmu[0].vote) ||
++	    !sa_arc_vote(48, cx, cx_levels, mx, mx_levels, &perf.gmu[1].vote)) {     /* GMU 200 MHz at MIN_SVS */
++		return false;
++	}
++	printf("SWEET GPU: %u: votes: gx %#x %#x %#x %#x, gmu %#x %#x\n", sa_step, perf.gpu[0].vote, perf.gpu[1].vote,
++	    perf.gpu[2].vote, perf.gpu[3].vote, perf.gmu[0].vote, perf.gmu[1].vote);
++	/* Linux a650_build_bw_table: one "off" level */
++	bw.levels = 1;
++	bw.ddr_commands = 3;
++	bw.ddr_wait = 0x01;
++	bw.ddr_address[0] = 0x50000;
++	bw.ddr_address[1] = 0x50004;
++	bw.ddr_address[2] = 0x5007c;
++	bw.ddr_data[0][0] = bw.ddr_data[0][1] = bw.ddr_data[0][2] = 0x40000000;
++	bw.cnoc_commands = 1;
++	bw.cnoc_wait = 0x01;
++	bw.cnoc_address[0] = 0x500a4;
++	bw.cnoc_data[0][0] = 0x40000000;
++	bw.cnoc_data[1][0] = 0x60000001;
++	(void)PE_parse_boot_argn("sweetgpuspeed", &speed, sizeof(speed));
++	if (speed < 1 || speed >= perf.gpu_levels) {
++		speed = 1;
++	}
++	vote[2] = speed;
++	printf("SWEET GPU: %u: the speed wanted: %u MHz\n", sa_step, speeds[speed].khz / 1000);
++
++	sa_announce("send the GMU its tables, core firmware start, start, and the speed wanted (Linux a6xx_hfi_start)");
++	if (!sa_hfi_send("the speed table", HFI_PERF_TABLE, &perf.header, sizeof(perf) / 4) ||
++	    !sa_hfi_send("the bandwidth table", HFI_BW_TABLE, &bw.header, sizeof(bw) / 4) ||
++	    !sa_hfi_send("core firmware start", HFI_CORE_FW_START, core_start, 2) ||
++	    !sa_hfi_send("start", HFI_START, start, 1) ||
++	    !sa_hfi_send("the speed wanted", HFI_GX_BW_PERF_VOTE, vote, 4)) {
++		return false;
++	}
++
++	sa_announce("ask the GMU to power the 3D core (oob GPU_SET)");
++	sa_get(&sa_gmu, "sptprac_pwr_clk_status", GMU_SPTPRAC_PWR_CLK_STATUS);
++	sa_get(&sa_gpucc, "gx_gdscr", GPUCC_GX_GDSCR);
++	sa_core_on = true;      /* from here nothing is undone */
++	sa_wr(sa_gmu.base + GMU_HOST2GMU_INTR_SET, GMU_OOB_GPU_SET);
++	for (int i = 0; i < 1000 && !(granted & GMU_OOB_GPU_ACK); i++) {
++		delay_for_interval(100, NSEC_PER_USEC);
++		granted = sa_rd(sa_gmu.base + GMU_GMU2HOST_INTR_INFO);
++	}
++	sa_wr(sa_gmu.base + GMU_GMU2HOST_INTR_CLR, GMU_OOB_GPU_ACK);
++	sa_get(&sa_gmu, "sptprac_pwr_clk_status", GMU_SPTPRAC_PWR_CLK_STATUS);
++	sa_get(&sa_gpucc, "gx_gdscr", GPUCC_GX_GDSCR);
++	sa_get(&sa_gmu, "rpmh_power_state", GMU_RPMH_POWER_STATE);
++	if (!(granted & GMU_OOB_GPU_ACK)) {
++		printf("SWEET GPU: %u: the GMU does not grant the 3D core (gmu2host_intr_info %#x)\n", sa_step, granted);
++		sa_gmu_post_mortem();
++		return false;
++	}
++	if (!(sa_rd(sa_gpucc.base + GPUCC_GX_GDSCR) & GDSC_POWER_ON)) {
++		printf("SWEET GPU: %u: granted, but gx_gdscr shows no power\n", sa_step);
++		return false;
++	}
++	sa_announce("read registers of the 3D core itself (0x3d00000): the first time it has power");
++	sa_get(&sa_gpu, "rbbm_status", RBBM_STATUS);
++	sa_get(&sa_gpu, "rbbm_int_0_status", RBBM_INT_0_STATUS);
++	sa_get(&sa_gpu, "rbbm_clock_cntl", RBBM_CLOCK_CNTL);
++	sa_get(&sa_gpu, "cp_rb_base", CP_RB_BASE);
++	printf("SWEET GPU: %u: THE 3D CORE HAS POWER AND ANSWERS\n", sa_step);
++	return !sa_space_faulted(&sa_smmu_gmu_cb, "the GMU");
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+-	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start,
++	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start, sa_step_gmu_queues, sa_step_core_power,
+ };
+ 
+ static void
+@@ -1436,7 +1762,12 @@ sa_thread(__unused void *arg, __unused wait_result_t wr)
+ 		}
+ 	}
+ 	sa_zap_release();
+-	sa_undo_all();
++	if (sa_core_on) {
++		printf("SWEET GPU: the 3D core was asked for: leaving the GPU block as it is (%u writes not undone)\n",
++		    sa_undo_count);
++	} else {
++		sa_undo_all();
++	}
+ 	printf("SWEET GPU: done\n");
+ 	(void)thread_terminate(current_thread());
+ }
+-- 
+2.54.0 (Apple Git-157)
+

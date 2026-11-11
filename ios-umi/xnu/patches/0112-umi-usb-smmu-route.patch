@@ -1,0 +1,109 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 9bab1cd..d8e997f 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -294,13 +294,15 @@ ev_cmd(uint32_t op, unsigned want)
+ }
+ 
+ /*
+- * The GPI masters DRAM as SMMU stream 0x56. With unmatched streams set to fault
++ * The GPI masters DRAM as SMMU stream 0x56 (umi USB: stream 0, sweet_usb.c). With unmatched streams set to fault
+  * (ABL's sCR0), give it a stream match entry that routes it to ABL's display
+  * context bank, whose translation is off (as the hypervisor does not accept
+  * BYPASS S2CRs on these SoCs, Linux arm-smmu-qcom uses such a bank too).
+  */
+-static bool
+-smmu_route_sid(uint32_t sid)
++bool sweet_smmu_route_sid(uint32_t sid);
++
++bool
++sweet_smmu_route_sid(uint32_t sid)
+ {
+ 	volatile uint32_t *gr0 = (volatile uint32_t *)ml_io_map(SMMU_PA, 0x1000);
+ 	if (gr0 == NULL) {
+@@ -320,9 +322,16 @@ smmu_route_sid(uint32_t sid)
+ 			continue;
+ 		}
+ 		if (((sid ^ id) & ~mask & 0x7fff) == 0) {
+-			printf("SWEET GPI: SMMU SMR%u id %#x mask %#x already routes stream %#x: S2CR %#x\n",
+-			    i, id, mask, sid, s2cr);
+-			return ((s2cr >> 16) & 3) != 2;
++			/* A translating bank would fault our physical addresses just the same. */
++			uint32_t sctlr = 0;
++			if (((s2cr >> 16) & 3) == 0) {
++				volatile uint32_t *cb = (volatile uint32_t *)ml_io_map(SMMU_PA + (numpage << pgshift) +
++				    ((uint64_t)(s2cr & 0xff) << pgshift), 0x1000);
++				sctlr = cb ? cb[0] : 1;
++			}
++			printf("SWEET GPI: SMMU SMR%u id %#x mask %#x already routes stream %#x: S2CR %#x SCTLR %#x\n",
++			    i, id, mask, sid, s2cr, sctlr);
++			return ((s2cr >> 16) & 3) != 2 && !(sctlr & 1);
+ 		}
+ 		if (((0x820 ^ id) & ~mask & 0x7fff) == 0 && ((s2cr >> 16) & 3) == 0) {
+ 			displaycb = (int)(s2cr & 0xff);
+@@ -358,10 +367,10 @@ gpi_smmu_route(void)
+ {
+ 	uint32_t qup = QUP_SID;
+ 	(void)PE_parse_boot_argn("sweetqupsid", &qup, sizeof(qup));
+-	if (!smmu_route_sid(GPI_SID)) {
++	if (!sweet_smmu_route_sid(GPI_SID)) {
+ 		return false;
+ 	}
+-	return qup == 0 || smmu_route_sid(qup);
++	return qup == 0 || sweet_smmu_route_sid(qup);
+ }
+ 
+ /* gpi_alloc_chan(chan, false): the channel context, its doorbell MSB, scratch and QoS */
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+index fb06a49..72b2557 100644
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -76,6 +76,9 @@ static const struct usb_clk usb_cbcr_umi[] = {
+ 	{ "phy-com-aux", 0x0f058 },
+ };
+ extern bool sweet_board_is_umi(void);
++extern bool sweet_smmu_route_sid(uint32_t sid);
++/* umi DT usb0 iommus = <&apps_smmu 0x0 0x0>: the DWC3 masters DRAM as stream 0. */
++#define UMI_USB_SID             0x0
+ 
+ #define DWC3_PA                 0x0a600000
+ #define DWC3_SIZE               0x0000d000
+@@ -887,6 +890,19 @@ sweet_usb_gadget_start(vm_offset_t dwc)
+ 		return;
+ 	}
+ 	ud.dma_pa = ptoa_64(pn);
++	/*
++	 * On umi an unrouted stream faults and resets the SoC at the first event
++	 * write (the 0111 sweetusb=2 boot hung right after the soft reset).
++	 */
++	if (sweet_board_is_umi()) {
++		uint32_t sid = UMI_USB_SID;
++		(void)PE_parse_boot_argn("sweetusbsid", &sid, sizeof(sid));
++		bool routed = sid == 0xffff || sweet_smmu_route_sid(sid);
++		printf("SWEET USB: umi stream %#x %s, DMA at 0x%llx\n", sid, routed ? "routed" : "NOT routed", ud.dma_pa);
++		if (!routed) {
++			return;
++		}
++	}
+ 	ud_if_create();
+ 
+ 	/* Device controller soft reset (PHY and global setup stay as ABL left them). */
+@@ -906,6 +922,7 @@ sweet_usb_gadget_start(vm_offset_t dwc)
+ 	dwc_wr(GEVNTSIZ, (1u << 31) | UD_EVT_SIZE);     /* interrupt masked: polled */
+ 	dwc_wr(GEVNTCOUNT, dwc_rd(GEVNTCOUNT) & 0xffff);
+ 	ud.evt_pos = 0;
++	printf("SWEET USB: event buffer set\n");
+ 
+ 	/* High speed, address 0 */
+ 	uint32_t dcfg = dwc_rd(DCFG) & ~(7u | (0x7fu << 3));
+@@ -922,8 +939,10 @@ sweet_usb_gadget_start(vm_offset_t dwc)
+ 		printf("SWEET USB: endpoint 0 setup failed\n");
+ 		return;
+ 	}
++	printf("SWEET USB: endpoint 0 configured\n");
+ 	dwc_wr(DALEPENA, 0x3);
+ 	ud_start_setup();
++	printf("SWEET USB: setup TRB started\n");
+ 
+ 	vm_offset_t qs = ml_io_map(QSCRATCH_PA, 0x100);
+ 	if (qs != 0) {

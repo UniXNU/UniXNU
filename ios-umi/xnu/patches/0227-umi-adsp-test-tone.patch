@@ -1,0 +1,369 @@
+From cac83dd983257eb84b2df3b89373130119efdf8f Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 22:30:48 +0100
+Subject: [PATCH] umi: opt-in ADSP test tone (ASM -> ADM -> TERT_MI2S_RX), off
+ by default
+
+Boot-arg sweetadsptone=1: a 1 kHz, 1 s sine at about -18 dBFS in low RAM
+(0xd3800000, APPS SMMU stream 0x1801 routed to bypass, sid bits 1 in
+address bits 32+), ASM map / open write v3 / media format v2, ADM open v5
+(NULL topology) + matrix route, run, four writes. Every step answers 0 and
+the ADSP's post-processing receives the data, but nothing is heard yet; the
+amps read DAC source ASPRX1, volume 0 dB. Suspect: the amps' I2S data line
+(SD0 configured).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 269 ++++++++++++++++++++++++++++++++++++++++++-
+ 1 file changed, 265 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index 3767029..7566142 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -58,6 +58,11 @@ static void afe_poll(uint32_t ms);
+ static void svc_probe(uint32_t ms);
+ static void afe_vote_answer(uint32_t opcode, uint32_t status, uint32_t handle);
+ static void amp_start(void);
++static void tone_start(void);
++static bool tone_rx(uint8_t svc, uint32_t opcode, const uint32_t *p);
++static void tone_poll(uint32_t ms);
++static volatile int tone_state;                 /* 0 off, 1..7 setting up / playing, 8 done, -1 failed */
++static volatile bool amp_live;                  /* the speaker amp's stream start is written */
+ static bool adsp_fr_on(void);
+ static uint32_t afe_now_ms;                     /* GLINK loop time (ms since boot) */
+ static uint32_t apr_ready_ms;                   /* when the core listed its services */
+@@ -66,7 +71,7 @@ static uint32_t apr_asked_ms, apr_token = 1;
+ static unsigned apr_logged;
+ 
+ static void
+-apr_send(uint8_t svc, uint32_t opcode, const void *payload, uint16_t plen)
++apr_send_port(uint8_t svc, uint16_t port, uint32_t opcode, const void *payload, uint16_t plen)
+ {
+ 	uint8_t m[20 + 64];
+ 	uint16_t f = APR_HDR_FIELD, size = (uint16_t)(20 + plen);
+@@ -77,10 +82,10 @@ apr_send(uint8_t svc, uint32_t opcode, const void *payload, uint16_t plen)
+ 	memcpy(m + 2, &size, 2);
+ 	m[4] = svc;                             /* src svc = dest svc, as apr_send_pkt */
+ 	m[5] = APR_DOMAIN_APPS;
+-	memset(m + 6, 0, 2);                    /* src port */
++	memcpy(m + 6, &port, 2);                /* src port (ASM: session << 8 | stream) */
+ 	m[8] = svc;
+ 	m[9] = APR_DOMAIN_ADSP;
+-	memset(m + 10, 0, 2);                   /* dest port */
++	memcpy(m + 10, &port, 2);               /* dest port */
+ 	uint32_t token = apr_token++;
+ 	memcpy(m + 12, &token, 4);
+ 	memcpy(m + 16, &opcode, 4);
+@@ -90,6 +95,12 @@ apr_send(uint8_t svc, uint32_t opcode, const void *payload, uint16_t plen)
+ 	(void)gl_send(GL_LCID_APR, m, size);
+ }
+ 
++static void
++apr_send(uint8_t svc, uint32_t opcode, const void *payload, uint16_t plen)
++{
++	apr_send_port(svc, 0, opcode, payload, plen);
++}
++
+ static void
+ apr_rx(const uint8_t *m, uint32_t len)
+ {
+@@ -107,6 +118,9 @@ apr_rx(const uint8_t *m, uint32_t len)
+ 		hlen = 20;
+ 	}
+ 	memcpy(p, m + hlen, MIN(len - hlen, (uint32_t)sizeof(p)));
++	if (tone_rx(m[4], opcode, p)) {
++		return;
++	}
+ 	switch (opcode) {
+ 	case AVCS_GET_STATE_RSP:
+ 		printf("SWEET ADSP: APR <- core state %u%s\n", p[0], p[0] == 1 ? " (READY)" : "");
+@@ -349,6 +363,7 @@ afe_next(void)
+ 	case 3:
+ 		afe_state = 4;
+ 		printf("SWEET ADSP: AFE: TERT_MI2S_RX RUNNING (zeros until a stream feeds it)\n");
++		tone_start();
+ 		return;
+ 	default:
+ 		return;
+@@ -372,6 +387,7 @@ static void
+ afe_poll(uint32_t ms)
+ {
+ 	afe_now_ms = ms;
++	tone_poll(ms);
+ 	if (afe_state == 0 && afe_vote_waiting && ms - afe_sent_ms > 3000) {
+ 		printf("SWEET ADSP: AFE: LPASS core hw vote %u not answered in 3 s; going on\n", afe_votes);
+ 		afe_vote_waiting = false;
+@@ -426,6 +442,243 @@ afe_result(uint32_t opcode, uint32_t status)
+ 	afe_next();
+ }
+ 
++/*
++ * ---- a short quiet test tone: ASM stream -> ADM COPP -> TERT_MI2S_RX (Linux msm-pcm-q6-v2 + q6asm/q6adm) ----
++ *
++ * PCM buffer: 256 KiB of low RAM at 0xd3800000 (unmanaged by XNU, after the DSP RPC pools), read by the ADSP
++ * through APPS SMMU stream 0x1801 (kona dt msm_audio_ion, qcom,smmu-sid-mask 0xf: sid bits 1 in address bits
++ * 32+), routed to the non-translating context like the FastRPC streams. Steps, one answer each:
++ *   1 ASM_CMD_SHARED_MEM_MAP_REGIONS (pool SHMEM8_4K, one region) -> mem map handle
++ *   2 ASM_STREAM_CMD_OPEN_WRITE_V3, session 1 stream 1 (ports 0x0101): legacy, matrix sink, 16 bit,
++ *     no post-processing topology, multi-channel PCM v2
++ *   3 ASM_DATA_CMD_MEDIA_FMT_UPDATE_V2: 2 ch, 16 bit, 48 kHz, signed, FL FR
++ *   4 ADM_CMD_DEVICE_OPEN_V5 on 0x1004: RX, NULL_COPP_TOPOLOGY, 2 ch 16 bit 48 kHz -> copp id
++ *   5 ADM_CMD_MATRIX_MAP_ROUTINGS_V5: audio RX matrix, session 1 -> that copp
++ *   6 ASM_SESSION_CMD_RUN_V2 (now), then 7: four ASM_DATA_CMD_WRITE_V2 of 150 ms each
++ * The tone: 1 kHz (48-sample period), amplitude 4000 (about -18 dBFS; the Linux lab tone was 6000), 1 s, 10 ms
++ * fades (0229: 480 Hz at 1000 for 0.6 s played through the ADSP but was not heard). Boot-arg
++ * sweetadsptone=1 (default off).
++ */
++#define TONE_PA                 0xd3800000u
++#define TONE_SIZE               0x40000u
++#define TONE_SID_BITS           1u
++#define TONE_SESSION_PORT       0x0101
++#define TONE_FRAMES             48000u          /* 1 s at 48 kHz */
++#define TONE_BUFS               4u
++#define TONE_FADE               480u
++#define APR_SVC_ASM             7
++#define APR_SVC_ADM             8
++
++static const int16_t tone_sine[48] = {
++	0, 522, 1035, 1531, 2000, 2435, 2828, 3173, 3464, 3696, 3864, 3966, 4000, 3966, 3864, 3696, 3464, 3173, 2828,
++	2435, 2000, 1531, 1035, 522, 0, -522, -1035, -1531, -2000, -2435, -2828, -3173, -3464, -3696, -3864, -3966,
++	-4000, -3966, -3864, -3696, -3464, -3173, -2828, -2435, -2000, -1531, -1035, -522
++};
++static uint32_t tone_handle, tone_sent_ms, tone_done_count;
++static uint16_t tone_copp;
++
++static void
++tone_fail(const char *what, uint32_t status)
++{
++	printf("SWEET ADSP: TONE: %s failed, status %#x; stopping\n", what, status);
++	tone_state = -1;
++}
++
++static void
++tone_step(void)
++{
++	uint8_t b[64] = { 0 };
++	tone_sent_ms = afe_now_ms;
++	switch (tone_state) {
++	case 1: {
++		/* avs_cmd_shared_mem_map_regions {u16 pool, u16 num, u32 property} + {lsw, msw, size} */
++		uint16_t h[2] = { 3 /* ADSP_MEMORY_MAP_SHMEM8_4K_POOL */, 1 };
++		uint32_t r[4] = { 0, TONE_PA, TONE_SID_BITS, TONE_SIZE };
++		memcpy(b, h, 4);
++		memcpy(b + 4, r, 16);
++		printf("SWEET ADSP: TONE -> ASM map %#x (sid bits %u) + %#x\n", TONE_PA, TONE_SID_BITS, TONE_SIZE);
++		apr_send_port(APR_SVC_ASM, 0, 0x00010d92, b, 20);
++		return;
++	}
++	case 2: {
++		uint32_t w[4] = { 0 /* legacy */, 0 | (16u << 16) /* matrix sink, 16 bit */, 0x00010c68 /* PP none */,
++			          0x00010da5 /* MULTI_CHANNEL_PCM_V2 */ };
++		printf("SWEET ADSP: TONE -> ASM open write, session 1\n");
++		apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010db3, w, 16);
++		return;
++	}
++	case 3: {
++		uint32_t w[3] = { 20 /* fmt_blk_size */, 2 | (16u << 16), AFE_RATE };
++		uint16_t sg[2] = { 1 /* signed */, 0 };
++		memcpy(b, w, 12);
++		memcpy(b + 12, sg, 4);
++		b[16] = 1;                      /* PCM_CHANNEL_FL */
++		b[17] = 2;                      /* PCM_CHANNEL_FR */
++		printf("SWEET ADSP: TONE -> ASM media format 2 ch 16 bit %u Hz\n", AFE_RATE);
++		apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010d98, b, 24);
++		return;
++	}
++	case 4: {
++		uint16_t h[4] = { 0 /* legacy */, 1 /* RX */, AFE_PORT_TERT_MI2S_RX, 0xffff };
++		uint32_t topo = 0x00010312;     /* NULL_COPP_TOPOLOGY */
++		uint16_t f[2] = { 2, 16 };
++		uint32_t rate = AFE_RATE;
++		memcpy(b, h, 8);
++		memcpy(b + 8, &topo, 4);
++		memcpy(b + 12, f, 4);
++		memcpy(b + 16, &rate, 4);
++		b[20] = 1;
++		b[21] = 2;
++		printf("SWEET ADSP: TONE -> ADM open on %#x, NULL topology\n", AFE_PORT_TERT_MI2S_RX);
++		apr_send_port(APR_SVC_ADM, AFE_PORT_TERT_MI2S_RX, 0x00010326, b, 28);
++		return;
++	}
++	case 5: {
++		uint32_t w[2] = { 0 /* ADM_MATRIX_ID_AUDIO_RX */, 1 };
++		uint16_t n[4] = { 1 /* session */, 1, tone_copp, 0 };
++		memcpy(b, w, 8);
++		memcpy(b + 8, n, 8);
++		printf("SWEET ADSP: TONE -> ADM route session 1 -> copp %u\n", tone_copp);
++		apr_send_port(APR_SVC_ADM, 0, 0x00010325, b, 16);
++		return;
++	}
++	case 6: {
++		uint32_t w[3] = { 0, 0, 0 };    /* run now */
++		printf("SWEET ADSP: TONE -> ASM run\n");
++		apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010daa, w, 12);
++		return;
++	}
++	case 7: {
++		uint32_t per = TONE_FRAMES / TONE_BUFS;
++		for (uint32_t i = 0; i < TONE_BUFS; i++) {
++			uint32_t w[8] = { TONE_PA + i * per * 4, TONE_SID_BITS, tone_handle, per * 4, i, 0, 0, 0 };
++			apr_send_port(APR_SVC_ASM, TONE_SESSION_PORT, 0x00010dab, w, 32);
++		}
++		printf("SWEET ADSP: TONE -> %u writes of %u bytes: playing 1 s of 1 kHz at about -18 dBFS\n",
++		    TONE_BUFS, per * 4);
++		return;
++	}
++	default:
++		return;
++	}
++}
++
++static uint32_t tone_armed_ms;
++
++/* TERT_MI2S_RX runs: play once the speaker amp is enabled (sweetamp=1), or after 5 s without it */
++static void
++tone_start(void)
++{
++	uint32_t on = 0;
++	PE_parse_boot_argn(SL_ARG "tone", &on, sizeof(on));
++	if (on && tone_state == 0) {
++		tone_armed_ms = afe_now_ms | 1;
++	}
++}
++
++static void
++tone_begin(void)
++{
++	extern bool sweet_smmu_route_sid(uint32_t sid);
++	bool routed = sweet_smmu_route_sid(0x1801);
++	vm_offset_t va = sweet_dsp_io_map(TONE_PA, TONE_SIZE);
++	if (va == 0) {
++		tone_fail("buffer map", 0);
++		return;
++	}
++	volatile uint32_t *pcm = (volatile uint32_t *)va;
++	for (uint32_t n = 0; n < TONE_SIZE / 4; n++) {
++		int32_t v = 0;
++		if (n < TONE_FRAMES) {
++			v = tone_sine[n % 48];
++			uint32_t edge = MIN(n, TONE_FRAMES - 1 - n);
++			if (edge < TONE_FADE) {
++				v = v * (int32_t)edge / (int32_t)TONE_FADE;
++			}
++		}
++		uint16_t s16 = (uint16_t)(int16_t)v;
++		pcm[n] = (uint32_t)s16 | ((uint32_t)s16 << 16);     /* L = R */
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	printf("SWEET ADSP: TONE: %u frames at %#x, SMMU sid 0x1801 %s\n", TONE_FRAMES, TONE_PA,
++	    routed ? "routed" : "NOT routed");
++	tone_state = 1;
++	tone_step();
++}
++
++/* ASM / ADM answers for the tone; true when the packet was ours */
++static bool
++tone_rx(uint8_t svc, uint32_t opcode, const uint32_t *p)
++{
++	static const uint32_t want[8] = { 0, 0x00010d92, 0x00010db3, 0x00010d98, 0x00010326, 0x00010325, 0x00010daa, 0 };
++	if (tone_state <= 0 || (svc != APR_SVC_ASM && svc != APR_SVC_ADM)) {
++		return false;
++	}
++	if (opcode == 0x00010d93 && tone_state == 1) {          /* ASM_CMDRSP_SHARED_MEM_MAP_REGIONS */
++		tone_handle = p[0];
++		printf("SWEET ADSP: TONE <- ASM map handle %#x\n", tone_handle);
++		tone_state = 2;
++		tone_step();
++		return true;
++	}
++	if (opcode == 0x00010329 && tone_state == 4) {          /* ADM_CMDRSP_DEVICE_OPEN_V5 {status, u16 copp} */
++		printf("SWEET ADSP: TONE <- ADM open status %#x copp %u\n", p[0], p[1] & 0xffff);
++		if (p[0] != 0) {
++			tone_fail("ADM open", p[0]);
++			return true;
++		}
++		tone_copp = (uint16_t)p[1];
++		tone_state = 5;
++		tone_step();
++		return true;
++	}
++	if (opcode == 0x00010d99) {                             /* ASM_DATA_EVENT_WRITE_DONE_V2 {lsw, msw, status} */
++		tone_done_count++;
++		printf("SWEET ADSP: TONE <- write done %u/%u (buffer %#x, status %#x)\n", tone_done_count, TONE_BUFS, p[0],
++		    p[2]);
++		if (tone_done_count == TONE_BUFS) {
++			tone_state = 8;
++		}
++		return true;
++	}
++	if (opcode == APR_BASIC_RSP_RESULT && tone_state >= 1 && tone_state <= 7 && p[0] == want[tone_state]) {
++		printf("SWEET ADSP: TONE <- result for %#x: %#x\n", p[0], p[1]);
++		if (p[1] != 0) {
++			tone_fail("step", p[1]);
++			return true;
++		}
++		tone_state++;
++		tone_step();
++		return true;
++	}
++	if (opcode == APR_BASIC_RSP_RESULT && p[0] == 0x00010dab) {
++		printf("SWEET ADSP: TONE <- write result %#x\n", p[1]);
++		return true;
++	}
++	if (opcode != APR_BASIC_RSP_RESULT) {
++		printf("SWEET ADSP: TONE <- svc %u opcode %#x: %#x %#x %#x\n", svc, opcode, p[0], p[1], p[2]);
++		return true;
++	}
++	return false;
++}
++
++static void
++tone_poll(uint32_t ms)
++{
++	if (tone_state == 0 && tone_armed_ms != 0 && (amp_live || ms - tone_armed_ms > 5000)) {
++		printf("SWEET ADSP: TONE: starting (%s)\n", amp_live ? "speaker amp enabled" : "no amp after 5 s");
++		tone_armed_ms = 0;
++		tone_begin();
++		return;
++	}
++	if (tone_state >= 1 && tone_state <= 6 && ms - tone_sent_ms > 3000) {
++		tone_fail("an unanswered step", (uint32_t)tone_state);
++	} else if (tone_state == 7 && ms - tone_sent_ms > 4000) {
++		printf("SWEET ADSP: TONE: %u of %u writes done after 4 s; stopping\n", tone_done_count, TONE_BUFS);
++		tone_state = 8;
++	}
++}
++
+ /* ---- the speaker amps: two Cirrus CS35L41 on QUP0 SE3 I2C (umi dtbo: 0x40 speaker, 0x42 earpiece) ---- */
+ 
+ /*
+@@ -667,7 +920,8 @@ amp_replay(uint8_t addr, const uint32_t (*seq)[2], unsigned n, const char *what)
+ }
+ 
+ /* Registers whose values the Linux driver leaves behind after probe: read back to check the replay. */
+-static const uint32_t amp_check[] = { 0x3808, 0x4220, 0x480c, 0x2018, 0x201c, 0x4c50, 0x4c54, 0x4c58, 0x4c5c, 0x6404 };
++static const uint32_t amp_check[] = { 0x3808, 0x4220, 0x480c, 0x2018, 0x201c, 0x4c50, 0x4c54, 0x4c58, 0x4c5c, 0x6404,
++	                               0x4c00 /* DAC source */, 0x6000 /* digital volume */, 0x6c04 /* gain */ };
+ 
+ static void
+ amp_configure(uint8_t addr, bool speaker)
+@@ -704,8 +958,15 @@ amp_configure(uint8_t addr, bool speaker)
+ 	} else {
+ 		amp_replay(addr, amp42_start, sizeof(amp42_start) / sizeof(amp42_start[0]), "stream start");
+ 	}
++	if (speaker) {
++		IOSleep(20);
++		amp_live = true;
++	}
+ 	IOSleep(1000);
+ 	uint32_t st[4] = { 0 };
++	for (int t = 0; t < 100 && tone_state > 0 && tone_state < 8; t++) {
++		IOSleep(100);                   /* 0228c: stay enabled while the test tone plays (up to 10 s more) */
++	}
+ 	for (unsigned i = 0; i < 4; i++) {
+ 		(void)amp_read(addr, 0x10010 + 4 * i, &st[i]);
+ 	}
+-- 
+2.54.0 (Apple Git-157)
+

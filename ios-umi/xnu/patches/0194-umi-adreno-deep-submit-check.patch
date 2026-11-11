@@ -1,0 +1,157 @@
+From 860cab21e364c1c683167d469c58e84b6e9f35a5 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 20:07:38 +0100
+Subject: [PATCH] umi: deeper submit check, ring words and CP interrupt
+ timeline
+
+0193's submit-time walk found every IB well-formed at the doorbell, and
+the kernel never clears CP_INTERRUPT_STATUS, so the opcode-error bit in
+every hang dump may be stale. Three diagnostics:
+
+- the submit walk follows CP_INDIRECT_BUFFER calls and every enabled
+  CP_SET_DRAW_STATE group one level down (the command memory the CP
+  runs at each draw that the IB walk did not see);
+- every change of CP_INTERRUPT_STATUS is logged at the submission it
+  is first seen at (fence, fence word, ring position, time);
+- the hang dump prints the ring's 32 words around CP_RB_RPTR, where the
+  CP stood in 0193 (IB1 fully fetched).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 75 ++++++++++++++++++++++++++++++++++++------
+ 1 file changed, 65 insertions(+), 10 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 7a68198..5d4a785 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3043,6 +3043,7 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ }
+ 
+ static void sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords);
++extern void IOLog(const char *, ...);
+ 
+ /* One command stream of up to n indirect buffers, one fence when it all ran (0: not submitted). */
+ uint32_t
+@@ -3070,6 +3071,17 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 		delay_for_interval(100, NSEC_PER_USEC);
+ 	}
+ 	uint32_t seqno = ++sa_fence_seqno;
++	/* CP_INTERRUPT_STATUS is never cleared here: log each change with the submission it was
++	 * seen at, so a bit in a hang dump can be dated (0193: the opcode bit may be stale) */
++	static uint32_t cp_int_seen, cp_int_logged;
++	uint32_t cp_int_now = sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS);
++	if (cp_int_now != cp_int_seen && cp_int_logged < 32) {
++		cp_int_logged++;
++		IOLog("SWEET ADRENO: CP interrupt status %#x -> %#x at submit of fence %u (done %u, ring read %u "
++		    "of %u) [t %llu]\n", cp_int_seen, cp_int_now, seqno, sa_fence_read(),
++		    sa_rd(sa_gpu.base + CP_RB_RPTR), sa_ring_sent, mach_absolute_time());
++		cp_int_seen = cp_int_now;
++	}
+ 	sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
+ 	sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
+ 	for (uint32_t i = 0; i < n; i++) {
+@@ -3242,30 +3254,53 @@ sa_walk_draw_state(uint64_t start, uint32_t dwords, struct sa_group *groups, uin
+  * 1 ms later: a word that has become valid by then was a write still on its way. */
+ static uint32_t sa_ib_check_logged;
+ 
+-static void
+-sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
++/* Walk one command stream; follow CP_INDIRECT_BUFFER (0x3f: address, size) and every enabled
++ * CP_SET_DRAW_STATE (0x43) group one level down (0194: the draw-state groups are command memory
++ * the CP runs at each draw that the IB walk alone did not see). Returns false after reporting. */
++static bool
++sa_ib_walk(uint32_t seqno, uint32_t index, const char *what, uint32_t group, uint64_t start,
++    uint32_t dwords, int depth)
+ {
+ 	struct sa_word_cache c = { .line = 1 };
+ 	uint32_t at = 0, h = 0;
+-	if (dwords > 8192 || sa_ib_check_logged >= 32) {
+-		return;
+-	}
+ 	while (at < dwords) {
+ 		if (!sa_gpu_word(&c, start + 4ull * at, &h)) {
+-			return;                                   /* unmapped/unmanaged: not ours to judge */
++			return true;                              /* unmapped/unmanaged: not ours to judge */
+ 		}
+ 		uint32_t n;
+ 		if ((h >> 28) == 4) {
+ 			n = h & 0x7f;
+ 		} else if ((h >> 28) == 7) {
+ 			n = h & 0x3fff;
++			uint32_t op = (h >> 16) & 0x7f, w[3];
++			if (depth < 2 && op == 0x3f && n == 3 && sa_gpu_word(&c, start + 4ull * (at + 1), &w[0]) &&
++			    sa_gpu_word(&c, start + 4ull * (at + 2), &w[1]) && sa_gpu_word(&c, start + 4ull * (at + 3), &w[2])) {
++				uint64_t to = (uint64_t)w[1] << 32 | w[0];
++				if (w[2] != 0 && w[2] <= 8192 &&
++				    !sa_ib_walk(seqno, index, "call", 0, to, w[2], depth + 1)) {
++					return false;
++				}
++			}
++			for (uint32_t e = 0; depth < 2 && op == 0x43 && e + 3 <= n; e += 3) {
++				if (!sa_gpu_word(&c, start + 4ull * (at + 1 + e), &w[0]) ||
++				    !sa_gpu_word(&c, start + 4ull * (at + 2 + e), &w[1]) ||
++				    !sa_gpu_word(&c, start + 4ull * (at + 3 + e), &w[2])) {
++					break;
++				}
++				uint32_t count = w[0] & 0xffff;
++				uint64_t to = (uint64_t)w[2] << 32 | w[1];
++				if (!(w[0] & (3u << 17)) && count != 0 && to != 0 &&
++				    !sa_ib_walk(seqno, index, "group", (w[0] >> 24) & 0x3f, to, count, depth + 1)) {
++					return false;
++				}
++			}
+ 		} else {
+ 			break;
+ 		}
+ 		at += 1 + n;
+ 	}
+ 	if (at >= dwords) {
+-		return;
++		return true;
+ 	}
+ 	sa_ib_check_logged++;
+ 	uint32_t bad_at = at, bad = h;
+@@ -3273,9 +3308,19 @@ sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
+ 	struct sa_word_cache c2 = { .line = 1 };
+ 	uint32_t later = 0;
+ 	bool got = sa_gpu_word(&c2, start + 4ull * bad_at, &later);
+-	IOLog("SWEET ADRENO: submit check: fence %u IB %u at %#llx (%u dwords): dword %u is %#x, no packet "
+-	    "header; 1 ms later %s %#x\n", seqno, index, (unsigned long long)start, dwords, bad_at, bad,
+-	    got ? "it reads" : "unreadable", later);
++	IOLog("SWEET ADRENO: submit check: fence %u IB %u %s %u at %#llx (%u dwords): dword %u is %#x, no "
++	    "packet header; 1 ms later %s %#x\n", seqno, index, what, group, (unsigned long long)start,
++	    dwords, bad_at, bad, got ? "it reads" : "unreadable", later);
++	return false;
++}
++
++static void
++sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
++{
++	if (dwords > 8192 || sa_ib_check_logged >= 32) {
++		return;
++	}
++	(void)sa_ib_walk(seqno, index, "top", 0, start, dwords, 0);
+ }
+ 
+ static void
+@@ -3300,6 +3345,16 @@ sa_hang_dump(uint32_t fence)
+ 	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT), cp_int, opcode,
+ 	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS), sa_rd(sa_gpu.base + CP_STATUS_1), fsr,
+ 	    (unsigned long long)far, sa_rd(sa_smmu_cb0.base + SMMU_CB_FSYNR0));
++	/* the ring around where the CP stands (between IBs, 0193: IB1 fully fetched) */
++	uint32_t rptr = sa_rd(sa_gpu.base + CP_RB_RPTR) % RING_WORDS;
++	const uint32_t *rw = (const uint32_t *)sa_core_ring.memory;
++	for (uint32_t k = 0; k < 32; k += 8) {
++		uint32_t b0 = (rptr + RING_WORDS - 16 + k) % RING_WORDS;
++		IOLog("SWEET ADRENO: ring %u: %#x %#x %#x %#x %#x %#x %#x %#x\n", b0, rw[b0],
++		    rw[(b0 + 1) % RING_WORDS], rw[(b0 + 2) % RING_WORDS], rw[(b0 + 3) % RING_WORDS],
++		    rw[(b0 + 4) % RING_WORDS], rw[(b0 + 5) % RING_WORDS], rw[(b0 + 6) % RING_WORDS],
++		    rw[(b0 + 7) % RING_WORDS]);
++	}
+ 	/* the stuck submission (only it: the UDP relay drops lines of long dumps) */
+ 	struct sa_submit *h = NULL;
+ 	for (uint32_t s = 0; s < SA_SUBMIT_HISTORY; s++) {
+-- 
+2.54.0 (Apple Git-157)
+

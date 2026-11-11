@@ -1,0 +1,391 @@
+diff --git a/bsd/kern/decmpfs.c b/bsd/kern/decmpfs.c
+index 95192dd..ff8c5e3 100644
+--- a/bsd/kern/decmpfs.c
++++ b/bsd/kern/decmpfs.c
+@@ -515,7 +515,7 @@ decmpfs_fetch_compressed_header(vnode_t vp, decmpfs_cnode *cp, decmpfs_header **
+ 	const bool no_additional_data = ((cp != NULL)
+ 	    && (cp->cmp_type != 0)
+ 	    && (cp->cmp_minimal_xattr != 0));
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	decmpfs_header *hdr = NULL;
+ 
+ 	/*
+diff --git a/bsd/kern/kpi_socket.c b/bsd/kern/kpi_socket.c
+index 003cfb0..735eaf3 100644
+--- a/bsd/kern/kpi_socket.c
++++ b/bsd/kern/kpi_socket.c
+@@ -727,7 +727,7 @@ sock_receive_internal(socket_t sock, struct msghdr *msg, mbuf_t *data,
+ 	int error = 0;
+ 	user_ssize_t length = 0;
+ 	struct sockaddr *fromsa = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF((msg != NULL) ? msg->msg_iovlen : 0)];
++	UIO_STACKBUF(uio_buf, (msg != NULL) ? msg->msg_iovlen : 0);
+ 
+ 	if (sock == NULL) {
+ 		return EINVAL;
+diff --git a/bsd/kern/sys_generic.c b/bsd/kern/sys_generic.c
+index 9de68e1..66a3528 100644
+--- a/bsd/kern/sys_generic.c
++++ b/bsd/kern/sys_generic.c
+@@ -303,7 +303,7 @@ dofileread(vfs_context_t ctx, struct fileproc *fp,
+     user_addr_t bufp, user_size_t nbyte, off_t offset, int flags,
+     user_ssize_t *retval)
+ {
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t uio;
+ 	int spacetype;
+ 
+@@ -350,7 +350,7 @@ static int
+ read_internal(struct proc *p, int fd, user_addr_t buf, user_size_t nbyte,
+     off_t offset, int flags, user_ssize_t *retval)
+ {
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t uio;
+ 	int spacetype = IS_64BIT_PROCESS(p) ? UIO_USERSPACE64 : UIO_USERSPACE32;
+ 
+@@ -631,7 +631,7 @@ dofilewrite(vfs_context_t ctx, struct fileproc *fp,
+     user_addr_t bufp, user_size_t nbyte, off_t offset, int flags,
+     user_ssize_t *retval)
+ {
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t uio;
+ 	int spacetype;
+ 
+@@ -678,7 +678,7 @@ int
+ write_internal(struct proc *p, int fd, user_addr_t buf, user_size_t nbyte,
+     off_t offset, int flags, guardid_t *puguard, user_ssize_t *retval)
+ {
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t uio;
+ 	int spacetype = IS_64BIT_PROCESS(p) ? UIO_USERSPACE64 : UIO_USERSPACE32;
+ 
+diff --git a/bsd/kern/uipc_syscalls.c b/bsd/kern/uipc_syscalls.c
+index f2bd38e..50625c0 100644
+--- a/bsd/kern/uipc_syscalls.c
++++ b/bsd/kern/uipc_syscalls.c
+@@ -3561,7 +3561,7 @@ sendfile(proc_ref_t p, struct sendfile_args *uap, __unused int *retval)
+ 		mbuf_t  m;
+ 		unsigned int    nbufs = SFUIOBUFS, i;
+ 		uio_t   auio;
+-		uio_stackbuf_t    uio_buf[UIO_SIZEOF(SFUIOBUFS)]; /* 1 KB !!! */
++		UIO_STACKBUF(uio_buf, SFUIOBUFS); /* 1 KB !!! */
+ 		size_t  uiolen;
+ 		user_ssize_t    rlen;
+ 		off_t   pgoff;
+diff --git a/bsd/nfs/nfs_serv.c b/bsd/nfs/nfs_serv.c
+index 6ae9b6b..8bda864 100644
+--- a/bsd/nfs/nfs_serv.c
++++ b/bsd/nfs/nfs_serv.c
+@@ -769,7 +769,7 @@ nfsrv_readlink(
+ 	struct nfsm_chain *nmreq, nmrep;
+ 	mbuf_t mpath, mp;
+ 	uio_t auio = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(4)];
++	UIO_STACKBUF(uio_buf, 4);
+ 	char *uio_bufp = &uio_buf[0];
+ 	int uio_buflen = UIO_SIZEOF(4);
+ 
+@@ -917,7 +917,7 @@ nfsrv_read(
+ 	struct vnode_attr vattr, *vap = &vattr;
+ 	off_t off;
+ 	uid_t saved_uid;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(0)];
++	UIO_STACKBUF(uio_buf, 0);
+ 	struct nfsm_chain *nmreq, nmrep;
+ 
+ 	error = 0;
+@@ -3559,7 +3559,7 @@ nfsrv_symlink(
+ 	struct nfs_export *nx = NULL;
+ 	struct nfs_export_options *nxo = NULL;
+ 	uio_t auio = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	struct nfsm_chain *nmreq, nmrep;
+ 	__unused const int nfs_vers = nd->nd_vers;
+ 	assert(nd->nd_vers == NFS_VER2 || nd->nd_vers == NFS_VER3);
+@@ -4215,7 +4215,7 @@ nfsrv_readdir(
+ 	struct nfs_export *nx;
+ 	struct nfs_export_options *nxo;
+ 	uio_t auio = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	int len, nlen, rem, xfer, error, attrerr;
+ 	int siz, count, fullsiz, eofflag, nentries;
+ 	u_quad_t off, toff, verf = 0;
+@@ -4462,7 +4462,7 @@ nfsrv_readdirplus(
+ 	struct nfs_export *nx;
+ 	struct nfs_export_options *nxo;
+ 	uio_t auio = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	struct vnode_attr attr, va, *vap = &va;
+ 	int len, nlen, rem, xfer, error, attrerr, gotfh, gotattr;
+ 	int siz, dircount, maxcount, fullsiz, eofflag, dirlen, nentries, isdotdot;
+diff --git a/bsd/sys/uio_internal.h b/bsd/sys/uio_internal.h
+index 74a2036..63e9f27 100644
+--- a/bsd/sys/uio_internal.h
++++ b/bsd/sys/uio_internal.h
+@@ -172,6 +172,14 @@ __END_DECLS
+ 
+ typedef char __attribute__((aligned(_Alignof(union iovecs)))) uio_stackbuf_t;
+ 
++/*
++ * UIO_STACKBUF - declare a correctly sized and aligned stack buffer for
++ *	uio_createwithbuffer(). Backported from later xnu: newer clang rejects
++ *	arrays of the over-aligned uio_stackbuf_t.
++ */
++#define UIO_STACKBUF(name, niov) \
++	uint64_t name[(UIO_SIZEOF(niov) + sizeof(uint64_t) - 1) / sizeof(uint64_t)]
++
+ #define UIO_IS_USER_SPACE32( a_uio_t )  \
+ 	( (a_uio_t)->uio_segflg == UIO_USERSPACE32 || (a_uio_t)->uio_segflg == UIO_PHYS_USERSPACE32 || \
+ 	  (a_uio_t)->uio_segflg == UIO_USERISPACE32 )
+diff --git a/bsd/vfs/vfs_attrlist.c b/bsd/vfs/vfs_attrlist.c
+index cbaa0b2..963acec 100644
+--- a/bsd/vfs/vfs_attrlist.c
++++ b/bsd/vfs/vfs_attrlist.c
+@@ -878,7 +878,7 @@ static int
+ setattrlist_setfinderinfo(vnode_t vp, char *fndrinfo, struct vfs_context *ctx)
+ {
+ 	uio_t   auio;
+-	uio_stackbuf_t    uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	int     error;
+ 
+ 	if ((auio = uio_createwithbuffer(1, 0, UIO_SYSSPACE, UIO_WRITE, uio_buf, sizeof(uio_buf))) == NULL) {
+@@ -1847,7 +1847,7 @@ attr_pack_common(vfs_context_t ctx, mount_t mp, vnode_t vp, struct attrlist *alp
+ 		error = 0;
+ 		if (vp && !is_bulk) {
+ 			uio_t   auio;
+-			uio_stackbuf_t    uio_buf[UIO_SIZEOF(1)];
++			UIO_STACKBUF(uio_buf, 1);
+ 
+ 			if ((auio = uio_createwithbuffer(1, 0, UIO_SYSSPACE,
+ 			    UIO_READ, uio_buf, sizeof(uio_buf))) == NULL) {
+@@ -3120,7 +3120,7 @@ getattrlist_internal(vfs_context_t ctx, vnode_t vp, struct attrlist  *alp,
+ 	int             pack_invalid;
+ 	int             vtype = 0;
+ 	uio_t           auio;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	// must be true for fork attributes to be used as new common attributes
+ 	const int use_fork = (options & FSOPT_ATTR_CMN_EXTENDED) != 0;
+ 
+@@ -3474,7 +3474,7 @@ refill_fd_direntries(vfs_context_t ctx, vnode_t dvp, struct fd_vn_data *fvd,
+     int *eofflagp)
+ {
+ 	uio_t rdir_uio;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	size_t rdirbufsiz;
+ 	size_t rdirbufused;
+ 	int eofflag;
+@@ -4048,7 +4048,7 @@ getattrlistbulk(proc_t p, struct getattrlistbulk_args *uap, int32_t *retval)
+ 	enum uio_seg segflg;
+ 	int count;
+ 	uio_t auio = NULL;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	kauth_action_t action;
+ 	int eofflag;
+ 	uint64_t options;
+diff --git a/bsd/vfs/vfs_lookup.c b/bsd/vfs/vfs_lookup.c
+index a05c8e7..94b4383 100644
+--- a/bsd/vfs/vfs_lookup.c
++++ b/bsd/vfs/vfs_lookup.c
+@@ -1670,7 +1670,7 @@ lookup_handle_symlink(struct nameidata *ndp, vnode_t *new_dp, bool *new_dp_has_i
+ 	int error;
+ 	char *cp;               /* pointer into pathname argument */
+ 	uio_t auio;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	int need_newpathbuf;
+ 	u_int linklen = 0;
+ 	struct componentname *cnp = &ndp->ni_cnd;
+diff --git a/bsd/vfs/vfs_quota.c b/bsd/vfs/vfs_quota.c
+index d047621..f3e1dac 100644
+--- a/bsd/vfs/vfs_quota.c
++++ b/bsd/vfs/vfs_quota.c
+@@ -382,7 +382,7 @@ dqfileopen(struct quotafile *qfp, int type)
+ 	off_t file_size;
+ 	uio_t auio;
+ 	int error = 0;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	context.vc_thread = current_thread();
+ 	context.vc_ucred = qfp->qf_cred;
+@@ -440,7 +440,7 @@ dqfileclose(struct quotafile *qfp, __unused int type)
+ 	struct dqfilehdr header;
+ 	struct vfs_context context;
+ 	uio_t auio;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	auio = uio_createwithbuffer(1, 0, UIO_SYSSPACE, UIO_READ,
+ 	    &uio_buf[0], sizeof(uio_buf));
+@@ -767,7 +767,7 @@ dqlookup(struct quotafile *qfp, u_int32_t id, struct dqblk *dqb, uint32_t *index
+ 	int i, skip, last;
+ 	u_int32_t mask;
+ 	int error = 0;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 
+ 	qf_lock(qfp);
+@@ -986,7 +986,7 @@ dqsync_locked(struct dquot *dq)
+ 	struct dqblk dqb, *dqblkp;
+ 	uio_t auio;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (dq->dq_id == 0) {
+ 		dq->dq_flags &= ~DQ_MOD;
+diff --git a/bsd/vfs/vfs_subr.c b/bsd/vfs/vfs_subr.c
+index 66b3cb7..125d3ee 100644
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -11021,7 +11021,7 @@ rmdir_remove_orphaned_appleDouble(vnode_t vp, vfs_context_t ctx, int * restart_f
+ 	uio_t auio = NULL;
+ 	int eofflag, siz = UIO_BUFF_SIZE, alloc_size = 0, nentries = 0;
+ 	int open_flag = 0, full_erase_flag = 0;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	char *rbuf = NULL;
+ 	void *dir_pos;
+ 	void *dir_end;
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+index 23ee4d5..90e68bb 100644
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -7264,7 +7264,7 @@ readlinkat_internal(vfs_context_t ctx, int fd, vnode_t lnk_vp, user_addr_t path,
+ 	uio_t auio;
+ 	int error;
+ 	struct nameidata nd;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	bool put_vnode;
+ 
+ 	if (bufsize > INT32_MAX) {
+@@ -10317,7 +10317,7 @@ getdirentries_common(int fd, user_addr_t bufp, user_size_t bufsize, ssize_t *byt
+ 	int spacetype = proc_is64bit(vfs_context_proc(&context)) ? UIO_USERSPACE64 : UIO_USERSPACE32;
+ 	off_t loff;
+ 	int error, numdirent;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ get_from_fd:
+ 	error = fp_getfvp(vfs_context_proc(&context), fd, &fp, &vp);
+@@ -10616,7 +10616,7 @@ getdirentriesattr(proc_t p, struct getdirentriesattr_args *uap, int32_t *retval)
+ 	struct attrlist attributelist;
+ 	vfs_context_t ctx = vfs_context_current();
+ 	int fd = uap->fd;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	kauth_action_t action;
+ 
+ 	AUDIT_ARG(fd, fd);
+@@ -10957,7 +10957,7 @@ searchfs(proc_t p, struct searchfs_args *uap, __unused int32_t *retval)
+ 	size_t mallocsize;
+ 	uint32_t nameiflags;
+ 	vfs_context_t ctx = vfs_context_current();
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	/* Start by copying in fsearchblock parameter list */
+ 	if (IS_64BIT_PROCESS(p)) {
+@@ -12909,7 +12909,7 @@ getxattr(proc_t p, struct getxattr_args *uap, user_ssize_t *retval)
+ 	size_t namelen;
+ 	u_int32_t nameiflags;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (uap->options & (XATTR_NOSECURITY | XATTR_NODEFAULT)) {
+ 		return EINVAL;
+@@ -12993,7 +12993,7 @@ fgetxattr(proc_t p, struct fgetxattr_args *uap, user_ssize_t *retval)
+ 	size_t attrsize = 0;
+ 	size_t namelen;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (uap->options & (XATTR_NOFOLLOW | XATTR_NOSECURITY | XATTR_NODEFAULT)) {
+ 		return EINVAL;
+@@ -13041,7 +13041,7 @@ out:
+ struct setxattr_ctx {
+ 	struct nameidata nd;
+ 	char attrname[XATTR_MAXNAMELEN + 1];
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ };
+ 
+ /*
+@@ -13137,7 +13137,7 @@ fsetxattr(proc_t p, struct fsetxattr_args *uap, int *retval)
+ 	int spacetype = IS_64BIT_PROCESS(p) ? UIO_USERSPACE64 : UIO_USERSPACE32;
+ 	size_t namelen;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (uap->options & (XATTR_NOFOLLOW | XATTR_NOSECURITY | XATTR_NODEFAULT)) {
+ 		return EINVAL;
+@@ -13314,7 +13314,7 @@ listxattr(proc_t p, struct listxattr_args *uap, user_ssize_t *retval)
+ 	size_t attrsize = 0;
+ 	u_int32_t nameiflags;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (uap->options & (XATTR_NOSECURITY | XATTR_NODEFAULT)) {
+ 		return EINVAL;
+@@ -13356,7 +13356,7 @@ flistxattr(proc_t p, struct flistxattr_args *uap, user_ssize_t *retval)
+ 	int spacetype = proc_is64bit(p) ? UIO_USERSPACE64 : UIO_USERSPACE32;
+ 	size_t attrsize = 0;
+ 	int error;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	if (uap->options & (XATTR_NOFOLLOW | XATTR_NOSECURITY | XATTR_NODEFAULT)) {
+ 		return EINVAL;
+diff --git a/bsd/vfs/vfs_vnops.c b/bsd/vfs/vfs_vnops.c
+index 5b51e9c..3a94ed4 100644
+--- a/bsd/vfs/vfs_vnops.c
++++ b/bsd/vfs/vfs_vnops.c
+@@ -964,7 +964,7 @@ vn_rdwr_64(
+ 	int spacetype;
+ 	struct vfs_context context;
+ 	int error = 0;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 
+ 	context.vc_thread = current_thread();
+ 	context.vc_ucred = cred;
+diff --git a/security/mac_vfs_subr.c b/security/mac_vfs_subr.c
+index 97028c0..ae73f62 100644
+--- a/security/mac_vfs_subr.c
++++ b/security/mac_vfs_subr.c
+@@ -167,7 +167,7 @@ mac_vnop_setxattr(struct vnode *vp, const char *name, char *buf, size_t len)
+ {
+ 	vfs_context_t ctx;
+ 	int options = XATTR_NOSECURITY;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t auio;
+ 	int error;
+ 
+@@ -198,7 +198,7 @@ mac_vnop_getxattr(struct vnode *vp, const char *name, char *buf, size_t len,
+ {
+ 	vfs_context_t ctx = vfs_context_current();
+ 	int options = XATTR_NOSECURITY;
+-	uio_stackbuf_t uio_buf[UIO_SIZEOF(1)];
++	UIO_STACKBUF(uio_buf, 1);
+ 	uio_t auio;
+ 	int error;
+ 

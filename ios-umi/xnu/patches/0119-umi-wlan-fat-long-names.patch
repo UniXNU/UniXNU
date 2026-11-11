@@ -1,0 +1,114 @@
+From 1688aca49ab5508955243a9e87f520f7d13ff5b7 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 10:44:52 +0200
+Subject: [PATCH] umi-0119
+
+---
+ bsd/dev/sweet_wlan.c | 53 +++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 42 insertions(+), 11 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index ec37497..1777406 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -143,14 +143,24 @@ clus_off(uint32_t clus)
+ 	return ((uint64_t)sw.data_start + (uint64_t)(clus - 2) * sw.spc) * sw.bps;
+ }
+ 
+-/* Look for an 8.3 name ("AMSS20  BIN") in a directory; dir_clus 0 = FAT16 root. */
++/*
++ * Look for a name in a directory (dir_clus 0 = FAT16 root). Xiaomi's modem image
++ * has random 8.3 names ("ERDZKY~2"): the real names are only in the VFAT long
++ * name entries, so match those (ASCII, case-insensitive).
++ */
+ static int
+-fat_find(uint32_t dir_clus, const char *name83, uint32_t *clus, uint32_t *size)
++fat_find(uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
+ {
+ 	uint32_t csize = sw.bps * sw.spc;
+ 	uint32_t c = dir_clus ? dir_clus : sw.root_clus;
+ 	uint32_t root_left = (!dir_clus && !sw.fat32) ? sw.root_secs * sw.bps : 0;
+ 	uint64_t pos = (uint64_t)sw.root_start * sw.bps;
++	char lfn[20 * 13 + 1];
++	unsigned lfn_parts = 0;
++	size_t namelen = strlen(name);
++	if (namelen >= sizeof(lfn)) {
++		return EINVAL;
++	}
+ 	for (unsigned guard = 0; guard < 4096; ++guard) {
+ 		uint32_t n;
+ 		if (root_left) {
+@@ -161,7 +171,7 @@ fat_find(uint32_t dir_clus, const char *name83, uint32_t *clus, uint32_t *size)
+ 			pos += n;
+ 			root_left -= n;
+ 		} else {
+-			if (c < 2 || c >= 0x0ffffff7) {
++			if (c < 2 || c >= 0x0ffffff7 || (!dir_clus && !sw.fat32)) {
+ 				return ENOENT;
+ 			}
+ 			n = csize;
+@@ -175,18 +185,39 @@ fat_find(uint32_t dir_clus, const char *name83, uint32_t *clus, uint32_t *size)
+ 			if (d[0] == 0) {
+ 				return ENOENT;
+ 			}
+-			if (d[0] == 0xe5 || (d[11] & 0x0f) == 0x0f || (d[11] & 0x08)) {
++			if (d[0] == 0xe5) {
++				lfn_parts = 0;
+ 				continue;
+ 			}
+-			if (memcmp(d, name83, 11) == 0) {
++			if ((d[11] & 0x3f) == 0x0f) {
++				/* 13 UTF-16 units per entry, sequence 1 first in the name, last entry first on disk */
++				static const uint8_t at[13] = {1, 3, 5, 7, 9, 14, 16, 18, 20, 22, 24, 28, 30};
++				unsigned seq = d[0] & 0x1f;
++				if (d[0] & 0x40) {
++					lfn_parts = seq <= 20 ? seq : 0;
++					memset(lfn, 0, sizeof(lfn));
++				}
++				if (seq == 0 || seq > lfn_parts) {
++					lfn_parts = 0;
++					continue;
++				}
++				for (unsigned k = 0; k < 13; ++k) {
++					uint16_t ch = le16(d + at[k]);
++					lfn[(seq - 1) * 13 + k] = (ch > 0 && ch < 0x80) ? (char)ch : 0;
++				}
++				continue;
++			}
++			bool match = lfn_parts && strlen(lfn) == namelen && !strncasecmp(lfn, name, namelen);
++			lfn_parts = 0;
++			if (d[11] & 0x08) {
++				continue;
++			}
++			if (match) {
+ 				*clus = (uint32_t)le16(d + 20) << 16 | le16(d + 26);
+ 				*size = le32(d + 28);
+ 				return 0;
+ 			}
+ 		}
+-		if (!dir_clus && !sw.fat32 && root_left == 0) {
+-			return ENOENT;
+-		}
+ 	}
+ 	return ENOENT;
+ }
+@@ -222,13 +253,13 @@ wlan_load_fw(void)
+ 	uint32_t c = 0, sz = 0, img = 0, fw = 0;
+ 	int err = fat_mount();
+ 	if (!err) {
+-		err = fat_find(0, "IMAGE      ", &img, &sz);
++		err = fat_find(0, "image", &img, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(img, "QCA6390    ", &c, &sz);
++		err = fat_find(img, "qca6390", &c, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(c, "AMSS20  BIN", &fw, &sz);
++		err = fat_find(c, "amss20.bin", &fw, &sz);
+ 	}
+ 	if (!err && (sz == 0 || sz > WLAN_FW_MAX)) {
+ 		err = EFBIG;
+-- 
+2.54.0 (Apple Git-157)
+

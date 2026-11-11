@@ -1,0 +1,120 @@
+From 5fc32a3d0fe5660b5ba1286ff18986ea2922b348 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 20:52:46 +0100
+Subject: [PATCH] umi: compare a bad IB word's GPU page with its BO's own pages
+
+The 0195 boot: a fresh command BO (h754, 302 dwords) read all zero from
+DRAM through the GPU's page table at submit, although Turnip had
+written it; it sat at an iova just recycled from an 864 KB host import.
+Either the GPU PTE and the BO's pages disagree, or the CPU wrote
+elsewhere.
+
+When the submit check finds a bad word it records the address; the
+client's Submit then finds the BO covering it and logs the GPU PTE's
+physical page, the BO descriptor's page at that offset
+(getPhysicalSegment) and the word read through the BO's kernel map.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c           | 21 ++++++++++++++++++
+ iokit/Kernel/arm/SweetAdreno.cpp | 38 ++++++++++++++++++++++++++++++++
+ 2 files changed, 59 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 9639b21..ec553fe 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3272,6 +3272,25 @@ sa_walk_draw_state(uint64_t start, uint32_t dwords, struct sa_group *groups, uin
+  * 1 ms later: a word that has become valid by then was a write still on its way. */
+ static uint32_t sa_ib_check_logged;
+ 
++/* The last word the submit check found bad (0196): the IOKit client looks up which of its BOs
++ * covers it and compares that BO's own pages with the GPU's page table. */
++uint64_t sweet_adreno_bad_iova;
++uint32_t sweet_adreno_bad_word;
++
++/* The physical page context 0 maps at iova (0: none). */
++uint64_t
++sweet_adreno_pte_phys(uint64_t iova)
++{
++	uint64_t pa = 0;
++	sa_service_take_lock();
++	uint64_t *pte = sa_space_pte(&sa_core_space, iova & ~4095ull);
++	if (pte != NULL && (*pte & 3) == PTE_PAGE) {
++		pa = *pte & PTE_ADDRESS;
++	}
++	sa_service_drop_lock();
++	return pa;
++}
++
+ /* Walk one command stream; follow CP_INDIRECT_BUFFER (0x3f: address, size) and every enabled
+  * CP_SET_DRAW_STATE (0x43) group one level down (0194: the draw-state groups are command memory
+  * the CP runs at each draw that the IB walk alone did not see). Returns false after reporting. */
+@@ -3322,6 +3341,8 @@ sa_ib_walk(uint32_t seqno, uint32_t index, const char *what, uint32_t group, uin
+ 	}
+ 	sa_ib_check_logged++;
+ 	uint32_t bad_at = at, bad = h;
++	sweet_adreno_bad_iova = start + 4ull * at;
++	sweet_adreno_bad_word = h;
+ 	delay_for_interval(1, NSEC_PER_MSEC);
+ 	struct sa_word_cache c2 = { .line = 1 };
+ 	uint32_t later = 0;
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 2271202..6644d2c 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -49,6 +49,9 @@ extern "C" {
+ 	void sweet_adreno_window_free(uint64_t base);
+ 	int sweet_adreno_map_at(uint64_t iova, const uint64_t *pages, uint32_t n);
+ 	void sweet_adreno_unmap_at(uint64_t iova, uint64_t len);
++	extern uint64_t sweet_adreno_bad_iova;
++	extern uint32_t sweet_adreno_bad_word;
++	uint64_t sweet_adreno_pte_phys(uint64_t iova);
+ 	uint32_t sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n, bool *busy);
+ 	bool sweet_adreno_wait_fence_ns(uint32_t fence, uint64_t timeout_ns);
+ 	uint64_t sweet_adreno_timestamp(void);
+@@ -742,6 +745,41 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 			return busy ? kIOReturnBusy : kIOReturnNotReady;
+ 		}
+ 		fLastFence = fence;
++		/* the submit check found a word that is no packet (0196): which of this client's BOs holds
++		 * it, and do the GPU's page table, the BO's own pages and the kernel's view of them agree? */
++		if (sweet_adreno_bad_iova != 0) {
++			uint64_t bad = sweet_adreno_bad_iova;
++			sweet_adreno_bad_iova = 0;
++			bool found = false;
++			for (uint32_t i = 0; i < fBOCap; i++) {
++				BO *b = &fBO[i];
++				if (b->md == NULL || b->iova == 0 || bad < b->iova || bad >= b->iova + b->bytes) {
++					continue;
++				}
++				found = true;
++				uint64_t off = bad - b->iova;
++				IOByteCount seg = 0;
++				addr64_t md_pa = b->md->getPhysicalSegment(off & ~4095ull, &seg, kIOMemoryMapperNone);
++				uint64_t pte_pa = sweet_adreno_pte_phys(bad);
++				uint32_t kword = 0;
++				bool kread = false;
++				if (b->kmap != NULL && off + 4 <= b->kmap->getLength()) {
++					vm_offset_t kva = (vm_offset_t)b->kmap->getVirtualAddress() + off;
++					sweet_adreno_clean(kva & ~63ul, 64);
++					kword = *(volatile uint32_t *)kva;
++					kread = true;
++				}
++				IOLog("SWEET ADRENO: bad word %#x at %#llx (fence %u) is in handle %u (%s, iova %#llx+%#llx, "
++				    "offset %#llx): GPU PTE page %#llx, BO page %#llx%s; through the kernel map %s %#x\n",
++				    sweet_adreno_bad_word, bad, fence, i + 1, b->imported ? "import" : "alloc", b->iova,
++				    b->bytes, off, pte_pa, (uint64_t)md_pa, pte_pa == (uint64_t)md_pa ? " (same)" : " (DIFFERENT)",
++				    kread ? "it reads" : "no map", kword);
++			}
++			if (!found) {
++				IOLog("SWEET ADRENO: bad word %#x at %#llx (fence %u) is in no BO of this client (GPU PTE page "
++				    "%#llx)\n", sweet_adreno_bad_word, bad, fence, sweet_adreno_pte_phys(bad));
++			}
++		}
+ 		if (fSubmitLogged++ < 8) {
+ 			IOLog("SWEET ADRENO: v2 submit ok: fence %u, %u IBs (first %llu bytes at %#llx)\n", fence,
+ 			    rq->buffer_count, (unsigned long long)rq->buffers[0].bytes,
+-- 
+2.54.0 (Apple Git-157)
+

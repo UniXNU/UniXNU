@@ -1,0 +1,169 @@
+From 0a58753bcbd8e9004ff624430b4700b0d5756ebd Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 10:44:37 +0100
+Subject: [PATCH] umi-0148
+
+---
+ bsd/dev/sweet_wldp.c | 71 ++++++++++++++++++++++++++++++++++++--------
+ 1 file changed, 59 insertions(+), 12 deletions(-)
+
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 1a57d04..e032185 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -396,8 +396,10 @@ sweet_wldp_rx_init(void)
+ /*
+  * ath11k_mac_config_mon_status_default (from ath11k_mac_op_start, before any
+  * vdev): HTT RX_RING_SELECTION_CFG (H2T 0xc) for each monitor-status ring:
+- * pdev i + 1, HTT ring MONITOR_STATUS (1), buffer 2048, ath11k_mac_mon_status_
+- * filter_default = TLVs MPDU_START | PPDU_END | PPDU_END_STATUS_DONE (0x1201),
++ * pdev i + 1, HTT ring MONITOR_STATUS (1), buffer 2048, TLVs MPDU_START |
++ * PPDU_START | PPDU_END | PPDU_END_USER_STATS(_EXT) | PPDU_END_STATUS_DONE
++ * (0x1f01, HTT_RX_MON_FILTER_TLV_FLAGS_MON_STATUS_RING; 0133-0147 sent
++ * ath11k_mac_mon_status_filter_default 0x1201, which has no frame details),
+  * packet types HTT_RX_FP_MGMT_FILTER_FLAGS0/1, CTRL 2, DATA|CTRL 3 (values
+  * evaluated from ath11k dp.h). With it the hardware starts writing status TLVs
+  * into the status buffers, so the status rings' TP should move.
+@@ -412,7 +414,7 @@ sweet_wldp_mon_filter(void)
+ 			0xcu | (i + 1) << 8 | 1u << 16,
+ 			RXBUF_SZ,
+ 			0x9049249u, 0x1249u, 0x9200000u, 0x1249249u,
+-			0x1201u,
++			0x1f01u,
+ 		};
+ 		int e = sweet_wlce_htt_send(m, sizeof(m));
+ 		if (e != 0) {
+@@ -420,7 +422,7 @@ sweet_wldp_mon_filter(void)
+ 			return e;
+ 		}
+ 	}
+-	printf("SWEET WLDP: monitor status filter sent (TLVs 0x1201)\n");
++	printf("SWEET WLDP: monitor status filter sent (TLVs 0x1f01)\n");
+ 	return 0;
+ }
+ 
+@@ -432,24 +434,37 @@ sweet_wldp_mon_filter(void)
+  * as 4 bytes so the PHY TLVs after it are read. PPDU_START 0xcd: chan_num at +4;
+  * PHYRX_RSSI_LEGACY 0x4c: rssi_comb bits 15:8 of the word at +140, a signed dBm
+  * value (ath11k's db2dbm case; 0139 showed raw 171..233 = -85..-23 dBm); MPDU_START 0xcf counted;
+- * PPDU_END_STATUS_DONE 0x13f or tag 0 ends a PPDU. The same buffer goes back
++ * PPDU_END_STATUS_DONE 0x13f or tag 0 ends a PPDU.
++ * 0148: MPDU_START is rx_mpdu_start_ipq8074 (info1 +8: seq 31:20; info3 +36:
++ * REO dest 4:0; info6 +52: mcast/bcast 15, AST not found 16, directed 29;
++ * frame control +56, addr1 +60, addr2 +66) and PPDU_END_USER_STATS 0x12d
++ * (info1 +12: FCS-ok MPDUs 8:0; info0 +8: FCS-error MPDUs 25:16). For data
++ * frames from the AP the log shows the class of addr1 (us, bcast, v4/v6
++ * multicast), sequence number, REO destination and FCS counts, never the
++ * addresses. The 0146 capture showed the AP's broadcasts (DHCP OFFER) and
++ * IPv6 multicast on air, none of which reached REO. The same buffer goes back
+  * into the slot (ath11k allocates a new one), the slot left empty at setup
+  * gets the ring's spare.
+  */
+ static struct {
+ 	uint32_t bufs, ppdus, mpdus, notdone, logged;
+ 	int rssi_min, rssi_max;
++	uint32_t ap_logged, ap_seen[5], ap_fcs_ok[5];
+ } mon = { .rssi_min = 127, .rssi_max = -128 };
+ 
++static const char *const mon_class[5] = { "us", "bcast", "v4-mcast", "v6-mcast", "other" };
++static uint8_t tx_bssid[6];
++
+ void sweet_wldp_mon_reap(void);
+ void sweet_wldp_mon_report(void);
+ 
+ static void
+ mon_parse(const uint8_t *b, unsigned ring)
+ {
+-	uint32_t o = 0, chan = 0, nmpdu = 0;
++	uint32_t o = 0, chan = 0, nmpdu = 0, cls = 5, seq = 0, i3 = 0, i6 = 0, fc = 0, fcs_ok = 0, fcs_err = 0;
+ 	int rssi = 0;
+-	bool have_rssi = false;
++	bool have_rssi = false, have_stats = false;
++	static const uint8_t zero[6];
+ 	while (o + 4 <= RXBUF_SZ) {
+ 		uint32_t tl;
+ 		memcpy(&tl, b + o, 4);
+@@ -467,6 +482,25 @@ mon_parse(const uint8_t *b, unsigned ring)
+ 			have_rssi = true;
+ 		} else if (tag == 0xcf) {
+ 			nmpdu++;
++			if (cls == 5 && o + 72 <= RXBUF_SZ && memcmp(tx_bssid, zero, 6) != 0 &&
++			    memcmp(b + o + 66, tx_bssid, 6) == 0 && (b[o + 56] & 0x0c) == 0x08) {
++				const uint8_t *a1 = b + o + 60;
++				uint32_t i1;
++				memcpy(&i1, b + o + 8, 4);
++				memcpy(&i3, b + o + 36, 4);
++				memcpy(&i6, b + o + 52, 4);
++				fc = (uint32_t)b[o + 56] | (uint32_t)b[o + 57] << 8;
++				seq = i1 >> 20;
++				cls = !(a1[0] & 1) ? 0 : a1[0] == 0xff && a1[1] == 0xff ? 1 :
++				    a1[0] == 0x01 && a1[1] == 0x00 && a1[2] == 0x5e ? 2 : a1[0] == 0x33 && a1[1] == 0x33 ? 3 : 4;
++			}
++		} else if (tag == 0x12d && o + 16 <= RXBUF_SZ) {
++			uint32_t u0, u1;
++			memcpy(&u0, b + o + 8, 4);
++			memcpy(&u1, b + o + 12, 4);
++			fcs_err = (u0 >> 16) & 0x3ffu;
++			fcs_ok = u1 & 0x1ffu;
++			have_stats = true;
+ 		}
+ 		if (tag == 0x13f || tag == 0) {
+ 			mon.ppdus++;
+@@ -479,6 +513,16 @@ mon_parse(const uint8_t *b, unsigned ring)
+ 				printf("SWEET WLDP: rx ppdu (status ring %u): channel %u, %u mpdu, signal %d dBm%s\n",
+ 				    ring, chan, nmpdu, rssi, have_rssi ? "" : " (no rssi tlv)");
+ 			}
++			if (cls < 5) {
++				mon.ap_seen[cls]++;
++				mon.ap_fcs_ok[cls] += have_stats && fcs_ok != 0;
++				if (mon.ap_logged++ < 48) {
++					printf("SWEET WLDP: mon: data from the AP to %s, fc %04x, seq %u, reo dest %u, "
++					    "mcast %u directed %u ast-miss %u, fcs ok %u err %u%s\n", mon_class[cls], fc, seq,
++					    i3 & 0x1fu, (i6 >> 15) & 1u, (i6 >> 29) & 1u, (i6 >> 16) & 1u, fcs_ok, fcs_err,
++					    have_stats ? "" : " (no user stats)");
++				}
++			}
+ 			break;
+ 		}
+ 		o = (o + len + 3) & ~3u;
+@@ -536,6 +580,9 @@ sweet_wldp_mon_report(void)
+ {
+ 	printf("SWEET WLDP: monitor status: %u buffers, %u ppdus, %u mpdus, signal %d..%d dBm, %u not done\n",
+ 	    mon.bufs, mon.ppdus, mon.mpdus, mon.ppdus ? mon.rssi_min : 0, mon.ppdus ? mon.rssi_max : 0, mon.notdone);
++	printf("SWEET WLDP: mon: data from the AP (seen/fcs ok): us %u/%u, bcast %u/%u, v4-mcast %u/%u, "
++	    "v6-mcast %u/%u, other %u/%u\n", mon.ap_seen[0], mon.ap_fcs_ok[0], mon.ap_seen[1], mon.ap_fcs_ok[1],
++	    mon.ap_seen[2], mon.ap_fcs_ok[2], mon.ap_seen[3], mon.ap_fcs_ok[3], mon.ap_seen[4], mon.ap_fcs_ok[4]);
+ }
+ 
+ /* Entries whose first word (buffer address or status) is non-zero: what the target has written into a ring. */
+@@ -654,8 +701,6 @@ sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa)
+  * field) + LLC/SNAP (aa aa 03 00 00 00, EtherType) + payload. 0141-0144 sent Ethernet-
+  * encapsulated frames: acked by the AP but never answered. Receive stays Ethernet (works).
+  */
+-static uint8_t tx_bssid[6];
+-
+ void sweet_wldp_set_bssid(const uint8_t bssid[6]);
+ 
+ void
+@@ -749,13 +794,15 @@ sweet_wldp_data_poll(void)
+ 				memcpy(&w24, b + 24, 4);
+ 				uint32_t len = w96 & 0x3fffu, pad = (w24 >> 26) & 3u, decap = (w100 >> 8) & 3u;
+ 				bool ok = push == 1 && (w84 >> 31) && (msdu & 3u) == 3u && RX_DESC_SZ + pad + len <= RXBUF_SZ;
+-				if (dd.rx_logged++ < 12) {
++				if (dd.rx_logged++ < 40) {
+ 					/* destination class and EtherType only (no addresses in the log) */
+ 					const uint8_t *fr = b + RX_DESC_SZ + pad;
+ 					const char *dst = fr[0] == 0xff && fr[1] == 0xff ? "bcast" : (fr[0] & 1) ? "mcast" : "unicast";
++					uint32_t mi1;
++					memcpy(&mi1, b + 140, 4);       /* mpdu_start info1 (desc +132 + 8): seq 31:20 */
+ 					printf("SWEET WLDP: rx ring %u: cookie %u, push %u err %u, msdu %s%s len %u, done %u, decap %u, pad %u, "
+-					    "%s type %#06x\n", k - 11, cookie, push, err, msdu & 1u ? "first " : "", msdu & 2u ? "last" : "",
+-					    len, w84 >> 31, decap, pad, dst, (uint32_t)fr[12] << 8 | fr[13]);
++					    "%s type %#06x, seq %u\n", k - 11, cookie, push, err, msdu & 1u ? "first " : "", msdu & 2u ? "last" : "",
++					    len, w84 >> 31, decap, pad, dst, (uint32_t)fr[12] << 8 | fr[13], mi1 >> 20);
+ 				}
+ 				if (ok) {
+ 					dd.rx_frames++;
+-- 
+2.54.0 (Apple Git-157)
+

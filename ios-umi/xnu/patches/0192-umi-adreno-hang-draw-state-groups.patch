@@ -1,0 +1,153 @@
+From 20fc89c3adae3cb5028e10a8db855d8721ff013d Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 19:51:25 +0100
+Subject: [PATCH] umi: hang dump lists the draw-state groups in force
+
+The 0191 hang (fence 349, CP_OPCODE_ERROR, opcode 0) showed valid
+commands at both IB1's fetch position and IB2's start - IB2 opens with a
+CP_SET_DRAW_STATE - so the zero dword the CP ran is in a draw-state
+group, which the CP executes at each draw from memory the dump did not
+show.
+
+Walk the stuck IB1 from its start to the fetch position and IB2 from its
+start, packet by packet (freedreno_pm4.h header counts), keep each
+group's newest CP_SET_DRAW_STATE entry (adreno_pm4.xml fields), and print
+every enabled group: header, address, first words or UNMAPPED, and any
+recorded free that covered it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 110 +++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 110 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 1914637..7d2de24 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3153,6 +3153,81 @@ sa_gpu_words(uint64_t va, uint32_t words[8])
+ 	return ok;
+ }
+ 
++/* One dword of GPU memory, through sa_gpu_words' 32-byte reads (the last line read is kept). */
++struct sa_word_cache {
++	uint64_t line;
++	bool ok;
++	uint32_t w[8];
++};
++
++static bool
++sa_gpu_word(struct sa_word_cache *c, uint64_t va, uint32_t *word)
++{
++	uint64_t line = va & ~31ull;
++	if (c->line != line) {
++		c->line = line;
++		c->ok = sa_gpu_words(line, c->w);
++	}
++	if (!c->ok) {
++		return false;
++	}
++	*word = c->w[(va & 31) / 4];
++	return true;
++}
++
++/* The draw-state groups a command stream set: walk its packets (Mesa freedreno_pm4.h: type 4
++ * count in bits 0-6, type 7 count in bits 0-13, opcode in 16-22) from start for at most
++ * `dwords`, keeping each group's newest CP_SET_DRAW_STATE entry (adreno_pm4.xml: COUNT 0-15,
++ * DISABLE 17, DISABLE_ALL_GROUPS 18, GROUP_ID 24-29, then the 64-bit address). The CP runs
++ * those groups at each draw - memory the dump's IB1/IB2 lines do not show. Returns false when
++ * the walk met a word that is no packet header. */
++#define SA_GROUPS 32
++struct sa_group {
++	uint32_t head;
++	uint64_t addr;
++};
++
++static bool
++sa_walk_draw_state(uint64_t start, uint32_t dwords, struct sa_group *groups, uint32_t *bad_at)
++{
++	struct sa_word_cache c = { .line = 1 };
++	uint32_t at = 0;
++	while (at < dwords) {
++		uint32_t h, n;
++		if (!sa_gpu_word(&c, start + 4ull * at, &h)) {
++			*bad_at = at;
++			return false;
++		}
++		if ((h >> 28) == 4) {
++			n = h & 0x7f;
++		} else if ((h >> 28) == 7) {
++			n = h & 0x3fff;
++			if (((h >> 16) & 0x7f) == 0x43) {               /* CP_SET_DRAW_STATE */
++				for (uint32_t e = 0; e + 3 <= n; e += 3) {
++					uint32_t d0, lo, hi;
++					if (!sa_gpu_word(&c, start + 4ull * (at + 1 + e), &d0) ||
++					    !sa_gpu_word(&c, start + 4ull * (at + 2 + e), &lo) ||
++					    !sa_gpu_word(&c, start + 4ull * (at + 3 + e), &hi)) {
++						break;
++					}
++					if (d0 & (1u << 18)) {                  /* DISABLE_ALL_GROUPS */
++						bzero(groups, SA_GROUPS * sizeof(*groups));
++						continue;
++					}
++					struct sa_group *g = &groups[(d0 >> 24) & (SA_GROUPS - 1)];
++					g->head = d0;
++					g->addr = (uint64_t)hi << 32 | lo;
++				}
++			}
++		} else {
++			*bad_at = at;
++			return false;
++		}
++		at += 1 + n;
++	}
++	return true;
++}
++
+ static void
+ sa_hang_dump(uint32_t fence)
+ {
+@@ -3234,6 +3309,41 @@ sa_hang_dump(uint32_t fence)
+ 			}
+ 		}
+ 	}
++	/* the draw-state groups in force: IB1's up to the fetch position, then IB2's */
++	struct sa_group groups[SA_GROUPS];
++	uint32_t bad = 0;
++	bzero(groups, sizeof(groups));
++	for (uint32_t i = 0; h != NULL && i < h->n; i++) {
++		if (h->iova[i] == ib_base[0] && ib_rem[0] <= h->dwords[i] &&
++		    !sa_walk_draw_state(ib_base[0], h->dwords[i] - ib_rem[0], groups, &bad)) {
++			IOLog("SWEET ADRENO: fence %u IB1 walk stopped at dword %u (no packet header)\n", fence, bad);
++		}
++	}
++	if (ib_base[1] != 0 && !sa_walk_draw_state(ib_base[1], 4096, groups, &bad)) {
++		IOLog("SWEET ADRENO: fence %u IB2 walk stopped at dword %u\n", fence, bad);
++	}
++	for (uint32_t g = 0; g < SA_GROUPS; g++) {
++		uint32_t p[8];
++		struct sa_group *e = &groups[g];
++		if (e->addr == 0 || (e->head & (1u << 17)) || (e->head & 0xffff) == 0) {
++			continue;
++		}
++		bool got = sa_gpu_words(e->addr & ~31ull, p);
++		uint32_t o = (uint32_t)(e->addr & 31) / 4;
++		IOLog("SWEET ADRENO: fence %u group %u head %#x at %#llx (%u dwords): %s %#x %#x %#x %#x\n",
++		    fence, g, e->head, (unsigned long long)e->addr, e->head & 0xffff, got ? "words" : "UNMAPPED",
++		    got ? p[o] : 0, got && o + 1 < 8 ? p[o + 1] : 0, got && o + 2 < 8 ? p[o + 2] : 0,
++		    got && o + 3 < 8 ? p[o + 3] : 0);
++		for (uint32_t k = 0; k < SA_FREE_HISTORY; k++) {
++			struct sa_free *f = &sa_free_hist[(sa_free_next + k) % SA_FREE_HISTORY];
++			if (f->len != 0 && e->addr >= f->iova && e->addr < f->iova + f->len) {
++				IOLog("SWEET ADRENO: fence %u group %u %#llx was in a range freed %#llx+%#llx at newest "
++				    "%u / done %u (%u frees ago)\n", fence, g, (unsigned long long)e->addr,
++				    (unsigned long long)f->iova, (unsigned long long)f->len, f->submitted, f->done,
++				    SA_FREE_HISTORY - k);
++			}
++		}
++	}
+ }
+ 
+ bool
+-- 
+2.54.0 (Apple Git-157)
+

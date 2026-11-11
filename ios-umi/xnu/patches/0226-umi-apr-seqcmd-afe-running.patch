@@ -1,0 +1,188 @@
+From dc8d9377f9de77335b29df8b2db75d6446b5a7c0 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 1 Nov 2026 22:09:12 +0100
+Subject: [PATCH] umi: APR commands as SEQ_CMD; AFE clock + TERT_MI2S_RX
+ running, amps PLL-locked
+
+The APR header field was 0x150 (message type 1, CMD_RSP): the ADSP ran our
+commands but sent no APR_BASIC_RSP_RESULT for them, so only replies with
+their own opcode (core state, versions, LPASS votes) ever came back. With
+0x250 (APR_MSG_TYPE_SEQ_CMD, as Linux) the AFE, ASM, ADM and core all answer.
+
+The bit clock goes out as AFE_SVC_CMD_SET_PARAM (param header v1, as Linux
+without instance-id support) first, the V2 form once on failure (it returns
+EBADPARAM here). The amps' stream test waits for TERT_MI2S_RX to run.
+
+Diag: time sync, one F3 mask per msm SSID range and DIAGMODE v2 per diag
+id make the ADSP stream its F3 log; QShrink4 terse messages (0x92) are
+printed as line, SSID, hash and arguments.
+
+On the phone: port stop, I2S config, clock set and start all return 0;
+both CS35L41 amps report PLL lock and power-up done.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adsp.c | 100 ++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 80 insertions(+), 20 deletions(-)
+
+diff --git a/bsd/dev/sweet_adsp.c b/bsd/dev/sweet_adsp.c
+index dffa3f4..3767029 100644
+--- a/bsd/dev/sweet_adsp.c
++++ b/bsd/dev/sweet_adsp.c
+@@ -40,7 +40,7 @@
+ 
+ /* ---- APR (downstream msm-audio apr.h / q6core.c; Linux soc/qcom/apr.h header) ---- */
+ 
+-#define APR_HDR_FIELD           0x0150          /* seq cmd, 20-byte header (5 words), version 0 */
++#define APR_HDR_FIELD           0x0250          /* APR_MSG_TYPE_SEQ_CMD (2), 20-byte header (5 words), version 0 */
+ #define APR_DOMAIN_ADSP         4
+ #define APR_DOMAIN_APPS         5
+ #define APR_SVC_CORE            3
+@@ -319,7 +319,7 @@ afe_next(void)
+ 		 * header v3 {module, u16 instance, u16 reserved, param, u32 size}), as downstream sends on newer AFEs.
+ 		 */
+ 		uint32_t clk[5] = { 1, AFE_CLK_ID_TER_MI2S_IBIT, AFE_RATE * AFE_BITS * 2, 1 /* couple no, root 0 */, 1 };
+-		bool v2 = (afe_tries & 1) == 0;
++		bool v2 = (afe_tries & 1) != 0;  /* V1 first: Linux uses V2 only with instance-id support (AVCS core >= 5) */
+ 		if (v2) {
+ 			uint32_t hdr[4] = { 16 + 20, 0, 0, 0 };
+ 			uint32_t ph[4] = { AFE_MODULE_CLOCK_SET, 0, AFE_PARAM_ID_CLOCK_SET, 20 };
+@@ -408,6 +408,16 @@ afe_result(uint32_t opcode, uint32_t status)
+ 		return;
+ 	}
+ 	afe_tries = 0;
++	static bool clk_other;
++	if (status != 0 && afe_state == 2 && !clk_other) {
++		/* 0228: SVC_SET_PARAM_V2 got EBADPARAM; try the other set-param form once */
++		printf("SWEET ADSP: AFE clock set (opcode %#x) status %#x; trying the other form\n", opcode, status);
++		clk_other = true;
++		afe_tries = opcode == AFE_SVC_CMD_SET_PARAM_V2 ? 0 : 1;
++		afe_state = 1;
++		afe_next();
++		return;
++	}
+ 	if (status != 0) {
+ 		printf("SWEET ADSP: AFE step %d (opcode %#x) FAILED, ADSP status %#x; stopping\n", afe_state, opcode, status);
+ 		afe_state = -1;
+@@ -681,7 +691,14 @@ amp_configure(uint8_t addr, bool speaker)
+ 	if (!play) {
+ 		return;
+ 	}
+-	/* the stream sequence without an I2S clock from the AFE: the PLL should report that it cannot lock */
++	/* the stream sequence; 0228: after TERT_MI2S_RX runs (its SCLK is the PLL reference), up to 20 s */
++	int waited = 0;
++	while (afe_state != 4 && waited < 200) {
++		IOSleep(100);
++		waited++;
++	}
++	printf("SWEET AMP: %#x stream start after %d ms, AFE %s\n", addr, waited * 100,
++	    afe_state == 4 ? "RUNNING" : "not running");
+ 	if (speaker) {
+ 		amp_replay(addr, amp40_start, sizeof(amp40_start) / sizeof(amp40_start[0]), "stream start");
+ 	} else {
+@@ -1169,6 +1186,15 @@ diag_announce(uint32_t node)
+  * u16 ssid, u32 ss_mask, u32 args[num_args], "format\0file\0") are printed with their strings; anything else
+  * (QShrink hashed messages, logs, events) as command + bytes. Boot-arg sweetadspf3=0: no mask.
+  */
++/* msm diagchar.h MSG_SSID_0..26 {first, last}: Linux sends one F3 mask per range (diag_send_msg_mask_update) */
++static const uint16_t diag_ssid[27][2] = {
++	{ 0, 134 }, { 500, 506 }, { 1000, 1007 }, { 2000, 2008 }, { 3000, 3014 }, { 4000, 4010 }, { 4500, 4584 },
++	{ 4600, 4616 }, { 5000, 5036 }, { 5500, 5517 }, { 6000, 6081 }, { 6500, 6521 }, { 7000, 7003 }, { 7100, 7111 },
++	{ 7200, 7201 }, { 8000, 8000 }, { 8500, 8532 }, { 9000, 9008 }, { 9500, 9521 }, { 10200, 10210 },
++	{ 10251, 10255 }, { 10300, 10300 }, { 10350, 10377 }, { 10400, 10416 }, { 10500, 10505 }, { 10600, 10620 },
++	{ 0xc000, 0xc063 },
++};
++
+ static void
+ diag_f3_enable(uint32_t node, uint32_t port)
+ {
+@@ -1177,35 +1203,69 @@ diag_f3_enable(uint32_t node, uint32_t port)
+ 	if (!on) {
+ 		return;
+ 	}
+-	uint8_t m[8 + 11 + 4];
+-	uint32_t h[2] = { 11, 11 + 4 };
+-	uint16_t first = 0, last = 0xffff;
+-	uint32_t size = 1, mask = 0x1f;         /* LOW MED HIGH ERROR FATAL */
+-	memcpy(m, h, 8);
+-	m[8] = 1;
+-	m[9] = 2;
+-	m[10] = 0;
+-	memcpy(m + 11, &first, 2);
+-	memcpy(m + 13, &last, 2);
+-	memcpy(m + 15, &size, 4);
+-	memcpy(m + 19, &mask, 4);
+-	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, m, sizeof(m));
+-	printf("SWEET ADSP: diag -> CNTL F3 mask: every SSID, levels 0x1f\n");
+-	/* real-time mode (diag_send_diag_mode_update_by_smd, version 1): flush messages at once, no buffering */
++	/* time sync (diag_send_time_sync_update): {31, 5, version 1, u8 time_api 0} */
++	uint8_t ts[13] = { 0 };
++	uint32_t th[3] = { 31, 5, 1 };
++	memcpy(ts, th, 12);
++	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, ts, sizeof(ts));
++	for (unsigned r = 0; r < 27; r++) {
++		uint8_t m[8 + 11 + 4];
++		uint32_t h[2] = { 11, 11 + 4 };
++		uint16_t first = diag_ssid[r][0], last = diag_ssid[r][1];
++		uint32_t size = 1, mask = 0x1f;         /* LOW MED HIGH ERROR FATAL */
++		memcpy(m, h, 8);
++		m[8] = 1;
++		m[9] = 2;                               /* DIAG_CTRL_MASK_ALL_ENABLED */
++		m[10] = 0;
++		memcpy(m + 11, &first, 2);
++		memcpy(m + 13, &last, 2);
++		memcpy(m + 15, &size, 4);
++		memcpy(m + 19, &mask, 4);
++		qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, m, sizeof(m));
++	}
++	printf("SWEET ADSP: diag -> CNTL time sync + F3 masks for 27 SSID ranges, levels 0x1f\n");
++	/* real-time mode (diag_send_diag_mode_update_by_smd): v1, then v2 per diag id as Linux does with diag ids */
+ 	uint32_t mode[11] = { 3, 9 * 4, 1, 1 /* sleep vote */, 1 /* real time */, 0, 0, 0, 0, 0, 0 };
+ 	qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, mode, sizeof(mode));
+-	printf("SWEET ADSP: diag -> CNTL DIAGMODE real time\n");
++	for (uint8_t id = 1; id <= 2; id++) {
++		uint8_t m2[8 + 37] = { 0 };
++		uint32_t h2[5] = { 3, 37, 2, 1, 1 };
++		memcpy(m2, h2, sizeof(h2));
++		m2[8 + 36] = id;
++		qr_send(QR_TYPE_DATA, DIAG_CNTL_PORT, node, port, m2, sizeof(m2));
++	}
++	printf("SWEET ADSP: diag -> CNTL DIAGMODE real time (v1, v2 for diag ids 1 and 2)\n");
+ }
+ 
+ static void
+ diag_frame(const uint8_t *f, uint32_t n)
+ {
+ 	static unsigned shown;
+-	if (n < 3 || shown >= 400) {
++	if (n < 3 || shown >= 3000) {
+ 		return;
+ 	}
+ 	n -= 2;                                 /* CRC */
+ 	shown++;
++	/*
++	 * QShrink4 terse message (0x92): {cmd, ts_type, nargs, drop, u64 ts, u16 line, u16 ssid, u32 ss_mask,
++	 * u32 hash, u32 args[nargs]}; the format string is only in the build's hash database, so hash + args.
++	 */
++	if (f[0] == 0x92 && n >= 24) {
++		uint32_t nargs = MIN((uint32_t)f[2], (n - 24) / 4), a[6] = { 0 }, hash, mask;
++		uint16_t line, ssid;
++		memcpy(&line, f + 12, 2);
++		memcpy(&ssid, f + 14, 2);
++		memcpy(&mask, f + 16, 4);
++		memcpy(&hash, f + 20, 4);
++		for (uint32_t i = 0; i < nargs && i < 6; i++) {
++			memcpy(&a[i], f + 24 + 4 * i, 4);
++		}
++		uint64_t ts;
++		memcpy(&ts, f + 4, 8);
++		printf("SWEET ADSP: F3Q %llx [%u/%#x] L%u %08x (%u): %#x %#x %#x %#x %#x %#x\n", ts >> 16, ssid, mask, line,
++		    hash, nargs, a[0], a[1], a[2], a[3], a[4], a[5]);
++		return;
++	}
+ 	if (f[0] == 0x79 && n >= 20) {
+ 		uint32_t nargs = f[2], at = 20 + 4 * nargs;
+ 		uint16_t line, ssid;
+-- 
+2.54.0 (Apple Git-157)
+

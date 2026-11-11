@@ -1,0 +1,97 @@
+From 100013fdb1a60fd91f57118f32a974e46ce7ac43 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 19:58:38 +0100
+Subject: [PATCH] umi: check indirect buffers for valid packets at submit time
+
+Every captured hang is CP_OPCODE_ERROR on a zero dword, yet the dumps
+(0191, 0192) read valid commands at IB1's fetch position, and IB2 had
+finished: the CP saw memory that 2 s later holds commands. Test the
+write-visibility theory directly: before the doorbell, walk each IB the
+way the CP will (type 4/7 header counts); at the first word that is no
+packet header, log it and read it again 1 ms later. A word that has
+become valid by then was a CPU write still on its way when the GPU
+would have fetched it. Bounded to 32 reports, IBs up to 8192 dwords.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 50 ++++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 50 insertions(+)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 7d2de24..7a68198 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3042,6 +3042,8 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ 	sa_service_drop_lock();
+ }
+ 
++static void sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords);
++
+ /* One command stream of up to n indirect buffers, one fence when it all ran (0: not submitted). */
+ uint32_t
+ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n, bool *busy)
+@@ -3050,6 +3052,9 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 		*busy = false;
+ 		return 0;
+ 	}
++	for (uint32_t i = 0; i < n; i++) {
++		sa_ib_check(sa_fence_seqno + 1, i, iova[i], dwords[i]);   /* before the lock: it reads through it */
++	}
+ 	sa_service_take_lock();
+ 	uint32_t need = 6 + 4 * n;
+ 	*busy = false;
+@@ -3228,6 +3233,51 @@ sa_walk_draw_state(uint64_t start, uint32_t dwords, struct sa_group *groups, uin
+ 	return true;
+ }
+ 
++/* Submit-time check (0193): walk an indirect buffer the way the CP will, before the doorbell.
++ * Every hang caught so far was CP_OPCODE_ERROR on a zero dword while the dump, 2 s later, read
++ * valid commands everywhere: either the CP saw memory the CPU had not finished writing (the
++ * client records on one thread and submits on another; write-combined stores of the recording
++ * core need not be in memory when the submitting core rings), or something rewrote it after.
++ * A word that is no packet header is logged with its position, then the buffer is walked again
++ * 1 ms later: a word that has become valid by then was a write still on its way. */
++static uint32_t sa_ib_check_logged;
++
++static void
++sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
++{
++	struct sa_word_cache c = { .line = 1 };
++	uint32_t at = 0, h = 0;
++	if (dwords > 8192 || sa_ib_check_logged >= 32) {
++		return;
++	}
++	while (at < dwords) {
++		if (!sa_gpu_word(&c, start + 4ull * at, &h)) {
++			return;                                   /* unmapped/unmanaged: not ours to judge */
++		}
++		uint32_t n;
++		if ((h >> 28) == 4) {
++			n = h & 0x7f;
++		} else if ((h >> 28) == 7) {
++			n = h & 0x3fff;
++		} else {
++			break;
++		}
++		at += 1 + n;
++	}
++	if (at >= dwords) {
++		return;
++	}
++	sa_ib_check_logged++;
++	uint32_t bad_at = at, bad = h;
++	delay_for_interval(1, NSEC_PER_MSEC);
++	struct sa_word_cache c2 = { .line = 1 };
++	uint32_t later = 0;
++	bool got = sa_gpu_word(&c2, start + 4ull * bad_at, &later);
++	IOLog("SWEET ADRENO: submit check: fence %u IB %u at %#llx (%u dwords): dword %u is %#x, no packet "
++	    "header; 1 ms later %s %#x\n", seqno, index, (unsigned long long)start, dwords, bad_at, bad,
++	    got ? "it reads" : "unreadable", later);
++}
++
+ static void
+ sa_hang_dump(uint32_t fence)
+ {
+-- 
+2.54.0 (Apple Git-157)
+

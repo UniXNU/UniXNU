@@ -1,0 +1,150 @@
+From 60636e73dfda4a2c0092550af20f28549016899d Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 22:22:48 +0200
+Subject: [PATCH] umi-0144
+
+---
+ bsd/dev/sweet_wlce.c |  4 ++--
+ bsd/dev/sweet_wldp.c | 15 +++++++++++++++
+ bsd/dev/sweet_wlip.c | 37 +++++++++++++++++++++++++++++++++----
+ 3 files changed, 50 insertions(+), 6 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index af201f1..3f9a7db 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -24,7 +24,7 @@ extern void sweet_wldp_mon_report(void);
+ extern int sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa);
+ extern void sweet_wldp_data_poll(void);
+ extern void sweet_wldp_data_report(void);
+-extern int sweet_wlip_run(const uint8_t mac[6], void (*poll)(void));
++extern int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void));
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ 
+@@ -1261,7 +1261,7 @@ wmi_join(void)
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
+ 	htc.joined = true;
+ 	htc.logged = 0;                 /* log every WMI event / HTT message from here on (up to 24) */
+-	int ipr = sweet_wlip_run(wlce_mac, htc_poll);   /* DHCP, ARP, ping (0141) */
++	int ipr = sweet_wlip_run(wlce_mac, bssid, htc_poll);    /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+ 	return ipr ? 11 + ipr : 0;              /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 14a91e3..b980fe7 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -762,5 +762,20 @@ sweet_wldp_data_report(void)
+ 	printf("SWEET WLDP: data: tx %u sent, %u done, %u acked; rx %u frames, %u dropped; rx release ring hp %u, "
+ 	    "reo exception hp %u\n", dd.tx_sent, dd.tx_done, dd.tx_acked, dd.rx_frames, dd.rx_dropped,
+ 	    *mem32(M_RDP + dp_rings[7].id * 4), *mem32(M_RDP + dp_rings[8].id * 4));
++	/*
++	 * RXDMA error destination rings (133 / 148, 8-word hal_reo_entrance_ring entries): frames the
++	 * hardware refused before REO (0144). Entry word 7 (info0 of the REO entrance ring) carries the
++	 * RXDMA push reason (bits 26:25) and error code (bits 31:27) - printed raw for the first ones.
++	 */
++	for (unsigned i = 3; i <= 4; ++i) {
++		struct rxring *r = &rx_rings[i];
++		uint32_t hp = *mem32(M_RDP + r->id * 4), filled = rx_filled(r);
++		printf("SWEET WLDP: rxdma error ring %u: hp %u, %u filled\n", i - 3, hp, filled);
++		for (uint32_t k = 0; k < MIN(hp / r->esz, 3u); ++k) {
++			volatile uint32_t *e = mem32(r->off + k * r->esz * 4);
++			printf("SWEET WLDP:   entry %u: %08x %08x %08x %08x %08x %08x %08x %08x\n", k, e[0], e[1], e[2], e[3],
++			    e[4], e[5], e[6], e[7]);
++		}
++	}
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlip.c b/bsd/dev/sweet_wlip.c
+index f8abba4..7e5d709 100644
+--- a/bsd/dev/sweet_wlip.c
++++ b/bsd/dev/sweet_wlip.c
+@@ -13,10 +13,12 @@
+ 
+ extern int sweet_wldp_tx(const void *frame, uint32_t len);
+ extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
+-int sweet_wlip_run(const uint8_t mac[6], void (*poll)(void));
++int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void));
+ 
+ static struct {
+-	uint8_t mac[6], router_mac[6];
++	uint8_t mac[6], router_mac[6], ap_mac[6];
++	uint32_t ap_ip;                 /* IPv4 source of a frame whose Ethernet source is the AP (0144) */
++	uint32_t mc_logged;
+ 	uint32_t xid, ip, server, router, mask;        /* network byte order kept as bytes in uint32_t (memcpy) */
+ 	bool offer, ack, nak, arp_ok;
+ 	uint32_t pings_back, rx, rx_other;
+@@ -76,6 +78,7 @@ ip_hdr(uint8_t *f, const uint8_t *dst_mac, uint8_t proto, uint32_t src, uint32_t
+ }
+ 
+ static const uint8_t bcast[6] = { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
++static const uint8_t *dhcp_dst = bcast;    /* Ethernet destination of DHCP requests (0144: once the AP's MAC) */
+ 
+ /* BOOTP/DHCP from 0.0.0.0:68 to 255.255.255.255:67, broadcast flag set (we cannot take unicast yet). */
+ static int
+@@ -83,7 +86,7 @@ dhcp_send(uint8_t type)
+ {
+ 	static uint8_t f[400];
+ 	bzero(f, sizeof(f));
+-	uint32_t o = ip_hdr(f, bcast, 17, 0, 0xffffffffu, 8 + 300);
++	uint32_t o = ip_hdr(f, dhcp_dst, 17, 0, 0xffffffffu, 8 + 300);
+ 	put16(f + o, 68);
+ 	put16(f + o + 2, 67);
+ 	put16(f + o + 4, 8 + 300);                      /* UDP checksum 0: allowed for IPv4 */
+@@ -210,6 +213,13 @@ wlip_rx(const uint8_t *f, uint32_t n)
+ 		(void)arp_send(2, f + 22, spa, f + 22);        /* someone asks for our address */
+ 	} else if (type == 0x0800 && n >= 34 && (f[14] >> 4) == 4) {
+ 		uint32_t ihl = (f[14] & 0xfu) * 4;
++		if (memcmp(f + 6, ip.ap_mac, 6) == 0 && f[26] != 0 && ip.ap_ip == 0) {
++			memcpy(&ip.ap_ip, f + 26, 4);   /* the hotspot's own address */
++		}
++		if (ip.mc_logged++ < 6) {
++			printf("SWEET WLIP: rx IPv4 %u.%u.%u.%u -> %u.%u.%u.%u proto %u, from %s\n", f[26], f[27], f[28], f[29],
++			    f[30], f[31], f[32], f[33], f[23], memcmp(f + 6, ip.ap_mac, 6) == 0 ? "the AP" : "another station");
++		}
+ 		const uint8_t *p = f + 14 + ihl;
+ 		uint32_t tot = get16(f + 16);
+ 		if (ihl < 20 || 14 + tot > n || tot < ihl) {
+@@ -246,11 +256,12 @@ wait_until(volatile bool *flag, unsigned ms, void (*poll)(void))
+ 
+ /* 0 = DHCP lease, router ARP and at least one echo reply; else the step that failed (1-4). */
+ int
+-sweet_wlip_run(const uint8_t mac[6], void (*poll)(void))
++sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void))
+ {
+ 	uint64_t now;
+ 	bzero(&ip, sizeof(ip));
+ 	memcpy(ip.mac, mac, 6);
++	memcpy(ip.ap_mac, ap_mac, 6);
+ 	clock_get_uptime(&now);
+ 	ip.xid = (uint32_t)now ^ 0x53574545u;
+ 	sweet_wldp_set_rx_handler(wlip_rx);
+@@ -258,6 +269,24 @@ sweet_wlip_run(const uint8_t mac[6], void (*poll)(void))
+ 		printf("SWEET WLIP: DHCP DISCOVER (send %d)\n", dhcp_send(1));
+ 		wait_until(&ip.offer, 3000, poll);
+ 	}
++	if (!ip.offer) {
++		/* 0144: one DISCOVER to the AP's MAC instead of broadcast (its DHCP server listens either way) */
++		dhcp_dst = ip.ap_mac;
++		printf("SWEET WLIP: DHCP DISCOVER to the AP's MAC (send %d)\n", dhcp_send(1));
++		dhcp_dst = bcast;
++		wait_until(&ip.offer, 3000, poll);
++	}
++	if (!ip.offer && ip.ap_ip != 0) {
++		const uint8_t *a = (const uint8_t *)&ip.ap_ip;
++		static const uint8_t zero6[6];
++		ip.router = ip.ap_ip;
++		printf("SWEET WLIP: the AP is %u.%u.%u.%u (from its own frames); ARP probe to it\n", a[0], a[1], a[2], a[3]);
++		for (unsigned tries = 0; tries < 3 && !ip.arp_ok; ++tries) {
++			(void)arp_send(1, zero6, ip.ap_ip, bcast);
++			wait_until(&ip.arp_ok, 1000, poll);
++		}
++		printf("SWEET WLIP: ARP to the AP %s\n", ip.arp_ok ? "answered: unicast receive works" : "not answered");
++	}
+ 	if (!ip.offer) {
+ 		printf("SWEET WLIP: no DHCP OFFER (%u frames received, %u other)\n", ip.rx, ip.rx_other);
+ 		/*
+-- 
+2.54.0 (Apple Git-157)
+

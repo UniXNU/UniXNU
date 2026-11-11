@@ -1,0 +1,45 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 8970666..8c2a8e6 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -704,7 +704,7 @@ touch_umi_start(void)
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
+-		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage && st.test_stage != 6 ? st.test_stage : 9, st.clk_level);
++		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage && st.test_stage < 5 ? st.test_stage : 9, st.clk_level);
+ 		if (gerr) {
+ 			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);
+ 			return false;
+@@ -757,6 +757,31 @@ touch_umi_start(void)
+ 		printf("SWEET TEST: stage 3 reached (touch powered and out of reset, no transfers)\n");
+ 		return false;
+ 	}
++	if (st.test_stage == 7) {
++		/*
++		 * One chosen transfer, then heartbeat/reboot: sweetgpiprobe=1 plain write of 0x86
++		 * (STOP, no stretch), 2 read 8 bytes only, 3 the FTS write+read pair;
++		 * sweetgpiaddr=N the 7-bit address (0x49 = the touch IC).
++		 */
++		uint32_t mode = 1, a = STFTS_ADDR;
++		(void)PE_parse_boot_argn("sweetgpiprobe", &mode, sizeof(mode));
++		(void)PE_parse_boot_argn("sweetgpiaddr", &a, sizeof(a));
++		uint8_t cmd = STFTS_FIFO_READ, rx[8];
++		int e;
++		memset(rx, 0xa5, sizeof(rx));
++		st.probing = true;
++		if (mode == 2) {
++			e = touch_msg((uint8_t)a, NULL, 0, rx, sizeof(rx), false);
++		} else if (mode == 3) {
++			e = touch_read((uint8_t)a, STFTS_FIFO_READ, false, rx, sizeof(rx));
++		} else {
++			e = touch_msg((uint8_t)a, &cmd, 1, NULL, 0, false);
++		}
++		st.probing = false;
++		printf("SWEET TEST: stage 7 probe mode %u addr %#x -> err %d data %02x %02x %02x %02x %02x %02x %02x %02x\n",
++		    mode, a, e, rx[0], rx[1], rx[2], rx[3], rx[4], rx[5], rx[6], rx[7]);
++		return false;
++	}
+ 	uint8_t ev[STFTS_EVENT_LEN];
+ 	int err = EIO;
+ 	st.probing = true;

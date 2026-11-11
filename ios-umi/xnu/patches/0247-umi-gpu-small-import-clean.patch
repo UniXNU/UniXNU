@@ -1,0 +1,50 @@
+From aae0613df085be70cdea856a81689cf9378278d4 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 13:46:01 +0100
+Subject: [PATCH] umi: clean small GPU imports (CPU-drawn layer memory) before
+ every submit (sweetgpuimpclean, 2 MB)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 25 +++++++++++++++++++++++++
+ 1 file changed, 25 insertions(+)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 2343588..3904535 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -831,6 +831,31 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 				}
+ 			}
+ 		}
++		/* (0247) ...except small imports: the host memory CoreAnimation's CPU-drawn layers arrive in (text,
++		 * icons - shared memory the app redraws in place). Cleaned only at BoMap, a redraw never reached the
++		 * GPU: stale glyphs in Settings and the App Library with everything else clean (0246). Imports up to
++		 * sweetgpuimpclean bytes (default 2 MB; 0 = off) are cleaned before every submit; drawables and other
++		 * full-screen render targets are larger and keep the 0183 rule. */
++		static uint64_t impLimit = ~0ull, impBytes, impSubmits;
++		if (impLimit == ~0ull) {
++			uint32_t v = 2u << 20;
++			(void)PE_parse_boot_argn("sweetgpuimpclean", &v, sizeof(v));
++			impLimit = v;
++		}
++		if (impLimit != 0) {
++			for (uint32_t i = 0; i < fBOCap; i++) {
++				BO *bo = &fBO[i];
++				if (bo->md != NULL && bo->iova != 0 && bo->kmap != NULL && bo->imported && bo->bytes <= impLimit) {
++					sweet_adreno_clean((vm_offset_t)bo->kmap->getVirtualAddress(), bo->bytes);
++					impBytes += bo->bytes;
++				}
++			}
++			if ((++impSubmits % 2000) == 0) {
++				IOLog("SWEET ADRENO: small imports cleaned before submits: %llu MB over the last 2000\n",
++				    impBytes >> 20);
++				impBytes = 0;
++			}
++		}
+ 		bool busy = false;
+ 		uint32_t fence = sweet_adreno_submit_v2(iova, dw, rq->buffer_count, &busy);
+ 		if (fence == 0) {
+-- 
+2.54.0 (Apple Git-157)
+

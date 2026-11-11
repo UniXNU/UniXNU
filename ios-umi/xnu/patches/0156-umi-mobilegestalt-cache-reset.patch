@@ -1,0 +1,85 @@
+From 4f261f384ad56a41a8e660ef66acb65224c7ebd6 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 16:12:55 +0100
+Subject: [PATCH] umi-0156-mg-cache-reset
+
+---
+ bsd/kern/kern_exec.c   | 29 +++++++++++++++++++++++++++++
+ bsd/vfs/vfs_syscalls.c | 14 ++++++++++++++
+ 2 files changed, 43 insertions(+)
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 68612db..00b1672 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -1157,6 +1157,32 @@ SYSCTL_PROC(_vm, OID_AUTO, shared_region_control,
+  *		activators should not be given the opportunity to attempt
+  *		to activate the image.
+  */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/*
++ * Boot-arg sweetmgreset=1: when launchd (pid 1) starts, move MobileGestalt's disk cache aside
++ * (renamed to ...plist.sweet-old, not deleted) so its answers are computed again from the
++ * device tree. The cache is only invalidated by a new build or host UUID, so a changed ADT
++ * (umi /product product-name "Xiaomi Mi 10") would otherwise keep showing the old answers.
++ * /private/var is on the root volume here (no data volume), writable with rootrw=1.
++ */
++extern int sweet_rename_path(const char *from, const char *to);   /* vfs_syscalls.c */
++
++static void
++sweet_mg_reset(void)
++{
++	static const char cache[] = "/private/var/containers/Shared/SystemGroup/"
++	    "systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist";
++	static const char old[] = "/private/var/containers/Shared/SystemGroup/"
++	    "systemgroup.com.apple.mobilegestaltcache/Library/Caches/com.apple.MobileGestalt.plist.sweet-old";
++	uint32_t on = 0;
++
++	if (!PE_parse_boot_argn("sweetmgreset", &on, sizeof(on)) || on == 0) {
++		return;
++	}
++	printf("SWEET MG: MobileGestalt cache moved aside: %d\n", sweet_rename_path(cache, old));
++}
++#endif
++
+ static int
+ exec_mach_imgact(struct image_params *imgp)
+ {
+@@ -7414,6 +7440,9 @@ process_signature(proc_t p, struct image_params *imgp)
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ 			/* SWEET runs every iOS binary this way: one short line per exec. */
+ 			printf("exec %s\n", p->p_name);
++			if (proc_getpid(p) == 1) {
++				sweet_mg_reset();
++			}
+ #else
+ 			printf("Allowing spawn of iOS binary %s since it has "
+ 			    "com.apple.private.security.no-sandbox entitlement or unentitled_ios_sim_launch "
+diff --git a/bsd/vfs/vfs_syscalls.c b/bsd/vfs/vfs_syscalls.c
+index 90e68bb..bf1c467 100644
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -8924,6 +8924,20 @@ rename_submounts_callback(mount_t mp, void *arg)
+  * Rename files.  Source and destination must either both be directories,
+  * or both not be directories.  If target is a directory, it must be empty.
+  */
++static int
++renameat_internal(vfs_context_t ctx, int fromfd, user_addr_t from,
++    int tofd, user_addr_t to, int segflg, u_int uflags);
++
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++/* Kernel rename of absolute paths (kern_exec.c sweet_mg_reset). */
++int
++sweet_rename_path(const char *from, const char *to)
++{
++	return renameat_internal(vfs_context_kernel(), AT_FDCWD, CAST_USER_ADDR_T(from),
++	           AT_FDCWD, CAST_USER_ADDR_T(to), UIO_SYSSPACE, 0);
++}
++#endif
++
+ /* ARGSUSED */
+ static int
+ renameat_internal(vfs_context_t ctx, int fromfd, user_addr_t from,
+-- 
+2.54.0 (Apple Git-157)
+

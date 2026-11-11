@@ -1,0 +1,90 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 8474f37..564143d 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -101,6 +101,13 @@ int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx
+ #define EV_IMMEDIATE            0x30u
+ #define EV_QUP_NOTIF            0x31u
+ #define TCE_EOT                 2u
++/*
++ * Errors in a transfer completion's status (i2c-qcom-geni DM_I2C_CB_ERR, GP_IRQn << 5).
++ * Its completion code alone says nothing: a write that worked can end with code 16.
++ */
++#define CB_NACK                 (1u << (1 + 5))
++#define CB_BUS_PROTO            (1u << (3 + 5))
++#define CB_ARB_LOST             (1u << (4 + 5))
+ #define M_GP_IRQ_1              (1u << 10)      /* NACK */
+ #define M_GP_IRQ_3              (1u << 12)      /* bus protocol */
+ #define M_GP_IRQ_4              (1u << 13)      /* arbitration lost */
+@@ -366,7 +373,7 @@ ring_doorbell(unsigned k)
+  * EIO or ETIMEDOUT; *got is the received length.
+  */
+ static int
+-gpi_wait(unsigned donech, unsigned *got)
++gpi_wait(unsigned donech, uint32_t donetre, unsigned *got)
+ {
+ 	for (unsigned spin = 0; spin < 20000; spin++) {
+ 		uint32_t hwrp = (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB) - (DMA_PA + OFF_EV)) / TRE_SIZE;
+@@ -392,10 +399,14 @@ gpi_wait(unsigned donech, unsigned *got)
+ 					return EIO;
+ 				}
+ 			} else if (type == EV_XFER_COMPLETE) {
+-				if (code != TCE_EOT && code != 1u) {
++				if (status & CB_NACK) {
++					return ENXIO;
++				}
++				if (status & (CB_BUS_PROTO | CB_ARB_LOST)) {
+ 					return EIO;
+ 				}
+-				if (chid == donech) {
++				/* the TRE that asked for the end of transfer; anything else is an older event */
++				if (chid == donech && d0 == donetre) {
+ 					if (got != NULL) {
+ 						*got = d2 & 0xffffff;
+ 					}
+@@ -439,9 +450,11 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 		ring_put(0, go0, 0, 0, TRE_DW3(2, 0, 0, 0, 0, 0, 1));
+ 		ring_put(0, DMA_PA + OFF_TXBUF, 0, nt, TRE_DW3(1, 0, 0, 0, 1, 0, 0));
+ 	}
++	uint32_t donetre = read ? DMA_PA + OFF_RX + ((g.rx_wp + CH_RING_N - 1) % CH_RING_N) * TRE_SIZE :
++	    DMA_PA + OFF_TX + ((g.tx_wp + CH_RING_N - 1) % CH_RING_N) * TRE_SIZE;
+ 	ring_doorbell(0);
+ 	unsigned got = 0;
+-	int err = gpi_wait(read ? 1 : 0, &got);
++	int err = gpi_wait(read ? 1 : 0, donetre, &got);
+ 	if (err == 0 && read) {
+ 		for (unsigned i = 0; i < nr; i++) {
+ 			rx[i] = ((volatile uint8_t *)dma_ptr(OFF_RXBUF))[i];
+@@ -453,7 +466,9 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 		 * (gpi_terminate_all); the next message re-sends CONFIG0.
+ 		 */
+ 		for (unsigned k = 0; k < 2; k++) {
+-			(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);
++			if (ch_state(k) == CH_STATE_STARTED) {
++				(void)ch_cmd(k, CMD_STOP, CH_STATE_STOPPED);   /* may stay STOP_IN_PROC (4) */
++			}
+ 			(void)ch_cmd(k, CMD_RESET, CH_STATE_ALLOCATED);
+ 		}
+ 		for (unsigned k = 0; k < 2; k++) {
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index c4481b5..523146f 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -731,9 +731,16 @@ touch_umi_start(void)
+ 	uint8_t ev[STFTS_EVENT_LEN];
+ 	int err = EIO;
+ 	st.probing = true;
+-	for (unsigned i = 0; i < 4; ++i) {
++	for (unsigned i = 0, tries = 0; i < 4; ++i) {
+ 		memset(ev, 0xa5, sizeof(ev));
+ 		err = touch_read(STFTS_ADDR, STFTS_FIFO_READ, false, ev, sizeof(ev));
++		if (err && st.gpi && ++tries < 6) {
++			/* the IC may still be booting its firmware: try again a little later */
++			printf("SWEET TOUCH: stfts probe err=%d, retrying\n", err);
++			touch_wait(100);
++			--i;
++			continue;
++		}
+ 		printf("SWEET TOUCH: stfts probe err=%d event %02x %02x %02x %02x %02x %02x %02x %02x\n",
+ 		    err, ev[0], ev[1], ev[2], ev[3], ev[4], ev[5], ev[6], ev[7]);
+ 		if (err || ev[0] == STFTS_EVT_NONE) {

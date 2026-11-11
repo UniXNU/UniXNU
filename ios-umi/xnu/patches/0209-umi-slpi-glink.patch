@@ -1,0 +1,460 @@
+From f3e1799b391838da6bd661bae09d47600fecd01a Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 18:12:13 +0100
+Subject: [PATCH] umi: SMP2P and GLINK with the SLPI; "IPCRTR" open
+
+After the SLPI starts, the kernel allocates its SMEM items in the
+APPS-SLPI partition (hwspinlock: TCSR mutex lock 3; Linux smem.c), the
+SMP2P outbound item 430 with "master-kernel" (smp2p.c) and GLINK FIFO
+479, then speaks GLINK over SMEM (qcom_glink_smem.c / _native.c) by
+polling: VERSION both ways, OPEN/OPEN_ACK of "IPCRTR", receive intents
+as the dt lists them, RX_INTENT_REQ, READ_NOTIF, TX_DATA logged and
+returned with RX_DONE_W_REUSE.
+
+On the phone: SMP2P slave-kernel goes ready + handover within 10 ms, the
+SLPI opens mhi_sat, fastrpcglink-apps-dsp, IPCRTR and LOOPBACK_CTL_DSPS,
+advertises 30 intents and sends its QRTR HELLO (node 9). 36 s later its
+sensor_process user PD reports a stalled initialization (watchdog):
+what it waits for on our side is the next step.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_slpi.c | 415 +++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 398 insertions(+), 17 deletions(-)
+
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index fcba224..e12df47 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -309,6 +309,401 @@ sl_crash_reason(void)
+ 	printf("SWEET SLPI: crash reason (item 424, %u bytes): \"%s\"\n", size, text);
+ }
+ 
++
++/* ---- SMEM writes (Linux smem.c qcom_smem_alloc_private, hwspinlock qcom_hwspinlock.c) ---- */
++
++#define SL_TCSR_MUTEX           0x01f40000ull   /* dt tcsr_mutex_block, stride 0x1000 */
++#define SL_SMEM_LOCK            3               /* dt smem hwlocks = <&tcsr_mutex 3> */
++
++static volatile uint32_t *sl_mutex;
++
++static void
++sl_wr32(uint32_t off, uint32_t v)
++{
++	*(volatile uint32_t *)(sl_smem + off) = v;
++}
++
++static void
++sl_wr16(uint32_t off, uint16_t v)
++{
++	*(volatile uint16_t *)(sl_smem + off) = v;
++}
++
++static bool
++sl_hwlock(bool take)
++{
++	if (sl_mutex == NULL) {
++		sl_mutex = (volatile uint32_t *)ml_io_map(SL_TCSR_MUTEX + SL_SMEM_LOCK * 0x1000, 0x1000);
++	}
++	if (!take) {
++		__asm__ volatile ("dsb sy" ::: "memory");
++		sl_mutex[0] = 0;
++		return true;
++	}
++	for (int i = 0; i < 100000; i++) {
++		sl_mutex[0] = 1;                /* QCOM_MUTEX_APPS_PROC_ID */
++		if (sl_mutex[0] == 1) {
++			return true;
++		}
++		delay(10);
++	}
++	return false;
++}
++
++/* Allocate an item in the APPS-SLPI partition (or find it); data offset, 0 on failure. */
++static uint32_t
++sl_smem_alloc(uint16_t item, uint32_t size)
++{
++	uint32_t got = 0, it = sl_smem_get(0, 3, item, &got);
++	if (it != 0) {
++		return it;
++	}
++	uint32_t pt = SL_SMEM_SIZE - 0x1000, p = 0, psize = 0;
++	for (uint32_t i = 0; i < sl_rd32(pt + 8) && i < 64; i++) {
++		uint32_t e = pt + 32 + 48 * i;
++		uint16_t h0 = sl_rd16(e + 12), h1 = sl_rd16(e + 14);
++		if ((h0 == 0 && h1 == 3) || (h0 == 3 && h1 == 0)) {
++			p = sl_rd32(e);
++			psize = sl_rd32(e + 4);
++		}
++	}
++	if (p == 0 || !sl_hwlock(true)) {
++		printf("SWEET SLPI: SMEM alloc %u: no partition or lock\n", item);
++		return 0;
++	}
++	uint32_t free_unc = sl_rd32(p + 12), free_cached = sl_rd32(p + 16);
++	uint32_t hdr = p + free_unc, asize = 16 + ((size + 7) & ~7u);
++	if (free_unc + asize > free_cached || free_cached > psize) {    /* cached items grow down to offset_free_cached */
++		sl_hwlock(false);
++		printf("SWEET SLPI: SMEM alloc %u: partition full\n", item);
++		return 0;
++	}
++	sl_wr16(hdr, 0xa5a5);
++	sl_wr16(hdr + 2, item);
++	sl_wr32(hdr + 4, (size + 7) & ~7u);
++	sl_wr16(hdr + 8, (uint16_t)(((size + 7) & ~7u) - size));
++	sl_wr16(hdr + 10, 0);
++	sl_wr32(hdr + 12, 0);
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sl_wr32(p + 12, free_unc + asize);
++	sl_hwlock(false);
++	printf("SWEET SLPI: SMEM item %u allocated, %u bytes at %#x\n", item, size, hdr + 16);
++	return hdr + 16;
++}
++
++/* ---- SMP2P outbound (Linux smp2p.c qcom_smp2p_alloc_outbound_item) ---- */
++
++static uint32_t sl_smp2p_out;
++
++static void
++sl_smp2p_create(void)
++{
++	uint32_t it = sl_smem_alloc(430, 20 + 16 * 20);
++	if (it == 0) {
++		return;
++	}
++	for (uint32_t i = 0; i < 20 + 16 * 20; i += 4) {
++		sl_wr32(it + i, 0);
++	}
++	sl_wr32(it, 0x504d5324);                /* "$SMP" */
++	sl_wr32(it + 4, 1u << 8);               /* version 0 for now, features SSR_ACK */
++	sl_wr16(it + 8, 0);                     /* local pid: APPS */
++	sl_wr16(it + 10, 3);                    /* remote pid: SLPI */
++	sl_wr16(it + 12, 16);                   /* total entries */
++	static const char name[16] = "master-kernel";
++	for (int c = 0; c < 16; c += 4) {
++		uint32_t w;
++		memcpy(&w, name + c, 4);
++		sl_wr32(it + 20 + c, w);
++	}
++	sl_wr16(it + 14, 1);                    /* valid entries */
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sl_wr32(it + 4, (1u << 8) | 1);         /* version 1 last */
++	sl_smp2p_out = it;
++	sl_ipcc_ring(4, 2);
++	printf("SWEET SLPI: SMP2P out item 430 created (master-kernel = 0)\n");
++}
++
++/* ---- GLINK over SMEM (Linux qcom_glink_smem.c, qcom_glink_native.c) ---- */
++
++#define GL_VERSION              0
++#define GL_VERSION_ACK          1
++#define GL_OPEN                 2
++#define GL_CLOSE                3
++#define GL_OPEN_ACK             4
++#define GL_INTENT               5
++#define GL_RX_DONE              6
++#define GL_RX_INTENT_REQ        7
++#define GL_RX_INTENT_REQ_ACK    8
++#define GL_TX_DATA              9
++#define GL_CLOSE_ACK            11
++#define GL_TX_DATA_CONT         12
++#define GL_READ_NOTIF           13
++#define GL_RX_DONE_W_REUSE      14
++#define GL_SIGNALS              15
++#define GL_FEATURE_INTENT_REUSE 1
++#define GL_LCID                 1               /* our only channel: "IPCRTR" */
++
++static uint32_t gl_desc, gl_tx, gl_tx_len, gl_rx, gl_rx_len;
++static uint32_t gl_rcid;                        /* the SLPI's id of "IPCRTR" */
++static uint32_t gl_next_iid = 1;
++static unsigned gl_data_logged;
++
++static uint32_t
++gl_avail(void)
++{
++	uint32_t tail = sl_rd32(gl_desc + 8), head = sl_rd32(gl_desc + 12);
++	return head >= tail ? head - tail : gl_rx_len - tail + head;
++}
++
++static void
++gl_peek(void *out, uint32_t offset, uint32_t count)
++{
++	uint32_t tail = sl_rd32(gl_desc + 8) + offset;
++	if (tail >= gl_rx_len) {
++		tail -= gl_rx_len;
++	}
++	for (uint32_t i = 0; i < count; i++) {
++		((uint8_t *)out)[i] = sl_smem[gl_rx + tail];
++		if (++tail == gl_rx_len) {
++			tail = 0;
++		}
++	}
++}
++
++static void
++gl_advance(uint32_t count)
++{
++	uint32_t tail = sl_rd32(gl_desc + 8) + count;
++	if (tail >= gl_rx_len) {
++		tail -= gl_rx_len;
++	}
++	sl_wr32(gl_desc + 8, tail);
++}
++
++static bool
++gl_tx_msg(const void *data, uint32_t len)
++{
++	uint32_t tail = sl_rd32(gl_desc), head = sl_rd32(gl_desc + 4);
++	uint32_t avail = tail <= head ? gl_tx_len - head + tail : tail - head;
++	uint32_t padded = (len + 7) & ~7u;
++	if (avail < padded + 16) {
++		printf("SWEET SLPI: GLINK tx fifo full\n");
++		return false;
++	}
++	for (uint32_t i = 0; i < padded; i++) {
++		sl_smem[gl_tx + head] = i < len ? ((const uint8_t *)data)[i] : 0;
++		if (++head == gl_tx_len) {
++			head = 0;
++		}
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sl_wr32(gl_desc + 4, head);
++	sl_ipcc_ring(4, 0);
++	return true;
++}
++
++static void
++gl_cmd(uint16_t cmd, uint16_t p1, uint32_t p2)
++{
++	uint8_t m[8];
++	memcpy(m, &cmd, 2);
++	memcpy(m + 2, &p1, 2);
++	memcpy(m + 4, &p2, 4);
++	gl_tx_msg(m, 8);
++}
++
++static void
++gl_intent(uint32_t size)
++{
++	uint8_t m[16];
++	uint16_t cmd = GL_INTENT, lcid = GL_LCID;
++	uint32_t count = 1, iid = gl_next_iid++;
++	memcpy(m, &cmd, 2);
++	memcpy(m + 2, &lcid, 2);
++	memcpy(m + 4, &count, 4);
++	memcpy(m + 8, &size, 4);
++	memcpy(m + 12, &iid, 4);
++	gl_tx_msg(m, 16);
++}
++
++static void
++gl_open(void)
++{
++	uint8_t m[16] = { 0 };
++	uint16_t cmd = GL_OPEN, lcid = GL_LCID;
++	uint32_t len = 7;                       /* "IPCRTR" + NUL */
++	memcpy(m, &cmd, 2);
++	memcpy(m + 2, &lcid, 2);
++	memcpy(m + 4, &len, 4);
++	memcpy(m + 8, "IPCRTR", 7);
++	gl_tx_msg(m, 16);
++}
++
++/* Handle what the SLPI sent; false when the FIFO holds an incomplete message. */
++static bool
++gl_rx_one(void)
++{
++	uint32_t avail = gl_avail();
++	if (avail < 8) {
++		return false;
++	}
++	uint8_t h[16];
++	gl_peek(h, 0, 8);
++	uint16_t cmd, p1;
++	uint32_t p2;
++	memcpy(&cmd, h, 2);
++	memcpy(&p1, h + 2, 2);
++	memcpy(&p2, h + 4, 4);
++	switch (cmd) {
++	case GL_VERSION:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- VERSION %u features %#x\n", p1, p2);
++		gl_cmd(GL_VERSION_ACK, 1, p2 & GL_FEATURE_INTENT_REUSE);
++		return true;
++	case GL_VERSION_ACK:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- VERSION_ACK %u features %#x\n", p1, p2);
++		return true;
++	case GL_OPEN: {
++		uint32_t len = (8 + p2 + 7) & ~7u;
++		if (avail < len) {
++			return false;
++		}
++		char name[33] = { 0 };
++		gl_peek(name, 8, MIN(p2, 32u));
++		gl_advance(len);
++		printf("SWEET SLPI: GLINK <- OPEN \"%s\" rcid %u\n", name, p1);
++		if (strcmp(name, "IPCRTR") == 0) {
++			gl_rcid = p1;
++			gl_cmd(GL_OPEN_ACK, (uint16_t)p1, 0);
++			gl_open();
++		} else {
++			gl_cmd(GL_OPEN_ACK, (uint16_t)p1, 0);   /* acked, not used */
++		}
++		return true;
++	}
++	case GL_OPEN_ACK:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- OPEN_ACK lcid %u: \"IPCRTR\" open both ways\n", p1);
++		if (p1 == GL_LCID) {
++			static const uint32_t sizes[] = { 0x800, 0x800, 0x800, 0x800, 0x800, 0x2000, 0x2000, 0x2000,
++				                          0x4400, 0x4400 };
++			for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
++				gl_intent(sizes[i]);    /* dt qcom,intents <0x800 5 0x2000 3 0x4400 2> */
++			}
++		}
++		return true;
++	case GL_CLOSE:
++	case GL_CLOSE_ACK:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- %s cid %u\n", cmd == GL_CLOSE ? "CLOSE" : "CLOSE_ACK", p1);
++		if (cmd == GL_CLOSE) {
++			gl_cmd(GL_CLOSE_ACK, p1, 0);
++		}
++		return true;
++	case GL_INTENT: {
++		uint32_t len = (8 + 8 * p2 + 7) & ~7u;
++		if (avail < len) {
++			return false;
++		}
++		for (uint32_t i = 0; i < p2 && i < 8; i++) {
++			uint32_t sz[2];
++			gl_peek(sz, 8 + 8 * i, 8);
++			printf("SWEET SLPI: GLINK <- INTENT cid %u size %#x iid %u\n", p1, sz[0], sz[1]);
++		}
++		gl_advance(len);
++		return true;
++	}
++	case GL_RX_INTENT_REQ:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- RX_INTENT_REQ cid %u size %#x\n", p1, p2);
++		gl_intent(p2);
++		gl_cmd(GL_RX_INTENT_REQ_ACK, GL_LCID, 1);
++		return true;
++	case GL_TX_DATA:
++	case GL_TX_DATA_CONT: {
++		if (avail < 16) {
++			return false;
++		}
++		uint32_t chunk, left;
++		gl_peek(h, 0, 16);
++		memcpy(&chunk, h + 8, 4);
++		memcpy(&left, h + 12, 4);
++		uint32_t len = (16 + chunk + 7) & ~7u;
++		if (avail < len) {
++			return false;
++		}
++		uint8_t d[48] = { 0 };
++		gl_peek(d, 16, MIN(chunk, 48u));
++		gl_advance(len);
++		if (gl_data_logged++ < 40) {
++			printf("SWEET SLPI: GLINK <- DATA cid %u iid %u %u bytes (%u left): %02x %02x %02x %02x %02x %02x %02x %02x "
++			    "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n", p1, p2, chunk, left,
++			    d[0], d[1], d[2], d[3], d[4], d[5], d[6], d[7], d[8], d[9], d[10], d[11], d[12], d[13], d[14], d[15],
++			    d[16], d[17], d[18], d[19], d[20], d[21], d[22], d[23]);
++		}
++		if (left == 0) {
++			gl_cmd(GL_RX_DONE_W_REUSE, GL_LCID, p2);     /* the intent is ours again */
++		}
++		return true;
++	}
++	case GL_READ_NOTIF:
++		gl_advance(8);
++		sl_ipcc_ring(4, 0);
++		return true;
++	case GL_RX_DONE:
++	case GL_RX_DONE_W_REUSE:
++	case GL_RX_INTENT_REQ_ACK:
++	case GL_SIGNALS:
++		gl_advance(8);
++		printf("SWEET SLPI: GLINK <- cmd %u %u %#x\n", cmd, p1, p2);
++		return true;
++	default:
++		printf("SWEET SLPI: GLINK <- unknown cmd %u (%u, %#x), %u bytes waiting; stop\n", cmd, p1, p2, avail);
++		return false;
++	}
++}
++
++static void
++sl_glink(void)
++{
++	uint32_t size = 0;
++	sl_smp2p_create();
++	gl_desc = sl_smem_get(0, 3, 478, &size);
++	gl_rx = sl_smem_get(0, 3, 480, &gl_rx_len);
++	gl_tx = sl_smem_alloc(479, 16384);
++	gl_tx_len = 16384;
++	if (gl_desc == 0 || size != 32 || gl_rx == 0 || gl_tx == 0) {
++		printf("SWEET SLPI: GLINK: descriptor %#x (%u) rx %#x tx %#x - no transport\n", gl_desc, size, gl_rx, gl_tx);
++		return;
++	}
++	printf("SWEET SLPI: GLINK descriptor tx %u/%u rx %u/%u, rx fifo %u bytes\n", sl_rd32(gl_desc), sl_rd32(gl_desc + 4),
++	    sl_rd32(gl_desc + 8), sl_rd32(gl_desc + 12), gl_rx_len);
++	gl_cmd(GL_VERSION, 1, GL_FEATURE_INTENT_REUSE);
++	printf("SWEET SLPI: GLINK -> VERSION 1\n");
++	uint32_t last = ~0u;
++	for (int t = 0; t < 6000; t++) {        /* 60 s */
++		while (gl_rx_one()) {
++		}
++		uint32_t v = sl_smp2p_value(false);
++		if (v != last) {
++			printf("SWEET SLPI: slave-kernel bits %#x (fatal %u ready %u handover %u stop-ack %u) at %d ms\n", v,
++			    v & 1, (v >> 1) & 1, (v >> 2) & 1, (v >> 3) & 1, t * 10);
++			if (v == ~0u || last == ~0u) {
++				(void)sl_smp2p_value(true);
++			}
++			last = v;
++		}
++		if (v != ~0u && (v & 1)) {
++			sl_crash_reason();
++			return;
++		}
++		sl_sleep_ms(10);
++	}
++	printf("SWEET SLPI: GLINK: 60 s done; %u data messages\n", gl_data_logged);
++}
++
+ /* ---- TrustZone (Linux qcom_scm-smc.c; same calls as the GPU zap shader) ---- */
+ 
+ #define SCM_64                  (1ull << 30)
+@@ -553,23 +948,9 @@ sl_load_and_start(void)
+ 		goto shutdown;
+ 	}
+ 	printf("SWEET SLPI: TRUSTZONE AUTHENTICATED AND STARTED THE SLPI\n");
+-	uint32_t last = ~0u;
+-	for (int t = 0; t < 300; t++) {         /* 30 s */
+-		uint32_t v = sl_smp2p_value(last == ~0u && t > 0);
+-		if (v != last) {
+-			printf("SWEET SLPI: slave-kernel bits %#x (fatal %u ready %u handover %u stop-ack %u) at %d ms\n", v,
+-			    v & 1, (v >> 1) & 1, (v >> 2) & 1, (v >> 3) & 1, t * 100);
+-			last = v;
+-		}
+-		if (v != ~0u && (v & 1)) {
+-			sl_crash_reason();
+-			break;
+-		}
+-		if (v != ~0u && (v & 6) == 6 && t > 50) {
+-			break;
+-		}
+-		sl_sleep_ms(100);
+-	}
++	sl_sleep_ms(500);
++	sl_smem_list();
++	sl_glink();                             /* SMP2P + GLINK up to the "IPCRTR" channel */
+ 	sl_smem_list();
+ 	sl_crash_reason();
+ 	err = 0;
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,346 @@
+diff --git a/crates/metal2vulkan-runtime/src/render.rs b/crates/metal2vulkan-runtime/src/render.rs
+index 3767b60..4400378 100644
+--- a/crates/metal2vulkan-runtime/src/render.rs
++++ b/crates/metal2vulkan-runtime/src/render.rs
+@@ -325,8 +325,8 @@ pub use late_resolve::ResolveTarget;
+ use metal2vulkan::bind::BindingPlan;
+ use metal2vulkan::bind::VertexAmplification;
+ use metal2vulkan::bind::{
+-    DrawCall, FragmentTests, HeapPlacement, ImageblockSize, IndexBufferRef, IndirectRef,
+-    MeshDispatch, MeshGroups, TessellationFactors, ViewSetup, WriteSource,
++    DrawCall, DrawCommands, FragmentTests, HeapPlacement, ImageblockSize, IndexBufferRef,
++    IndirectRef, MeshDispatch, MeshGroups, TessellationFactors, ViewSetup, WriteSource,
+ };
+ use metal2vulkan::cache::SpecializationKey;
+ use metal2vulkan::device::{DriverFact, FormatUsage, VkFeature};
+@@ -1121,6 +1121,8 @@ pub struct RenderCommandEncoder {
+     /// The last draw's variant, plan and specialization under which the bound values' notices
+     /// were quiet (`Device::degrade_bound_values`), where it was.
+     quiet_bound_values: Option<QuietBoundValues>,
++    /// The last draw's commands, whose lists the next draw's fill again.
++    draw_commands: Option<DrawCommands>,
+     /// The views and sampler descriptions its draws' binds made or found (`binding::BindMemo`).
+     bind_memo: binding::BindMemo,
+     /// What its last draw retained of its own ([`LastRetained`]).
+@@ -1391,6 +1393,7 @@ impl CommandBuffer {
+             live: Arc::default(),
+             log,
+             quiet_bound_values: None,
++            draw_commands: None,
+             bind_memo: binding::BindMemo::default(),
+             last_retained: LastRetained::default(),
+         })
+@@ -5961,8 +5964,8 @@ impl RenderCommandEncoder {
+                 return Err(Error::NotImplemented(RuntimeGap::ImageblockMasters));
+             }
+         }
+-        let commands = plan
+-            .instantiate_draw(&live.state, &draw)
++        let mut commands = self.draw_commands.take().unwrap_or_else(DrawCommands::empty);
++        plan.instantiate_draw_into(&live.state, &draw, &mut commands)
+             .map_err(Error::Bind)?;
+         self.reaches_unnamed |= !commands.root_tables.is_empty() || reads_handles(&plan);
+         // A mesh draw the binder launches no threadgroup of (as plain Metal draws nothing).
+@@ -6674,7 +6677,7 @@ impl RenderCommandEncoder {
+             binding::bind(call, &device, &mut state, &plan, &command, &tables, memo)?
+         };
+         // The draw's push bytes, filled in place.
+-        let push = binding::push_writes(commands.push_constants, &bound.holes)?;
++        let push = binding::push_writes(std::mem::take(&mut commands.push_constants), &bound.holes)?;
+         // A plan that draws one amplification at a time records the draw once per amplification,
+         // in order, each after that amplification's push writes.
+         let amplified = commands
+@@ -7309,6 +7312,7 @@ impl RenderCommandEncoder {
+         if capture.is_some() {
+             self.capture_uses(uses);
+         }
++        self.draw_commands = Some(commands);
+         Ok(())
+     }
+ 
+diff --git a/crates/metal2vulkan-runtime/src/render/executions.rs b/crates/metal2vulkan-runtime/src/render/executions.rs
+index 458c571..e026402 100644
+--- a/crates/metal2vulkan-runtime/src/render/executions.rs
++++ b/crates/metal2vulkan-runtime/src/render/executions.rs
+@@ -2094,6 +2094,7 @@ impl RenderExecution {
+             live: Arc::default(),
+             log: None,
+             quiet_bound_values: None,
++            draw_commands: None,
+             bind_memo: crate::binding::BindMemo::default(),
+             last_retained: Default::default(),
+         }
+diff --git a/crates/metal2vulkan/src/bind/graphics.rs b/crates/metal2vulkan/src/bind/graphics.rs
+index 850f28a..c79f0d4 100644
+--- a/crates/metal2vulkan/src/bind/graphics.rs
++++ b/crates/metal2vulkan/src/bind/graphics.rs
+@@ -233,9 +233,9 @@ use std::collections::BTreeMap;
+ 
+ use crate::bind::heap::{planner, HeapPlanner};
+ use crate::bind::instantiate::{
+-    bind_buffers, descriptor_range, put, slot_field, BufferExtent, BufferRange, DescriptorBytes,
+-    DescriptorRange, FieldBytes, IndexBufferRef, IndirectRef, PushConstantWrite, PushHole,
+-    RangeError, RootTable,
++    bind_buffers_in, descriptor_range, put, slot_field, BoundBuffers, BufferExtent, BufferRange,
++    DescriptorBytes, DescriptorRange, FieldBytes, IndexBufferRef, IndirectRef, PushConstantWrite,
++    PushHole, RangeError, RootTable,
+ };
+ use crate::bind::neutral::{zero_buffer_bytes, NeutralResource};
+ use crate::bind::plan::compute::{internal, not_implemented, spec_key, tile_memory};
+@@ -2209,6 +2209,21 @@ impl BindingPlan {
+         state: &BindState,
+         draw: &DrawCall,
+     ) -> Result<DrawCommands, BindError> {
++        let mut out = DrawCommands::empty();
++        self.instantiate_draw_into(state, draw, &mut out)?;
++        Ok(out)
++    }
++
++    /// [`instantiate_draw`](Self::instantiate_draw) into `out`, whose vectors this draw's commands
++    /// take (emptied first): a consumer that keeps one `DrawCommands` from draw to draw fills it
++    /// without allocating them again. On a refusal nothing `out` holds is a draw's to record: the
++    /// next call fills it again.
++    pub fn instantiate_draw_into(
++        &self,
++        state: &BindState,
++        draw: &DrawCall,
++        out: &mut DrawCommands,
++    ) -> Result<(), BindError> {
+         let t = self
+             .graphics
+             .as_ref()
+@@ -2230,10 +2245,45 @@ impl BindingPlan {
+                 });
+             }
+         }
+-        instantiate(t, state, draw)
++        instantiate_into(t, state, draw, out)
++    }
++}
++
++impl DrawCommands {
++    /// No draw's commands, every vector empty: what [`BindingPlan::instantiate_draw_into`] fills.
++    pub fn empty() -> DrawCommands {
++        DrawCommands {
++            push_constants: Vec::new(),
++            descriptor_bytes: Vec::new(),
++            buffer_offsets: Vec::new(),
++            draw: vk::DrawCommand::Draw {
++                vertex_count: 0,
++                instance_count: 0,
++                first_vertex: 0,
++                first_instance: 0,
++            },
++            indirect_needs_arguments: false,
++            extents: Vec::new(),
++            push_holes: Vec::new(),
++            descriptor_ranges: Vec::new(),
++            root_tables: Vec::new(),
++            vertex_strides: Vec::new(),
++            uses: Vec::new(),
++            index_overrun: None,
++            index_bounds_pass: false,
++            amplifications: Vec::new(),
++            specialization: None,
++            mesh_dispatch: None,
++        }
+     }
+ }
+ 
++/// `v`, emptied: its room kept for the draw that takes it.
++fn emptied<T>(mut v: Vec<T>) -> Vec<T> {
++    v.clear();
++    v
++}
++
+ /// The Vulkan draw of a Metal draw, and the base vertex and first instance the
+ /// `BaseVertexInstance` field reports (Vulkan's `BaseVertex` and `BaseInstance`). A direct
+ /// indexed draw whose indices run past its index buffer ([`index_overrun`]) draws as `overrun`
+@@ -3272,11 +3322,25 @@ fn capture_draw(
+     }
+ }
+ 
++#[cfg(test)]
+ fn instantiate(
+     t: &GraphicsTemplate,
+     state: &BindState,
+     draw: &DrawCall,
+ ) -> Result<DrawCommands, BindError> {
++    let mut out = DrawCommands::empty();
++    instantiate_into(t, state, draw, &mut out)?;
++    Ok(out)
++}
++
++fn instantiate_into(
++    t: &GraphicsTemplate,
++    state: &BindState,
++    draw: &DrawCall,
++    out: &mut DrawCommands,
++) -> Result<(), BindError> {
++    // The vectors `out` held, which this draw's commands take, emptied.
++    let kept = std::mem::replace(out, DrawCommands::empty());
+     let overrun = index_overrun(t.robust_index_fetch, draw);
+     let (command, base) = vk_draw(draw, overrun);
+     let capture = match t.capture {
+@@ -3295,7 +3359,15 @@ fn instantiate(
+         }
+     };
+     let command = mesh.as_ref().map_or(command, |m| m.command);
+-    let bound = bind_buffers(&t.buffers, state)?;
++    let bound = bind_buffers_in(
++        &t.buffers,
++        state,
++        BoundBuffers {
++            descriptor_ranges: kept.descriptor_ranges,
++            extents: kept.extents,
++            ..BoundBuffers::default()
++        },
++    )?;
+     let mut descriptor_ranges = bound.descriptor_ranges;
+     descriptor_ranges.extend(crate::bind::instantiate::texel_ranges(&t.resources, state)?);
+     let tables = crate::bind::heap::table_bytes(&t.resources, state)?;
+@@ -3309,10 +3381,10 @@ fn instantiate(
+     };
+     let vertex = state.stages.get(&Stage::Vertex);
+ 
+-    let mut push_constants = Vec::new();
+-    let mut descriptor_bytes = Vec::new();
+-    let mut push_holes = Vec::new();
+-    let mut root_tables = Vec::new();
++    let mut push_constants = emptied(kept.push_constants);
++    let mut descriptor_bytes = emptied(kept.descriptor_bytes);
++    let mut push_holes = emptied(kept.push_holes);
++    let mut root_tables = emptied(kept.root_tables);
+     let mut reads_base = false;
+     for st in &t.stages {
+         let (push_start, push_size) = st.push_range.unwrap_or((0, 0));
+@@ -3502,8 +3574,8 @@ fn instantiate(
+ 
+     // Vertex buffers: offsets, per-bind strides, the address rules, and the bytes the draw's
+     // vertex and instance ranges fetch.
+-    let mut buffer_offsets = Vec::new();
+-    let mut vertex_strides = Vec::new();
++    let mut buffer_offsets = emptied(kept.buffer_offsets);
++    let mut vertex_strides = emptied(kept.vertex_strides);
+     for vb in &t.vertex_buffers {
+         match vertex.and_then(|v| v.buffers.get(&vb.slot.index)) {
+             Some(&BoundBuffer::Buffer {
+@@ -3595,7 +3667,7 @@ fn instantiate(
+         Some(m) => (m.dispatch, Some(m.specialization)),
+         None => (None, None),
+     };
+-    Ok(DrawCommands {
++    *out = DrawCommands {
+         push_constants,
+         descriptor_bytes,
+         buffer_offsets,
+@@ -3610,10 +3682,11 @@ fn instantiate(
+         uses: {
+             // The indexed capture form reads its indices in the vertex stage, by address, and
+             // binds no index buffer.
+-            let mut uses = match capture.as_ref().and_then(|c| c.indices) {
+-                Some(indices) => vec![indices],
+-                None => draw_uses(draw, overrun, t.tessellation.as_ref()),
+-            };
++            let mut uses = emptied(kept.uses);
++            match capture.as_ref().and_then(|c| c.indices) {
++                Some(indices) => uses.push(indices),
++                None => draw_uses_into(draw, overrun, t.tessellation.as_ref(), &mut uses),
++            }
+             // A mesh draw that reads its arguments reads 12 bytes; an emulated one's scan reads
+             // them in the compute stage.
+             if let vk::DrawCommand::DrawMeshTasksIndirect { .. } = command {
+@@ -3637,7 +3710,8 @@ fn instantiate(
+         amplifications,
+         mesh_dispatch,
+         specialization,
+-    })
++    };
++    Ok(())
+ }
+ 
+ /// The `u32` of amplification push field `field` for amplification `a` of a plan drawing
+@@ -3890,12 +3964,25 @@ fn indirect_use(len: u64) -> ResourceUse {
+ /// control-point index offset, and argument offset. A direct draw whose indices run past the buffer
+ /// (`overrun`) reads the bytes from the index offset to [`IndexBufferRef::fetch_end`] when it is
+ /// `Robust`, and only the indices it draws when it is `Clamped` (none, from offset 0, when it draws
+-/// none).
++/// none). [`draw_uses_into`] appends them to a list.
++#[cfg(test)]
+ fn draw_uses(
+     draw: &DrawCall,
+     overrun: Option<IndexOverrun>,
+     factors: Option<&FactorTemplate>,
+ ) -> Vec<ResourceUse> {
++    let mut uses = Vec::new();
++    draw_uses_into(draw, overrun, factors, &mut uses);
++    uses
++}
++
++/// [`draw_uses`], appended to `uses`.
++fn draw_uses_into(
++    draw: &DrawCall,
++    overrun: Option<IndexOverrun>,
++    factors: Option<&FactorTemplate>,
++    uses: &mut Vec<ResourceUse>,
++) {
+     let index = |range| ResourceUse {
+         resource: UseTarget::IndexBuffer,
+         access: AccessSet::READ,
+@@ -3911,7 +3998,6 @@ fn draw_uses(
+         stages: vk::PipelineStageFlags2::TESSELLATION_CONTROL_SHADER,
+         range,
+     };
+-    let mut uses = Vec::new();
+     if let DrawCall::Patches {
+         patch_index: Some(_),
+         ..
+@@ -3995,7 +4081,6 @@ fn draw_uses(
+         } => [Some(index(None)), Some(indirect_use(20))],
+     };
+     uses.extend(own.into_iter().flatten());
+-    uses
+ }
+ 
+ /// Bytes of one index of `ty`, when it is a fixed-size index type.
+diff --git a/crates/metal2vulkan/src/bind/instantiate.rs b/crates/metal2vulkan/src/bind/instantiate.rs
+index 62d9d3f..e474e8c 100644
+--- a/crates/metal2vulkan/src/bind/instantiate.rs
++++ b/crates/metal2vulkan/src/bind/instantiate.rs
+@@ -469,6 +469,7 @@ pub(crate) fn bound_buffer(
+ }
+ 
+ /// What a draw or dispatch binds for the plan's buffer slots.
++#[derive(Default)]
+ pub(crate) struct BoundBuffers {
+     /// The range of every descriptor-form slot's buffer or inline bytes.
+     pub descriptor_ranges: Vec<DescriptorRange>,
+@@ -542,14 +543,22 @@ fn check_uniform_aliasing(buffers: &[PlannedBuffer], state: &BindState) -> Resul
+ pub(crate) fn bind_buffers(
+     buffers: &[PlannedBuffer],
+     state: &BindState,
++) -> Result<BoundBuffers, BindError> {
++    bind_buffers_in(buffers, state, BoundBuffers::default())
++}
++
++/// [`bind_buffers`] into `out`'s vectors, emptied first: a draw that keeps them from the last
++/// (`BindingPlan::instantiate_draw_into`) fills them without allocating.
++pub(crate) fn bind_buffers_in(
++    buffers: &[PlannedBuffer],
++    state: &BindState,
++    mut out: BoundBuffers,
+ ) -> Result<BoundBuffers, BindError> {
+     check_uniform_aliasing(buffers, state)?;
+-    let mut out = BoundBuffers {
+-        descriptor_ranges: Vec::new(),
+-        extents: Vec::new(),
+-        residuals: Vec::new(),
+-        statics: Vec::new(),
+-    };
++    out.descriptor_ranges.clear();
++    out.extents.clear();
++    out.residuals.clear();
++    out.statics.clear();
+     for pb in buffers {
+         let bound = bound_buffer(state, pb.slot, pb.bound)?;
+         let (bind_offset, length) = match bound {

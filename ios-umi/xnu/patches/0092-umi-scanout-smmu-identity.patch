@@ -1,0 +1,229 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index cfdbbb6..eb18cfc 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -40,6 +40,7 @@ extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
+ extern "C" void sweet_busy_init(void);  /* iokit/Kernel/arm/SweetBusy.cpp (boot-arg sweetbusy=N) */
+ extern "C" bool sweet_board_is_umi(void);       /* bsd/dev/sweet_rpmh.c */
+ extern "C" vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++extern "C" void ml_io_unmap(vm_offset_t addr, vm_size_t sz);
+ extern "C" void (*sweet_panic_display_hook)(void);      /* pexpert/arm/pe_identify_machine.c */
+ 
+ #if defined(SWEET)
+@@ -419,6 +420,49 @@ static const struct { uint32_t off, bit; const char *name; } sweet_sspp[] = {
+ #define SWEET_MDP_SIZE          0x2c000
+ #define SWEET_CTL_FLUSH_CTL     (1u << 17)
+ 
++
++/*
++ * Translation of one IOVA by an SMMU context bank's stage-1 tables (AArch64
++ * format, 4K granule, as ABL sets up the display context). *size is the size
++ * of the mapping that covers it. False when unmapped or not walkable.
++ */
++static bool
++sweet_smmu_walk(uint64_t ttbr, uint32_t tcr, uint64_t iova, uint64_t *pa, uint64_t *size)
++{
++	uint32_t t0sz = tcr & 0x3f, ia = 64 - t0sz;
++	if (((tcr >> 14) & 3) != 0 || ia < 25 || ia > 48) {
++		return false;                   /* only the 4K granule */
++	}
++	int level = ia > 39 ? 0 : ia > 30 ? 1 : 2;
++	uint64_t table = ttbr & 0x0000fffffffff000ull;
++	for (; level <= 3; level++) {
++		uint32_t shift = 12 + 9 * (3 - level);
++		uint32_t bits = level == (ia > 39 ? 0 : ia > 30 ? 1 : 2) ? ia - shift : 9;
++		uint64_t idx = (iova >> shift) & ((1ull << bits) - 1);
++		vm_offset_t va = ml_io_map(table, 0x1000);
++		if (va == 0) {
++			return false;
++		}
++		uint64_t desc = ((volatile uint64_t *)va)[idx];
++		ml_io_unmap(va, 0x1000);
++		if ((desc & 1) == 0) {
++			return false;
++		}
++		bool leaf = level == 3 || (desc & 2) == 0;     /* page (L3) or block */
++		if (level == 3 && (desc & 2) == 0) {
++			return false;
++		}
++		if (leaf) {
++			uint64_t span = 1ull << shift;
++			*pa = (desc & 0x0000fffffffff000ull & ~(span - 1)) | (iova & (span - 1));
++			*size = span - (iova & (span - 1));
++			return true;
++		}
++		table = desc & 0x0000fffffffff000ull;
++	}
++	return false;
++}
++
+ static AppleCLCD *sweet_fb_direct;
+ 
+ static void
+@@ -471,6 +515,8 @@ AppleCLCD::setupScanout()
+ {
+ 	uint32_t direct = 0, mdp = 0x0ae01000, smmu = 0x15000000, sid = 0x820;
+ 	uint32_t pool = 0xc0000000, slots = 6;     /* umi: free low RAM (0xb0400000 is disp_rdump_region) */
++	uint32_t slotSize = 16u << 20;
++	bool poolSet = false;
+ 
+ 	if (!PE_parse_boot_argn("sweetfb_direct", &direct, sizeof(direct)) || direct == 0) {
+ 		return;
+@@ -478,8 +524,9 @@ AppleCLCD::setupScanout()
+ 	PE_parse_boot_argn("sweetfb_mdp", &mdp, sizeof(mdp));
+ 	PE_parse_boot_argn("sweetfb_smmu", &smmu, sizeof(smmu));
+ 	PE_parse_boot_argn("sweetfb_sid", &sid, sizeof(sid));
+-	PE_parse_boot_argn("sweetfb_pool", &pool, sizeof(pool));
+-	PE_parse_boot_argn("sweetfb_slots", &slots, sizeof(slots));
++	poolSet = PE_parse_boot_argn("sweetfb_pool", &pool, sizeof(pool));
++	poolSet |= PE_parse_boot_argn("sweetfb_slots", &slots, sizeof(slots));
++	poolSet |= PE_parse_boot_argn("sweetfb_slotsize", &slotSize, sizeof(slotSize));
+ 	bool umi = sweet_board_is_umi();
+ 
+ 	/*
+@@ -493,6 +540,7 @@ AppleCLCD::setupScanout()
+ 		if (gr0 != NULL) {
+ 			uint32_t n = gr0[0x20 / 4] & 0xff, matched = 0;
+ 			bool translate = false;
++			int cbndx = -1;
+ 			IOLog("SWEET FB: SMMU sCR0 %#x (unmatched streams %s), %u SMRs\n", gr0[0],
+ 			    (gr0[0] & (1u << 10)) ? "fault" : "bypass", n);
+ 			for (uint32_t i = 0; i < n && i < 128; i++) {
+@@ -503,11 +551,67 @@ AppleCLCD::setupScanout()
+ 				}
+ 				uint32_t s2cr = gr0[(0xc00 + 4 * i) / 4], type = (s2cr >> 16) & 3;
+ 				matched++;
+-				translate |= type == 0;
++				if (type == 0) {
++					translate = true;
++					cbndx = (int)(s2cr & 0xff);
++				}
+ 				IOLog("SWEET FB: SMMU SMR%u id %#x mask %#x -> S2CR %#x (%s, cb %u)\n", i, id, mask,
+ 				    s2cr, type == 0 ? "translate" : type == 1 ? "bypass" : "fault", s2cr & 0xff);
+ 			}
+ 			bool unmatched_fault = matched == 0 && (gr0[0] & (1u << 10));
++			if (translate && cbndx >= 0) {
++				/*
++				 * umi: ABL runs the display through context bank 4 with its own stage-1
++				 * tables (the boot framebuffer is mapped 1:1). The pool is usable when
++				 * every page of it is mapped 1:1 there too. Without an explicit pool, try
++				 * the free tail of the splash region after the boot framebuffer: two
++				 * 12 MiB slots, room for two 1125x2436 frames.
++				 */
++				uint32_t idr1 = gr0[0x24 / 4];
++				uint32_t pgshift = (idr1 & (1u << 31)) ? 16 : 12;
++				uint64_t numpage = 1ull << (((idr1 >> 28) & 7) + 1);
++				uint64_t cbaddr = smmu + (numpage << pgshift) + ((uint64_t)cbndx << pgshift);
++				volatile uint32_t *gr1 = (volatile uint32_t *)ml_io_map(smmu + (1u << pgshift), 0x1000);
++				volatile uint32_t *cb = (volatile uint32_t *)ml_io_map(cbaddr, 0x1000);
++				if (!poolSet) {
++					uint64_t tail = (fPhys + (uint64_t)fHeight * fRowBytes + 0x1fffff) & ~0x1fffffull;
++					pool = (uint32_t)tail;
++					slots = 2;
++					slotSize = 12u << 20;
++				}
++				bool identity = false;
++				if (cb != NULL && gr1 != NULL) {
++					uint32_t sctlr = cb[0], tcr = cb[0x30 / 4];
++					uint64_t ttbr = (uint64_t)cb[0x20 / 4] | ((uint64_t)cb[0x24 / 4] << 32);
++					IOLog("SWEET FB: SMMU cb%d at %#llx: SCTLR %#x TCR %#x TTBR0 %#llx CBAR %#x CBA2R %#x\n", cbndx,
++					    cbaddr, sctlr, tcr, ttbr, gr1[(4 * cbndx) / 4], gr1[(0x800 + 4 * cbndx) / 4]);
++					if ((sctlr & 1) == 0) {
++						identity = true;        /* context off: untranslated */
++					} else {
++						static const uint64_t probe[] = { 0x9c000000, 0x9ca00000, 0x9e200000, 0xc0000000 };
++						for (uint32_t k = 0; k < 4; k++) {
++							uint64_t pa = 0, sz = 0;
++							bool ok = sweet_smmu_walk(ttbr, tcr, probe[k], &pa, &sz);
++							IOLog("SWEET FB: SMMU cb%d iova %#llx -> %s %#llx (+%#llx)\n", cbndx, probe[k],
++							    ok ? "pa" : "unmapped", pa, sz);
++						}
++						identity = true;
++						uint64_t end = (uint64_t)pool + (uint64_t)slots * slotSize;
++						for (uint64_t a = pool; a < end && identity;) {
++							uint64_t pa = 0, sz = 0;
++							if (!sweet_smmu_walk(ttbr, tcr, a, &pa, &sz) || pa != a || sz == 0) {
++								IOLog("SWEET FB: SMMU pool page %#llx not mapped 1:1 (-> %#llx)\n", a, pa);
++								identity = false;
++							}
++							a += sz != 0 ? sz : 0x1000;
++						}
++					}
++				}
++				if (identity) {
++					IOLog("SWEET FB: pool %#x + %u x %#x is mapped 1:1 for the display\n", pool, slots, slotSize);
++					translate = false;
++				}
++			}
+ 			if ((translate || unmatched_fault) && direct != 2) {
+ 				IOLog("SWEET FB: direct scanout off: the SMMU %s display stream %#x (sweetfb_direct=2 forces)\n",
+ 				    translate ? "translates" : "faults", sid);
+@@ -565,7 +669,7 @@ AppleCLCD::setupScanout()
+ 		fPipe = NULL;
+ 		return;
+ 	}
+-	sweet_scanout_configure(pool, slots, fWidth, fHeight, fLogicalW, fLogicalH);
++	sweet_scanout_configure(pool, slots, slotSize, fWidth, fHeight, fLogicalW, fLogicalH);
+ 	fDirect = true;
+ 	sweet_fb_direct = this;
+ 	sweet_panic_display_hook = sweet_fb_panic_display;
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index aa36a84..68301fd 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -96,7 +96,7 @@ static uint64_t      sweet_surface_wired;       /* bytes of buffer surfaces */
+ #define SWEET_SURFACE_WIRED_MAX         (1536ull << 20)
+ 
+ /* Direct scanout pool (sweet_scanout_configure) */
+-#define SWEET_SCANOUT_SLOT      (16u << 20)
++static uint32_t sweet_scanout_slot_size = 16u << 20;
+ #define SWEET_SCANOUT_MAX_SLOTS 8
+ static uint64_t sweet_scanout_pool;             /* physical base, 0: off */
+ static uint32_t sweet_scanout_slots;
+@@ -104,13 +104,14 @@ static uint32_t sweet_scanout_used;             /* bit per slot, sweet_surface_l
+ static uint32_t sweet_scanout_w[2], sweet_scanout_h[2];
+ 
+ void
+-sweet_scanout_configure(uint64_t pool, uint32_t slots, uint32_t w1, uint32_t h1, uint32_t w2, uint32_t h2)
++sweet_scanout_configure(uint64_t pool, uint32_t slots, uint32_t slotSize, uint32_t w1, uint32_t h1, uint32_t w2, uint32_t h2)
+ {
+ 	sweet_scanout_w[0] = w1;
+ 	sweet_scanout_h[0] = h1;
+ 	sweet_scanout_w[1] = w2;
+ 	sweet_scanout_h[1] = h2;
+ 	sweet_scanout_slots = slots < SWEET_SCANOUT_MAX_SLOTS ? slots : SWEET_SCANOUT_MAX_SLOTS;
++	sweet_scanout_slot_size = slotSize;
+ 	sweet_scanout_pool = pool;
+ }
+ 
+@@ -118,7 +119,7 @@ static bool
+ sweet_scanout_eligible(const SweetSurface *s)
+ {
+ 	if (sweet_scanout_pool == 0 || s->bytesPerElement != 4 || s->planeCount > 1 ||
+-	    s->elementWidth != 1 || s->elementHeight != 1 || s->allocSize > SWEET_SCANOUT_SLOT) {
++	    s->elementWidth != 1 || s->elementHeight != 1 || s->allocSize > sweet_scanout_slot_size) {
+ 		return false;
+ 	}
+ 	for (int i = 0; i < 2; i++) {
+@@ -830,7 +831,7 @@ IOSurfaceRootUserClient::create(IOExternalMethodArguments *args)
+ 		 */
+ 		int slot = sweet_scanout_alloc_slot();
+ 		if (slot >= 0) {
+-			uint64_t pa = sweet_scanout_pool + (uint64_t)slot * SWEET_SCANOUT_SLOT;
++			uint64_t pa = sweet_scanout_pool + (uint64_t)slot * sweet_scanout_slot_size;
+ 			s->memory = IOMemoryDescriptor::withPhysicalAddress(pa, s->allocSize, kIODirectionInOut);
+ 			if (s->memory != NULL) {
+ 				s->scanoutPhys = pa;
+diff --git a/iokit/Kernel/arm/SweetSurface.h b/iokit/Kernel/arm/SweetSurface.h
+index 3a70d0e..e8d92d1 100644
+--- a/iokit/Kernel/arm/SweetSurface.h
++++ b/iokit/Kernel/arm/SweetSurface.h
+@@ -72,7 +72,7 @@ SweetSurface *sweet_surface_create_physical(uint64_t phys, uint32_t width,
+  * memory is mapped cached; the framebuffer cleans it before it is shown.
+  * pool == 0 leaves the pool off.
+  */
+-void sweet_scanout_configure(uint64_t pool, uint32_t slots, uint32_t w1, uint32_t h1, uint32_t w2, uint32_t h2);
++void sweet_scanout_configure(uint64_t pool, uint32_t slots, uint32_t slotSize, uint32_t w1, uint32_t h1, uint32_t w2, uint32_t h2);
+ 
+ /* Send right for the surface in task (IOSurfaceLookupFromMachPort). */
+ mach_port_name_t sweet_surface_port_in_task(SweetSurface *surface, task_t task);

@@ -1,0 +1,314 @@
+From a1f70a77755acafd76559af11d1f381220dfe674 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 16:08:14 +0200
+Subject: [PATCH] umi-0133
+
+---
+ bsd/dev/sweet_wlan.c |   2 +-
+ bsd/dev/sweet_wlce.c | 215 ++++++++++++++++++++++++++++++++++++++++++-
+ bsd/dev/sweet_wlfw.c |   4 +-
+ 3 files changed, 214 insertions(+), 7 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 8ddb7b4..f0544fc 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI: 21-41 = step 1-21 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI/scan: 21-47 = step 1-27 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index d3f63da..9772409 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -307,6 +307,11 @@ static struct {
+ 	uint32_t num_rf_chains;
+ 	uint32_t rdy_status;
+ 	uint8_t mac[6];
++	/* scan (0133) */
++	bool scan_started, scan_done;
++	uint32_t scan_fail, chan_events, mgmt_frames;
++	unsigned nbss;
++	uint8_t bss[32][6];
+ } htc;
+ 
+ #define WMI_EV_BIT(id)          ((id) < 0x4000u ? 1ull << ((id) & 31) : 1ull << (32 + ((id) & 31)))
+@@ -314,8 +319,12 @@ static struct {
+ #define WMI_EV_READY            0x2u
+ #define WMI_EV_SVC_READY_EXT    0x4009u
+ #define WMI_EV_SVC_READY_EXT2   0x4022u
++#define WMI_EV_SCAN             0x3001u
++#define WMI_EV_MGMT_RX          0x7001u
++#define WMI_EV_SET_HW_MODE_RESP 0x4010u
+ 
+ static void wmi_rx(uint32_t id, const uint8_t *m, uint32_t len);
++static void wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len);
+ 
+ static uint32_t
+ get32(const uint8_t *p)
+@@ -385,7 +394,7 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 		if (htc.wmi_events++ == 0) {
+ 			htc.first_wmi = id;
+ 		}
+-		if (htc.logged++ < 16) {
++		if (id != 0x7001u && id != 0x4002u && htc.logged++ < 24) {     /* not MGMT_RX / CHAN_INFO */
+ 			printf("SWEET HTC: WMI event %#x, %u bytes (CE%u)\n", id, plen, pipe);
+ 		}
+ 		if (plen >= 4) {
+@@ -463,8 +472,70 @@ wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
+ 		htc.rdy_status = get32(v + 32);
+ 		printf("SWEET WMI: READY: status %u, MAC %02x:%02x:%02x:%02x:%02x:%02x\n", htc.rdy_status,
+ 		    htc.mac[0], htc.mac[1], htc.mac[2], htc.mac[3], htc.mac[4], htc.mac[5]);
++	} else if (id == WMI_EV_SCAN && (v = wmi_tlv_find(m, len, 0x24, &l)) != NULL && l >= 24) {
++		/* wmi_scan_event: event_type, reason, channel_freq, scan_req_id, scan_id, vdev_id */
++		uint32_t type = get32(v), reason = get32(v + 4), freq = get32(v + 8);
++		if (type & 1u) {
++			htc.scan_started = true;
++		}
++		if (type & 2u) {
++			htc.scan_done = true;
++		}
++		if (type & 0x40u) {
++			htc.scan_fail = 1 + reason;
++		}
++		if (type & 8u) {
++			htc.chan_events++;
++		}
++		if (!(type & 8u)) {
++			printf("SWEET WMI: scan event %#x reason %u freq %u\n", type, reason, freq);
++		}
++	} else if (id == WMI_EV_MGMT_RX && (v = wmi_tlv_find(m, len, 0x2c, &l)) != NULL && l >= 68) {
++		wmi_mgmt_rx(v, m, len);
++	} else if (id == WMI_EV_SET_HW_MODE_RESP) {
++		printf("SWEET WMI: SET_HW_MODE response, %u bytes\n", len);
++	}
++	if (id < 0x20u || (id >> 12) == 4u) {  /* the bitmap only covers group 0 and 0x40xx */
++		htc.seen |= WMI_EV_BIT(id);
++	}
++}
++
++/*
++ * WMI_MGMT_RX: wmi_mgmt_rx_hdr (channel, snr, rate, phy_mode, buf_len, status,
++ * rssi_ctl[4], flags, rssi, tsf_delta, tsf l/u, pdev_id, chan_freq at +64),
++ * then TLV 0x11 (bytes) with the 802.11 frame. Beacons (0x80) and probe
++ * responses (0x50): BSSID at +16, SSID IE after the 24-byte header and 12 fixed bytes.
++ */
++static void
++wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len)
++{
++	uint32_t fl;
++	const uint8_t *f = wmi_tlv_find(m, len, 0x11, &fl);
++	htc.mgmt_frames++;
++	if (f == NULL || fl < 36 || (f[0] != 0x80 && f[0] != 0x50)) {
++		return;
++	}
++	const uint8_t *bssid = f + 16;
++	for (unsigned i = 0; i < htc.nbss; ++i) {
++		if (memcmp(htc.bss[i], bssid, 6) == 0) {
++			return;
++		}
++	}
++	if (htc.nbss < 32) {
++		memcpy(htc.bss[htc.nbss], bssid, 6);
++	}
++	htc.nbss++;
++	char ssid[33] = {0};
++	if (fl >= 38 && f[36] == 0) {
++		memcpy(ssid, f + 38, MIN((unsigned)f[37], MIN(fl - 38, 32u)));
++		for (unsigned i = 0; ssid[i]; ++i) {
++			if (ssid[i] < 0x20 || ssid[i] > 0x7e) {
++				ssid[i] = '?';
++			}
++		}
+ 	}
+-	htc.seen |= WMI_EV_BIT(id);
++	printf("SWEET WMI: BSS %02x:%02x:%02x:%02x:%02x:%02x %u MHz snr %u \"%s\"\n", bssid[0], bssid[1], bssid[2],
++	    bssid[3], bssid[4], bssid[5], get32(hdr + 64), get32(hdr + 4), ssid);
+ }
+ 
+ /* One WMI command on CE3: HTC header (credit flow: flag 1 = need credit update), u32 id, body. */
+@@ -551,9 +622,142 @@ wmi_wait(uint64_t want, unsigned ms)
+ 	return (htc.seen & want) == want;
+ }
+ 
++/* Send a WMI command, waiting up to 1 s for a credit (credits come back in HTC trailers). */
++static int
++wmi_cmd(uint32_t id, const void *body, uint32_t len, const char *name)
++{
++	for (unsigned t = 0; t < 1000 && htc.wmi_credits == 0; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	int r = wmi_send(id, body, len);
++	if (r != 0) {
++		printf("SWEET WMI: %s send failed %d (credits %u)\n", name, r, htc.wmi_credits);
++	}
++	return r;
++}
++
++/*
++ * After WMI_READY (ath11k_core_start, mac start/add_interface/hw_scan for
++ * qca6390): hardware mode DBS, a 2.4 GHz channel list, a STA vdev, one passive
++ * scan. Command ids / tags from ath11k wmi.h: PDEV_SET_HW_MODE 0x401e (tag
++ * 0x203), SCAN_CHAN_LIST 0x3003 (0x4f, channels 0x50), VDEV_CREATE 0x5001
++ * (0x56, streams 0x19b), START_SCAN 0x3001 (0x4d). pdev_id 0 = SoC level
++ * (single-pdev chip). Events: SCAN 0x3001 (tag 0x24), MGMT_RX 0x7001 (0x2c).
++ */
++#define SCAN_NCHAN      13
++static const uint8_t wlce_mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };  /* locally administered: OTP has none */
++
++static int
++wmi_scan(void)
++{
++	static uint32_t b[64 + 7 * SCAN_NCHAN];
++	uint32_t chains = MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u);
++	int r;
++
++	/* ath11k_wmi_set_hw_mode(WMI_HOST_HW_MODE_DBS): pdev_id 0, mode 1, no band_to_mac */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x203, 12);
++	b[2] = 1;
++	if (wmi_cmd(0x401eu, b, 16, "SET_HW_MODE") != 0) {
++		return 9;
++	}
++	for (unsigned t = 0; t < 500; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++
++	/* ath11k_reg_update_chan_list for 2.4 GHz channels 1-13: 11G, HE allowed, passive, 20 dBm */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x4f, 12);
++	b[1] = SCAN_NCHAN;              /* num_scan_chans; flags 0, pdev_id 0 */
++	b[4] = WMI_TLV(0x12, 7 * 4 * SCAN_NCHAN - 4);   /* ath11k sets the array length 4 short */
++	for (unsigned i = 0; i < SCAN_NCHAN; ++i) {
++		uint32_t *c = b + 5 + 7 * i, mhz = 2412 + 5 * i;
++		c[0] = WMI_TLV(0x50, 24);
++		c[1] = mhz;
++		c[2] = mhz;
++		c[4] = 1u | 1u << 7 | 1u << 17;         /* MODE_11G, PASSIVE, ALLOW_HE */
++		c[5] = 40u << 8 | 40u << 16;            /* max power, max reg power (0.5 dBm units) */
++		c[6] = 40u << 8;                        /* max tx power */
++	}
++	if (wmi_cmd(0x3003u, b, (5 + 7 * SCAN_NCHAN) * 4, "SCAN_CHAN_LIST") != 0) {
++		return 10;
++	}
++
++	/* ath11k_wmi_vdev_create: vdev 0, STA (2), pdev 0, tx/rx streams for 2G (0) and 5G (1) */
++	bzero(b, sizeof(b));
++	/* wmi_vdev_create_cmd: hdr, vdev_id, type, subtype, mac (2 words), num_cfg_txrx_streams, pdev_id, mbssid x2 */
++	b[0] = WMI_TLV(0x56, 9 * 4);
++	b[1] = 0;
++	b[2] = 2;
++	memcpy(&b[4], wlce_mac, 6);
++	b[6] = 2;                       /* num_cfg_txrx_streams */
++	b[10] = WMI_TLV(0x12, 2 * 16);
++	for (unsigned band = 0; band < 2; ++band) {
++		uint32_t *s = b + 11 + 4 * band;
++		s[0] = WMI_TLV(0x19b, 12);
++		s[1] = band;
++		s[2] = chains;
++		s[3] = chains;
++	}
++	if (wmi_cmd(0x5001u, b, 19 * 4, "VDEV_CREATE") != 0) {
++		return 11;
++	}
++
++	/* ath11k_wmi_start_scan_init + hw_scan without SSIDs = passive; 40-word fixed part */
++	bzero(b, sizeof(b));
++	b[0] = WMI_TLV(0x4d, 39 * 4);
++	b[1] = 0xa000;                  /* scan_id (ATH11K_SCAN_ID) */
++	b[2] = 1;                       /* scan_req_id */
++	b[3] = 0;                       /* vdev_id */
++	b[4] = 1;                       /* priority low */
++	b[5] = 0x1f | 0x40;             /* started, completed, bss chan, foreign chan, dequeued, start failed */
++	b[6] = 50;                      /* dwell active */
++	b[7] = 150;                     /* dwell passive */
++	b[8] = 50;                      /* min rest */
++	b[9] = 500;                     /* max rest */
++	b[13] = 20000;                  /* max scan time */
++	b[14] = 5;                      /* probe delay */
++	b[15] = 0x1 | 0x10;             /* PASSIVE | CHAN_STAT_EVENT */
++	b[17] = SCAN_NCHAN;
++	b[18] = 1;                      /* num_bssid */
++	b[37] = 40;                     /* dwell active 6G */
++	b[38] = 30;                     /* dwell passive 6G */
++	uint32_t *p = b + 40;
++	*p++ = WMI_TLV(0x10, SCAN_NCHAN * 4);
++	for (unsigned i = 0; i < SCAN_NCHAN; ++i) {
++		*p++ = 2412 + 5 * i;
++	}
++	*p++ = WMI_TLV(0x13, 0);        /* no SSIDs */
++	*p++ = WMI_TLV(0x13, 8);        /* one BSSID: broadcast */
++	*p++ = 0xffffffffu;
++	*p++ = 0x0000ffffu;
++	*p++ = WMI_TLV(0x11, 0);        /* no extra IEs */
++	r = wmi_cmd(0x3001u, b, (uint32_t)((uint8_t *)p - (uint8_t *)b), "START_SCAN");
++	if (r != 0) {
++		return 12;
++	}
++	for (unsigned t = 0; t < 3000 && !htc.scan_started && !htc.scan_fail; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	if (!htc.scan_started) {
++		printf("SWEET WMI: scan not started (start failed %u)\n", htc.scan_fail);
++		return 13;
++	}
++	for (unsigned t = 0; t < 15000 && !htc.scan_done; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	printf("SWEET WMI: scan %s: %u channel visits, %u management frames, %u BSS\n",
++	    htc.scan_done ? "completed" : "still running after 15 s", htc.chan_events, htc.mgmt_frames, htc.nbss);
++	return htc.scan_done ? 0 : 14;
++}
++
+ /*
+  * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
+- * service-ready events, WMI_INIT, WMI_READY. 0 or step 1-8.
++ * service-ready events, WMI_INIT, WMI_READY, then the scan. 0 or step 1-14.
+  */
+ int
+ sweet_wlce_htc(void)
+@@ -605,6 +809,9 @@ sweet_wlce_htc(void)
+ 		    ce.tx3.src.hp, *mem32(M_RDP + ce.tx3.src.id * 4), htc.wmi_credits);
+ 		return 8;
+ 	}
+-	return htc.rdy_status == 0 ? 0 : 8;
++	if (htc.rdy_status != 0) {
++		return 8;
++	}
++	return wmi_scan();
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 2d0f628..e246f68 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -613,7 +613,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-21) that failed. */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-27) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -659,7 +659,7 @@ sweet_wlfw_run(void)
+ 	printf("SWEET WLFW: mission mode requested\n");
+ 	r = sweet_wlce_htc();
+ 	if (r != 0) {
+-		return 13 + r;          /* 14 no HTC READY ... 18 no WMI event, 19 no service ready, 20/21 WMI init / READY */
++		return 13 + r;          /* 14 no HTC READY ... 21 WMI READY, 22-25 hw mode / chan list / vdev / scan send, 26 no scan start, 27 no scan end */
+ 	}
+ 	sweet_ipcr_service(500);        /* log whatever QMI says after that */
+ 	return 0;
+-- 
+2.54.0 (Apple Git-157)
+

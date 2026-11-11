@@ -1,0 +1,563 @@
+From 7fc7f85c5a9ab6483655b8d28c02ef61ae9b3ae8 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 26 Oct 2026 17:51:22 +0100
+Subject: [PATCH] umi-0166-adreno-core-cp-start
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c | 440 ++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 418 insertions(+), 22 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index dfb85c1..860d056 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -49,7 +49,14 @@
+  *              start, start, the speed wanted (boot-arg sweetgpuspeed, default 1 = 305 MHz), and
+  *              the request to power the 3D core; then its registers are read. Once the 3D core
+  *              has power nothing is undone (collapsing CX under a powered GX has hung a phone in
+- *              HackiOS's runs); the next restart resets the SoC.
++ *              HackiOS's runs), and TrustZone keeps the zap shader; the next restart resets the SoC.
++ *  18  writes  page tables for the 3D core (its ring, a650_sqe.fw read-only, a scratch page) and SMMU
++ *              context 0 with its streams 0 and 1 through it (dt gfx3d_user: iommus 0 / 0x401)
++ *  19  asks    TrustZone to load the zap shader: header again, place (pil_gpu_region@8681a000),
++ *              a650_zap.b02 copied there, authenticate and run
++ *  20  writes  the 3D core's registers (Linux a6xx_gpu.c hw_init for the A650, without clock gating,
++ *              register protection and interrupts), starts its command processor, CP_ME_INIT
++ *  21  commands the 3D core out of secure mode, then to write a known word into the scratch page
+  *
+  * Every write is recorded; when the steps are over they are undone in reverse order (CX off
+  * again), so nothing of the GPU block outlives the run and the next boot starts from what the
+@@ -761,12 +768,13 @@ sa_step_gmu_memory(void)
+ #define PAS_GPU                 13
+ 
+ static int32_t
+-sa_scm2(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t second, uint64_t *answer)
++sa_scm3(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t second, uint64_t third,
++    uint64_t *answer)
+ {
+ 	uint64_t session = 0;
+ 
+-	printf("SWEET GPU: %u: about to ask TrustZone %s: smc %#llx, arguments %#llx, %#llx\n", sa_step, what, function, first,
+-	    second);
++	printf("SWEET GPU: %u: about to ask TrustZone %s: smc %#llx, arguments %#llx, %#llx, %#llx\n", sa_step, what, function,
++	    first, second, third);
+ 	if (sa_step == sa_steps && sa_pause_ms) {
+ 		sa_sleep_ms(sa_pause_ms);
+ 	}
+@@ -775,7 +783,7 @@ sa_scm2(const char *what, uint64_t function, uint64_t arguments, uint64_t first,
+ 		register uint64_t x1 __asm__("x1") = arguments;
+ 		register uint64_t x2 __asm__("x2") = first;
+ 		register uint64_t x3 __asm__("x3") = second;
+-		register uint64_t x4 __asm__("x4") = 0;
++		register uint64_t x4 __asm__("x4") = third;
+ 		register uint64_t x5 __asm__("x5") = 0;
+ 		register uint64_t x6 __asm__("x6") = session;
+ 		register uint64_t x7 __asm__("x7") = 0;
+@@ -793,6 +801,12 @@ sa_scm2(const char *what, uint64_t function, uint64_t arguments, uint64_t first,
+ 	return -1;
+ }
+ 
++static int32_t
++sa_scm2(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t second, uint64_t *answer)
++{
++	return sa_scm3(what, function, arguments, first, second, 0, answer);
++}
++
+ static int32_t
+ sa_scm(const char *what, uint64_t function, uint64_t arguments, uint64_t first, uint64_t *answer)
+ {
+@@ -859,16 +873,17 @@ sa_firmware(const char *name, unsigned int *size)
+  * Linux mdt_loader.c qcom_mdt_pas_init -> qcom_scm_pas_init_image: TrustZone is given the image's
+  * header (ELF header + program headers + the hash segment = all of a650_zap.mdt) in physically
+  * contiguous memory and checks the signature. TrustZone may protect that memory while it works,
+- * so the page is kept for good (KMA_PERMANENT) and not touched again.
++ * so the page is kept for good (KMA_PERMANENT) and only written again for the next
++ * pas_init_image (step 19, after pas_shutdown has let it go).
+  */
++static vm_offset_t sa_zap_header_page;
++
+ static bool
+-sa_step_zap_signature(void)
++sa_zap_init(void)
+ {
+ 	unsigned int size = 0;
+-	vm_offset_t page = 0;
+ 	uint32_t segments, hashes;
+ 
+-	sa_announce("find the zap shader's header (a650_zap.mdt) in the ADT");
+ 	const uint8_t *header = sa_firmware("a650_zap.mdt", &size);
+ 	if (header == NULL) {
+ 		return false;
+@@ -886,13 +901,13 @@ sa_step_zap_signature(void)
+ 		printf("SWEET GPU: %u: the file is not the header followed by the hashes alone\n", sa_step);
+ 		return false;
+ 	}
+-	if (kmem_alloc_contig(kernel_map, &page, PAGE_SIZE, PAGE_MASK, 0, 0, KMA_DATA | KMA_ZERO | KMA_PERMANENT,
+-	    VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++	if (sa_zap_header_page == 0 && kmem_alloc_contig(kernel_map, &sa_zap_header_page, PAGE_SIZE, PAGE_MASK, 0, 0,
++	    KMA_DATA | KMA_ZERO | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
+ 		printf("SWEET GPU: %u: no memory\n", sa_step);
+ 		return false;
+ 	}
+-	memcpy((void *)page, header, size);
+-	uint64_t phys = ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)page));
++	memcpy((void *)sa_zap_header_page, header, size);
++	uint64_t phys = ptoa_64(pmap_find_phys(kernel_pmap, (addr64_t)sa_zap_header_page));
+ 	flush_dcache64((addr64_t)phys, PAGE_SIZE, TRUE);        /* TrustZone reads memory, not our cache */
+ 
+ 	sa_announce("hand the header to TrustZone to check its signature (image 13)");
+@@ -908,6 +923,13 @@ sa_step_zap_signature(void)
+ 	return false;
+ }
+ 
++static bool
++sa_step_zap_signature(void)
++{
++	sa_announce("find the zap shader's header (a650_zap.mdt) in the ADT");
++	return sa_zap_init();
++}
++
+ /* What TrustZone holds for image 13 is let go at the end of a run (Linux: qcom_scm_pas_shutdown). */
+ static void
+ sa_zap_release(void)
+@@ -1084,8 +1106,26 @@ sa_space_faulted(struct sa_block *cb, const char *who)
+ 	return true;
+ }
+ 
++/* Stream match register `match` sends `stream` through the space's context (the hypervisor grants the global registers). */
++static bool
++sa_space_stream(struct sa_space *space, uint32_t match, uint32_t stream)
++{
++	uint32_t smr = SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream;
++
++	sa_put(&sa_smmu, "s2cr", SMMU_S2CR(match), space->context);
++	sa_put(&sa_smmu, "smr", SMMU_SMR(match), smr);
++	if (sa_get(&sa_smmu, "smr", SMMU_SMR(match)) != smr ||
++	    (sa_get(&sa_smmu, "s2cr", SMMU_S2CR(match)) & 0x300ff) != space->context) {
++		printf("SWEET GPU: %u: the SMMU did not take what was written: stream %u is not going through context %u\n",
++		    sa_step, stream, space->context);
++		return false;
++	}
++	return true;
++}
++
++/* `sctlr`: bits wanted in the context's SCTLR besides SMMU_SCTLR_ON. */
+ static bool
+-sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_t stream)
++sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_t stream, uint32_t sctlr)
+ {
+ 	uint64_t root = space->table_phys[0] | (uint64_t)space->context << 48;
+ 
+@@ -1110,13 +1150,12 @@ sa_space_on(struct sa_space *space, struct sa_block *cb, uint32_t match, uint32_
+ 		printf("SWEET GPU: %u: the SMMU does not finish its TLB sync (%#x)\n", sa_step, sa_rd(cb->base + SMMU_CB_TLBSTATUS));
+ 		return false;
+ 	}
+-	sa_put(cb, "sctlr", SMMU_CB_SCTLR, SMMU_SCTLR_ON);
+-	sa_put(&sa_smmu, "s2cr", SMMU_S2CR(match), space->context);
+-	sa_put(&sa_smmu, "smr", SMMU_SMR(match), SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream);
++	sa_put(cb, "sctlr", SMMU_CB_SCTLR, SMMU_SCTLR_ON | sctlr);
++	if (!sa_space_stream(space, match, stream)) {
++		return false;
++	}
+ 	/* the global registers are the hypervisor's to grant: see what it made of them */
+-	if (sa_get(&sa_smmu, "smr", SMMU_SMR(match)) != (SMMU_SMR_VALID | SMMU_STREAM_MASK << 16 | stream) ||
+-	    (sa_get(&sa_smmu, "s2cr", SMMU_S2CR(match)) & 0x300ff) != space->context ||
+-	    (sa_get(&sa_smmu_cbar, "cbar", SMMU_CBAR(space->context)) & 0x30000) != (SMMU_CBAR_STAGE_1 & 0x30000) ||
++	if ((sa_get(&sa_smmu_cbar, "cbar", SMMU_CBAR(space->context)) & 0x30000) != (SMMU_CBAR_STAGE_1 & 0x30000) ||
+ 	    !(sa_get(cb, "sctlr", SMMU_CB_SCTLR) & 1) ||
+ 	    sa_get(cb, "ttbr0 low", SMMU_CB_TTBR0) != (uint32_t)root ||
+ 	    sa_get(cb, "ttbr0 high", SMMU_CB_TTBR0 + 4) != (uint32_t)(root >> 32)) {
+@@ -1205,7 +1244,7 @@ sa_step_gmu_space(void)
+ 	}
+ 	sa_smmu_gmu_cb.phys = SMMU_PHYS + (sa_smmu_pages + GMU_CONTEXT) * sa_smmu_page;
+ 	sa_gmu_space_on = true;
+-	return sa_space_on(&sa_gmu_space, &sa_smmu_gmu_cb, GMU_MATCH, GMU_STREAM);
++	return sa_space_on(&sa_gmu_space, &sa_smmu_gmu_cb, GMU_MATCH, GMU_STREAM, 0);
+ }
+ 
+ /* ---- step 14: the GMU's firmware ---- */
+@@ -1741,10 +1780,367 @@ sa_step_core_power(void)
+ 	return !sa_space_faulted(&sa_smmu_gmu_cb, "the GMU");
+ }
+ 
++/* ---- step 18: the 3D core's memory ---- */
++
++/*
++ * The 3D core reads its orders from a ring of memory, through a processor of its own (SQE) that
++ * runs a650_sqe.fw. It reaches memory through the SMMU like the GMU: dt gfx3d_user iommus <0 0x401>,
++ * streams 0 and 1, both through context 0 here. The addresses are ours to choose.
++ */
++#define PTE_UNPRIVILEGED        (1ull << 6)     /* io-pgtable-arm.c: a mapping without IOMMU_PRIV */
++#define PTE_READ_ONLY           (1ull << 7)     /* without IOMMU_WRITE (Linux: MSM_BO_GPU_READONLY) */
++#define PTE_CORE                (PTE_GMU | PTE_UNPRIVILEGED)
++#define SMMU_SCTLR_HUPCF        (1u << 8)       /* serve the core's other requests after a fault (qcom_adreno_smmu_write_sctlr) */
++#define CORE_CONTEXT            0
++#define CORE_MATCH              0
++#define CORE_MATCH_2            2               /* entry 1 is the GMU's */
++#define CORE_RING_ADDRESS       0x01000000u
++#define CORE_RING_SIZE          0x8000u         /* Linux's MSM_GPU_RINGBUFFER_SZ */
++#define CORE_SQE_ADDRESS        0x01100000u
++#define CORE_SCRATCH_ADDRESS    0x01200000u
++
++static struct sa_space sa_core_space = { .name = "the 3D core", .context = CORE_CONTEXT };
++static struct sa_gpu_block sa_core_ring, sa_core_sqe, sa_core_scratch;
++static bool sa_core_space_on, sa_core_runs;
++
++static bool
++sa_step_core_space(void)
++{
++	unsigned int size = 0;
++
++	if (!sa_cx_ready() || !sa_core_on) {
++		printf("SWEET GPU: %u: the 3D core has no power: step 17\n", sa_step);
++		return false;
++	}
++	sa_announce("make the 3D core's memory: its ring, its processor's firmware (a650_sqe.fw), a scratch page");
++	const uint8_t *sqe = sa_firmware("a650_sqe.fw", &size);
++	if (sqe == NULL || size < 8 || size > 0x40000) {
++		return false;
++	}
++	uint32_t version;
++	memcpy(&version, sqe + 4, sizeof(version));
++	printf("SWEET GPU: %u: a650_sqe.fw version %#x (Linux a6xx_ucode_check_version wants >= 0x095)\n", sa_step,
++	    version & 0xfff);
++	if (!sa_block_new(&sa_core_space, &sa_core_ring, CORE_RING_ADDRESS, CORE_RING_SIZE, PTE_CORE) ||
++	    !sa_block_new(&sa_core_space, &sa_core_sqe, CORE_SQE_ADDRESS, size - 4, PTE_CORE | PTE_READ_ONLY) ||
++	    !sa_block_new(&sa_core_space, &sa_core_scratch, CORE_SCRATCH_ADDRESS, 4096, PTE_CORE)) {
++		return false;
++	}
++	memcpy((void *)sa_core_sqe.memory, sqe + 4, size - 4);         /* the file's first word is not firmware */
++	sa_to_memory(sa_core_sqe.memory, round_page(sa_core_sqe.size));
++
++	sa_announce("give SMMU context 0 these tables and send the 3D core's streams 0 and 1 through it");
++	if (sa_smmu_cb0.phys == 0 && !sa_smmu_layout()) {
++		return false;
++	}
++	sa_core_space_on = true;
++	if (!sa_space_on(&sa_core_space, &sa_smmu_cb0, CORE_MATCH, 0, SMMU_SCTLR_HUPCF) ||
++	    !sa_space_stream(&sa_core_space, CORE_MATCH_2, 1)) {
++		return false;
++	}
++	sa_get(&sa_smmu_cb0, "sctlr", SMMU_CB_SCTLR);
++	sa_get(&sa_gpu, "rbbm_status", RBBM_STATUS);
++	return !sa_space_faulted(&sa_smmu_cb0, "the 3D core");
++}
++
++/* ---- step 19: the zap shader, loaded ---- */
++
++/*
++ * Linux zap_shader_load_mdt / qcom_mdt_pas_init + qcom_mdt_load: the header to TrustZone again
++ * (step 12's init is let go first), the place of the image (dt pil_gpu_region@8681a000, 0x2000;
++ * a650_zap.b02 is the only loadable segment, relocatable, paddr 0x5000 = the lowest, so it goes at
++ * the start, size rounded to 0x1000), the segment copied there, then authenticate and run. The
++ * 3D core leaves secure mode (step 21) only with the zap shader's help.
++ */
++#define SCM_PAS_MEM_SETUP       SCM_CALL(2, 2)
++#define SCM_THREE_VALUES        3
++#define ZAP_MEMORY              0x8681a000ull
++#define ZAP_MEMORY_SIZE         0x2000u
++#define ZAP_IMAGE_SIZE          0x1000u
++
++static bool
++sa_step_zap_load(void)
++{
++	unsigned int size = 0;
++	uint64_t answer = ~0ull;
++
++	if (!sa_cx_ready() || !sa_core_space_on) {
++		return false;
++	}
++	sa_announce("find the zap shader's image (a650_zap.b02) in the ADT");
++	const uint8_t *segment = sa_firmware("a650_zap.b02", &size);
++	if (segment == NULL || size == 0 || size > ZAP_IMAGE_SIZE) {
++		return false;
++	}
++	sa_announce("let TrustZone go of step 12's header, then hand it over again");
++	sa_zap_release();
++	if (!sa_zap_init()) {
++		return false;
++	}
++	sa_announce("tell TrustZone where the image goes (0x8681a000, 0x1000)");
++	if (sa_scm3("where the zap shader's image will be", SCM_64 | SCM_SIP | SCM_PAS_MEM_SETUP, SCM_THREE_VALUES, PAS_GPU,
++	    ZAP_MEMORY, ZAP_IMAGE_SIZE, &answer) != 0 || answer != 0) {
++		printf("SWEET GPU: %u: TrustZone does not take the place (%#llx)\n", sa_step, answer);
++		return false;
++	}
++	volatile uint8_t *memory = (volatile uint8_t *)ml_io_map_wcomb(ZAP_MEMORY, ZAP_MEMORY_SIZE);
++	if (memory == NULL) {
++		return false;
++	}
++	printf("SWEET GPU: %u: about to write %u bytes of zap shader at %#llx (it begins %02x %02x %02x %02x; the memory "
++	    "%02x %02x %02x %02x)\n", sa_step, size, ZAP_MEMORY, segment[0], segment[1], segment[2], segment[3], memory[0],
++	    memory[1], memory[2], memory[3]);
++	if (sa_pause_ms && sa_step == sa_steps) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++	for (unsigned i = 0; i < ZAP_IMAGE_SIZE; i++) {
++		memory[i] = i < size ? segment[i] : 0;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	sa_announce("ask TrustZone to authenticate the zap shader and run it");
++	if (sa_scm("to authenticate and run the zap shader", SCM_64 | SCM_SIP | SCM_PAS_AUTH_AND_RESET, SCM_ONE_VALUE, PAS_GPU,
++	    &answer) != 0 || answer != 0) {
++		printf("SWEET GPU: %u: TrustZone does not authenticate the zap shader (%#llx)\n", sa_step, answer);
++		return false;
++	}
++	printf("SWEET GPU: %u: TRUSTZONE HAS AUTHENTICATED AND STARTED THE ZAP SHADER\n", sa_step);
++	return true;
++}
++
++/* ---- step 20: the 3D core's registers; its command processor started ---- */
++
++/* a6xx.xml offsets in words. */
++#define RBBM_GBIF_CLIENT_QOS_CNTL GPU_WORD(0x0011)
++#define RBBM_GBIF_HALT          GPU_WORD(0x0016)
++#define RBBM_INTERFACE_HANG_INT_CNTL GPU_WORD(0x001f)
++#define RBBM_STATUS_GPU_BUSY    (1u << 23)      /* GPU_BUSY_IGN_AHB, what Linux's _a6xx_check_idle looks at */
++#define RBBM_PERFCTR_CNTL       GPU_WORD(0x0500)
++#define RBBM_PERFCTR_GPU_BUSY_MASKED GPU_WORD(0x050b)
++#define RBBM_NC_MODE_CNTL       GPU_WORD(0x0534)
++#define CP_RB_CNTL              GPU_WORD(0x0802)
++#define CP_RB_RPTR              GPU_WORD(0x0806)
++#define CP_RB_WPTR              GPU_WORD(0x0807)
++#define CP_SQE_CNTL             GPU_WORD(0x0808)
++#define CP_HW_FAULT             GPU_WORD(0x0821)
++#define CP_INTERRUPT_STATUS     GPU_WORD(0x0823)
++#define CP_PROTECT_STATUS       GPU_WORD(0x0824)
++#define CP_SQE_INSTR_BASE       GPU_WORD(0x0830)
++#define CP_APRIV_CNTL           GPU_WORD(0x0844)
++#define CP_ROQ_THRESHOLDS_1     GPU_WORD(0x08c1)
++#define CP_ROQ_THRESHOLDS_2     GPU_WORD(0x08c2)
++#define CP_MEM_POOL_SIZE        GPU_WORD(0x08c3)
++#define CP_AHB_CNTL             GPU_WORD(0x098d)
++#define UCHE_MODE_CNTL          GPU_WORD(0x0e01)
++#define UCHE_WRITE_RANGE_MAX    GPU_WORD(0x0e05)
++#define UCHE_WRITE_THRU_BASE    GPU_WORD(0x0e07)
++#define UCHE_TRAP_BASE          GPU_WORD(0x0e09)
++#define UCHE_CACHE_WAYS         GPU_WORD(0x0e17)
++#define UCHE_FILTER_CNTL        GPU_WORD(0x0e18)
++#define UCHE_CLIENT_PF          GPU_WORD(0x0e19)
++#define RB_NC_MODE_CNTL         GPU_WORD(0x8e08)
++#define PC_DBG_ECO_CNTL         GPU_WORD(0x9e00)
++#define SP_NC_MODE_CNTL         GPU_WORD(0xae02)
++#define TPL1_NC_MODE_CNTL       GPU_WORD(0xb604)
++#define TPL1_BICUBIC_WEIGHTS_TABLE_0 GPU_WORD(0xb608)
++#define RBBM_SECVID_TSB_TRUSTED_BASE GPU_WORD(0xf800)
++#define RBBM_SECVID_TSB_TRUSTED_SIZE GPU_WORD(0xf802)
++#define RBBM_SECVID_TSB_CNTL    GPU_WORD(0xf803)
++#define GBIF_QSB_SIDE0          (4 * 0x03)      /* in sa_gbif (0x3c03) */
++#define CP_RB_CNTL_A650         (12u | 2u << 8 | 1u << 27)      /* 32K ring, 32-byte blocks; no read-position copy to memory */
++
++/* PM4 packets (Mesa adreno_pm4.xml; Linux adreno_gpu.h OUT_PKT4 / OUT_PKT7) */
++#define CP_MEM_WRITE            0x3d
++#define CP_ME_INIT              0x48
++#define CP_SET_SECURE_MODE      0x66
++#define RING_WORDS              (CORE_RING_SIZE / 4)
++
++static uint32_t sa_ring_at, sa_ring_sent;
++
++static uint32_t
++sa_pm4_parity(uint32_t v)
++{
++	return 0x9669 >> (0xf & (v ^ v >> 4 ^ v >> 8 ^ v >> 12 ^ v >> 16 ^ v >> 20 ^ v >> 24 ^ v >> 28)) & 1;
++}
++
++static void
++sa_ring(uint32_t word)
++{
++	((uint32_t *)sa_core_ring.memory)[sa_ring_at] = word;
++	sa_ring_at = (sa_ring_at + 1) % RING_WORDS;
++}
++
++/* A type 7 packet: a command with `words` words after it. */
++static void
++sa_ring_packet(uint32_t opcode, uint32_t words)
++{
++	sa_ring(7u << 28 | words | sa_pm4_parity(words) << 15 | (opcode & 0x7f) << 16 | sa_pm4_parity(opcode) << 23);
++}
++
++/* What the ring holds since the last time goes out to memory, the core is told how far to read, and we wait for it to be idle. */
++static bool
++sa_ring_run(const char *what)
++{
++	uint32_t taken = ~0u, status = ~0u;
++
++	printf("SWEET GPU: %u: about to have the 3D core %s: the ring up to word %u\n", sa_step, what, sa_ring_at);
++	if (sa_pause_ms && sa_step == sa_steps) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++	sa_to_memory(sa_core_ring.memory, CORE_RING_SIZE);
++	sa_ring_sent = sa_ring_at;
++	sa_wr(sa_gpu.base + CP_RB_WPTR, sa_ring_sent);
++	for (int i = 0; i < 20000 && (taken != sa_ring_sent || (status & RBBM_STATUS_GPU_BUSY)); i++) {
++		delay_for_interval(100, NSEC_PER_USEC);
++		taken = sa_rd(sa_gpu.base + CP_RB_RPTR);
++		status = sa_rd(sa_gpu.base + RBBM_STATUS);
++	}
++	bool faulted = sa_space_faulted(&sa_smmu_cb0, "the 3D core");
++	uint32_t hw_fault = sa_rd(sa_gpu.base + CP_HW_FAULT);
++	if (taken == sa_ring_sent && !(status & RBBM_STATUS_GPU_BUSY) && hw_fault == 0 && !faulted) {
++		printf("SWEET GPU: %u: the 3D core did it (ring read up to %u, status %#x)\n", sa_step, taken, status);
++		return true;
++	}
++	printf("SWEET GPU: %u: the 3D core does not get through: ring read up to %u of %u, status %#x, interrupts %#x, "
++	    "command processor: fault %#x, interrupts %#x, protection %#x\n", sa_step, taken, sa_ring_sent, status,
++	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), hw_fault, sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS),
++	    sa_rd(sa_gpu.base + CP_PROTECT_STATUS));
++	return false;
++}
++
++static void
++sa_put64(struct sa_block *b, const char *name, uint32_t offset, uint64_t value)
++{
++	sa_put(b, name, offset, (uint32_t)value);
++	sa_put(b, name, offset + 4, (uint32_t)(value >> 32));
++}
++
++static bool
++sa_step_core_start(void)
++{
++	/* CP, VSC, GRAS, RB, PC, HLSQ, VFD, VPC, UCHE, SP, TPL1, RBBM_SECVID_TSB */
++	static const uint32_t address_modes[12] = { 0x0842, 0x0c01, 0x8601, 0x8e05, 0x9e01, 0xbe05, 0xa601, 0x9601, 0x0e00,
++		                                    0xae01, 0xb601, 0xf810 };
++	static const uint32_t bicubic[5] = { 0, 0x3fe05ff4, 0x3fa0ebee, 0x3f5193ed, 0x3f0243f0 };
++
++	if (!sa_cx_ready() || !sa_core_space_on) {
++		return false;
++	}
++	sa_announce("write the 3D core's registers as Linux hw_init does for the A650 (no clock gating, register protection "
++	    "or interrupts)");
++	sa_put(&sa_gbif, "halt", GBIF_HALT, 0);
++	sa_put(&sa_gpu, "rbbm_gbif_halt", RBBM_GBIF_HALT, 0);
++	sa_put(&sa_gpu, "rbbm_secvid_tsb_cntl", RBBM_SECVID_TSB_CNTL, 0);
++	sa_put64(&sa_gpu, "rbbm_secvid_tsb_trusted_base", RBBM_SECVID_TSB_TRUSTED_BASE, 0);
++	sa_put(&sa_gpu, "rbbm_secvid_tsb_trusted_size", RBBM_SECVID_TSB_TRUSTED_SIZE, 0);
++	for (unsigned i = 0; i < 12; i++) {
++		sa_put(&sa_gpu, "addr_mode_cntl", GPU_WORD(address_modes[i]), 1);
++	}
++	for (unsigned i = 0; i < 4; i++) {
++		sa_put(&sa_gbif, "qsb_side", GBIF_QSB_SIDE0 + 4 * i, 0x00071620);
++	}
++	sa_put(&sa_gpu, "rbbm_gbif_client_qos_cntl", RBBM_GBIF_CLIENT_QOS_CNTL, 3);
++	sa_put(&sa_gpu, "rbbm_perfctr_gpu_busy_masked", RBBM_PERFCTR_GPU_BUSY_MASKED, 0xffffffff);
++	sa_put64(&sa_gpu, "uche_write_range_max", UCHE_WRITE_RANGE_MAX, 0x0001ffffffffffc0ull);
++	sa_put64(&sa_gpu, "uche_trap_base", UCHE_TRAP_BASE, 0x0001fffffffff000ull);
++	sa_put64(&sa_gpu, "uche_write_thru_base", UCHE_WRITE_THRU_BASE, 0x0001fffffffff000ull);
++	sa_put(&sa_gpu, "uche_filter_cntl", UCHE_FILTER_CNTL, 0x804);
++	sa_put(&sa_gpu, "uche_cache_ways", UCHE_CACHE_WAYS, 0x4);
++	sa_put(&sa_gpu, "cp_roq_thresholds_2", CP_ROQ_THRESHOLDS_2, 0x02000140);
++	sa_put(&sa_gpu, "cp_roq_thresholds_1", CP_ROQ_THRESHOLDS_1, 0x8040362c);
++	sa_put(&sa_gpu, "cp_mem_pool_size", CP_MEM_POOL_SIZE, 128);
++	sa_put(&sa_gpu, "pc_dbg_eco_cntl", PC_DBG_ECO_CNTL, 0x00300200);       /* a6xx_catalog.c A650 prim_fifo_threshold */
++	sa_put(&sa_gpu, "cp_ahb_cntl", CP_AHB_CNTL, 1);
++	sa_put(&sa_gpu, "rbbm_perfctr_cntl", RBBM_PERFCTR_CNTL, 1);
++	/* a6xx_set_ubwc_config, A650: highest bank bit 16, amsbc, rgb565 predicator, uavflagprd_inv 2, macrotile */
++	sa_put(&sa_gpu, "rb_nc_mode_cntl", RB_NC_MODE_CNTL, 0x816);
++	sa_put(&sa_gpu, "tpl1_nc_mode_cntl", TPL1_NC_MODE_CNTL, 0x6);
++	sa_put(&sa_gpu, "sp_nc_mode_cntl", SP_NC_MODE_CNTL, 0x26);
++	sa_put(&sa_gpu, "uche_mode_cntl", UCHE_MODE_CNTL, 0x600000);
++	sa_put(&sa_gpu, "rbbm_nc_mode_cntl", RBBM_NC_MODE_CNTL, 1);
++	sa_put(&sa_gpu, "rbbm_interface_hang_int_cntl", RBBM_INTERFACE_HANG_INT_CNTL, 1u << 30 | 0x1fffff);
++	sa_put(&sa_gpu, "uche_client_pf", UCHE_CLIENT_PF, 1u << 7 | 1);
++	for (unsigned i = 0; i < 5; i++) {
++		sa_put(&sa_gpu, "tpl1_bicubic_weights", TPL1_BICUBIC_WEIGHTS_TABLE_0 + 4 * i, bicubic[i]);
++	}
++	sa_put(&sa_gpu, "cp_apriv_cntl", CP_APRIV_CNTL, 1u << 6 | 1u << 5 | 1u << 3 | 1u << 2 | 1u << 1);  /* HW_APRIV */
++	sa_put64(&sa_gpu, "cp_sqe_instr_base", CP_SQE_INSTR_BASE, CORE_SQE_ADDRESS);
++	sa_put64(&sa_gpu, "cp_rb_base", CP_RB_BASE, CORE_RING_ADDRESS);
++	sa_put(&sa_gpu, "cp_rb_cntl", CP_RB_CNTL, CP_RB_CNTL_A650);
++	sa_get(&sa_gpu, "cp_sqe_instr_base", CP_SQE_INSTR_BASE);
++	sa_get(&sa_gpu, "cp_rb_base", CP_RB_BASE);
++	sa_get(&sa_gpu, "cp_rb_cntl", CP_RB_CNTL);
++	sa_get(&sa_gpu, "cp_rb_rptr", CP_RB_RPTR);
++	sa_get(&sa_gpu, "cp_rb_wptr", CP_RB_WPTR);
++	sa_get(&sa_gpu, "rbbm_status", RBBM_STATUS);
++
++	sa_announce("start the 3D core's command processor (cp_sqe_cntl 1)");
++	sa_core_runs = true;
++	sa_put(&sa_gpu, "cp_sqe_cntl", CP_SQE_CNTL, 1);
++	sa_sleep_ms(20);
++	printf("SWEET GPU: %u: after the start: status %#x, interrupts %#x, command processor: fault %#x, interrupts %#x, "
++	    "protection %#x, ring read up to %u\n", sa_step, sa_rd(sa_gpu.base + RBBM_STATUS),
++	    sa_rd(sa_gpu.base + RBBM_INT_0_STATUS), sa_rd(sa_gpu.base + CP_HW_FAULT),
++	    sa_rd(sa_gpu.base + CP_INTERRUPT_STATUS), sa_rd(sa_gpu.base + CP_PROTECT_STATUS), sa_rd(sa_gpu.base + CP_RB_RPTR));
++	sa_get(&sa_smmu, "sgfsr", SMMU_SGFSR);
++	if (sa_space_faulted(&sa_smmu_cb0, "the 3D core")) {
++		return false;
++	}
++
++	sa_announce("give the 3D core its first command: CP_ME_INIT (Linux a6xx_cp_init)");
++	sa_ring_packet(CP_ME_INIT, 8);
++	sa_ring(0x0000002f);
++	sa_ring(0x00000003);    /* multiple hardware contexts */
++	sa_ring(0x20000000);    /* error detection */
++	sa_ring(0);             /* no header dump */
++	sa_ring(0);
++	sa_ring(0);             /* no workarounds */
++	sa_ring(0);
++	sa_ring(0);
++	if (!sa_ring_run("initialise its command processor")) {
++		return false;
++	}
++	printf("SWEET GPU: %u: THE 3D CORE'S COMMAND PROCESSOR RUNS AND TAKES COMMANDS\n", sa_step);
++	return true;
++}
++
++/* ---- step 21: out of secure mode; a word written on command ---- */
++
++#define CORE_KNOWN_WORD         0x600dc0deu
++
++static bool
++sa_step_core_commands(void)
++{
++	volatile uint32_t *scratch = (volatile uint32_t *)sa_core_scratch.memory;
++
++	if (!sa_cx_ready() || !sa_core_runs) {
++		return false;
++	}
++	sa_announce("command the 3D core out of secure mode (CP_SET_SECURE_MODE 0: the zap shader lets it)");
++	sa_ring_packet(CP_SET_SECURE_MODE, 1);
++	sa_ring(0);
++	if (!sa_ring_run("leave secure mode")) {
++		return false;
++	}
++	sa_announce("command the 3D core to write a known word into the scratch page (CP_MEM_WRITE)");
++	sa_ring_packet(CP_MEM_WRITE, 3);
++	sa_ring(CORE_SCRATCH_ADDRESS);
++	sa_ring(0);
++	sa_ring(CORE_KNOWN_WORD);
++	if (!sa_ring_run("write a word to memory")) {
++		return false;
++	}
++	sa_to_memory(sa_core_scratch.memory, PAGE_SIZE);       /* drop our cache's copy of the page before reading it */
++	uint32_t word = scratch[0];
++	printf("SWEET GPU: %u: the scratch page reads %#x: %s\n", sa_step, word, word == CORE_KNOWN_WORD ?
++	    "THE 3D CORE EXECUTES OUR COMMANDS AND WRITES OUR MEMORY" : "not the word it was told to write");
++	return word == CORE_KNOWN_WORD;
++}
++
+ static bool (*const sa_step_fn[])(void) = {
+ 	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc, sa_step_cx_power, sa_step_clocks, sa_step_gmu_read,
+ 	sa_step_rscc, sa_step_smmu, sa_step_smmu_context, sa_step_gmu_memory, sa_step_trustzone, sa_step_zap_signature,
+ 	sa_step_gmu_space, sa_step_gmu_firmware, sa_step_gmu_start, sa_step_gmu_queues, sa_step_core_power,
++	sa_step_core_space, sa_step_zap_load, sa_step_core_start, sa_step_core_commands,
+ };
+ 
+ static void
+@@ -1761,11 +2157,11 @@ sa_thread(__unused void *arg, __unused wait_result_t wr)
+ 			break;
+ 		}
+ 	}
+-	sa_zap_release();
+ 	if (sa_core_on) {
+ 		printf("SWEET GPU: the 3D core was asked for: leaving the GPU block as it is (%u writes not undone)\n",
+ 		    sa_undo_count);
+ 	} else {
++		sa_zap_release();
+ 		sa_undo_all();
+ 	}
+ 	printf("SWEET GPU: done\n");
+-- 
+2.54.0 (Apple Git-157)
+

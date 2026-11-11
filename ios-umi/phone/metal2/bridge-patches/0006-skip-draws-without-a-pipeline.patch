@@ -1,0 +1,16 @@
+diff --git a/crates/metal2vulkan-runtime/src/render.rs b/crates/metal2vulkan-runtime/src/render.rs
+index 870bdb1..119119d 100644
+--- a/crates/metal2vulkan-runtime/src/render.rs
++++ b/crates/metal2vulkan-runtime/src/render.rs
+@@ -7788,6 +7788,11 @@ impl Recording<'_> {
+     /// is live until the command buffer completes, and `bound` is the record of what the draws
+     /// recorded into it bound (each recorded through it).
+     unsafe fn record(&self, bound: &mut Bound) -> u64 {
++        // A draw whose pipeline could not be created (the compile was refused) has a null pipeline; binding it crashes the driver
++        // (int-170: tu_CmdBindPipeline in the render server). The draw is dropped instead, and nothing is recorded for it.
++        if self.pipeline == vk::Pipeline::null() {
++            return 0;
++        }
+         let (raw, cb) = (self.raw, self.command_buffer);
+         let dynamic = |state| self.dynamic.contains(&state);
+         bound.follow(cb);

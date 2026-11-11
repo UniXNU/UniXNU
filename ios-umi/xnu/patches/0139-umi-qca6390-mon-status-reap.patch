@@ -1,0 +1,207 @@
+From b1eda7a72fc666456ad4a4bfcb3db1fa367b71e4 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 20:49:49 +0200
+Subject: [PATCH] umi-0139
+
+---
+ bsd/dev/sweet_wlce.c |   8 +++
+ bsd/dev/sweet_wldp.c | 122 +++++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 130 insertions(+)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 82288ee..aa111d0 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -19,6 +19,8 @@ extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
+ extern int sweet_wldp_rx_init(void);
+ extern void sweet_wldp_rx_report(const char *when);
+ extern int sweet_wldp_mon_filter(void);
++extern void sweet_wldp_mon_reap(void);
++extern void sweet_wldp_mon_report(void);
+ int sweet_wlce_init(void);
+ int sweet_wlce_htc(void);
+ 
+@@ -440,6 +442,7 @@ htc_poll(void)
+ 	rx_poll(&ce.rx1, htc_rx);
+ 	rx_poll(&ce.rx2, htc_rx);
+ 	rx_poll(&ce.rx5, htc_rx);
++	sweet_wldp_mon_reap();          /* monitor-status buffers (0139); a no-op before the receive rings exist */
+ }
+ 
+ /* A control message to endpoint 0 over CE0 (no credit flow on the control endpoint). */
+@@ -902,6 +905,11 @@ wmi_scan(void)
+ 		delay(1000);
+ 	}
+ 	sweet_wldp_rx_report("after the scan");
++	for (unsigned t = 0; t < 3000; ++t) {   /* listen 3 s more: beacons from the channel the radio rests on */
++		htc_poll();
++		delay(1000);
++	}
++	sweet_wldp_mon_report();
+ 	printf("SWEET WMI: scan %s: %u channel visits, %u management frames, %u BSS\n",
+ 	    htc.scan_done ? "completed" : "still running after 15 s", htc.chan_events, htc.mgmt_frames, htc.nbss);
+ 	return htc.scan_done ? 0 : 14;
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 1df8ee4..23b3272 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -307,6 +307,7 @@ struct rxring {
+ 	bool bufs;
+ 	uint32_t intr, low;             /* HTT intr_info, info2 low threshold (ath11k_dp_srng_setup values) */
+ 	uint32_t off, pa, hp, nbuf;
++	uint32_t spare;                 /* status rings: buffer for the slot left empty at setup (0139) */
+ };
+ 
+ #define I_RX            ((500u >> 3) << 16)             /* RXDMA_BUF / MONITOR_STATUS: timer 500 us, batch 0 */
+@@ -321,6 +322,7 @@ static struct rxring rx_rings[] = {
+ 	{ "status1", 147, 2, 128, true, 1, 1, 2, true, I_RX, (128 >> 3) * 2 },
+ };
+ #define RX_NRING        (sizeof(rx_rings) / sizeof(rx_rings[0]))
++static bool rx_ready;           /* receive rings set up: the monitor reap may run */
+ 
+ extern int sweet_wlce_htt_send(const void *msg, uint32_t len);
+ int sweet_wldp_rx_init(void);
+@@ -353,6 +355,11 @@ sweet_wldp_rx_init(void)
+ 			r->hp += r->esz;
+ 			r->nbuf++;
+ 		}
++		r->spare = 0;
++		if (r->bufs && r->htt_id == 1) {        /* monitor status: one spare for the reap of the empty slot */
++			r->spare = dp.pa + boff;
++			boff += RXBUF_SZ;
++		}
+ 		*mem32(M_WRP + (r->id - 128) * 4) = r->src ? r->hp : 0;
+ 		if (boff > 0x800000u || off > M_RX_BUFS) {
+ 			printf("SWEET WLDP: receive rings/buffers do not fit (%s)\n", r->name);
+@@ -375,6 +382,7 @@ sweet_wldp_rx_init(void)
+ 			return e;
+ 		}
+ 	}
++	rx_ready = true;
+ 	printf("SWEET WLDP: %u receive rings at %#x, %u buffers at %#x-%#x, HTT SRING_SETUP sent\n",
+ 	    (unsigned)RX_NRING, dp.pa + M_RX_RINGS, buf_id - 1, dp.pa + M_RX_BUFS, dp.pa + boff);
+ 	return 0;
+@@ -411,6 +419,120 @@ sweet_wldp_mon_filter(void)
+ 	return 0;
+ }
+ 
++/*
++ * Monitor-status reap (ath11k_dp_rx_reap_mon_status_ring + hal_rx_parse_mon_status):
++ * the host looks at the slot at its own HP once the hardware's TP has moved past
++ * it; a used buffer starts with TLV STATUS_BUFFER_DONE (0x140). TLV header u32:
++ * tag bits 9:1, length 25:10, user 31:26; 4-byte aligned; PPDU_END (0xce) counts
++ * as 4 bytes so the PHY TLVs after it are read. PPDU_START 0xcd: chan_num at +4;
++ * PHYRX_RSSI_LEGACY 0x4c: rssi_comb bits 15:8 of the word at +140 (signal =
++ * rssi_comb - 95 dBm, ath11k's default noise floor); MPDU_START 0xcf counted;
++ * PPDU_END_STATUS_DONE 0x13f or tag 0 ends a PPDU. The same buffer goes back
++ * into the slot (ath11k allocates a new one), the slot left empty at setup
++ * gets the ring's spare.
++ */
++static struct {
++	uint32_t bufs, ppdus, mpdus, notdone, logged;
++	int rssi_min, rssi_max;
++} mon = { .rssi_min = 127, .rssi_max = -128 };
++
++void sweet_wldp_mon_reap(void);
++void sweet_wldp_mon_report(void);
++
++static void
++mon_parse(const uint8_t *b, unsigned ring)
++{
++	uint32_t o = 0, chan = 0, nmpdu = 0;
++	int rssi = 0;
++	bool have_rssi = false;
++	while (o + 4 <= RXBUF_SZ) {
++		uint32_t tl;
++		memcpy(&tl, b + o, 4);
++		uint32_t tag = (tl >> 1) & 0x1ffu, len = (tl >> 10) & 0xffffu;
++		o += 4;
++		if (tag == 0xce) {
++			len = 4;
++		}
++		if (tag == 0xcd && o + 8 <= RXBUF_SZ) {
++			memcpy(&chan, b + o + 4, 4);
++		} else if (tag == 0x4c && o + 144 <= RXBUF_SZ) {
++			uint32_t info0;
++			memcpy(&info0, b + o + 140, 4);
++			rssi = (int)((info0 >> 8) & 0xffu) - 95;
++			have_rssi = true;
++		} else if (tag == 0xcf) {
++			nmpdu++;
++		}
++		if (tag == 0x13f || tag == 0) {
++			mon.ppdus++;
++			mon.mpdus += nmpdu;
++			if (have_rssi) {
++				mon.rssi_min = MIN(mon.rssi_min, rssi);
++				mon.rssi_max = MAX(mon.rssi_max, rssi);
++			}
++			if (mon.logged++ < 8) {
++				printf("SWEET WLDP: rx ppdu (status ring %u): channel %u, %u mpdu, signal %d dBm%s\n",
++				    ring, chan, nmpdu, rssi, have_rssi ? "" : " (no rssi tlv)");
++			}
++			break;
++		}
++		o = (o + len + 3) & ~3u;
++	}
++}
++
++void
++sweet_wldp_mon_reap(void)
++{
++	if (!rx_ready) {
++		return;
++	}
++	for (unsigned i = 0; i < RX_NRING; ++i) {
++		struct rxring *r = &rx_rings[i];
++		if (!r->bufs || r->htt_id != 1 || dp.mem == 0) {
++			continue;
++		}
++		uint32_t size = r->n * r->esz;
++		bool moved = false;
++		while ((r->hp + r->esz) % size != *mem32(M_RDP + r->id * 4)) {
++			volatile uint32_t *d = mem32(r->off + r->hp * 4);
++			uint32_t paddr = d[0], info1 = d[1];
++			if (paddr != 0) {
++				uint8_t *b = (uint8_t *)(dp.mem + (paddr - dp.pa));
++				uint32_t tl;
++				memcpy(&tl, b, 4);
++				if (((tl >> 1) & 0x1ffu) != 0x140) {
++					mon.notdone++;          /* not written yet: try again later */
++					break;
++				}
++				mon.bufs++;
++				mon_parse(b + 4, i - 5);
++				bzero(b, 4);
++			} else {
++				paddr = r->spare;
++				info1 = 4u << 8;                /* cookie 0, RBM SW1 */
++				r->spare = 0;
++				if (paddr == 0) {
++					break;
++				}
++			}
++			d[0] = paddr;
++			d[1] = info1;
++			r->hp = (r->hp + r->esz) % size;
++			moved = true;
++		}
++		if (moved) {
++			*mem32(M_WRP + (r->id - 128) * 4) = r->hp;
++		}
++	}
++}
++
++void
++sweet_wldp_mon_report(void)
++{
++	printf("SWEET WLDP: monitor status: %u buffers, %u ppdus, %u mpdus, signal %d..%d dBm, %u not done\n",
++	    mon.bufs, mon.ppdus, mon.mpdus, mon.ppdus ? mon.rssi_min : 0, mon.ppdus ? mon.rssi_max : 0, mon.notdone);
++}
++
+ /* Entries whose first word (buffer address or status) is non-zero: what the target has written into a ring. */
+ static uint32_t
+ rx_filled(const struct rxring *r)
+-- 
+2.54.0 (Apple Git-157)
+

@@ -1,0 +1,117 @@
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -134,7 +134,7 @@
+ }
+ 
+ static VkResult
+-dw_open_connection(struct tu_instance *instance)
++dw_open_connection_raw(struct tu_instance *instance)
+ {
+    /* TU_DARWIN_SERVICE names the IOKit service (default: the AGX accelerator the original Metal discovery finds), TU_DARWIN_OPEN_TYPE its open
+     * type (default 0x4147, the type the driver serves to the plugin). NativeAdrenoGpuPublished with type 0 is the unsandboxed direct form. */
+@@ -182,15 +182,64 @@
+ }
+ 
+ static void
+-dw_close_connection(void)
++dw_close_connection_raw(void)
+ {
+    if (dw.open) {
+       IOServiceClose(dw.conn);
+       dw.conn = 0;
+       dw.open = false;
+    }
++}
++
++/* One connection per process, shared by every tu_device in it and counted (umi 0196). The kernel
++ * client owns the BOs: closing it frees and unmaps all of them. The enumeration probe used to open
++ * and close the connection unconditionally and every device_finish closed it, so a second Vulkan
++ * instance or a short-lived device in backboardd/SpringBoard closed the connection under a live
++ * device; the reopened client got the same window and handles from 1 again, the live device's old
++ * handles then named the new client's BOs (BoFree/BoMap on the wrong BO: GPU page tables pointing
++ * at another BO's pages, the CP_OPCODE_ERROR hangs). Now the probe reuses an open connection, and
++ * only the last device's finish closes it. */
++static pthread_mutex_t dw_conn_lock = PTHREAD_MUTEX_INITIALIZER;
++static unsigned dw_devices;
++
++static VkResult
++dw_open_connection(struct tu_instance *instance)
++{
++   pthread_mutex_lock(&dw_conn_lock);
++   VkResult result = dw.open ? VK_SUCCESS : dw_open_connection_raw(instance);
++   pthread_mutex_unlock(&dw_conn_lock);
++   return result;
++}
++
++/* The probe's close: only when no device uses the connection. */
++static void
++dw_close_connection(void)
++{
++   pthread_mutex_lock(&dw_conn_lock);
++   if (dw_devices == 0)
++      dw_close_connection_raw();
++   pthread_mutex_unlock(&dw_conn_lock);
++}
++
++static VkResult
++dw_device_acquire(struct tu_instance *instance)
++{
++   pthread_mutex_lock(&dw_conn_lock);
++   VkResult result = dw.open ? VK_SUCCESS : dw_open_connection_raw(instance);
++   if (result == VK_SUCCESS)
++      dw_devices++;
++   pthread_mutex_unlock(&dw_conn_lock);
++   return result;
+ }
+ 
++static void
++dw_device_release(void)
++{
++   pthread_mutex_lock(&dw_conn_lock);
++   if (dw_devices > 0 && --dw_devices == 0)
++      dw_close_connection_raw();
++   pthread_mutex_unlock(&dw_conn_lock);
++}
+ 
+ static VkResult
+ dw_status_to_vk(struct tu_device *dev, kern_return_t kr, const char *what)
+@@ -988,21 +1037,19 @@
+ darwin_device_init(struct tu_device *dev)
+ {
+    dev->fd = -1;
+-   /* The enumeration probe closed its connection; take the single slot for this device. */
+-   if (!dw.open) {
+-      VkResult result = dw_open_connection(dev->physical_device->instance);
+-      if (result != VK_SUCCESS)
+-         return result;
+-   }
++   /* The connection is shared by all devices of the process and counted (dw_device_acquire). */
++   VkResult acquired = dw_device_acquire(dev->physical_device->instance);
++   if (acquired != VK_SUCCESS)
++      return acquired;
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)
+       vk_zalloc(&dev->vk.alloc, sizeof(*retire), 8, VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+    if (!retire) {
+-      dw_close_connection();
++      dw_device_release();
+       return vk_error(dev, VK_ERROR_OUT_OF_HOST_MEMORY);
+    }
+    if (pthread_mutex_init(&retire->lock, NULL)) {
+       vk_free(&dev->vk.alloc, retire);
+-      dw_close_connection();
++      dw_device_release();
+       return vk_error(dev, VK_ERROR_INITIALIZATION_FAILED);
+    }
+    dev->darwin_retire = retire;
+@@ -1012,8 +1059,9 @@
+ static void
+ darwin_device_finish(struct tu_device *dev)
+ {
+-   /* Closing the connection makes the kernel drain the GPU and free every object this client created. */
+-   dw_close_connection();
++   /* The last device's release closes the connection: the kernel then drains the GPU and frees every
++    * object the client created. Earlier devices leave it to the others still using it. */
++   dw_device_release();
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+    if (retire) {
+       /* Some CreateDevice failure paths already destroyed the VMA heap/mutex.

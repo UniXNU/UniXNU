@@ -1,0 +1,181 @@
+From 90b6db5528152d47189d6ba2e4771ad7027fae82 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 4 Nov 2026 11:51:19 +0100
+Subject: [PATCH] umi: GPU cache (UCHE) invalidate before every submission;
+ experiment switches for the stale-frame hunt
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_adreno.c           | 86 ++++++++++++++++++++++++++++++--
+ iokit/Kernel/arm/SweetAdreno.cpp | 14 ++++++
+ 2 files changed, 95 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 19865f2..8b094b8 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -2266,6 +2266,7 @@ extern uint32_t sweet_fb_gpu_pixel(uint32_t x, uint32_t y);
+ #define EVENT_TIMESTAMP         (1u << 30)      /* CP_EVENT_WRITE_0_TIMESTAMP, as Mesa's A6XX __event_write */
+ #define EVENT_IRQ               (1u << 31)      /* CP_EVENT_WRITE_0_IRQ: RBBM_INT_0 CP_CACHE_FLUSH_TS when done (Linux a6xx_submit) */
+ #define EVENT_CACHE_FLUSH_TS    4
++#define EVENT_CACHE_INVALIDATE  0x31            /* adreno_pm4.xml, A6XX: the UCHE (Linux a6xx_set_pagetable) */
+ #define EVENT_CCU_INVALIDATE_DEPTH 24
+ #define EVENT_CCU_INVALIDATE_COLOR 25
+ #define EVENT_CCU_FLUSH_DEPTH_TS 28
+@@ -3262,6 +3263,21 @@ sweet_adreno_unmap_at(uint64_t iova, uint64_t len)
+ }
+ 
+ static void sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords);
++
++/* sweetgpucheck: 1 (default) the per-submit walk, 0 none, N >= 2 no walk but N ms of sleep before the doorbell -
++ * the 0242 test of whether the walk only helps by its delay (boot line full: no new boot-arg). Tested (0242d,
++ * 3 ms): still glitchy - the walk does more than delay; what exactly is open. */
++static uint32_t
++sa_check_mode(void)
++{
++	static uint32_t mode = ~0u;
++	if (mode == ~0u) {
++		uint32_t v = 1;
++		(void)PE_parse_boot_argn("sweetgpucheck", &v, sizeof(v));
++		mode = v;
++	}
++	return mode;
++}
+ extern void IOLog(const char *, ...);
+ 
+ /*
+@@ -3307,8 +3323,17 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 		sa_ib_check(sa_fence_seqno + 1, i, iova[i], dwords[i]);   /* before the lock: it reads through it */
+ 	}
+ 	sa_drain_all_cores();
++	if (sa_check_mode() >= 2) {
++		delay_for_interval(sa_check_mode(), NSEC_PER_MSEC);
++	}
++	static int sa_inval = -1;
++	if (sa_inval < 0) {
++		uint32_t v = 1;
++		(void)PE_parse_boot_argn("sweetgpuinval", &v, sizeof(v));
++		sa_inval = (int)v;
++	}
+ 	sa_service_take_lock();
+-	uint32_t need = 6 + 4 * n;
++	uint32_t need = 13 + 4 * n;    /* 2 waits (1 word), 3 events (2 words each), n IBs (4), the fence (5) */
+ 	*busy = false;
+ 	for (int i = 0; i < 5000; i++) {
+ 		if (sa_ring_room(need)) {
+@@ -3333,6 +3358,24 @@ sweet_adreno_submit_v2(const uint64_t *iova, const uint32_t *dwords, uint32_t n,
+ 		    sa_rd(sa_gpu.base + CP_RB_RPTR), sa_ring_sent, mach_absolute_time());
+ 		cp_int_seen = cp_int_now;
+ 	}
++	/* (0242) The GPU's own cache (UCHE) holds lines of addresses earlier submissions read; every client shares
++	 * this ring and context 0's page table, and freed GPU addresses are reused (a BO, a draw-state
++	 * suballocation), so without an invalidate the core can fetch a previous owner's draw state = the stale
++	 * "previous frames" of 0240e/0241d. Linux emits CACHE_INVALIDATE whenever the ring switches context
++	 * (a6xx_set_pagetable); here every submission may come from another task: invalidate each time.
++	 * ios-apollo hit the same stale-through-the-cache reads (its NOTES, kInvalidateBeforeStateLoads, MIT).
++	 * Tested with the walk off: invalidate alone "still pretty glitchy but it has really improved" (0242);
++	 * bracketed by CP_WAIT_FOR_IDLE (ios-apollo's form, sweetgpuinval=2) still glitchy (0242b). Default 1 (the
++	 * invalidate, as Linux), with the walk on; 0 = off. */
++	if (sa_inval >= 2) {
++		sa_ring_packet(CP_WAIT_FOR_IDLE, 0);   /* the previous submission is done with the cache */
++	}
++	if (sa_inval) {
++		sa_ring_event(EVENT_CACHE_INVALIDATE, false);
++	}
++	if (sa_inval >= 2) {
++		sa_ring_packet(CP_WAIT_FOR_IDLE, 0);   /* ... and the invalidate is done before this one reads */
++	}
+ 	sa_ring_event(EVENT_CCU_INVALIDATE_DEPTH, false);
+ 	sa_ring_event(EVENT_CCU_INVALIDATE_COLOR, false);
+ 	for (uint32_t i = 0; i < n; i++) {
+@@ -3675,11 +3718,9 @@ sa_ib_check(uint32_t seqno, uint32_t index, uint64_t start, uint32_t dwords)
+ 		(void)PE_parse_boot_argn("sweetgpucoh", &sa_coh_on, sizeof(sa_coh_on));
+ 	}
+ 	if (check < 0) {
+-		uint32_t v = 1;
+-		(void)PE_parse_boot_argn("sweetgpucheck", &v, sizeof(v));
+-		check = v != 0;
++		check = (int)sa_check_mode();
+ 	}
+-	if (!check || dwords > 8192 || sa_ib_check_logged >= 32) {
++	if (check != 1 || dwords > 8192 || sa_ib_check_logged >= 32) {
+ 		return;
+ 	}
+ 	(void)sa_ib_walk(seqno, index, "top", 0, start, dwords, 0);
+@@ -3873,6 +3914,41 @@ sweet_adreno_faults(void)
+ 	return sa_faults;
+ }
+ 
++/*
++ * (0242) Clean+invalidate physical memory through the kernel's CACHEABLE alias of RAM (the physmap). A new BO's pages
++ * were zeroed by the VM through that alias before they became write-combined, which can leave dirty lines that are
++ * later evicted over what Turnip wrote with WC stores - the cleaning WC view (kmap) does not reach them reliably. The
++ * per-submit walk's flush through the physmap is what kept frames right (0240e, 0241, 0242/0242b); this does it
++ * once per BO at BoAlloc, before Turnip writes. sweetgpuphysclean=0 turns it off.
++ */
++void sweet_adreno_clean_phys(uint64_t pa, uint64_t len);
++void
++sweet_adreno_clean_phys(uint64_t pa, uint64_t len)
++{
++	static int on = -1;
++	if (on < 0) {
++		uint32_t v = 0;         /* tested (0242c, walk off): still glitchy - not the cause; off by default */
++		(void)PE_parse_boot_argn("sweetgpuphysclean", &v, sizeof(v));
++		on = v != 0;
++	}
++	if (!on) {
++		return;
++	}
++	/* page by page through phystokv, only where the kernel's own translation agrees (the physical
++	 * form of flush_dcache panics on low RAM on this highmem kernel, 0176; sa_gpu_page_kva's guard) */
++	while (len != 0) {
++		uint64_t chunk = MIN(len, (uint64_t)PAGE_SIZE - (pa & PAGE_MASK));
++		if (pmap_valid_address(pa) && pmap_valid_address(pa + chunk - 1)) {
++			vm_offset_t k = phystokv(pa);
++			if (sa_phys(k) == pa) {
++				flush_dcache64((addr64_t)k, (unsigned)chunk, FALSE);
++			}
++		}
++		pa += chunk;
++		len -= chunk;
++	}
++}
++
+ /* Push a kernel virtual range out to memory (SweetAdreno.cpp cleans its objects' pages on submit). */
+ void
+ sweet_adreno_clean(vm_offset_t kva, uint64_t len)
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 6efc1d0..2343588 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -58,6 +58,7 @@ extern "C" {
+ 	uint64_t sweet_adreno_timestamp(void);
+ 	uint64_t sweet_adreno_faults(void);
+ 	void sweet_adreno_clean(vm_offset_t kva, uint64_t len);
++	void sweet_adreno_clean_phys(uint64_t pa, uint64_t len);
+ }
+ 
+ enum {
+@@ -637,6 +638,19 @@ SweetAdrenoUserClient::v2Method(uint32_t method, const void *in, uint32_t inSize
+ 		}
+ 		bzero((void *)kmap->getVirtualAddress(), rq->bytes);
+ 		sweet_adreno_clean((vm_offset_t)kmap->getVirtualAddress(), rq->bytes);
++		/* (0242) and through the cacheable physmap: the VM zeroed these pages there first */
++		for (IOByteCount off = 0; off < rq->bytes;) {
++			IOByteCount seg = 0;
++			addr64_t pa = md->getPhysicalSegment(off, &seg, kIOMemoryMapperNone);
++			if (pa == 0 || seg == 0) {
++				break;
++			}
++			if (seg > rq->bytes - off) {
++				seg = rq->bytes - off;
++			}
++			sweet_adreno_clean_phys(pa, seg);
++			off += seg;
++		}
+ 		uint64_t h = 0;
+ 		IOReturn r = v2NewSlot(md, kmap, rq->bytes, false, &h);
+ 		if (r != kIOReturnSuccess) {
+-- 
+2.54.0 (Apple Git-157)
+

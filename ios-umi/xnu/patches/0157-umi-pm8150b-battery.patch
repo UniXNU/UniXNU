@@ -1,0 +1,175 @@
+From 54c7538377d6614f7a75d38597ae40e3082d10d6 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 16:25:04 +0100
+Subject: [PATCH] umi-0157-battery
+
+---
+ bsd/dev/sweet_spmi.c              |  8 ++--
+ iokit/Kernel/arm/SweetBattery.cpp | 75 +++++++++++++++++++++++++++----
+ 2 files changed, 72 insertions(+), 11 deletions(-)
+
+diff --git a/bsd/dev/sweet_spmi.c b/bsd/dev/sweet_spmi.c
+index 1981490..cacf511 100644
+--- a/bsd/dev/sweet_spmi.c
++++ b/bsd/dev/sweet_spmi.c
+@@ -88,9 +88,11 @@ sweet_spmi_read(unsigned sid, unsigned addr, uint8_t *out)
+ {
+ 	/* Restrict access to the battery blocks; keys retain their own lanes. */
+ 	unsigned peripheral = addr >> 8;
+-	if (!sp_ready || !out || sid != 0 || addr > 0xffffu ||
+-	    (peripheral != 0x10 && peripheral != 0x11 && peripheral != 0x12 &&
+-	    peripheral != 0x13 && peripheral != 0x48)) {
++	bool charger = peripheral >= 0x10 && peripheral <= 0x13;
++	/* sweet: PM6150 SID 0 (QG 0x48); umi: PM8150B SID 2 (FG gen4 BATT_SOC 0x40, BATT_INFO 0x41). */
++	if (!sp_ready || !out || addr > 0xffffu ||
++	    !((sid == 0 && (charger || peripheral == 0x48)) ||
++	    (sid == 2 && (charger || peripheral == 0x40 || peripheral == 0x41)))) {
+ 		return -1;
+ 	}
+ 	IOLockLock(sp_lock);
+diff --git a/iokit/Kernel/arm/SweetBattery.cpp b/iokit/Kernel/arm/SweetBattery.cpp
+index 9969739..285821a 100644
+--- a/iokit/Kernel/arm/SweetBattery.cpp
++++ b/iokit/Kernel/arm/SweetBattery.cpp
+@@ -3,6 +3,11 @@
+  * sweetbattery=1: read-only PM6150 polling every 30 seconds; voltage-derived
+  * SOC is an UNCALIBRATED estimate, not a replacement for the Linux QG algo.
+  * See report.md for binary evidence, register provenance and integration.
++ * sweetbattery=2 (umi): PM8150B SID 2, read only. SOC is the fuel gauge's own
++ * monotonic SOC (FG gen4 BATT_SOC 0x4009, 0..255); voltage / current from
++ * BATT_INFO VBATT 0x41a0 / IBATT 0x41a2 (Linux fg-reg.h, used only when
++ * plausible); charger state from the SMB5 blocks at the same offsets as PM6150.
++ * The first poll logs the peripheral types and raw values.
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ #include <device/device_types.h> /* io_buf_ptr_t for private OSKext headers */
+@@ -26,16 +31,17 @@ public:
+ private:
+ 	IOWorkLoop *fLoop;
+ 	IOTimerEventSource *fTimer;
+-	bool fTimerAdded, fRunning, fReal;
++	bool fTimerAdded, fRunning, fReal, fUmi, fUmiLogged;
+ 	int fLastMode;
+ 	void putNumber(const char *key, UInt32 value);
+ 	void putBool(const char *key, bool value);
+ 	void publish(unsigned percent, unsigned mv, int ma, bool external,
+ 	    bool capable, bool charging, bool full, bool measured, bool currentValid);
+ 	void poll(void);
++	bool pollUmi(void);
+ 	static void timerFired(OSObject *owner, IOTimerEventSource *sender);
+ 	static IOReturn stopPolling(OSObject *owner, void *, void *, void *, void *);
+-	static bool readWord(unsigned address, uint16_t *value);
++	static bool readWord(unsigned address, uint16_t *value, unsigned sid = 0);
+ 	static unsigned estimatePercent(unsigned mv);
+ };
+ OSDefineMetaClassAndStructors(SweetBattery, IOPMPowerSource);
+@@ -51,7 +57,7 @@ SweetBattery::init(OSDictionary *dictionary)
+ 	}
+ 	fLoop = NULL;
+ 	fTimer = NULL;
+-	fTimerAdded = fRunning = fReal = false;
++	fTimerAdded = fRunning = fReal = fUmi = fUmiLogged = false;
+ 	if (dictionary) {
+ 		OSCollectionIterator *it = OSCollectionIterator::withCollection(dictionary);
+ 		if (!it) {
+@@ -154,7 +160,7 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
+ 	int mode = measured ? 1 : 0;
+ 	if (mode != fLastMode) {
+ 		IOLog("SWEET BATTERY: %s, %u%% %umV external=%d charging=%d\n",
+-		    measured ? "PM6150 / estimated SOC" : "static fallback",
++		    measured ? (fUmi ? "PM8150B fuel gauge SOC" : "PM6150 / estimated SOC") : "static fallback",
+ 		    percent, mv, external, charging);
+ 		fLastMode = mode;
+ 	}
+@@ -164,13 +170,13 @@ SweetBattery::publish(unsigned percent, unsigned mv, int ma, bool external,
+  * words to reject most torn ADC samples without writing the QG HOLD bit.
+  * This is a bounded consistency check, not a hardware snapshot guarantee. */
+ bool
+-SweetBattery::readWord(unsigned address, uint16_t *value)
++SweetBattery::readWord(unsigned address, uint16_t *value, unsigned sid)
+ {
+ 	uint16_t previous = 0;
+ 	for (unsigned attempt = 0; attempt < 4; ++attempt) {
+ 		uint8_t lo, hi;
+-		if (sweet_spmi_read(0, address, &lo) ||
+-		    sweet_spmi_read(0, address + 1, &hi)) {
++		if (sweet_spmi_read(sid, address, &lo) ||
++		    sweet_spmi_read(sid, address + 1, &hi)) {
+ 			return false;
+ 		}
+ 		uint16_t next = (uint16_t)((unsigned)lo | ((unsigned)hi << 8));
+@@ -203,9 +209,61 @@ SweetBattery::estimatePercent(unsigned mv)
+ 	return 100;
+ }
+ 
++/* umi: PM8150B (SID 2). Returns false when the data is not usable (caller publishes the fallback). */
++bool
++SweetBattery::pollUmi(void)
++{
++	uint8_t socType = 0, socSub = 0, infoType = 0, infoSub = 0, rawSoc = 0, usb = 0, path = 0, charger = 0,
++	    error = 0, temperature = 0;
++	uint16_t rawV = 0, rawI = 0;
++	bool socOk = !sweet_spmi_read(2, 0x4004, &socType) && !sweet_spmi_read(2, 0x4005, &socSub) &&
++	    !sweet_spmi_read(2, 0x4009, &rawSoc);
++	bool vOk = !sweet_spmi_read(2, 0x4104, &infoType) && !sweet_spmi_read(2, 0x4105, &infoSub) &&
++	    readWord(0x41a0, &rawV, 2);
++	bool iOk = readWord(0x41a2, &rawI, 2);
++	bool chgOk = !sweet_spmi_read(2, 0x1310, &usb) && !sweet_spmi_read(2, 0x110b, &path) &&
++	    !sweet_spmi_read(2, 0x1006, &charger) && !sweet_spmi_read(2, 0x1007, &error) &&
++	    !sweet_spmi_read(2, 0x100d, &temperature);
++	/* Linux fg-util: VBATT 122.070 uV/bit, IBATT 152.588 uA/bit signed (positive = discharging). */
++	unsigned mv = vOk ? (unsigned)(((uint64_t)rawV * 122070u) / 1000000u) : 0;
++	int signedI = (rawI & 0x8000u) ? (int)rawI - 65536 : (int)rawI;
++	int ma = iOk ? (int)(-((int64_t)signedI * 152588) / 1000000) : 0;
++	unsigned percent = (rawSoc * 100u + 127u) / 255u;
++	if (!fUmiLogged) {
++		IOLog("SWEET BATTERY: umi PM8150B BATT_SOC type %#x/%#x soc %u (%u%%), BATT_INFO type %#x/%#x "
++		    "vbatt %#x (%umV) ibatt %#x (%dmA), usb %#x path %#x chg %#x err %#x temp %#x, ok %d%d%d%d\n",
++		    socType, socSub, rawSoc, percent, infoType, infoSub, rawV, mv, rawI, ma, usb, path, charger, error,
++		    temperature, socOk, vOk, iOk, chgOk);
++		fUmiLogged = true;
++	}
++	if (!socOk || !chgOk || socType == 0 || socType == 0xff) {
++		return false;
++	}
++	if (!vOk || mv < 2800 || mv > 4600) {
++		mv = 3850;                              /* nominal: the SOC is what the UI shows */
++	}
++	if (!iOk || ma < -12000 || ma > 12000) {
++		ma = 0;
++		iOk = false;
++	}
++	bool external = (usb & 0x10u) != 0;
++	bool capable = external && (path & 0x10u) && (path & 1u) && !(path & 0x40u);
++	unsigned state = charger & 7u;
++	bool charging = capable && state >= 1 && state <= 4 && !(error & 2u) && !(temperature & 0x0cu);
++	bool full = external && state == 5 && !(error & 2u);
++	publish(percent > 100 ? 100 : percent, mv, ma, external, capable, charging, full, true, iOk);
++	return true;
++}
++
+ void
+ SweetBattery::poll(void)
+ {
++	if (fReal && fUmi) {
++		if (!pollUmi()) {
++			publish(100, 4200, 0, true, true, false, true, false, false);
++		}
++		return;
++	}
+ 	uint8_t type, present, usb, path, charger, error, temperature;
+ 	uint16_t rawVoltage;
+ 	bool valid = fReal &&
+@@ -264,7 +322,8 @@ SweetBattery::start(IOService *provider)
+ 	}
+ 	int real = 0;
+ 	(void)PE_parse_boot_argn("sweetbattery", &real, sizeof(real));
+-	fReal = real == 1 && sweet_spmi_init() == 0;
++	fUmi = real == 2;
++	fReal = (real == 1 || real == 2) && sweet_spmi_init() == 0;
+ 	/* Publish a complete source BEFORE registerService wakes powerd. */
+ 	poll();
+ 	if (fReal) {
+-- 
+2.54.0 (Apple Git-157)
+

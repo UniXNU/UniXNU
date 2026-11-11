@@ -1,0 +1,979 @@
+From f63dc19423bd47b0ea53feb8cf37569c8ccdd5fe Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sat, 31 Oct 2026 18:52:09 +0100
+Subject: [PATCH] umi: FastRPC for the SLPI's sensor PD - it now initializes
+
+The sensor user PD died 36 s after start waiting for its configuration,
+which Android serves from user space (sscrpcd; postmarketOS hexagonrpcd)
+through reverse FastRPC calls. The kernel now does that job, following
+Linux drivers/misc/fastrpc.c for the wire format and hexagonrpcd's
+behaviour (linux-msm/hexagonrpc, GPL; no code taken):
+
+- GLINK carries two channels ("IPCRTR" lcid 1, "fastrpcglink-apps-dsp"
+  lcid 2) with intents, reassembly and remote intents per channel.
+- FastRPC invokes: payload (remote_arg / invoke_buf / phy_page lists,
+  fd and crc lists, 128-aligned buffers) in 1 MiB of low RAM at
+  0xd3000000 (32-bit DMA, after the Wi-Fi pools), read by the SLPI
+  through SMMU streams 0x541-0x543 routed to the non-translating
+  display context (sweet_smmu_route_sid), sid 1 in address bits 32+.
+- INIT_ATTACH to the sensors PD, remotectl open + register
+  adsp_default_listener, adsp_listener init2, then next2 in a loop with
+  the nested buffer coding; reverse calls served: remotectl open/close
+  and apps_std fopen_with_env, fread, fseek, fclose, fflush, opendir,
+  readdir, closedir, stat (read-only), from /private/var/sweet/sensors/
+  (the phone's vendor:/etc/sensors, persist:/sensors and sysfs soc0).
+
+On the phone (with a 30 s next2 wait): attach and listener answer 0,
+3393 reverse calls are served (soc0, sns_reg_config, the whole
+persist registry), then the PD goes quiet and no longer dies. The
+listener now waits for the next call without a deadline and the loop
+keeps running (not booted yet).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_slpi.c | 789 ++++++++++++++++++++++++++++++++++++++++---
+ 1 file changed, 743 insertions(+), 46 deletions(-)
+
+diff --git a/bsd/dev/sweet_slpi.c b/bsd/dev/sweet_slpi.c
+index bcd99cf..84d8244 100644
+--- a/bsd/dev/sweet_slpi.c
++++ b/bsd/dev/sweet_slpi.c
+@@ -29,6 +29,7 @@
+ #include <sys/vnode_internal.h>
+ #include <sys/kernel.h>
+ #include <sys/uio.h>
++#include <sys/dirent.h>
+ #include <kern/kalloc.h>
+ #include <kern/thread.h>
+ #include <vm/vm_kern.h>
+@@ -442,11 +443,36 @@ sl_smp2p_create(void)
+ #define GL_RX_DONE_W_REUSE      14
+ #define GL_SIGNALS              15
+ #define GL_FEATURE_INTENT_REUSE 1
+-#define GL_LCID                 1               /* our only channel: "IPCRTR" */
++#define GL_LCID                 1               /* "IPCRTR" */
++#define GL_LCID_RPC             2               /* "fastrpcglink-apps-dsp" */
++#define GL_CHANNELS             2
+ 
+ static uint32_t gl_desc, gl_tx, gl_tx_len, gl_rx, gl_rx_len;
+-static uint32_t gl_rcid;                        /* the SLPI's id of "IPCRTR" */
+ static uint32_t gl_next_iid = 1;
++
++/* Our channels: index = lcid - 1. The SLPI opens them; we answer and open them too. */
++static struct {
++	const char *name;
++	uint32_t rcid;                  /* the SLPI's id, 0 until it opens the channel */
++	bool acked;                     /* our OPEN acknowledged */
++	uint32_t intents[3][2];         /* our receive intents: { size, count } (dt qcom,intents) */
++	uint8_t rx[0x4400];             /* message being reassembled */
++	uint32_t rx_used;
++} gl_ch[GL_CHANNELS] = {
++	{ .name = "IPCRTR", .intents = { { 0x800, 5 }, { 0x2000, 3 }, { 0x4400, 2 } } },
++	{ .name = "fastrpcglink-apps-dsp", .intents = { { 0x64, 64 } } },
++};
++
++static int
++gl_ch_by_rcid(uint32_t rcid)
++{
++	for (int i = 0; i < GL_CHANNELS; i++) {
++		if (gl_ch[i].rcid != 0 && gl_ch[i].rcid == rcid) {
++			return i;
++		}
++	}
++	return -1;
++}
+ static unsigned gl_data_logged;
+ 
+ static uint32_t
+@@ -514,10 +540,10 @@ gl_cmd(uint16_t cmd, uint16_t p1, uint32_t p2)
+ }
+ 
+ static void
+-gl_intent(uint32_t size)
++gl_intent(uint16_t lcid, uint32_t size)
+ {
+ 	uint8_t m[16];
+-	uint16_t cmd = GL_INTENT, lcid = GL_LCID;
++	uint16_t cmd = GL_INTENT;
+ 	uint32_t count = 1, iid = gl_next_iid++;
+ 	memcpy(m, &cmd, 2);
+ 	memcpy(m + 2, &lcid, 2);
+@@ -528,32 +554,31 @@ gl_intent(uint32_t size)
+ }
+ 
+ static void
+-gl_open(void)
++gl_open(uint16_t lcid)
+ {
+-	uint8_t m[16] = { 0 };
+-	uint16_t cmd = GL_OPEN, lcid = GL_LCID;
+-	uint32_t len = 7;                       /* "IPCRTR" + NUL */
++	uint8_t m[48] = { 0 };
++	uint16_t cmd = GL_OPEN;
++	uint32_t len = (uint32_t)strlen(gl_ch[lcid - 1].name) + 1;
+ 	memcpy(m, &cmd, 2);
+ 	memcpy(m + 2, &lcid, 2);
+ 	memcpy(m + 4, &len, 4);
+-	memcpy(m + 8, "IPCRTR", 7);
+-	gl_tx_msg(m, 16);
++	memcpy(m + 8, gl_ch[lcid - 1].name, len);
++	gl_tx_msg(m, (8 + len + 7) & ~7u);
+ }
+ 
+-/* The SLPI's receive intents on "IPCRTR": what we may send into. */
+-#define GL_REMOTE_INTENTS       64
++/* The SLPI's receive intents, per channel (its cid): what we may send into. */
++#define GL_REMOTE_INTENTS       128
+ static struct {
+-	uint32_t size, iid;
++	uint32_t cid, size, iid;
+ 	bool used, valid;
+ } gl_ri[GL_REMOTE_INTENTS];
+-static uint8_t gl_rx_buf[0x4400];
+-static uint32_t gl_rx_used;
+ 
+ static void
+-gl_remote_intent_add(uint32_t size, uint32_t iid)
++gl_remote_intent_add(uint32_t cid, uint32_t size, uint32_t iid)
+ {
+ 	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
+ 		if (!gl_ri[i].valid) {
++			gl_ri[i].cid = cid;
+ 			gl_ri[i].size = size;
+ 			gl_ri[i].iid = iid;
+ 			gl_ri[i].used = false;
+@@ -564,10 +589,10 @@ gl_remote_intent_add(uint32_t size, uint32_t iid)
+ }
+ 
+ static void
+-gl_remote_intent_done(uint32_t iid, bool reuse)
++gl_remote_intent_done(uint32_t cid, uint32_t iid, bool reuse)
+ {
+ 	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
+-		if (gl_ri[i].valid && gl_ri[i].iid == iid) {
++		if (gl_ri[i].valid && gl_ri[i].cid == cid && gl_ri[i].iid == iid) {
+ 			gl_ri[i].used = false;
+ 			gl_ri[i].valid = reuse;
+ 			return;
+@@ -577,25 +602,26 @@ gl_remote_intent_done(uint32_t iid, bool reuse)
+ 
+ /* One GLINK data message (TX_DATA, param1 = our lcid, param2 = the SLPI's intent). */
+ static bool
+-gl_send(const uint8_t *data, uint32_t len)
++gl_send(uint16_t lcid, const uint8_t *data, uint32_t len)
+ {
+ 	int best = -1;
++	uint32_t cid = gl_ch[lcid - 1].rcid;
+ 	for (int i = 0; i < GL_REMOTE_INTENTS; i++) {
+-		if (gl_ri[i].valid && !gl_ri[i].used && gl_ri[i].size >= len &&
++		if (gl_ri[i].valid && gl_ri[i].cid == cid && !gl_ri[i].used && gl_ri[i].size >= len &&
+ 		    (best < 0 || gl_ri[i].size < gl_ri[best].size)) {
+ 			best = i;
+ 		}
+ 	}
+ 	if (best < 0) {
+-		printf("SWEET SLPI: GLINK: no SLPI intent for %u bytes; asking for one\n", len);
+-		gl_cmd(GL_RX_INTENT_REQ, GL_LCID, len);
++		printf("SWEET SLPI: GLINK: no SLPI intent on %s for %u bytes; asking for one\n", gl_ch[lcid - 1].name, len);
++		gl_cmd(GL_RX_INTENT_REQ, lcid, len);
+ 		return false;
+ 	}
+ 	static uint8_t m[16 + 0x2100];
+ 	if (len > sizeof(m) - 16) {
+ 		return false;
+ 	}
+-	uint16_t cmd = GL_TX_DATA, lcid = GL_LCID;
++	uint16_t cmd = GL_TX_DATA;
+ 	uint32_t left = 0;
+ 	memcpy(m, &cmd, 2);
+ 	memcpy(m + 2, &lcid, 2);
+@@ -642,7 +668,7 @@ qr_send(uint32_t type, uint32_t src_port, uint32_t dst_node, uint32_t dst_port,
+ 	memcpy(pkt, h, 32);
+ 	memset(pkt + 32, 0, padded);
+ 	memcpy(pkt + 32, payload, len);
+-	(void)gl_send(pkt, 32 + padded);
++	(void)gl_send(GL_LCID, pkt, 32 + padded);
+ }
+ 
+ static void
+@@ -813,6 +839,657 @@ qr_rx(const uint8_t *pkt, uint32_t len)
+ 	}
+ }
+ 
++
++/* ---- FastRPC (Linux drivers/misc/fastrpc.c message format) ---- */
++
++/*
++ * The sensor user PD (sensor_process) reads its configuration through reverse calls
++ * to an APPS process: Android's sscrpcd, postmarketOS's hexagonrpcd (linux-msm/hexagonrpc,
++ * whose behaviour this follows; no code taken). Here the kernel is that process:
++ * INIT_ATTACH to the sensors PD, open + register "adsp_default_listener", then
++ * adsp_listener next2 in a loop, answering remotectl (handle 0) and apps_std
++ * (handle 1: files from /private/var/sweet/sensors/).
++ *
++ * Argument buffers are read by the SLPI through APPS SMMU stream 0x541 (dt
++ * sdsprpc-smd compute cb, upstream reg 1 = sid in address bits 32+), routed to the
++ * display's non-translating context like the other DSP streams here
++ * (sweet_smmu_route_sid). The SLPI takes 32-bit physical addresses, so the buffer
++ * is low RAM that highmem XNU does not manage: 1 MiB at 0xd3000000 (after the
++ * Wi-Fi pools, sweet_wlan.c / sweet_wlfw.c).
++ */
++#define FR_POOL_PA              0xd3000000u
++#define FR_POOL_SIZE            0x100000u
++#define FR_SID                  1ull
++#define FR_TGID                 0x100
++#define FR_PD_SENSORS           2
++#define FR_HANDLE_REMOTECTL     0
++#define FR_HANDLE_INIT          1
++#define FR_HANDLE_LISTENER      3
++#define FR_SC(m, in, out)       ((((uint32_t)(m) & 0x1f) << 24) | (((in) & 0xff) << 16) | (((out) & 0xff) << 8))
++#define FR_SC_METHOD(sc)        (((sc) >> 24) & 0x1f)
++#define FR_SC_IN(sc)            (((sc) >> 16) & 0xff)
++#define FR_SC_OUT(sc)           (((sc) >> 8) & 0xff)
++#define FR_MAX_BUFS             8
++#define AEE_EFAILED             1
++#define AEE_EBADPARM            14
++#define AEE_EUNSUPPORTED        20
++#define FR_DIR                  "/private/var/sweet/sensors/"
++
++extern bool sweet_smmu_route_sid(uint32_t sid);
++extern kern_return_t pmap_enter(pmap_t, vm_map_offset_t, ppnum_t, vm_prot_t, vm_prot_t, unsigned int, boolean_t);
++static bool gl_rx_one(void);
++#define FR_WIMG_WCOMB           0x6     /* arm/memory_types.h VM_WIMG_WCOMB */
++
++static volatile uint8_t *fr_pool;
++static uint32_t fr_ctxid;
++static uint64_t fr_reply_ctx;
++static int32_t fr_reply_ret;
++static bool fr_reply;
++static unsigned fr_logged;
++
++struct fr_buf {
++	void *p;
++	uint32_t len;
++};
++
++static void
++fr_rx(const uint8_t *m, uint32_t len)
++{
++	if (len < 12) {
++		return;
++	}
++	memcpy(&fr_reply_ctx, m, 8);
++	memcpy(&fr_reply_ret, m + 8, 4);
++	fr_reply = true;
++}
++
++static bool
++fr_map_pool(void)
++{
++	if (fr_pool != NULL) {
++		return true;
++	}
++	vm_offset_t va = 0;
++	if (kmem_alloc(kernel_map, &va, FR_POOL_SIZE, KMA_VAONLY | KMA_PERMANENT, VM_KERN_MEMORY_IOKIT) != KERN_SUCCESS) {
++		return false;
++	}
++	for (uint32_t o = 0; o < FR_POOL_SIZE; o += PAGE_SIZE) {
++		if (pmap_enter(kernel_pmap, va + o, (ppnum_t)atop_64((uint64_t)FR_POOL_PA + o), VM_PROT_READ | VM_PROT_WRITE,
++		    VM_PROT_NONE, FR_WIMG_WCOMB, TRUE) != KERN_SUCCESS) {
++			return false;
++		}
++	}
++	fr_pool = (volatile uint8_t *)va;
++	return true;
++}
++
++static void
++fr_put(uint32_t off, const void *src, uint32_t len)
++{
++	for (uint32_t i = 0; i < len; i++) {
++		fr_pool[off + i] = ((const uint8_t *)src)[i];
++	}
++}
++
++static void
++fr_get(void *dst, uint32_t off, uint32_t len)
++{
++	for (uint32_t i = 0; i < len; i++) {
++		((uint8_t *)dst)[i] = fr_pool[off + i];
++	}
++}
++
++static void
++fr_put64(uint32_t off, uint64_t v)
++{
++	fr_put(off, &v, 8);
++}
++
++static void
++fr_put32(uint32_t off, uint32_t v)
++{
++	fr_put(off, &v, 4);
++}
++
++/*
++ * One synchronous invoke: the payload (remote_arg / invoke_buf / phy_page lists, fd and
++ * crc lists, then each buffer 128-byte aligned) at the pool's start, the 40-byte message
++ * on the GLINK channel, then GLINK is pumped until the reply {ctx, retval} comes.
++ */
++static int
++fr_invoke(uint32_t pid, uint32_t handle, uint32_t sc, struct fr_buf *in, struct fr_buf *out, unsigned wait_ms)
++{
++	uint32_t nin = FR_SC_IN(sc), nout = FR_SC_OUT(sc), n = nin + nout;
++	if (n > FR_MAX_BUFS || !fr_map_pool()) {
++		return -1;
++	}
++	uint32_t meta = (16 + 8 + 16) * n + 8 * 16 + 4 * 64;
++	uint32_t at = (meta + 127) & ~127u, off[FR_MAX_BUFS];
++	for (uint32_t i = 0; i < meta; i += 4) {
++		fr_put32(i, 0);
++	}
++	for (uint32_t i = 0; i < n; i++) {
++		struct fr_buf *b = i < nin ? &in[i] : &out[i - nin];
++		at = (at + 127) & ~127u;
++		off[i] = at;
++		uint64_t pa = (uint64_t)FR_POOL_PA + at;
++		if (at + b->len > FR_POOL_SIZE) {
++			return -1;
++		}
++		fr_put64(16 * i, b->len ? pa : 0);                              /* remote_arg.pv */
++		fr_put64(16 * i + 8, b->len);                                   /* remote_arg.len */
++		fr_put32(16 * n + 8 * i, b->len ? 1 : 0);                       /* invoke_buf.num */
++		fr_put32(16 * n + 8 * i + 4, i);                                /* invoke_buf.pgidx */
++		if (b->len) {
++			uint64_t first = pa & ~0xfffull, last = (pa + b->len - 1) & ~0xfffull;
++			fr_put64(24 * n + 16 * i, first | (FR_SID << 32));      /* phy_page.addr (4K pages) */
++			fr_put64(24 * n + 16 * i + 8, last - first + 0x1000);   /* phy_page.size */
++		}
++		if (i < nin && b->len) {
++			fr_put(at, b->p, b->len);
++		} else if (b->len) {
++			for (uint32_t z = 0; z < b->len; z++) {
++				fr_pool[at + z] = 0;
++			}
++		}
++		at += b->len;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	fr_ctxid = (fr_ctxid % 255) + 1;
++	uint64_t ctx = ((uint64_t)fr_ctxid << 4) | FR_PD_SENSORS;
++	uint8_t msg[40];
++	uint64_t addr = (uint64_t)FR_POOL_PA | (FR_SID << 32), size = (at + 0xfff) & ~0xfffull;
++	int32_t ipid = (int32_t)pid, itid = FR_TGID;
++	memcpy(msg, &ipid, 4);
++	memcpy(msg + 4, &itid, 4);
++	memcpy(msg + 8, &ctx, 8);
++	memcpy(msg + 16, &handle, 4);
++	memcpy(msg + 20, &sc, 4);
++	memcpy(msg + 24, &addr, 8);
++	memcpy(msg + 32, &size, 8);
++	fr_reply = false;
++	bool sent = false;
++	for (unsigned t = 0; t < 200 && !sent; t++) {
++		sent = gl_send(GL_LCID_RPC, msg, 40);
++		if (!sent) {
++			while (gl_rx_one()) {
++			}
++			sl_sleep_ms(5);
++		}
++	}
++	if (!sent) {
++		printf("SWEET SLPI: FastRPC: could not send (handle %u sc %#x)\n", handle, sc);
++		return -1;
++	}
++	for (unsigned t = 0; wait_ms == 0 || t < wait_ms; t++) {   /* 0: until the reply */
++		while (gl_rx_one()) {
++		}
++		if (fr_reply && fr_reply_ctx == ctx) {
++			for (uint32_t i = 0; i < nout; i++) {
++				if (out[i].len) {
++					fr_get(out[i].p, off[nin + i], out[i].len);
++				}
++			}
++			return fr_reply_ret;
++		}
++		if (fr_reply) {
++			printf("SWEET SLPI: FastRPC: reply for ctx %#llx, waiting for %#llx\n", fr_reply_ctx, ctx);
++			fr_reply = false;
++		}
++		sl_sleep_ms(t < 200 ? 1 : 10);  /* a listener call may wait for minutes */
++		if (t >= 200 && wait_ms != 0) {
++			t += 9;
++		}
++	}
++	printf("SWEET SLPI: FastRPC: no reply (handle %u sc %#x) in %u ms\n", handle, sc, wait_ms);
++	return -2;
++}
++
++/* ---- the files the sensor PD asks for (apps_std) ---- */
++
++#define FR_FDS                  16
++#define FR_FILE_MAX             (1024 * 1024)
++static struct {
++	bool used, dir;
++	uint8_t *data;          /* file contents, or "name\0name\0..." for a directory */
++	uint32_t len, pos;
++} fr_fd[FR_FDS];
++
++/* The SLPI's path -> ours (hexagonrpcd's virtual tree: rpcd_builder.c). */
++static bool
++fr_path(const char *dsp, const char *env, char *out, size_t outlen)
++{
++	static const struct {
++		const char *from, *to;
++	} map[] = {
++		{ "/mnt/vendor/persist/sensors", "persist-sensors" },  /* the phone's persist:/sensors */
++		{ "/persist/sensors", "persist-sensors" },
++		{ "/system/vendor/etc/sensors", "vendor-sensors" },    /* vendor:/etc/sensors */
++		{ "/vendor/etc/sensors", "vendor-sensors" },
++		{ "/system/vendor/etc/acdbdata", "acdb" },
++		{ "/vendor/etc/acdbdata", "acdb" },
++		{ "/sys/devices/soc0", "soc0" },                        /* sysfs soc0 as read in TWRP */
++		{ "/usr/lib/qcom/adsp", "adsp" },
++	};
++	char clean[256];
++	size_t j = 0;
++	for (size_t i = 0; dsp[i] && j + 1 < sizeof(clean); i++) {     /* collapse "//", drop a trailing "/" */
++		if (dsp[i] == '/' && j > 0 && clean[j - 1] == '/') {
++			continue;
++		}
++		clean[j++] = dsp[i];
++	}
++	while (j > 1 && clean[j - 1] == '/') {
++		j--;
++	}
++	clean[j] = 0;
++	if (clean[0] != '/') {          /* relative: in the search directory of the environment variable */
++		const char *dir = env != NULL && strcmp(env, "ADSP_AVS_CFG_PATH") == 0 ? "acdb" : "adsp";
++		snprintf(out, outlen, FR_DIR "%s/%s", dir, clean);
++		return true;
++	}
++	for (unsigned k = 0; k < sizeof(map) / sizeof(map[0]); k++) {
++		size_t n = strlen(map[k].from);
++		if (strncmp(clean, map[k].from, n) == 0 && (clean[n] == 0 || clean[n] == '/')) {
++			snprintf(out, outlen, FR_DIR "%s%s", map[k].to, clean + n);
++			return true;
++		}
++	}
++	return false;
++}
++
++static int
++fr_load(const char *path, uint8_t **data, uint32_t *len, bool *dir)
++{
++	vfs_context_t ctx = vfs_context_kernel();
++	vnode_t vp = NULLVP;
++	int err = vnode_lookup(path, 0, &vp, ctx);
++	if (err) {
++		return err;
++	}
++	*dir = vnode_vtype(vp) == VDIR;
++	if (!*dir) {
++		off_t size = 0;
++		err = vnode_size(vp, &size, ctx);
++		if (!err && size > FR_FILE_MAX) {
++			err = EFBIG;
++		}
++		if (!err) {
++			*len = (uint32_t)size;
++			*data = kalloc_data(size ? (vm_size_t)size : 1, Z_WAITOK | Z_ZERO);
++			int resid = 0;
++			err = *data == NULL ? ENOMEM : (size ? vn_rdwr(UIO_READ, vp, (caddr_t)*data, (int)size, 0, UIO_SYSSPACE,
++			    IO_NODELOCKED, vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx)) : 0);
++		}
++	} else {
++		uint8_t *names = kalloc_data(16384, Z_WAITOK | Z_ZERO), *buf = kalloc_data(8192, Z_WAITOK);
++		uint32_t used = 0;
++		int eof = 0;
++		off_t off = 0;
++		err = names && buf ? 0 : ENOMEM;
++		while (!err && !eof) {
++			int count = 0;
++			uio_t uio = uio_create(1, off, UIO_SYSSPACE, UIO_READ);
++			uio_addiov(uio, CAST_USER_ADDR_T(buf), 8192);
++			err = VNOP_READDIR(vp, uio, 0, &eof, &count, ctx);
++			size_t got = 8192 - (size_t)uio_resid(uio);
++			off = uio_offset(uio);
++			uio_free(uio);
++			if (err || got == 0) {
++				break;
++			}
++			for (size_t q = 0; q < got;) {
++				struct dirent *de = (struct dirent *)(void *)(buf + q);
++				if (de->d_reclen == 0) {
++					break;
++				}
++				q += de->d_reclen;
++				size_t nl = strlen(de->d_name);
++				if (de->d_ino == 0 || !strcmp(de->d_name, ".") || !strcmp(de->d_name, "..") ||
++				    used + nl + 1 > 16384) {
++					continue;
++				}
++				memcpy(names + used, de->d_name, nl + 1);
++				used += (uint32_t)nl + 1;
++			}
++		}
++		if (buf) {
++			kfree_data(buf, 8192);
++		}
++		*data = names;
++		*len = used;
++	}
++	vnode_put(vp);
++	return err;
++}
++
++static int
++fr_open(const char *path)
++{
++	for (int i = 1; i < FR_FDS; i++) {
++		if (!fr_fd[i].used) {
++			uint8_t *data = NULL;
++			uint32_t len = 0;
++			bool dir = false;
++			int err = fr_load(path, &data, &len, &dir);
++			if (err) {
++				if (data) {
++					kfree_data(data, dir ? 16384 : (len ? len : 1));
++				}
++				return -err;
++			}
++			fr_fd[i].used = true;
++			fr_fd[i].dir = dir;
++			fr_fd[i].data = data;
++			fr_fd[i].len = len;
++			fr_fd[i].pos = 0;
++			return i;
++		}
++	}
++	return -EMFILE;
++}
++
++static void
++fr_close(uint32_t fd)
++{
++	if (fd < FR_FDS && fr_fd[fd].used) {
++		kfree_data(fr_fd[fd].data, fr_fd[fd].dir ? 16384 : (fr_fd[fd].len ? fr_fd[fd].len : 1));
++		fr_fd[fd].used = false;
++	}
++}
++
++/* A string argument: in-buffer i, NUL-terminated within its length. */
++static const char *
++fr_str(struct fr_buf *b)
++{
++	return b->len > 0 && ((const char *)b->p)[b->len - 1] == 0 ? (const char *)b->p : NULL;
++}
++
++/*
++ * One reverse call (handle, method) with its decoded in-buffers; fills out-buffer sizes
++ * and contents (out[0] = the primary out words). Returns the call's result.
++ */
++static uint32_t
++fr_serve(uint32_t handle, uint32_t sc, struct fr_buf *in, uint32_t nin, uint8_t *outmem, struct fr_buf *out,
++    uint32_t nout)
++{
++	uint32_t method = FR_SC_METHOD(sc), w[8] = { 0 };
++	if (nin > 0 && in[0].len >= 4) {
++		memcpy(w, in[0].p, MIN(in[0].len, (uint32_t)sizeof(w)));
++	}
++	if (method == 31 && nin > 0) {          /* extended method id: the first primary word */
++		method = w[0];
++		memmove(w, w + 1, sizeof(w) - 4);
++	}
++	for (uint32_t i = 0; i < nout; i++) {
++		out[i].p = NULL;
++		out[i].len = 0;
++	}
++	uint8_t *prim = outmem;
++	char path[200];
++	bool log = fr_logged++ < 200;
++	if (handle == FR_HANDLE_REMOTECTL && method == 0 && nin >= 2 && nout >= 2) {      /* open(name) */
++		const char *name = fr_str(&in[1]);
++		uint32_t h = 0, e = 0;
++		if (name != NULL && strcmp(name, "apps_std") == 0) {
++			h = 1;
++		} else {
++			e = (uint32_t)-5;
++		}
++		memcpy(prim, &h, 4);
++		memcpy(prim + 4, &e, 4);
++		out[0].p = prim;
++		out[0].len = 8;
++		out[1].p = outmem + 64;
++		out[1].len = MIN(w[1], 256u);
++		memset(out[1].p, 0, out[1].len);
++		printf("SWEET SLPI: FastRPC <- remotectl open \"%s\" -> %s\n", name ? name : "?", h ? "apps_std" : "refused");
++		return e;
++	}
++	if (handle == FR_HANDLE_REMOTECTL && method == 1 && nout >= 2) {                   /* close */
++		memset(prim, 0, 4);
++		out[0].p = prim;
++		out[0].len = 4;
++		out[1].p = outmem + 64;
++		out[1].len = MIN(w[1], 256u);
++		memset(out[1].p, 0, out[1].len);
++		return 0;
++	}
++	if (handle != 1) {
++		printf("SWEET SLPI: FastRPC <- handle %u method %u: unknown interface\n", handle, method);
++		return AEE_EUNSUPPORTED;
++	}
++	switch (method) {
++	case 2:                                 /* fflush */
++		return 0;
++	case 3:                                 /* fclose */
++		fr_close(w[0]);
++		return 0;
++	case 4: {                               /* fread(fd, size) -> written, eof, data */
++		uint32_t fd = w[0], want = MIN(w[1], 0x10000u), got = 0;
++		if (fd >= FR_FDS || !fr_fd[fd].used || fr_fd[fd].dir || nout < 2) {
++			return AEE_EFAILED;
++		}
++		got = MIN(want, fr_fd[fd].len - MIN(fr_fd[fd].pos, fr_fd[fd].len));
++		out[1].p = outmem + 1024;
++		out[1].len = w[1] <= 0x10000 ? w[1] : 0x10000;
++		memset(out[1].p, 0, out[1].len);
++		memcpy(out[1].p, fr_fd[fd].data + fr_fd[fd].pos, got);
++		fr_fd[fd].pos += got;
++		uint32_t pw[2] = { got, got < w[1] };
++		memcpy(prim, pw, 8);
++		out[0].p = prim;
++		out[0].len = 8;
++		return 0;
++	}
++	case 9: {                               /* fseek(fd, pos, whence) */
++		uint32_t fd = w[0];
++		if (fd >= FR_FDS || !fr_fd[fd].used) {
++			return AEE_EFAILED;
++		}
++		int64_t base = w[2] == 0 ? 0 : w[2] == 1 ? fr_fd[fd].pos : fr_fd[fd].len;
++		int64_t np = base + (int32_t)w[1];
++		if (np < 0 || np > fr_fd[fd].len) {
++			return AEE_EFAILED;
++		}
++		fr_fd[fd].pos = (uint32_t)np;
++		return 0;
++	}
++	case 19: {                              /* fopen_with_env(env, delim, name, mode) -> fd */
++		const char *env = nin >= 5 ? fr_str(&in[1]) : NULL, *name = nin >= 5 ? fr_str(&in[3]) : NULL;
++		const char *mode = nin >= 5 ? fr_str(&in[4]) : NULL;
++		out[0].p = prim;
++		out[0].len = 4;
++		memset(prim, 0, 4);
++		if (name == NULL || mode == NULL) {
++			return AEE_EBADPARM;
++		}
++		if (mode[0] == 'w' || mode[0] == 'a') {
++			if (log) {
++				printf("SWEET SLPI: FastRPC <- fopen \"%s\" \"%s\": writing refused\n", name, mode);
++			}
++			return AEE_EUNSUPPORTED;
++		}
++		int fd = fr_path(name, env, path, sizeof(path)) ? fr_open(path) : -ENOENT;
++		if (log) {
++			printf("SWEET SLPI: FastRPC <- fopen \"%s\" -> %s %d (%u bytes)\n", name, path, fd,
++			    fd > 0 ? fr_fd[fd].len : 0);
++		}
++		if (fd <= 0) {
++			return AEE_EFAILED;
++		}
++		memcpy(prim, &fd, 4);
++		return 0;
++	}
++	case 26: {                              /* opendir(name) -> dir */
++		const char *name = nin >= 2 ? fr_str(&in[1]) : NULL;
++		out[0].p = prim;
++		out[0].len = 8;
++		memset(prim, 0, 8);
++		int fd = name && fr_path(name, NULL, path, sizeof(path)) ? fr_open(path) : -ENOENT;
++		if (log) {
++			printf("SWEET SLPI: FastRPC <- opendir \"%s\" -> %d\n", name ? name : "?", fd);
++		}
++		if (fd <= 0 || !fr_fd[fd].dir) {
++			if (fd > 0) {
++				fr_close((uint32_t)fd);
++			}
++			return AEE_EFAILED;
++		}
++		uint64_t d = (uint64_t)fd;
++		memcpy(prim, &d, 8);
++		return 0;
++	}
++	case 27: {                              /* closedir(dir) */
++		uint64_t d;
++		memcpy(&d, w, 8);
++		fr_close((uint32_t)d);
++		return 0;
++	}
++	case 28: {                              /* readdir(dir) -> inode, name[256], eof */
++		uint64_t d;
++		memcpy(&d, w, 8);
++		memset(prim, 0, 264);
++		out[0].p = prim;
++		out[0].len = 264;
++		if (d >= FR_FDS || !fr_fd[d].used || !fr_fd[d].dir) {
++			return AEE_EFAILED;
++		}
++		if (fr_fd[d].pos < fr_fd[d].len) {
++			const char *nm = (const char *)fr_fd[d].data + fr_fd[d].pos;
++			strlcpy((char *)prim + 4, nm, 256);
++			fr_fd[d].pos += (uint32_t)strlen(nm) + 1;
++		} else {
++			uint32_t one = 1;
++			memcpy(prim + 260, &one, 4);
++		}
++		return 0;
++	}
++	case 31: {                              /* stat(path) */
++		const char *name = nin >= 2 ? fr_str(&in[1]) : NULL;
++		memset(prim, 0, 96);
++		out[0].p = prim;
++		out[0].len = 96;
++		int fd = name && fr_path(name, "ADSP_LIBRARY_PATH", path, sizeof(path)) ? fr_open(path) : -ENOENT;
++		if (log) {
++			printf("SWEET SLPI: FastRPC <- stat \"%s\" -> %d\n", name ? name : "?", fd);
++		}
++		if (fd <= 0) {
++			return AEE_EFAILED;
++		}
++		uint32_t mode = fr_fd[fd].dir ? 0040755 : 0100644, nlink = 1;
++		uint64_t size = fr_fd[fd].dir ? 0 : fr_fd[fd].len;
++		memcpy(prim + 24, &mode, 4);
++		memcpy(prim + 28, &nlink, 4);
++		memcpy(prim + 40, &size, 8);
++		fr_close((uint32_t)fd);
++		return 0;
++	}
++	default:
++		printf("SWEET SLPI: FastRPC <- apps_std method %u (sc %#x): not implemented\n", method, sc);
++		return AEE_EUNSUPPORTED;
++	}
++}
++
++/* Attach to the sensors PD, register the default listener, then answer its calls. */
++static void
++fr_run(unsigned seconds)
++{
++	struct fr_buf in[4], out[4];
++	uint32_t prim[8], oprim[8];
++	char err[256];
++	(void)sweet_smmu_route_sid(0x541);
++	(void)sweet_smmu_route_sid(0x542);
++	(void)sweet_smmu_route_sid(0x543);
++	int32_t tgid = FR_TGID;
++	in[0] = (struct fr_buf){ &tgid, 4 };
++	int r = fr_invoke(0, FR_HANDLE_INIT, FR_SC(0, 1, 0), in, out, 3000);
++	printf("SWEET SLPI: FastRPC INIT_ATTACH (sensors PD) -> %d\n", r);
++	if (r != 0) {
++		return;
++	}
++	static const char lname[] = "adsp_default_listener";
++	prim[0] = sizeof(lname);
++	prim[1] = sizeof(err);
++	in[0] = (struct fr_buf){ prim, 8 };
++	in[1] = (struct fr_buf){ (void *)(uintptr_t)lname, sizeof(lname) };
++	out[0] = (struct fr_buf){ oprim, 8 };
++	out[1] = (struct fr_buf){ err, sizeof(err) };
++	r = fr_invoke(FR_TGID, FR_HANDLE_REMOTECTL, FR_SC(0, 2, 2), in, out, 3000);
++	uint32_t lh = oprim[0];
++	printf("SWEET SLPI: FastRPC remotectl open adsp_default_listener -> %d, handle %u, dl error %d\n", r, lh, oprim[1]);
++	if (r != 0) {
++		return;
++	}
++	r = fr_invoke(FR_TGID, lh, FR_SC(0, 0, 0), in, out, 3000);
++	printf("SWEET SLPI: FastRPC adsp_default_listener register -> %d\n", r);
++	r = fr_invoke(FR_TGID, FR_HANDLE_LISTENER, FR_SC(3, 0, 0), in, out, 3000);
++	printf("SWEET SLPI: FastRPC adsp_listener init2 -> %d\n", r);
++	if (r != 0) {
++		return;
++	}
++	static uint8_t reply_enc[0x10200], nested[256], outmem[0x10400];
++	struct fr_buf rq_in[FR_MAX_BUFS], rq_out[FR_MAX_BUFS];
++	uint8_t inmem[256];
++	uint32_t rctx = 0, result = 0xffffffff, enc_len = 0, calls = 0;
++	(void)seconds;
++	for (;;) {
++		uint32_t np[4] = { rctx, result, enc_len, sizeof(nested) }, rp[4] = { 0 };
++		in[0] = (struct fr_buf){ np, 16 };
++		in[1] = (struct fr_buf){ reply_enc, enc_len };
++		out[0] = (struct fr_buf){ rp, 16 };
++		out[1] = (struct fr_buf){ nested, sizeof(nested) };
++		r = fr_invoke(FR_TGID, FR_HANDLE_LISTENER, FR_SC(4, 2, 2), in, out, 0);    /* the next call, whenever */
++		if (r != 0) {
++			printf("SWEET SLPI: FastRPC adsp_listener next2 -> %d after %u calls\n", r, calls);
++			return;
++		}
++		rctx = rp[0];
++		uint32_t handle = rp[1], sc = rp[2], ilen = MIN(rp[3], (uint32_t)sizeof(nested));
++		/* nested in-buffers: per buffer u32 size, padding to 8, data (hexagonrpcd iobuffer.c) */
++		uint32_t nin = MIN(FR_SC_IN(sc), (uint32_t)FR_MAX_BUFS), nout = MIN(FR_SC_OUT(sc), (uint32_t)FR_MAX_BUFS);
++		uint32_t pos = 0, used = 0;
++		bool ok = true;
++		for (uint32_t i = 0; i < nin; i++) {
++			uint32_t sz = 0;
++			if (pos + 4 > ilen) {
++				ok = false;
++				break;
++			}
++			memcpy(&sz, nested + pos, 4);
++			pos += 4;
++			if (sz && (pos & 7)) {
++				pos = (pos + 7) & ~7u;
++			}
++			if (pos + sz > ilen || used + sz > sizeof(inmem)) {
++				ok = false;
++				break;
++			}
++			memcpy(inmem + used, nested + pos, sz);
++			rq_in[i] = (struct fr_buf){ inmem + used, sz };
++			used += sz;
++			pos += sz;
++		}
++		calls++;
++		result = ok ? fr_serve(handle, sc, rq_in, nin, outmem, rq_out, nout) : AEE_EBADPARM;
++		/* the out-buffers back: per buffer u32 size, padding to 8, data */
++		enc_len = 0;
++		for (uint32_t i = 0; i < nout; i++) {
++			uint32_t sz = rq_out[i].len;
++			memcpy(reply_enc + enc_len, &sz, 4);
++			enc_len += 4;
++			if (sz && (enc_len & 7)) {
++				memset(reply_enc + enc_len, 0, 8 - (enc_len & 7));
++				enc_len = (enc_len + 7) & ~7u;
++			}
++			if (sz) {
++				memcpy(reply_enc + enc_len, rq_out[i].p, sz);
++				enc_len += sz;
++			}
++		}
++	}
++}
++
+ /* Handle what the SLPI sent; false when the FIFO holds an incomplete message. */
+ static bool
+ gl_rx_one(void)
+@@ -847,23 +1524,24 @@ gl_rx_one(void)
+ 		gl_peek(name, 8, MIN(p2, 32u));
+ 		gl_advance(len);
+ 		printf("SWEET SLPI: GLINK <- OPEN \"%s\" rcid %u\n", name, p1);
+-		if (strcmp(name, "IPCRTR") == 0) {
+-			gl_rcid = p1;
+-			gl_cmd(GL_OPEN_ACK, (uint16_t)p1, 0);
+-			gl_open();
+-		} else {
+-			gl_cmd(GL_OPEN_ACK, (uint16_t)p1, 0);   /* acked, not used */
++		gl_cmd(GL_OPEN_ACK, (uint16_t)p1, 0);
++		for (int i = 0; i < GL_CHANNELS; i++) {
++			if (strcmp(name, gl_ch[i].name) == 0) {
++				gl_ch[i].rcid = p1;
++				gl_open((uint16_t)(i + 1));
++			}
+ 		}
+ 		return true;
+ 	}
+ 	case GL_OPEN_ACK:
+ 		gl_advance(8);
+-		printf("SWEET SLPI: GLINK <- OPEN_ACK lcid %u: \"IPCRTR\" open both ways\n", p1);
+-		if (p1 == GL_LCID) {
+-			static const uint32_t sizes[] = { 0x800, 0x800, 0x800, 0x800, 0x800, 0x2000, 0x2000, 0x2000,
+-				                          0x4400, 0x4400 };
+-			for (unsigned i = 0; i < sizeof(sizes) / sizeof(sizes[0]); i++) {
+-				gl_intent(sizes[i]);    /* dt qcom,intents <0x800 5 0x2000 3 0x4400 2> */
++		if (p1 >= 1 && p1 <= GL_CHANNELS) {
++			printf("SWEET SLPI: GLINK <- OPEN_ACK lcid %u: \"%s\" open both ways\n", p1, gl_ch[p1 - 1].name);
++			gl_ch[p1 - 1].acked = true;
++			for (int k = 0; k < 3; k++) {   /* dt qcom,intents of the channel */
++				for (uint32_t n = 0; n < gl_ch[p1 - 1].intents[k][1]; n++) {
++					gl_intent(p1, gl_ch[p1 - 1].intents[k][0]);
++				}
+ 			}
+ 		}
+ 		return true;
+@@ -883,7 +1561,7 @@ gl_rx_one(void)
+ 		for (uint32_t i = 0; i < p2; i++) {
+ 			uint32_t sz[2];
+ 			gl_peek(sz, 8 + 8 * i, 8);
+-			gl_remote_intent_add(sz[0], sz[1]);
++			gl_remote_intent_add(p1, sz[0], sz[1]);
+ 		}
+ 		gl_advance(len);
+ 		return true;
+@@ -891,8 +1569,11 @@ gl_rx_one(void)
+ 	case GL_RX_INTENT_REQ:
+ 		gl_advance(8);
+ 		printf("SWEET SLPI: GLINK <- RX_INTENT_REQ cid %u size %#x\n", p1, p2);
+-		gl_intent(p2);
+-		gl_cmd(GL_RX_INTENT_REQ_ACK, GL_LCID, 1);
++		if (gl_ch_by_rcid(p1) >= 0) {
++			uint16_t lcid = (uint16_t)(gl_ch_by_rcid(p1) + 1);
++			gl_intent(lcid, p2);
++			gl_cmd(GL_RX_INTENT_REQ_ACK, lcid, 1);
++		}
+ 		return true;
+ 	case GL_TX_DATA:
+ 	case GL_TX_DATA_CONT: {
+@@ -907,18 +1588,27 @@ gl_rx_one(void)
+ 		if (avail < len) {
+ 			return false;
+ 		}
++		int ch = gl_ch_by_rcid(p1);
++		if (ch < 0) {
++			gl_advance(len);
++			return true;
++		}
+ 		if (cmd == GL_TX_DATA) {
+-			gl_rx_used = 0;
++			gl_ch[ch].rx_used = 0;
+ 		}
+-		if (gl_rx_used + chunk <= sizeof(gl_rx_buf)) {
+-			gl_peek(gl_rx_buf + gl_rx_used, 16, chunk);
+-			gl_rx_used += chunk;
++		if (gl_ch[ch].rx_used + chunk <= sizeof(gl_ch[ch].rx)) {
++			gl_peek(gl_ch[ch].rx + gl_ch[ch].rx_used, 16, chunk);
++			gl_ch[ch].rx_used += chunk;
+ 		}
+ 		gl_advance(len);
+ 		gl_data_logged++;
+ 		if (left == 0) {
+-			gl_cmd(GL_RX_DONE_W_REUSE, GL_LCID, p2);     /* the intent is ours again */
+-			qr_rx(gl_rx_buf, gl_rx_used);
++			gl_cmd(GL_RX_DONE_W_REUSE, (uint16_t)(ch + 1), p2);     /* the intent is ours again */
++			if (ch + 1 == GL_LCID) {
++				qr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
++			} else {
++				fr_rx(gl_ch[ch].rx, gl_ch[ch].rx_used);
++			}
+ 		}
+ 		return true;
+ 	}
+@@ -929,7 +1619,7 @@ gl_rx_one(void)
+ 	case GL_RX_DONE:
+ 	case GL_RX_DONE_W_REUSE:
+ 		gl_advance(8);
+-		gl_remote_intent_done(p2, cmd == GL_RX_DONE_W_REUSE);
++		gl_remote_intent_done(p1, p2, cmd == GL_RX_DONE_W_REUSE);
+ 		return true;
+ 	case GL_RX_INTENT_REQ_ACK:
+ 	case GL_SIGNALS:
+@@ -960,9 +1650,16 @@ sl_glink(void)
+ 	gl_cmd(GL_VERSION, 1, GL_FEATURE_INTENT_REUSE);
+ 	printf("SWEET SLPI: GLINK -> VERSION 1\n");
+ 	uint32_t last = ~0u;
++	bool fr_done = false;
++	uint32_t fr_secs = 180;
++	PE_parse_boot_argn("sweetslpirpc", &fr_secs, sizeof(fr_secs));
+ 	for (int t = 0; t < 12000; t++) {       /* 120 s */
+ 		while (gl_rx_one()) {
+ 		}
++		if (!fr_done && fr_secs && gl_ch[GL_LCID_RPC - 1].acked) {
++			fr_done = true;         /* the sensor PD's configuration: FastRPC listener (blocks, pumps GLINK) */
++			fr_run(fr_secs);
++		}
+ 		uint32_t v = sl_smp2p_value(false);
+ 		if (v != last) {
+ 			printf("SWEET SLPI: slave-kernel bits %#x (fatal %u ready %u handover %u stop-ack %u) at %d ms\n", v,
+-- 
+2.54.0 (Apple Git-157)
+

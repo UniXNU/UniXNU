@@ -1,0 +1,66 @@
+From 62dd251a6d38a31cb7eaf2b3d69c89d268de7378 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Thu, 29 Oct 2026 18:25:51 +0100
+Subject: [PATCH] umi: clean IOSurfaces from the CPU cache at write-unlock
+
+The GPU is not coherent with the CPU's caches on SM8250, and the Metal
+runtime maps an IOSurface's texture once (BoMap cleans it then) and
+keeps the mapping. Everything the CPU draws into the surface later -
+CoreAnimation backing stores, the clock, decoded images - stayed in the
+cache while the GPU sampled what memory held.
+
+IOSurfaceUnlock without kIOSurfaceLockReadOnly is the framework's own
+"CPU writes are done" point (trap 3), so clean+invalidate the surface's
+pixels there. Unlike the submit-time clean of imports, this never pushes
+a stale line over a frame the GPU is writing. Write-combined surfaces
+are skipped (no dirty lines). The first 32 large write-unlocks are
+logged; SpringBoard, mediaserverd and CollectionsPoster all use it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetSurface.cpp | 29 +++++++++++++++++++++++++++--
+ 1 file changed, 27 insertions(+), 2 deletions(-)
+
+diff --git a/iokit/Kernel/arm/SweetSurface.cpp b/iokit/Kernel/arm/SweetSurface.cpp
+index 2c36918..3c1f93b 100644
+--- a/iokit/Kernel/arm/SweetSurface.cpp
++++ b/iokit/Kernel/arm/SweetSurface.cpp
+@@ -1404,8 +1404,33 @@ IOSurfaceRootUserClient::trapUnlock(void *id, void *options, void *seedOut,
+ 	if (s == NULL) {
+ 		return kIOReturnNotFound;
+ 	}
+-	IOReturn ret = sweet_surface_seed_out(s, seedOut,
+-	    !((uintptr_t)options & kIOSurfaceLockReadOnly));
++	bool wrote = !((uintptr_t)options & kIOSurfaceLockReadOnly);
++	/*
++	 * The CPU is done writing: push its lines out to memory now. The GPU is not
++	 * coherent with the CPU's caches here, and the Metal runtime maps a surface's
++	 * texture once (BoMap cleans it then) and keeps it - everything the CPU draws
++	 * into it later (backing stores, the clock, decoded images) would stay in the
++	 * cache while the GPU composites what memory still holds. Unlock is IOSurface's
++	 * own "CPU access ends" point, so no frame the GPU is writing gets a stale line
++	 * pushed over it (that was the submit-time clean's problem). Write-combined
++	 * surfaces have no dirty lines to push.
++	 */
++	if (wrote && s->mapCache != kIOMapWriteCombineCache && s->memory != NULL) {
++		uintptr_t va = s->kernelAddress();
++		uint64_t len = s->memory->getLength();
++		if (va != 0) {
++			sweet_dcache_flush(va, len);
++		}
++		static uint32_t told;
++		if (told < 32 && len >= (64u << 10)) {
++			char name[32];
++			proc_selfname(name, sizeof(name));
++			told++;
++			IOLog("SWEET SURF: %s write-unlock id %u %ux%u %llu bytes%s cleaned\n", name, s->id,
++			    s->width, s->height, len, s->wrapped ? " wrapped" : "");
++		}
++	}
++	IOReturn ret = sweet_surface_seed_out(s, seedOut, wrote);
+ 	s->release();
+ 	return ret;
+ }
+-- 
+2.54.0 (Apple Git-157)
+

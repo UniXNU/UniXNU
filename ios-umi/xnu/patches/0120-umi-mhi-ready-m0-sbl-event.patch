@@ -1,0 +1,281 @@
+From 478da3c751b04cd742ea488b8440557684266f68 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 11:23:51 +0200
+Subject: [PATCH] umi-0120
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_mhi.c  | 209 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlan.c |  16 +++-
+ 3 files changed, 225 insertions(+), 1 deletion(-)
+ create mode 100644 bsd/dev/sweet_mhi.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index f5b66e7..6e41eb3 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -115,6 +115,7 @@ bsd/dev/sweet_usb.c			standard
+ bsd/dev/sweet_pcie.c			standard
+ bsd/dev/sweet_mon.c			standard
+ bsd/dev/sweet_wlan.c			standard
++bsd/dev/sweet_mhi.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_mhi.c b/bsd/dev/sweet_mhi.c
+new file mode 100644
+index 0000000..8a8cb7f
+--- /dev/null
++++ b/bsd/dev/sweet_mhi.c
+@@ -0,0 +1,209 @@
++/*
++ * Minimal MHI host for the umi QCA6390 boot (Linux drivers/bus/mhi/host, polled):
++ * after BHI has started the SBL, wait for READY, give the device its context
++ * arrays (128 channels, 2 event rings, 1 command ring), move it to M0, then read
++ * the control event ring for execution-environment and state-change events.
++ * Memory comes from the caller (sweet_wlan.c): a block of DMA RAM below 4 GiB.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++
++int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
++int sweet_mhi_wait_ee(unsigned want, unsigned ms);
++
++/* Layout inside the caller's block (each ring aligned to its size) */
++#define MEM_CHCTX       0x0000u         /* 128 x 40 bytes */
++#define MEM_ERCTX       0x2000u         /* 2 x 40 */
++#define MEM_CMDCTX      0x2100u         /* 1 x 40 */
++#define MEM_ER0         0x3000u         /* 32 x 16 */
++#define MEM_ER1         0x4000u         /* 256 x 16 */
++#define MEM_CMD         0x5000u         /* 64 x 16 */
++#define ER0_N           32u
++#define ER1_N           256u
++#define CMD_N           64u
++#define MAX_CHAN        128u
++#define EL              16u
++
++#define MHICFG          0x10u
++#define CHDBOFF         0x18u
++#define ERDBOFF         0x20u
++#define MHICTRL         0x38u
++#define MHISTATUS       0x48u
++#define CCABAP_LOWER    0x58u
++#define ECABAP_LOWER    0x60u
++#define CRCBAP_LOWER    0x68u
++#define CRDB_LOWER      0x70u
++#define CTRLBASE_LOWER  0x80u
++#define CTRLLIMIT_LOWER 0x88u
++#define DATABASE_LOWER  0x98u
++#define DATALIMIT_LOWER 0xa0u
++#define DEV_WAKE_DB     127u
++
++static struct {
++	vm_offset_t bar0, mem;
++	uint32_t mem_pa;
++	vm_offset_t erdb;
++	uint32_t rp, wp;        /* host indices on event ring 0 */
++	unsigned ee;
++} mh;
++
++static uint32_t
++mh_rd(uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(mh.bar0 + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++mh_wr(uint32_t off, uint32_t val)
++{
++	__asm__ volatile("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(mh.bar0 + off) = val;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static void
++mh_wr64(uint32_t off, uint64_t val)
++{
++	mh_wr(off + 4, (uint32_t)(val >> 32));
++	mh_wr(off, (uint32_t)val);
++}
++
++static void
++mem_wr32(uint32_t off, uint32_t v)
++{
++	*(volatile uint32_t *)(mh.mem + off) = v;
++}
++
++static void
++mem_wr64(uint32_t off, uint64_t v)
++{
++	mem_wr32(off, (uint32_t)v);
++	mem_wr32(off + 4, (uint32_t)(v >> 32));
++}
++
++static uint64_t
++mem_rd64(uint32_t off)
++{
++	volatile uint32_t *p = (volatile uint32_t *)(mh.mem + off);
++	return (uint64_t)p[0] | (uint64_t)p[1] << 32;
++}
++
++/* One context: 3 words, then rbase, rlen, rp, wp (64-bit, 4-byte aligned) */
++static void
++ctx_set(uint32_t off, uint32_t w0, uint32_t w1, uint32_t w2, uint32_t ring, uint32_t len, uint32_t wp)
++{
++	mem_wr32(off, w0);
++	mem_wr32(off + 4, w1);
++	mem_wr32(off + 8, w2);
++	mem_wr64(off + 12, ring ? mh.mem_pa + ring : 0);
++	mem_wr64(off + 20, len);
++	mem_wr64(off + 28, ring ? mh.mem_pa + ring : 0);
++	mem_wr64(off + 36, ring ? mh.mem_pa + wp : 0);
++}
++
++static bool
++mh_poll(uint32_t off, uint32_t mask, uint32_t want, unsigned ms)
++{
++	for (unsigned i = 0; i < ms * 10u; ++i) {
++		if ((mh_rd(off) & mask) == want) {
++			return true;
++		}
++		delay(100);
++	}
++	return false;
++}
++
++int
++sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa)
++{
++	mh.bar0 = bar0;
++	mh.mem = mem;
++	mh.mem_pa = mem_pa;
++	mh.ee = 0;
++	bzero((void *)mem, MEM_CMD + CMD_N * EL);
++
++	bool rst = mh_poll(MHICTRL, 1u << 1, 0, 2000);
++	bool rdy = mh_poll(MHISTATUS, 1u, 1u, 2000);
++	printf("SWEET MHI: reset %s, ready %s (ctrl %#x status %#x)\n", rst ? "clear" : "STUCK",
++	    rdy ? "yes" : "NO", mh_rd(MHICTRL), mh_rd(MHISTATUS));
++	if (!rst || !rdy) {
++		return ETIMEDOUT;
++	}
++
++	/* Channels stay disabled (zero) until a client starts one. */
++	/* Event rings: type valid (1), MSI vector = Linux irq index; wp = last element. */
++	ctx_set(MEM_ERCTX, 0, 1, 1, MEM_ER0, ER0_N * EL, MEM_ER0 + (ER0_N - 1) * EL);
++	ctx_set(MEM_ERCTX + 40, 1u << 16, 1, 2, MEM_ER1, ER1_N * EL, MEM_ER1 + (ER1_N - 1) * EL);
++	ctx_set(MEM_CMDCTX, 0, 0, 0, MEM_CMD, CMD_N * EL, MEM_CMD);
++	__asm__ volatile("dsb sy" ::: "memory");
++	mh.rp = 0;
++	mh.wp = ER0_N - 1;
++
++	uint32_t erdboff = mh_rd(ERDBOFF), chdboff = mh_rd(CHDBOFF);
++	mh.erdb = erdboff;
++	mh_wr64(CCABAP_LOWER, mem_pa + MEM_CHCTX);
++	mh_wr64(ECABAP_LOWER, mem_pa + MEM_ERCTX);
++	mh_wr64(CRCBAP_LOWER, mem_pa + MEM_CMDCTX);
++	/* No IOMMU translation: the whole 32-bit space is host memory. */
++	mh_wr64(CTRLBASE_LOWER, 0);
++	mh_wr64(DATABASE_LOWER, 0);
++	mh_wr64(CTRLLIMIT_LOWER, 0xffffffffu);
++	mh_wr64(DATALIMIT_LOWER, 0xffffffffu);
++	mh_wr(MHICFG, (mh_rd(MHICFG) & ~0xffff0000u) | (2u << 16));     /* 2 event rings, 0 hardware */
++
++	/* Event ring doorbells: offer every element but one. */
++	mh_wr64(erdboff, mem_pa + MEM_ER0 + (ER0_N - 1) * EL);
++	mh_wr64(erdboff + 8, mem_pa + MEM_ER1 + (ER1_N - 1) * EL);
++
++	/* M0, and keep the device awake */
++	mh_wr(MHICTRL, (mh_rd(MHICTRL) & ~0xff00u) | (2u << 8));
++	mh_wr64(chdboff + 8 * DEV_WAKE_DB, 1);
++	printf("SWEET MHI: contexts at %#x, M0 requested (chdb %#x erdb %#x cfg %#x)\n",
++	    mem_pa, chdboff, erdboff, mh_rd(MHICFG));
++	return 0;
++}
++
++/* Consume control events until execution environment `want` is reported. */
++int
++sweet_mhi_wait_ee(unsigned want, unsigned ms)
++{
++	for (unsigned t = 0; t < ms * 10u; ++t) {
++		uint64_t devrp = mem_rd64(MEM_ERCTX + 28);
++		uint32_t idx = (uint32_t)((devrp - (mh.mem_pa + MEM_ER0)) / EL);
++		while (idx < ER0_N && mh.rp != idx) {
++			uint32_t e = MEM_ER0 + mh.rp * EL;
++			uint64_t ptr = mem_rd64(e);
++			uint32_t d0 = *(volatile uint32_t *)(mh.mem + e + 8);
++			uint32_t d1 = *(volatile uint32_t *)(mh.mem + e + 12);
++			unsigned type = (d1 >> 16) & 0xff;
++			if (type == 0x40) {
++				mh.ee = d0 >> 24;
++			}
++			printf("SWEET MHI: event type %#x %s %u (ptr %#llx d0 %#x d1 %#x)\n", type,
++			    type == 0x40 ? "ee" : type == 0x20 ? "state" : "code", d0 >> 24, ptr, d0, d1);
++			mh.rp = (mh.rp + 1) % ER0_N;
++			/* Give the element back */
++			mh.wp = (mh.wp + 1) % ER0_N;
++			uint64_t wp = mh.mem_pa + MEM_ER0 + mh.wp * EL;
++			mem_wr64(MEM_ERCTX + 36, wp);
++			__asm__ volatile("dsb sy" ::: "memory");
++			mh_wr64(mh.erdb, wp);
++		}
++		if (mh.ee == want) {
++			return 0;
++		}
++		if (mh_rd(MHISTATUS) & (1u << 2)) {
++			printf("SWEET MHI: SYSERR (status %#x)\n", mh_rd(MHISTATUS));
++			return EIO;
++		}
++		delay(100);
++	}
++	printf("SWEET MHI: no ee %u after %u ms (status %#x, ee %u)\n", want, ms, mh_rd(MHISTATUS), mh.ee);
++	return ETIMEDOUT;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 1777406..9d2a752 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -22,12 +22,15 @@ extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len);
+ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
++extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
++extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ 
+ #define WLAN_POOL_PA            0xd0000000u
+ #define WLAN_POOL_SIZE          0x00490000u
+ #define WLAN_FW_OFF             0x000000u       /* amss20.bin */
+ #define WLAN_FW_MAX             0x480000u        /* amss20.bin is 4352144 bytes */
+ #define WLAN_VEC_OFF            0x480000u       /* BHIe vector table */
++#define WLAN_MHI_OFF            0x484000u       /* MHI contexts and rings (sweet_mhi.c), 24 KiB */
+ #define WLAN_SBL_SIZE           0x80000u        /* ath11k sbl_size = seg_len = 512 KiB */
+ #define WLAN_SEG_LEN            0x80000u
+ 
+@@ -391,6 +394,17 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 6) {
+ 		return 0;
+ 	}
+-	return wlan_bhie(bar0, bhi) ? 15 : 0;
++	/* Linux order: READY, contexts, M0, SBL event, then BHIe, then mission mode. */
++	if (sweet_mhi_start(bar0, sw.pool + WLAN_MHI_OFF, sw.pool_pa + WLAN_MHI_OFF) != 0) {
++		return 16;
++	}
++	if (sweet_mhi_wait_ee(1, 5000) != 0) {         /* MHI_EE_SBL */
++		wlan_state(bar0, bhi, "no SBL");
++		return 17;
++	}
++	if (wlan_bhie(bar0, bhi) != 0) {
++		return 15;
++	}
++	return sweet_mhi_wait_ee(2, 10000) ? 18 : 0;    /* MHI_EE_AMSS */
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

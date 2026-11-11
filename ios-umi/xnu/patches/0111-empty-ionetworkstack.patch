@@ -1,0 +1,60 @@
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index eb18cfc..f5c13af 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -162,6 +162,37 @@ class IOAcceleratorES : public IOService {
+ };
+ 
+ OSDefineMetaClassAndStructors(IOAcceleratorES, IOService);
++
++/*
++ * configd's InterfaceNamer (configd-1241 ifnamer.c) opens the "IONetworkStack" object
++ * (IONetworkingFamily on real iOS, not in this kernel) and only then publishes "*QUIET*".
++ * Without it every first SCNetworkInterfaceCopyAll waits out WaitStackTimeout (300 s):
++ * Settings > About froze in -[PSGAboutDataSource _macAddress]. An empty stack whose user
++ * client opens is enough: naming requests only come for IONetworkInterface objects, of
++ * which there are none. It must exist before configd starts (it checks once, at launch).
++ */
++class IONetworkStack : public IOService {
++	OSDeclareDefaultStructors(IONetworkStack);
++};
++
++OSDefineMetaClassAndStructors(IONetworkStack, IOService);
++
++class IONetworkStackUserClient : public IOUserClient {
++	OSDeclareDefaultStructors(IONetworkStackUserClient);
++public:
++	IOReturn clientClose(void) APPLE_KEXT_OVERRIDE
++	{
++		terminate();
++		return kIOReturnSuccess;
++	}
++	IOReturn setProperties(OSObject *properties) APPLE_KEXT_OVERRIDE
++	{
++		(void)properties;
++		return kIOReturnUnsupported;    /* interface naming: nothing to name */
++	}
++};
++
++OSDefineMetaClassAndStructors(IONetworkStackUserClient, IOUserClient);
+ OSDefineMetaClassAndStructors(AppleCLCD, IOMobileFramebuffer);
+ 
+ static void sweet_hold(SweetSurface *s, bool on);
+@@ -256,6 +287,17 @@ AppleCLCD::start(IOService *provider)
+ 		}
+ 	}
+ 	OSSafeReleaseNULL(accel);
++	uint32_t netstack = 1;
++	(void)PE_parse_boot_argn("sweetnetstack", &netstack, sizeof(netstack));
++	IONetworkStack *stack = netstack ? OSTypeAlloc(IONetworkStack) : NULL;
++	if (stack != NULL && stack->init()) {
++		stack->setProperty(kIOUserClientClassKey, "IONetworkStackUserClient");
++		if (stack->attach(this)) {
++			stack->registerService();
++			IOLog("SWEET FB: empty IONetworkStack published (configd InterfaceNamer)\n");
++		}
++	}
++	OSSafeReleaseNULL(stack);
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
+ 	return true;

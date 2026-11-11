@@ -1,0 +1,36 @@
+From fbf7406f45c9bb601cdeb77d79a2eab43bd9b9f7 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 27 Oct 2026 22:12:45 +0100
+Subject: [PATCH] umi-0174-adreno-userclient-class-at-publish
+
+IOServiceOpen on SweetAdreno failed with kIOReturnUnsupported: the
+IOUserClientClass property was set in SweetAdreno::start(), but nothing
+matches the service, so start() never runs and newUserClient finds no
+class. Set it at publish time, as the other SWEET stand-ins
+(IONetworkStack, IOAcceleratorES) do. Found with the verbose
+sweet-gpu-test daemon over the file server (open -> 0xe00002c7 on every
+retry, no kernel handleOpen line).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ iokit/Kernel/arm/SweetAdreno.cpp | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/iokit/Kernel/arm/SweetAdreno.cpp b/iokit/Kernel/arm/SweetAdreno.cpp
+index 23f08a7..1420842 100644
+--- a/iokit/Kernel/arm/SweetAdreno.cpp
++++ b/iokit/Kernel/arm/SweetAdreno.cpp
+@@ -342,6 +342,10 @@ sweet_adreno_publish(IOService *provider)
+ 		return;
+ 	}
+ 	service->setName("SweetAdreno");
++	/* The user client class must be a property before anything opens the service:
++	 * nothing matches it, so start() never runs, and the open path (newUserClient)
++	 * reads this property to build the connection (as the other SWEET stand-ins do). */
++	service->setProperty(kIOUserClientClassKey, "SweetAdrenoUserClient");
+ 	if (service->attach(provider)) {
+ 		service->registerService();
+ 		IOLog("SWEET ADRENO: GPU service published (SweetAdreno; opens %s)\n",
+-- 
+2.54.0 (Apple Git-157)
+

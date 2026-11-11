@@ -1,0 +1,73 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 7e8c60f..598d018 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -150,11 +150,14 @@ static struct {
+ 	bool ready, cfg_sent;
+ 	bool norecover;          /* test stage 4: leave channels as the error left them */
+ 	unsigned irqlog;
++	unsigned trace;          /* first transfers: log every step before it runs */
+ 	uint32_t tx_wp, rx_wp;          /* ring indexes */
+ 	uint32_t ev_rp, ev_wp;
+ 	unsigned logged;
+ } g;
+ 
++#define TRACE(...) do { if (g.trace) { printf("SWEET GPI trace: " __VA_ARGS__); } } while (0)
++
+ static uint32_t
+ gpi_rd(uint32_t off)
+ {
+@@ -221,13 +224,19 @@ se_dump(const char *why)
+ static void
+ gpi_ack(void)
+ {
++	TRACE("ack: read TYPE_IRQ\n");
+ 	uint32_t type = gpi_rd(TYPE_IRQ(g.gpii));
+ 	if (type == 0) {
+ 		return;
+ 	}
++	TRACE("ack: type %#x, read SRC_CH/EV/IEOB\n", type);
+ 	uint32_t ch = gpi_rd(SRC_CH_IRQ(g.gpii)), ev = gpi_rd(SRC_EV_IRQ(g.gpii));
+-	uint32_t ieob = gpi_rd(SRC_IEOB_IRQ(g.gpii)), glob = gpi_rd(GLOB_IRQ_STTS(g.gpii));
++	uint32_t ieob = gpi_rd(SRC_IEOB_IRQ(g.gpii));
++	TRACE("ack: ch %#x ev %#x ieob %#x, read GLOB\n", ch, ev, ieob);
++	uint32_t glob = gpi_rd(GLOB_IRQ_STTS(g.gpii));
++	TRACE("ack: glob %#x, read GPII\n", glob);
+ 	uint32_t gpii = gpi_rd(GPII_IRQ_STTS(g.gpii));
++	TRACE("ack: gpii %#x, clearing\n", gpii);
+ 	if ((glob | gpii) != 0 && g.irqlog++ < 16) {
+ 		printf("SWEET GPI: irq type %#x ch %#x ev %#x ieob %#x GLOB %#x GPII %#x error log %#x\n",
+ 		    type, ch, ev, ieob, glob, gpii, gpi_rd(ERROR_LOG(g.gpii)));
+@@ -510,7 +519,12 @@ static int
+ gpi_wait(unsigned donech, uint32_t donetre, unsigned *got)
+ {
+ 	for (unsigned spin = 0; spin < 20000; spin++) {
++		if (g.trace && spin == 3) {
++			TRACE("wait: spinning quietly from now on\n");
++			g.trace = 0;
++		}
+ 		gpi_ack();
++		TRACE("wait %u: read EV RP\n", spin);
+ 		uint32_t hwrp = (gpi_rd(EV_CNTXT(g.gpii, 0) + CNTXT_RP_LSB) - (DMA_PA + OFF_EV)) / TRE_SIZE;
+ 		while (g.ev_rp != hwrp % EV_RING_N) {
+ 			volatile uint32_t *e = dma_ptr(OFF_EV + g.ev_rp * TRE_SIZE);
+@@ -603,6 +617,9 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 		return EIO;
+ 	}
+ 	bool read = nr != 0;
++	static unsigned traced;
++	g.trace = traced++ < 2;
++	TRACE("xfer %s addr %#x len %u: queue TREs\n", read ? "read" : "write", addr, read ? nr : nt);
+ 	if (read) {
+ 		ring_put(1, DMA_PA + OFF_RXBUF, 0, nr, TRE_DW3(1, 0, 0, 0, 1, 0, 0));
+ 		ring_doorbell(1);
+@@ -625,7 +642,9 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 	}
+ 	uint32_t donetre = read ? DMA_PA + OFF_RX + ((g.rx_wp + CH_RING_N - 1) % CH_RING_N) * TRE_SIZE :
+ 	    DMA_PA + OFF_TX + ((g.tx_wp + CH_RING_N - 1) % CH_RING_N) * TRE_SIZE;
++	TRACE("ring TX doorbell (wp %u)\n", g.tx_wp);
+ 	ring_doorbell(0);
++	TRACE("doorbell written\n");
+ 	unsigned got = 0;
+ 	int err = gpi_wait(read ? 1 : 0, donetre, &got);
+ 	if (err == 0 && read) {

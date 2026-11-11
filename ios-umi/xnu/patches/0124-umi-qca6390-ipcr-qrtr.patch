@@ -1,0 +1,378 @@
+From 5e444f4877b2c2378681a7483016a8b6784f9904 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 12:28:15 +0200
+Subject: [PATCH] umi-0124
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_ipcr.c | 258 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_mhi.c  |  33 ++++++
+ bsd/dev/sweet_wlan.c |  15 ++-
+ 4 files changed, 303 insertions(+), 4 deletions(-)
+ create mode 100644 bsd/dev/sweet_ipcr.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 6e41eb3..0472a0b 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -116,6 +116,7 @@ bsd/dev/sweet_pcie.c			standard
+ bsd/dev/sweet_mon.c			standard
+ bsd/dev/sweet_wlan.c			standard
+ bsd/dev/sweet_mhi.c			standard
++bsd/dev/sweet_ipcr.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_ipcr.c b/bsd/dev/sweet_ipcr.c
+new file mode 100644
+index 0000000..595289f
+--- /dev/null
++++ b/bsd/dev/sweet_ipcr.c
+@@ -0,0 +1,258 @@
++/*
++ * umi QCA6390: MHI channels 20 (out) and 21 (in), "IPCR", carrying QRTR to the
++ * Wi-Fi firmware once it runs (sweet_mhi.c brought it to mission mode). Polled.
++ * Stage 7 starts both channels, keeps receive buffers queued, answers the
++ * firmware's QRTR HELLO and logs the services it announces (WLFW is 0x45).
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++
++extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
++extern bool sweet_mhi_er0_next(uint64_t *ptr, uint32_t *d0, uint32_t *d1);
++int sweet_ipcr_start(unsigned ms);
++
++/* In sweet_mhi.c's block, after its rings (which end at 0x5400) */
++#define MEM_CHCTX       0x0000u
++#define MEM_ERCTX       0x2000u
++#define MEM_ER1         0x4000u
++#define MEM_CMDCTX      0x2100u
++#define MEM_CMD         0x5000u
++#define MEM_TRE_OUT     0x5800u         /* channel 20: 16 elements */
++#define MEM_TRE_IN      0x5900u         /* channel 21: 16 elements */
++#define MEM_TXBUF       0x6000u
++#define MEM_RXBUF       0x7000u         /* RX_N x 4 KiB */
++#define ER1_N           256u
++#define CMD_N           64u
++#define TRE_N           16u
++#define RX_N            8u
++#define BUF_LEN         0x1000u
++#define EL              16u
++#define CH_OUT          20u
++#define CH_IN           21u
++
++#define CHDBOFF         0x18u
++#define ERDBOFF         0x20u
++#define CRDB_LOWER      0x70u
++
++static struct {
++	vm_offset_t bar0, mem;
++	uint32_t pa, chdb, erdb1;
++	uint32_t cmd_wp, er1_rp, er1_wp, out_wp, in_wp;
++	uint32_t node;          /* firmware's QRTR node */
++} ip;
++
++static uint32_t
++ip_rd(uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(ip.bar0 + off);
++	__asm__ volatile("dmb oshld" ::: "memory");
++	return v;
++}
++
++static void
++ip_wr(uint32_t off, uint32_t v)
++{
++	__asm__ volatile("dsb sy" ::: "memory");
++	*(volatile uint32_t *)(ip.bar0 + off) = v;
++	__asm__ volatile("dsb osh" ::: "memory");
++}
++
++static void
++ip_db(uint32_t off, uint64_t v)
++{
++	ip_wr(off + 4, (uint32_t)(v >> 32));
++	ip_wr(off, (uint32_t)v);
++}
++
++static volatile uint32_t *
++m32(uint32_t off)
++{
++	return (volatile uint32_t *)(ip.mem + off);
++}
++
++static void
++m64(uint32_t off, uint64_t v)
++{
++	m32(off)[0] = (uint32_t)v;
++	m32(off)[1] = (uint32_t)(v >> 32);
++}
++
++static void
++tre(uint32_t off, uint64_t ptr, uint32_t d0, uint32_t d1)
++{
++	m64(off, ptr);
++	m32(off)[2] = d0;
++	m32(off)[3] = d1;
++}
++
++/* Channel context: enabled, doorbell burst off; ring empty (rp = wp = base). */
++static void
++chan_init(unsigned ch, bool in, uint32_t ring)
++{
++	uint32_t c = MEM_CHCTX + ch * 40u;
++	m32(c)[0] = 1u | (2u << 8);
++	m32(c)[1] = in ? 2u : 1u;
++	m32(c)[2] = 1u;                         /* event ring 1 */
++	m64(c + 12, ip.pa + ring);
++	m64(c + 20, TRE_N * EL);
++	m64(c + 28, ip.pa + ring);
++	m64(c + 36, ip.pa + ring);
++}
++
++static void
++chan_ring(unsigned ch, uint32_t ring, uint32_t wp)
++{
++	uint64_t a = ip.pa + ring + wp * EL;
++	m64(MEM_CHCTX + ch * 40u + 36, a);
++	ip_db(ip.chdb + 8u * ch, a);
++}
++
++/* START_CHAN on the command ring; completion arrives on event ring 0. */
++static int
++chan_start(unsigned ch)
++{
++	tre(MEM_CMD + ip.cmd_wp * EL, 0, 0, ch << 24 | 0x12u << 16);
++	ip.cmd_wp = (ip.cmd_wp + 1) % CMD_N;
++	uint64_t a = ip.pa + MEM_CMD + ip.cmd_wp * EL;
++	m64(MEM_CMDCTX + 36, a);
++	ip_db(CRDB_LOWER, a);
++	for (unsigned i = 0; i < 20000; ++i) {
++		uint64_t ptr;
++		uint32_t d0, d1;
++		if (sweet_mhi_er0_next(&ptr, &d0, &d1)) {
++			unsigned type = (d1 >> 16) & 0xff;
++			printf("SWEET IPCR: ch %u start: event %#x code %u\n", ch, type, d0 >> 24);
++			if (type == 0x21) {
++				return (d0 >> 24) == 1 ? 0 : EIO;
++			}
++		}
++		delay(100);
++	}
++	printf("SWEET IPCR: ch %u start: no completion (ctx state %#x)\n", ch, m32(MEM_CHCTX + ch * 40u)[0]);
++	return ETIMEDOUT;
++}
++
++static void
++rx_queue(unsigned buf)
++{
++	tre(MEM_TRE_IN + ip.in_wp * EL, ip.pa + MEM_RXBUF + buf * BUF_LEN, BUF_LEN, 0x2u << 16 | 1u << 9);
++	ip.in_wp = (ip.in_wp + 1) % TRE_N;
++	chan_ring(CH_IN, MEM_TRE_IN, ip.in_wp);
++}
++
++static void
++ip_send(const void *p, uint32_t len)
++{
++	if (len > BUF_LEN) {
++		return;
++	}
++	memcpy((void *)(ip.mem + MEM_TXBUF), p, len);
++	tre(MEM_TRE_OUT + ip.out_wp * EL, ip.pa + MEM_TXBUF, len, 0x2u << 16 | 1u << 9);
++	ip.out_wp = (ip.out_wp + 1) % TRE_N;
++	chan_ring(CH_OUT, MEM_TRE_OUT, ip.out_wp);
++}
++
++/* QRTR v1 (qrtr-mhi): 32-byte header, then the payload. We are node 1. */
++struct qhdr {
++	uint32_t version, type, src_node, src_port, confirm_rx, size, dst_node, dst_port;
++};
++#define Q_PORT_CTRL     0xfffffffeu
++
++static void
++q_ctrl(uint32_t type, uint32_t dst_node, uint32_t a, uint32_t b)
++{
++	uint32_t pkt[8 + 5] = { 1, type, 1, Q_PORT_CTRL, 0, 20, dst_node, Q_PORT_CTRL, type, a, b, 0, 0 };
++	ip_send(pkt, sizeof(pkt));
++}
++
++static void
++q_rx(const uint8_t *p, uint32_t len)
++{
++	struct qhdr h;
++	if (len < sizeof(h)) {
++		return;
++	}
++	memcpy(&h, p, sizeof(h));
++	const uint32_t *c = (const uint32_t *)(p + sizeof(h));
++	switch (h.type) {
++	case 2:
++		ip.node = h.src_node;
++		printf("SWEET IPCR: QRTR v%u HELLO from node %u\n", h.version, h.src_node);
++		q_ctrl(2, h.src_node, 0, 0);
++		break;
++	case 4:
++		printf("SWEET IPCR: QRTR NEW_SERVER service %#x instance %#x node %u port %#x%s\n",
++		    c[1], c[2], c[3], c[4], c[1] == 0x45 ? "  <- WLFW" : "");
++		break;
++	default:
++		printf("SWEET IPCR: QRTR type %u from %u:%#x to port %#x, %u bytes\n",
++		    h.type, h.src_node, h.src_port, h.dst_port, h.size);
++		break;
++	}
++}
++
++/* Data events (event ring 1): receive completions and send completions. */
++static void
++er1_poll(void)
++{
++	uint32_t ctx = MEM_ERCTX + 40;
++	uint64_t devrp = (uint64_t)m32(ctx + 28)[0] | (uint64_t)m32(ctx + 28)[1] << 32;
++	uint32_t idx = (uint32_t)((devrp - (ip.pa + MEM_ER1)) / EL);
++	while (idx < ER1_N && ip.er1_rp != idx) {
++		uint32_t e = MEM_ER1 + ip.er1_rp * EL;
++		uint64_t ptr = (uint64_t)m32(e)[0] | (uint64_t)m32(e)[1] << 32;
++		uint32_t d0 = m32(e)[2], d1 = m32(e)[3];
++		unsigned type = (d1 >> 16) & 0xff, ch = d1 >> 24, code = d0 >> 24, n = d0 & 0xffff;
++		if (type == 0x22 && ch == CH_IN) {
++			unsigned slot = (unsigned)((ptr - (ip.pa + MEM_TRE_IN)) / EL);
++			uint64_t buf = (uint64_t)m32(MEM_TRE_IN + slot * EL)[0];
++			unsigned b = (unsigned)((buf - (ip.pa + MEM_RXBUF)) / BUF_LEN);
++			if (b < RX_N) {
++				q_rx((const uint8_t *)(ip.mem + MEM_RXBUF + b * BUF_LEN), n);
++				rx_queue(b);
++			}
++		} else if (!(type == 0x22 && ch == CH_OUT)) {
++			printf("SWEET IPCR: event %#x ch %u code %u len %u\n", type, ch, code, n);
++		}
++		ip.er1_rp = (ip.er1_rp + 1) % ER1_N;
++		ip.er1_wp = (ip.er1_wp + 1) % ER1_N;
++		uint64_t wp = ip.pa + MEM_ER1 + ip.er1_wp * EL;
++		m64(ctx + 36, wp);
++		ip_db(ip.erdb1, wp);
++		idx = (uint32_t)((((uint64_t)m32(ctx + 28)[0] | (uint64_t)m32(ctx + 28)[1] << 32) - (ip.pa + MEM_ER1)) / EL);
++	}
++}
++
++/* Stage 7: start IPCR, say HELLO, listen for ms milliseconds. */
++int
++sweet_ipcr_start(unsigned ms)
++{
++	uint32_t er0;
++	sweet_mhi_info(&ip.bar0, &ip.mem, &ip.pa, &er0);
++	ip.chdb = ip_rd(CHDBOFF);
++	ip.erdb1 = ip_rd(ERDBOFF) + 8;
++	ip.cmd_wp = 0;
++	ip.er1_rp = 0;
++	ip.er1_wp = ER1_N - 1;
++	ip.out_wp = ip.in_wp = 0;
++	bzero((void *)(ip.mem + MEM_TRE_OUT), 0x200);
++	chan_init(CH_OUT, false, MEM_TRE_OUT);
++	chan_init(CH_IN, true, MEM_TRE_IN);
++	if (chan_start(CH_OUT) || chan_start(CH_IN)) {
++		return EIO;
++	}
++	for (unsigned b = 0; b < RX_N; ++b) {
++		rx_queue(b);
++	}
++	printf("SWEET IPCR: channels %u/%u running, %u receive buffers\n", CH_OUT, CH_IN, RX_N);
++	q_ctrl(2, 0xffffffffu, 0, 0);           /* HELLO; the firmware answers with its own */
++	for (unsigned t = 0; t < ms; ++t) {
++		er1_poll();
++		delay(1000);
++	}
++	return ip.node ? 0 : ETIMEDOUT;
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_mhi.c b/bsd/dev/sweet_mhi.c
+index 8a8cb7f..93bb273 100644
+--- a/bsd/dev/sweet_mhi.c
++++ b/bsd/dev/sweet_mhi.c
+@@ -13,6 +13,8 @@
+ 
+ int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ int sweet_mhi_wait_ee(unsigned want, unsigned ms);
++void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
++bool sweet_mhi_er0_next(uint64_t *ptr, uint32_t *d0, uint32_t *d1);
+ 
+ /* Layout inside the caller's block (each ring aligned to its size) */
+ #define MEM_CHCTX       0x0000u         /* 128 x 40 bytes */
+@@ -206,4 +208,35 @@ sweet_mhi_wait_ee(unsigned want, unsigned ms)
+ 	printf("SWEET MHI: no ee %u after %u ms (status %#x, ee %u)\n", want, ms, mh_rd(MHISTATUS), mh.ee);
+ 	return ETIMEDOUT;
+ }
++/* Take one element off event ring 0 (command completions after boot); false if empty. */
++bool
++sweet_mhi_er0_next(uint64_t *ptr, uint32_t *d0, uint32_t *d1)
++{
++	uint64_t devrp = mem_rd64(MEM_ERCTX + 28);
++	uint32_t idx = (uint32_t)((devrp - (mh.mem_pa + MEM_ER0)) / EL);
++	if (idx >= ER0_N || mh.rp == idx) {
++		return false;
++	}
++	uint32_t e = MEM_ER0 + mh.rp * EL;
++	*ptr = mem_rd64(e);
++	*d0 = *(volatile uint32_t *)(mh.mem + e + 8);
++	*d1 = *(volatile uint32_t *)(mh.mem + e + 12);
++	mh.rp = (mh.rp + 1) % ER0_N;
++	mh.wp = (mh.wp + 1) % ER0_N;
++	uint64_t wp = mh.mem_pa + MEM_ER0 + mh.wp * EL;
++	mem_wr64(MEM_ERCTX + 36, wp);
++	__asm__ volatile("dsb sy" ::: "memory");
++	mh_wr64(mh.erdb, wp);
++	return true;
++}
++
++/* For sweet_ipcr.c: where things are, and how far event ring 0 has been read. */
++void
++sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp)
++{
++	*bar0 = mh.bar0;
++	*mem = mh.mem;
++	*mem_pa = mh.mem_pa;
++	*er0_rp = mh.rp;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 08a9e88..660d73e 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -25,14 +25,15 @@ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ extern int sweet_pcie_msi(uint32_t addr, uint32_t data);
++extern int sweet_ipcr_start(unsigned ms);
+ 
+ #define WLAN_POOL_PA            0xd0000000u
+-#define WLAN_POOL_SIZE          0x00490000u
++#define WLAN_POOL_SIZE          0x004a0000u
+ #define WLAN_FW_OFF             0x000000u       /* amss20.bin */
+ #define WLAN_FW_MAX             0x480000u        /* amss20.bin is 4352144 bytes */
+ #define WLAN_VEC_OFF            0x480000u       /* BHIe vector table */
+-#define WLAN_MHI_OFF            0x484000u       /* MHI contexts and rings (sweet_mhi.c), 24 KiB */
+-#define WLAN_MSI_OFF            0x48c000u       /* MSI writes land here (polled) */
++#define WLAN_MHI_OFF            0x484000u       /* MHI contexts, rings, IPCR buffers (sweet_mhi.c, sweet_ipcr.c), 60 KiB */
++#define WLAN_MSI_OFF            0x49c000u       /* MSI writes land here (polled) */
+ #define WLAN_SBL_SIZE           0x80000u        /* ath11k sbl_size = seg_len = 512 KiB */
+ #define WLAN_SEG_LEN            0x80000u
+ 
+@@ -485,6 +486,12 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (wlan_bhie(bar0, bhi) != 0) {
+ 		return 15;
+ 	}
+-	return sweet_mhi_wait_ee(2, 10000) ? 18 : 0;    /* MHI_EE_AMSS */
++	if (sweet_mhi_wait_ee(2, 10000) != 0) {         /* MHI_EE_AMSS */
++		return 18;
++	}
++	if (stage < 7) {
++		return 0;
++	}
++	return sweet_ipcr_start(5000) ? 19 : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

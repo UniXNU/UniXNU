@@ -1,0 +1,56 @@
+--- a/osfmk/console/serial_console.c
++++ b/osfmk/console/serial_console.c
+@@ -268,6 +268,12 @@
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ extern void sweet_log_append(const char *c, int size);  /* bsd/dev/sweet_ufs.c */
++/*
++ * Set by AppleCLCD (boot-arg sweetfb_noconsole=1) once the GUI presents:
++ * console text still goes to the persistent log, but is not drawn over
++ * the GUI. A panic draws again.
++ */
++int sweet_console_muted;
+ #endif
+ 
+ static inline void
+@@ -277,6 +283,9 @@
+ 
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+ 	sweet_log_append(c, size);
++	if (sweet_console_muted && !panic_active()) {
++		return;
++	}
+ #endif
+ 
+ 	if (disableConsoleOutput) {
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -26,11 +26,13 @@
+  *
+  * The panel memory itself is published as an IOSurface and returned as the
+  * default framebuffer surface. The kernel text console keeps drawing over
+- * the GUI by default: pausing it (boot-arg sweetfb_noconsole=1, on the
+- * first swap) switches the console to serial, which also hides panics.
++ * the GUI by default: boot-arg sweetfb_noconsole=1 stops drawing it from
++ * the first swap on (it still reaches the persistent log; panics draw).
+  */
+ #include "SweetSurface.h"
+ 
++extern "C" int sweet_console_muted;     /* osfmk/console/serial_console.c */
++
+ #if defined(SWEET)
+ #include <IOKit/IOService.h>
+ #include <IOKit/IOUserClient.h>
+@@ -290,9 +292,9 @@
+ 		int quiet = 0;
+ 		fConsolePaused = true;
+ 		if (PE_parse_boot_argn("sweetfb_noconsole", &quiet, sizeof(quiet)) && quiet != 0) {
+-			PE_Video video;
+-			PE_current_console(&video);
+-			PE_initialize_console(&video, kPEDisableScreen);
++			/* Not PE_initialize_console(kPEDisableScreen): its console switch
++			 * writes the read-only-late cons_ops_index and panics. */
++			sweet_console_muted = 1;
+ 		}
+ 	}
+ 

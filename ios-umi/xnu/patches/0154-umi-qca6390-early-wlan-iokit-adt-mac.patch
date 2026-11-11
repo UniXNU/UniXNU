@@ -1,0 +1,174 @@
+From d1f1c33adac095e42ee8cc5b740e15ecd531caaa Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 13:45:59 +0100
+Subject: [PATCH] umi-0154
+
+---
+ bsd/dev/sweet_wlce.c                  |  4 +-
+ bsd/dev/sweet_wlfw.c                  |  4 +-
+ iokit/Kernel/arm/SweetFramebuffer.cpp |  3 ++
+ iokit/Kernel/arm/SweetWLAN.cpp        | 55 ++++++++++++++++++++++++++-
+ 4 files changed, 62 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 08bbc2c..cc9d112 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -14,6 +14,8 @@
+ #include <kern/clock.h>
+ #include <pexpert/pexpert.h>
+ 
++static uint8_t wlce_mac[6];                     /* 0154: the ADT's mac-address-wifi0 (sweet_wlan_mac); OTP has none */
++extern void sweet_wlan_mac(uint8_t mac[6]);
+ extern void sweet_mhi_info(vm_offset_t *bar0, vm_offset_t *mem, uint32_t *mem_pa, uint32_t *er0_rp);
+ extern int sweet_wlfw_ce_mem(vm_offset_t *va, uint32_t *pa, uint32_t *size);
+ extern int sweet_wldp_rx_init(void);
+@@ -277,6 +279,7 @@ sweet_wlce_init(void)
+ {
+ 	vm_offset_t mem;
+ 	uint32_t pa, size, er0;
++	sweet_wlan_mac(wlce_mac);
+ 	sweet_mhi_info(&ce.bar0, &mem, &pa, &er0);
+ 	if (ce.bar0 == 0 || sweet_wlfw_ce_mem(&ce.mem, &ce.pa, &size) != 0 || size < 0x70000u) {
+ 		return ENXIO;
+@@ -351,7 +354,6 @@ static struct {
+ #define WMI_EV_SET_HW_MODE_RESP 0x4010u
+ #define WMI_EV_REG_CHAN_LIST    0x3a001u        /* REG_CHAN_LIST_CC */
+ 
+-static const uint8_t wlce_mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };  /* locally administered: OTP has none */
+ static void wmi_rx(uint32_t id, const uint8_t *m, uint32_t len);
+ static void wmi_mgmt_rx(const uint8_t *hdr, const uint8_t *m, uint32_t len);
+ 
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 9a1ae77..dafa6d8 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -658,7 +658,9 @@ sweet_wlfw_run(void)
+ 	 */
+ 	{
+ 		static struct qmsg mm;
+-		static const uint8_t mac[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };
++		extern void sweet_wlan_mac(uint8_t mac[6]);
++		uint8_t mac[6];
++		sweet_wlan_mac(mac);                    /* 0154: the ADT's mac-address-wifi0 */
+ 		wf_begin(&mm, 0x33);
+ 		uint8_t *p = q_tlv(&mm, 0x10, 6);
+ 		if (p != NULL) {
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index f5c13af..66d6e72 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -171,6 +171,8 @@ OSDefineMetaClassAndStructors(IOAcceleratorES, IOService);
+  * client opens is enough: naming requests only come for IONetworkInterface objects, of
+  * which there are none. It must exist before configd starts (it checks once, at launch).
+  */
++extern "C" void sweet_wlan_publish_early(void);
++
+ class IONetworkStack : public IOService {
+ 	OSDeclareDefaultStructors(IONetworkStack);
+ };
+@@ -298,6 +300,7 @@ AppleCLCD::start(IOService *provider)
+ 		}
+ 	}
+ 	OSSafeReleaseNULL(stack);
++	sweet_wlan_publish_early();             /* 0154: Wi-Fi registry entries before wifid starts */
+ 	IOLog("SWEET FB: AppleCLCD %ux%u stride %u at 0x%llx, default surface %u, presented as %ux%u\n",
+ 	    fWidth, fHeight, fRowBytes, fPhys, fSurface->id, fLogicalW, fLogicalH);
+ 	return true;
+diff --git a/iokit/Kernel/arm/SweetWLAN.cpp b/iokit/Kernel/arm/SweetWLAN.cpp
+index b9c0488..0d544ba 100644
+--- a/iokit/Kernel/arm/SweetWLAN.cpp
++++ b/iokit/Kernel/arm/SweetWLAN.cpp
+@@ -13,6 +13,13 @@
+  *    IOInterfaceName is the BSD name. No user client is offered, so the framework falls back to
+  *    the ioctl path (SIOCGA80211 / SIOCSA80211 on a socket), which reaches en0's ioctl handler.
+  * Both classes carry properties only; they are named as Apple's families name theirs.
++ *
++ * 0154: published early (sweet_wlan_publish_early from AppleCLCD::start, next to the
++ * IONetworkStack stand-in, boot-arg sweetwlanearly=0 off) because the 0153 boot showed
++ * wifid registering its IOServiceMatched notification for IO80211InterfaceRole =
++ * "Infrastructure" right at launch and never reacting when the objects came ~3 min later.
++ * The Wi-Fi MAC is the ADT's /chosen mac-address-wifi0 (sweet_wlan_mac), used by the
++ * radio too, so IOKit, en0 and the air agree.
+  */
+ #include <pexpert/arm64/board_config.h>
+ 
+@@ -24,6 +31,8 @@
+ #include <libkern/c++/OSNumber.h>
+ #include <libkern/c++/OSString.h>
+ #include <libkern/c++/OSBoolean.h>
++#include <IOKit/IODeviceTreeSupport.h>
++#include <pexpert/pexpert.h>
+ 
+ class IO80211Controller : public IOService {
+ 	OSDeclareDefaultStructors(IO80211Controller);
+@@ -47,10 +56,32 @@ sweet_wlan_num(IOService *s, const char *key, uint32_t v)
+ 	}
+ }
+ 
+-/* Called once by sweet_wlif.c when en0 is attached; prefix "en", unit from the BSD name. */
++/* The Wi-Fi MAC: /chosen mac-address-wifi0 of the ADT, else the 0141-0153 address. */
++extern "C" void
++sweet_wlan_mac(uint8_t mac[6])
++{
++	static const uint8_t fallback[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 };
++	memcpy(mac, fallback, 6);
++	IORegistryEntry *chosen = IORegistryEntry::fromPath("/chosen", gIODTPlane);
++	if (chosen != NULL) {
++		OSData *d = OSDynamicCast(OSData, chosen->getProperty("mac-address-wifi0"));
++		if (d != NULL && d->getLength() >= 6) {
++			memcpy(mac, d->getBytesNoCopy(), 6);
++		}
++		chosen->release();
++	}
++}
++
++static bool sweet_wlan_published;
++
++/* sweet_wlif.c when en0 is attached, or AppleCLCD::start (early); the second call only logs. */
+ extern "C" int
+ sweet_wlan_publish(const uint8_t mac[6], const char *prefix, uint32_t unit)
+ {
++	if (sweet_wlan_published) {
++		IOLog("SWEET WLAN: IO80211Controller + IONetworkInterface %s%u already published\n", prefix, unit);
++		return 0;
++	}
+ 	IOService *bus = IOService::getPlatform();
+ 	IO80211Controller *ctl = OSTypeAlloc(IO80211Controller);
+ 	IONetworkInterface *ifc = OSTypeAlloc(IONetworkInterface);
+@@ -87,11 +118,31 @@ sweet_wlan_publish(const uint8_t mac[6], const char *prefix, uint32_t unit)
+ 			r = 0;
+ 		}
+ 	}
+-	IOLog("SWEET WLAN: IO80211Controller + IONetworkInterface %s published: %d\n", bsd, r);
++	sweet_wlan_published = r == 0;
++	IOLog("SWEET WLAN: IO80211Controller + IONetworkInterface %s published: %d (%02x:%02x:%02x:%02x:%02x:%02x)\n", bsd, r,
++	    mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
+ 	ctl->release();
+ 	ifc->release();
+ 	return r;
+ }
++/* Early: only when the ADT has /arm-io/wlan (umi) and sweetwlanearly is not 0. */
++extern "C" void
++sweet_wlan_publish_early(void)
++{
++	uint32_t early = 1;
++	(void)PE_parse_boot_argn("sweetwlanearly", &early, sizeof(early));
++	IORegistryEntry *wlan = IORegistryEntry::fromPath("/arm-io/wlan", gIODTPlane);
++	if (wlan == NULL || early == 0) {
++		OSSafeReleaseNULL(wlan);
++		return;
++	}
++	wlan->release();
++	uint8_t mac[6];
++	sweet_wlan_mac(mac);
++	(void)sweet_wlan_publish(mac, "en", 0);
++}
+ #else
+ extern "C" int sweet_wlan_publish(const uint8_t *, const char *, uint32_t) { return 1; }
++extern "C" void sweet_wlan_mac(uint8_t mac[6]) { static const uint8_t m[6] = { 0x02, 0x00, 0x5e, 0x77, 0xee, 0x10 }; memcpy(mac, m, 6); }
++extern "C" void sweet_wlan_publish_early(void) {}
+ #endif
+-- 
+2.54.0 (Apple Git-157)
+

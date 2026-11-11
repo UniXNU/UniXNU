@@ -1,0 +1,300 @@
+From 043aca5b20bbd4f69d5219260def089cebc3ea17 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 15:49:27 +0200
+Subject: [PATCH] umi-0132
+
+---
+ bsd/dev/sweet_wlan.c |   2 +-
+ bsd/dev/sweet_wlce.c | 199 +++++++++++++++++++++++++++++++++++++++++--
+ bsd/dev/sweet_wlfw.c |   4 +-
+ 3 files changed, 193 insertions(+), 12 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 027eea4..8ddb7b4 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -529,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC: 21-38 = step 1-18 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI + CE/HTC/WMI: 21-41 = step 1-21 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index ddbc3fa..d3f63da 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -1,5 +1,5 @@
+ /*
+- * umi QCA6390: copy engines and HTC (Linux ath11k ce.c, hal.c, htc.c for
++ * umi QCA6390: copy engines, HTC and WMI start-up (Linux ath11k ce.c, hal.c, htc.c, wmi.c for
+  * "qca6390 hw2.0", v6.6). Polled, no interrupts, no shadow registers yet:
+  * ring pointers are written straight to the CE registers through the PCIe
+  * register window (BAR0 + 0x80000, window select at 0x310c).
+@@ -299,11 +299,24 @@ sweet_wlce_init(void)
+ static struct {
+ 	bool ready, conn;
+ 	uint16_t credits, credit_size, max_msg;
+-	uint8_t max_ep, status, wmi_ep, seq0;
++	uint8_t max_ep, status, wmi_ep, seq0, seq_wmi;
+ 	unsigned wmi_events, logged;
+ 	uint32_t first_wmi;
++	unsigned wmi_credits;           /* for the WMI endpoint: 1 after connect (ath11k, qca6390), plus trailer reports */
++	uint64_t seen;                  /* WMI events seen: bit (id & 63) for group 0, bit 32 + (id & 31) for 0x40xx */
++	uint32_t num_rf_chains;
++	uint32_t rdy_status;
++	uint8_t mac[6];
+ } htc;
+ 
++#define WMI_EV_BIT(id)          ((id) < 0x4000u ? 1ull << ((id) & 31) : 1ull << (32 + ((id) & 31)))
++#define WMI_EV_SERVICE_READY    0x1u
++#define WMI_EV_READY            0x2u
++#define WMI_EV_SVC_READY_EXT    0x4009u
++#define WMI_EV_SVC_READY_EXT2   0x4022u
++
++static void wmi_rx(uint32_t id, const uint8_t *m, uint32_t len);
++
+ static uint32_t
+ get32(const uint8_t *p)
+ {
+@@ -326,7 +339,22 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 		return;
+ 	}
+ 	if ((flags & 2u) && (ctrl & 0xffu) <= plen) {
+-		plen -= ctrl & 0xffu;
++		/* trailer records {u8 id, u8 len, 2 pad}; id 1 = credit reports {u8 endpoint, u8 credits, 2 pad} */
++		unsigned tl = ctrl & 0xffu;
++		const uint8_t *t = b + 8 + plen - tl;
++		for (unsigned o = 0; o + 4 <= tl;) {
++			unsigned rid = t[o], rl = t[o + 1];
++			if (o + 4 + rl > tl) {
++				break;
++			}
++			for (unsigned k = 0; rid == 1 && k + 4 <= rl; k += 4) {
++				if (htc.conn && t[o + 4 + k] == htc.wmi_ep) {
++					htc.wmi_credits += t[o + 4 + k + 1];
++				}
++			}
++			o += 4 + rl;
++		}
++		plen -= tl;
+ 	}
+ 	const uint8_t *m = b + 8;
+ 	if (eid == 0 && plen >= 4) {
+@@ -360,6 +388,9 @@ htc_rx(unsigned pipe, const uint8_t *b, uint32_t len)
+ 		if (htc.logged++ < 16) {
+ 			printf("SWEET HTC: WMI event %#x, %u bytes (CE%u)\n", id, plen, pipe);
+ 		}
++		if (plen >= 4) {
++			wmi_rx(id, m + 4, plen - 4);
++		}
+ 	} else {
+ 		printf("SWEET HTC: CE%u endpoint %u, %u bytes, flags %#x\n", pipe, eid, plen, flags);
+ 	}
+@@ -388,7 +419,142 @@ htc_send_ctrl(const uint32_t *msg, uint32_t len)
+ 	return ce_send(&ce.tx0, b, 8 + len, 0);
+ }
+ 
+-/* After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, first WMI events. 0 or step 1-5. */
++/*
++ * WMI (ath11k wmi.c, TLV format): u32 command/event id (bits 23:0), then TLVs
++ * with a u32 header {bits 31:16 tag, 15:0 length}. Tags used here: 0x20
++ * SERVICE_READY_EVENT, 0x23 READY_EVENT, 0x4a INIT_CMD, 0x4b RESOURCE_CONFIG,
++ * 0x12 ARRAY_STRUCT.
++ */
++#define WMI_TLV(tag, len)       ((uint32_t)(tag) << 16 | (uint32_t)(len))
++#define WMI_INIT_CMDID          0x1u
++
++static const uint8_t *
++wmi_tlv_find(const uint8_t *m, uint32_t len, uint32_t tag, uint32_t *tlen)
++{
++	for (uint32_t o = 0; o + 4 <= len;) {
++		uint32_t h = get32(m + o), l = h & 0xffffu;
++		if (o + 4 + l > len) {
++			break;
++		}
++		if (h >> 16 == tag) {
++			*tlen = l;
++			return m + o + 4;
++		}
++		o += 4 + ((l + 3) & ~3u);
++	}
++	return NULL;
++}
++
++static void
++wmi_rx(uint32_t id, const uint8_t *m, uint32_t len)
++{
++	const uint8_t *v;
++	uint32_t l;
++	if (id == WMI_EV_SERVICE_READY && (v = wmi_tlv_find(m, len, 0x20, &l)) != NULL && l >= 84) {
++		/* wmi_service_ready_event: fw_build_vers, abi (6), phy_cap, max_frag, num_rf_chains (+36),
++		 * ht_cap, vht_cap, vht_mcs, min/max tx power, sys_cap, min_pkt, max_bcn_ie,
++		 * num_mem_reqs (+72), max_scan_channels, hw_bd_id (+80) */
++		htc.num_rf_chains = get32(v + 36);
++		printf("SWEET WMI: SERVICE_READY: fw build %#x, %u rf chains, %u memory requests, board %#x\n",
++		    get32(v), htc.num_rf_chains, get32(v + 72), get32(v + 80));
++	} else if (id == WMI_EV_READY && (v = wmi_tlv_find(m, len, 0x23, &l)) != NULL && l >= 36) {
++		/* wmi_ready_event_min: abi (6 words), mac_addr (2 words), status, ... */
++		memcpy(htc.mac, v + 24, 6);
++		htc.rdy_status = get32(v + 32);
++		printf("SWEET WMI: READY: status %u, MAC %02x:%02x:%02x:%02x:%02x:%02x\n", htc.rdy_status,
++		    htc.mac[0], htc.mac[1], htc.mac[2], htc.mac[3], htc.mac[4], htc.mac[5]);
++	}
++	htc.seen |= WMI_EV_BIT(id);
++}
++
++/* One WMI command on CE3: HTC header (credit flow: flag 1 = need credit update), u32 id, body. */
++static int
++wmi_send(uint32_t cmd_id, const void *body, uint32_t len)
++{
++	static uint8_t b[BUF_SZ];
++	uint32_t plen = 4 + len;
++	if (8 + plen > BUF_SZ || plen > htc.max_msg) {
++		return EMSGSIZE;
++	}
++	if (htc.wmi_credits == 0) {
++		return EAGAIN;
++	}
++	uint32_t info = (uint32_t)htc.wmi_ep | 1u << 8 | plen << 16, ctrl = (uint32_t)htc.seq_wmi++ << 8;
++	uint32_t hdr = cmd_id & 0xffffffu;
++	memcpy(b, &info, 4);
++	memcpy(b + 4, &ctrl, 4);
++	memcpy(b + 8, &hdr, 4);
++	memcpy(b + 12, body, len);
++	int r = ce_send(&ce.tx3, b, 8 + plen, htc.wmi_ep);
++	if (r == 0) {
++		htc.wmi_credits--;
++	}
++	return r;
++}
++
++/*
++ * WMI_INIT_CMDID as ath11k_init_cmd_send for qca6390 (single pdev: no hw mode
++ * TLV; ath11k v6.6 passes no host memory chunks either). Resource config from
++ * ath11k_init_wmi_config_qca6390 + ath11k_wmi_copy_resource_config, indexed by
++ * word in struct wmi_resource_config (word 0 = TLV header).
++ */
++#define RC_WORDS        73
++static int
++wmi_init(void)
++{
++	static uint32_t c[8 + RC_WORDS + 1];
++	uint32_t *rc = c + 8, chains = (1u << MIN(htc.num_rf_chains ? htc.num_rf_chains : 1, 8u)) - 1;
++	bzero(c, sizeof(c));
++	c[0] = WMI_TLV(0x4a, 7 * 4);    /* wmi_init_cmd: abi version (6 words, 0), num_host_mem_chunks 0 */
++	rc[0] = WMI_TLV(0x4b, (RC_WORDS - 1) * 4);
++	rc[1] = 4;                      /* num_vdevs */
++	rc[2] = 16;                     /* num_peers */
++	rc[3] = 3;                      /* num_offload_peers */
++	rc[4] = 3;                      /* num_offload_reorder_buffs */
++	rc[5] = 2;                      /* num_peer_keys */
++	rc[6] = 32;                     /* num_tids */
++	rc[7] = 16;                     /* ast_skid_limit */
++	rc[8] = chains;                 /* tx_chain_mask */
++	rc[9] = chains;                 /* rx_chain_mask */
++	rc[10] = rc[11] = rc[12] = 100; /* rx_timeout_pri[0-2] */
++	rc[13] = 40;                    /* rx_timeout_pri[3] */
++	rc[14] = 1;                     /* rx_decap_mode: native wifi */
++	rc[15] = 4;                     /* scan_max_pending_req */
++	rc[16] = 3;                     /* bmiss_offload_max_vdev */
++	rc[17] = 3;                     /* roam_offload_max_vdev */
++	rc[18] = 8;                     /* roam_offload_max_ap_profiles */
++	rc[22] = 1024;                  /* tx_dbg_log_size */
++	rc[28] = 2;                     /* gtk_offload_max_vdev */
++	rc[29] = 0x400;                 /* num_msdu_desc */
++	rc[30] = 0xa;                   /* max_frag_entries */
++	rc[31] = 1;                     /* num_tdls_vdevs */
++	rc[32] = 8;                     /* num_tdls_conn_table_entries */
++	rc[33] = 2;                     /* beacon_tx_offload_max_vdev */
++	rc[34] = 0x20;                  /* num_multicast_filter_entries */
++	rc[35] = 0x16;                  /* num_wow_filters */
++	rc[44] = 1u << 5;               /* flag1: BSS_CHANNEL_INFO_64 */
++	rc[54] = 1;                     /* use_pdev_id */
++	rc[68] = 1u << 9;               /* flags2: CALC_NEXT_DTIM_COUNT_SET */
++	rc[RC_WORDS] = WMI_TLV(0x12, 0);        /* host memory chunks: none */
++	printf("SWEET WMI: INIT: tx/rx chain mask %#x, %u credits\n", chains, htc.wmi_credits);
++	return wmi_send(WMI_INIT_CMDID, c, sizeof(c));
++}
++
++/* Poll until all of the given WMI events were seen, up to ms. */
++static bool
++wmi_wait(uint64_t want, unsigned ms)
++{
++	for (unsigned t = 0; t < ms && (htc.seen & want) != want; ++t) {
++		htc_poll();
++		delay(1000);
++	}
++	return (htc.seen & want) == want;
++}
++
++/*
++ * After WLAN_MODE: HTC READY, connect WMI control, SETUP_COMPLETE_EX, the
++ * service-ready events, WMI_INIT, WMI_READY. 0 or step 1-8.
++ */
+ int
+ sweet_wlce_htc(void)
+ {
+@@ -415,15 +581,30 @@ sweet_wlce_htc(void)
+ 	if (!htc.conn || htc.status != 0) {
+ 		return 3;
+ 	}
++	htc.wmi_credits = 1;            /* ath11k_htc_wait_target: qca6390 uses 1 credit, all to WMI control */
+ 	uint32_t setup[3] = { HTC_SETUP_COMPLETE_EX, 0, 0 };
+ 	if (htc_send_ctrl(setup, sizeof(setup)) != 0) {
+ 		return 4;
+ 	}
+-	for (unsigned t = 0; t < 3000; ++t) {
+-		htc_poll();
+-		delay(1000);
++	bool svc = wmi_wait(WMI_EV_BIT(WMI_EV_SERVICE_READY) | WMI_EV_BIT(WMI_EV_SVC_READY_EXT) |
++	    WMI_EV_BIT(WMI_EV_SVC_READY_EXT2), 3000);
++	printf("SWEET HTC: %u WMI events, first %#x, seen %#llx\n", htc.wmi_events, htc.first_wmi, htc.seen);
++	if (htc.wmi_events == 0) {
++		return 5;
++	}
++	if (!svc) {
++		return 6;
++	}
++	int r = wmi_init();
++	if (r != 0) {
++		printf("SWEET WMI: INIT send failed %d\n", r);
++		return 7;
++	}
++	if (!wmi_wait(WMI_EV_BIT(WMI_EV_READY), 5000)) {
++		printf("SWEET WMI: no READY in 5 s (CE3 hp %u tp %u, credits %u)\n",
++		    ce.tx3.src.hp, *mem32(M_RDP + ce.tx3.src.id * 4), htc.wmi_credits);
++		return 8;
+ 	}
+-	printf("SWEET HTC: %u WMI events, first %#x\n", htc.wmi_events, htc.first_wmi);
+-	return htc.wmi_events ? 0 : 5;
++	return htc.rdy_status == 0 ? 0 : 8;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 93d8060..2d0f628 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -613,7 +613,7 @@ wf_firmware_start(void)
+ 	return 0;
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-18) that failed. */
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-21) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -659,7 +659,7 @@ sweet_wlfw_run(void)
+ 	printf("SWEET WLFW: mission mode requested\n");
+ 	r = sweet_wlce_htc();
+ 	if (r != 0) {
+-		return 13 + r;          /* 14 no HTC READY ... 18 no WMI event */
++		return 13 + r;          /* 14 no HTC READY ... 18 no WMI event, 19 no service ready, 20/21 WMI init / READY */
+ 	}
+ 	sweet_ipcr_service(500);        /* log whatever QMI says after that */
+ 	return 0;
+-- 
+2.54.0 (Apple Git-157)
+

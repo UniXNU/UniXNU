@@ -1,0 +1,199 @@
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+index 2d5c490..9c459ff 100644
+--- a/bsd/dev/sweet_rpmh.c
++++ b/bsd/dev/sweet_rpmh.c
+@@ -13,6 +13,7 @@
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
+ bool sweet_board_is_umi(void);
+ 
+ /*
+@@ -82,6 +83,7 @@ sweet_board_is_umi(void)
+ #define RH_DB_ENTRY     24u
+ #define RH_DB_MAX       0x100000u /* policy bound, not a DT size */
+ #define RH_VRM          4u
++#define RH_BCM          5u      /* cmd-db slave id of bandwidth/clock voters */
+ #define RH_TIMEOUT_US   100000u
+ 
+ static vm_offset_t rh_rsc, rh_tcs, rh_dict, rh_db;
+@@ -204,7 +206,7 @@ rh_map(void)
+ }
+ 
+ static int
+-rh_lookup(const char *res, uint32_t *address)
++rh_lookup_type(const char *res, uint32_t *address, unsigned want)
+ {
+ 	uint32_t key[2] = {0, 0};
+ 	for (unsigned i = 0; i < 8 && res[i]; ++i) {
+@@ -231,9 +233,9 @@ rh_lookup(const char *res, uint32_t *address)
+ 				continue;
+ 			}
+ 			uint32_t addr = rh_read(rh_db, e + 16);
+-			if (slave != RH_VRM || (addr >> 16) != RH_VRM || (addr & 15u) ||
++			if (slave != want || (addr >> 16) != want || (want == RH_VRM && (addr & 15u)) ||
+ 			    !rh_range(aux + rh_db16(e + 22), rh_db16(e + 20))) {
+-				printf("SWEET RPMH: invalid VRM entry for %s\n", res);
++				printf("SWEET RPMH: invalid entry for %s (slave %u addr %#x)\n", res, slave, addr);
+ 				return EINVAL;
+ 			}
+ 			*address = addr;
+@@ -250,6 +252,12 @@ rh_lookup(const char *res, uint32_t *address)
+ 	return 0;
+ }
+ 
++static int
++rh_lookup(const char *res, uint32_t *address)
++{
++	return rh_lookup_type(res, address, RH_VRM);
++}
++
+ static bool
+ rh_free(unsigned t)
+ {
+@@ -264,7 +272,7 @@ rh_free(unsigned t)
+ }
+ 
+ static int
+-rh_send(uint32_t address, unsigned mv)
++rh_send_cmds(uint32_t address, const uint32_t *addrs, const uint32_t *values, unsigned n, const char *what)
+ {
+ 	int chosen = -1;
+ 	for (unsigned t = 0; t < RH_ACTIVE_N; ++t) {
+@@ -279,7 +287,7 @@ rh_send(uint32_t address, unsigned mv)
+ 		for (unsigned c = 0; c < rh_ncpt; ++c) {
+ 			if ((enabled & (1u << c)) &&
+ 			    (rh_read(rh_tcs, b + RH_ADDR + c * RH_CMD_STRIDE) & ~15u) == address) {
+-				printf("SWEET RPMH: conflicting inherited L11C request in TCS%u\n", t);
++				printf("SWEET RPMH: conflicting inherited request for %#x in TCS%u\n", address, t);
+ 				return EBUSY;
+ 			}
+ 		}
+@@ -289,6 +297,7 @@ rh_send(uint32_t address, unsigned mv)
+ 	}
+ 	if (chosen < 0) {
+ 		printf("SWEET RPMH: no empty idle ACTIVE TCS; leaving inherited state intact\n");
++		(void)what;
+ 		return EBUSY;
+ 	}
+ 	unsigned t = (unsigned)chosen;
+@@ -311,19 +320,17 @@ rh_send(uint32_t address, unsigned mv)
+ 	}
+ 	/* From here an uncertain write/timeout quarantines our slot for this boot. */
+ 	rh_poisoned = true;
+-	/* HPM (raw 7) is supported by this PMIC5 LDO; enable comes last. */
+-	const uint32_t offsets[3] = {0, 8, 4};
+-	const uint32_t values[3] = {mv, 7, 1};
+-	printf("SWEET RPMH: TCS%u ACTIVE %u mV mode=7 enable=1 irq-enable=%#x\n", t, mv, irq_en);
+-	for (unsigned c = 0; c < 3; ++c) {
++	uint32_t mask = (1u << n) - 1u;
++	printf("SWEET RPMH: TCS%u ACTIVE %s irq-enable=%#x\n", t, what, irq_en);
++	for (unsigned c = 0; c < n; ++c) {
+ 		uint32_t cmd = b + c * RH_CMD_STRIDE;
+ 		if (!rh_sync(cmd + RH_MSGID, RH_WRITE_ACK) ||
+-		    !rh_sync(cmd + RH_ADDR, address + offsets[c]) ||
++		    !rh_sync(cmd + RH_ADDR, addrs[c]) ||
+ 		    !rh_sync(cmd + RH_DATA, values[c])) {
+ 			return EIO;
+ 		}
+ 	}
+-	if (!rh_sync(b + RH_WAIT, 7) || !rh_sync(b + RH_ENABLE, 7) ||
++	if (!rh_sync(b + RH_WAIT, mask) || !rh_sync(b + RH_ENABLE, mask) ||
+ 	    !rh_sync(b + RH_CONTROL, 0) || !rh_sync(b + RH_CONTROL, RH_AMC_EN)) {
+ 		return EIO;
+ 	}
+@@ -334,7 +341,7 @@ rh_send(uint32_t address, unsigned mv)
+ 		irq = rh_read(rh_tcs, RH_IRQ_STATUS);
+ 		idle = rh_read(rh_tcs, b + RH_STATUS);
+ 		bool complete = true;
+-		for (unsigned c = 0; c < 3; ++c) {
++		for (unsigned c = 0; c < n; ++c) {
+ 			status[c] = rh_read(rh_tcs, b + RH_CMD_STATUS + c * RH_CMD_STRIDE);
+ 			complete &= status[c] != 0xffffffffu &&
+ 			    (status[c] & (RH_ISSUED | RH_COMPLETE)) == (RH_ISSUED | RH_COMPLETE);
+@@ -365,10 +372,19 @@ rh_send(uint32_t address, unsigned mv)
+ 		return EIO;
+ 	}
+ 	rh_poisoned = false;
+-	printf("SWEET RPMH: L11C ACTIVE vote complete (rail voltage requires hardware verification)\n");
++	printf("SWEET RPMH: %s ACTIVE vote complete\n", what);
+ 	return 0;
+ }
+ 
++static int
++rh_send(uint32_t address, unsigned mv)
++{
++	/* HPM (raw 7) is supported by this PMIC5 LDO; enable comes last. */
++	const uint32_t addrs[3] = {address, address + 8, address + 4};
++	const uint32_t values[3] = {mv, 7, 1};
++	return rh_send_cmds(address, addrs, values, 3, "LDO voltage/mode/enable");
++}
++
+ int
+ sweet_rpmh_vreg_enable(const char *res, unsigned mv)
+ {
+@@ -406,4 +422,37 @@ out:
+ 	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
+ 	return error;
+ }
++/*
++ * One ACTIVE bandwidth/clock vote (BCM_TCS_CMD: commit, valid, vote_x = average,
++ * vote_y = peak). umi: Linux keeps QUP0 voted (msm-bus client qupv3_1_geni_se,
++ * master 152 -> slave 512) whenever a QUP1 serial engine is used; without it the
++ * QUP core clock domain may be left off by AOP.
++ */
++int
++sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y)
++{
++	if (!sweet_board_is_umi() || !res || strcmp(res, "QUP0")) {
++		return EINVAL;
++	}
++	if (__atomic_exchange_n(&rh_lock, 1, __ATOMIC_ACQUIRE)) {
++		return EBUSY;
++	}
++	int error = EIO;
++	uint32_t address = 0;
++	if (!rh_poisoned) {
++		error = rh_map();
++		if (!error) {
++			error = rh_lookup_type(res, &address, RH_BCM);
++		}
++		if (!error) {
++			uint32_t data = (1u << 30) | (1u << 29) | ((vote_x & 0x3fffu) << 14) | (vote_y & 0x3fffu);
++			error = rh_send_cmds(address, &address, &data, 1, "BCM QUP0");
++		}
++	}
++	if (error) {
++		printf("SWEET RPMH: BCM %s vote failed errno=%d\n", res, error);
++	}
++	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
++	return error;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 8c2a8e6..13ea8ce 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -26,6 +26,7 @@ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ /* Mach MIG declaration is not included by BSD's exported thread.h. */
+ extern kern_return_t thread_terminate(thread_t);
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++extern int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
+ extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage, unsigned clk_level);   /* sweet_gpi.c */
+@@ -704,6 +705,13 @@ touch_umi_start(void)
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
++		/* Linux keeps the QUP core bandwidth/clock voter (BCM QUP0) voted while QUP1 is in use. */
++		uint32_t bcm = 1;
++		(void)PE_parse_boot_argn("sweetqupbcm", &bcm, sizeof(bcm));
++		if (bcm) {
++			int berr = sweet_rpmh_bcm_vote("QUP0", bcm, bcm);
++			printf("SWEET TOUCH: BCM QUP0 vote x=y=%u -> %d\n", bcm, berr);
++		}
+ 		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage && st.test_stage < 5 ? st.test_stage : 9, st.clk_level);
+ 		if (gerr) {
+ 			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);

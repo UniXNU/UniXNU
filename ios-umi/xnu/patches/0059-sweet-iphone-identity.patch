@@ -1,0 +1,53 @@
+--- a/bsd/kern/kern_mib.c
++++ b/bsd/kern/kern_mib.c
+@@ -518,7 +518,9 @@
+ 		 * Deprecated variables.  We still support these for
+ 		 * backwards compatibility purposes only.
+ 		 */
+-#if XNU_TARGET_OS_OSX && defined(__arm64__)
++#if XNU_TARGET_OS_OSX && defined(__arm64__) && !defined(ARM64_BOARD_CONFIG_SWEET)
++	/* SWEET: the macOS config runs the iOS userland, which wants the
++	 * device-tree names (hw.machine iPhone10,3, hw.model D22AP). */
+ 	/* The following two are kludged for backward
+ 	 * compatibility. Use hw.product/hw.target for something
+ 	 * consistent instead. */
+--- a/iokit/Kernel/arm/SweetPlatformExpert.cpp
++++ b/iokit/Kernel/arm/SweetPlatformExpert.cpp
+@@ -18,8 +18,6 @@
+ 	void processTopLevel(IORegistryEntry *root) APPLE_KEXT_OVERRIDE;
+ 	const char *deleteList(void) APPLE_KEXT_OVERRIDE;
+ 	const char *excludeList(void) APPLE_KEXT_OVERRIDE;
+-	bool getTargetName(char *name, int maxLength) APPLE_KEXT_OVERRIDE;
+-	bool getProductName(char *name, int maxLength) APPLE_KEXT_OVERRIDE;
+ };
+ 
+ OSDefineMetaClassAndStructors(SweetPlatformExpert, IODTPlatformExpert);
+@@ -76,23 +74,9 @@
+ 	}
+ }
+ 
+-bool
+-SweetPlatformExpert::getTargetName(char *name, int maxLength)
+-{
+-	if (name == NULL || maxLength <= 0) {
+-		return false;
+-	}
+-	strlcpy(name, "sweet", (size_t)maxLength);
+-	return true;
+-}
+-
+-bool
+-SweetPlatformExpert::getProductName(char *name, int maxLength)
+-{
+-	if (name == NULL || maxLength <= 0) {
+-		return false;
+-	}
+-	strlcpy(name, "Redmi Note 10 Pro", (size_t)maxLength);
+-	return true;
+-}
++/*
++ * hw.target / hw.product come from IODTPlatformExpert: the first root
++ * "compatible" string and "model" (D22AP / iPhone10,3 in the ADT), which
++ * is what the iPhone userland (MobileGestalt) expects.
++ */
+ #endif /* SWEET */

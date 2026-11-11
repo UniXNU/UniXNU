@@ -1,0 +1,78 @@
+From 9eb2a362aeb92580dfb9875d09812ed6b0136830 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 21:48:38 +0200
+Subject: [PATCH] umi-0142
+
+---
+ bsd/dev/sweet_wlce.c | 25 +++++++++++++++++++++++++
+ bsd/dev/sweet_wldp.c | 11 +++++++----
+ 2 files changed, 32 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index 22a1491..3b2b3e7 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -899,6 +899,30 @@ wmi_scan(void)
+ 			return 11;
+ 		}
+ 	}
++	/*
++	 * Rest of ath11k_mac_op_add_interface for a STA (0142): VDEV_PARAM_NSS (0x22) = chains;
++	 * STA_POWERSAVE_PARAM (0x9002, tag 0x6d) RX_WAKE_POLICY (0) = WAKE (0), TX_WAKE_THRESHOLD (1)
++	 * = ALWAYS (1), PSPOLL_COUNT (2) = NO_MAX (0); STA_POWERSAVE_MODE (0x9001, tag 0x6c) =
++	 * DISABLED (0). 0141 left these at the firmware's defaults and received nothing after the
++	 * first seconds of association.
++	 */
++	{
++		uint32_t sp[4] = { WMI_TLV(0x5f, 12), 0, 0x22, chains };
++		if (wmi_cmd(0x5008u, sp, sizeof(sp), "VDEV_SET_PARAM nss") != 0) {
++			return 11;
++		}
++		static const uint32_t ps[3][2] = { { 0, 0 }, { 1, 1 }, { 2, 0 } };
++		for (unsigned k = 0; k < 3; ++k) {
++			uint32_t pp[4] = { WMI_TLV(0x6d, 12), 0, ps[k][0], ps[k][1] };
++			if (wmi_cmd(0x9002u, pp, sizeof(pp), "STA_POWERSAVE_PARAM") != 0) {
++				return 11;
++			}
++		}
++		uint32_t pm[3] = { WMI_TLV(0x6c, 8), 0, 0 };
++		if (wmi_cmd(0x9001u, pm, sizeof(pm), "STA_POWERSAVE_MODE disabled") != 0) {
++			return 11;
++		}
++	}
+ 
+ 	/*
+ 	 * ath11k_wmi_start_scan_init + hw_scan; 40-word fixed part. Active: one
+@@ -1228,6 +1252,7 @@ wmi_join(void)
+ 	printf("SWEET WMI: associated to \"%s\" as AID %u (peer id %u)\n", want, htc.aid, htc.peer_id);
+ 	int ipr = sweet_wlip_run(wlce_mac, htc_poll);   /* DHCP, ARP, ping (0141) */
+ 	sweet_wldp_data_report();
++	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+ 	return ipr ? 11 + ipr : 0;              /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
+ }
+ 
+diff --git a/bsd/dev/sweet_wldp.c b/bsd/dev/sweet_wldp.c
+index 1a92cb5..95f1fb0 100644
+--- a/bsd/dev/sweet_wldp.c
++++ b/bsd/dev/sweet_wldp.c
+@@ -714,10 +714,13 @@ sweet_wldp_data_poll(void)
+ 				memcpy(&w24, b + 24, 4);
+ 				uint32_t len = w96 & 0x3fffu, pad = (w24 >> 26) & 3u, decap = (w100 >> 8) & 3u;
+ 				bool ok = push == 1 && (w84 >> 31) && (msdu & 3u) == 3u && RX_DESC_SZ + pad + len <= RXBUF_SZ;
+-				if (dd.rx_logged++ < 6) {
+-					printf("SWEET WLDP: rx ring %u: cookie %u, push %u err %u, msdu %s%s len %u, done %u, decap %u, pad %u\n",
+-					    k - 11, cookie, push, err, msdu & 1u ? "first " : "", msdu & 2u ? "last" : "", len, w84 >> 31,
+-					    decap, pad);
++				if (dd.rx_logged++ < 12) {
++					/* destination class and EtherType only (no addresses in the log) */
++					const uint8_t *fr = b + RX_DESC_SZ + pad;
++					const char *dst = fr[0] == 0xff && fr[1] == 0xff ? "bcast" : (fr[0] & 1) ? "mcast" : "unicast";
++					printf("SWEET WLDP: rx ring %u: cookie %u, push %u err %u, msdu %s%s len %u, done %u, decap %u, pad %u, "
++					    "%s type %#06x\n", k - 11, cookie, push, err, msdu & 1u ? "first " : "", msdu & 2u ? "last" : "",
++					    len, w84 >> 31, decap, pad, dst, (uint32_t)fr[12] << 8 | fr[13]);
+ 				}
+ 				if (ok) {
+ 					dd.rx_frames++;
+-- 
+2.54.0 (Apple Git-157)
+

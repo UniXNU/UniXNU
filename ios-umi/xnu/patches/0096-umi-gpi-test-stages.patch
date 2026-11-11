@@ -1,0 +1,189 @@
+diff --git a/bsd/dev/sweet_gpi.c b/bsd/dev/sweet_gpi.c
+index 564143d..01bfea6 100644
+--- a/bsd/dev/sweet_gpi.c
++++ b/bsd/dev/sweet_gpi.c
+@@ -27,7 +27,7 @@
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ 
+-int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid);
++int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage);
+ int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ 
+ #define GPI_PA          0x00a00000u
+@@ -116,6 +116,7 @@ static struct {
+ 	vm_offset_t ee, se, dma;
+ 	unsigned gpii, seid;
+ 	bool ready, cfg_sent;
++	bool norecover;          /* test stage 4: leave channels as the error left them */
+ 	uint32_t tx_wp, rx_wp;          /* ring indexes */
+ 	uint32_t ev_rp, ev_wp;
+ 	unsigned logged;
+@@ -240,8 +241,9 @@ gpi_smmu_route(void)
+ 	return smr == ((1u << 31) | GPI_SID) && (s2cr & 0x300ff) == (uint32_t)displaycb;
+ }
+ 
++/* stage 1: SMMU route only; 2 and up: also the GPII, channels and SE GSI mode */
+ int
+-sweet_gpi_i2c_init(vm_offset_t se, unsigned seid)
++sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage)
+ {
+ 	g.se = se;
+ 	g.seid = seid;
+@@ -258,6 +260,11 @@ sweet_gpi_i2c_init(vm_offset_t se, unsigned seid)
+ 		printf("SWEET GPI: no SMMU route for the GPI stream; stopping\n");
+ 		return ENXIO;
+ 	}
++	g.norecover = stage == 4;
++	if (stage == 1) {
++		printf("SWEET GPI: test stage 1: SMMU route only\n");
++		return 0;
++	}
+ 	printf("SWEET GPI: gpii%u ch0 %#x ch1 %#x ev %#x glob %#x error log %#x\n", g.gpii,
+ 	    gpi_rd(CH_CNTXT(g.gpii, 0)), gpi_rd(CH_CNTXT(g.gpii, 1)), gpi_rd(EV_CNTXT(g.gpii, 0)),
+ 	    gpi_rd(GLOB_IRQ_STTS(g.gpii)), gpi_rd(ERROR_LOG(g.gpii)));
+@@ -460,7 +467,11 @@ sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, un
+ 			rx[i] = ((volatile uint8_t *)dma_ptr(OFF_RXBUF))[i];
+ 		}
+ 	}
+-	if (err != 0) {
++	if (err != 0 && g.norecover) {
++		printf("SWEET GPI: test stage 4: no recovery (ch0 %#x ch1 %#x)\n", gpi_rd(CH_CNTXT(g.gpii, 0)),
++		    gpi_rd(CH_CNTXT(g.gpii, 1)));
++		g.ready = false;
++	} else if (err != 0) {
+ 		/*
+ 		 * Stop, reset and restart both channels so the rings start empty again
+ 		 * (gpi_terminate_all); the next message re-sends CONFIG0.
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 799f868..efe68f9 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -28,7 +28,7 @@ extern kern_return_t thread_terminate(thread_t);
+ extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
+ extern void sweet_hid_touch(int finger, int down, int x, int y);
+ extern bool sweet_board_is_umi(void);
+-extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid);   /* sweet_gpi.c */
++extern int sweet_gpi_i2c_init(vm_offset_t se, unsigned seid, unsigned stage);   /* sweet_gpi.c */
+ extern int sweet_gpi_i2c_xfer(uint8_t addr, const uint8_t *tx, unsigned nt, uint8_t *rx, unsigned nr, bool stretch);
+ void sweet_touch_init(void);
+ 
+@@ -110,6 +110,7 @@ static struct {
+ 	vm_offset_t se, gcc, gpio;
+ 	bool started, dead, probing;
+ 	bool gpi;               /* umi: SE5 FIFO disabled, transfers through GPI DMA */
++	unsigned test_stage;    /* sweetgpistage=N: stop after step N, heartbeat, reboot */
+ 	int kind, irq_hint;
+ 	/* Board clock and pin choices (sweet defaults, see touch_umi_board). */
+ 	uint32_t gcc_vote, vote_mask, rcg, clk_level, irq_pin;
+@@ -696,18 +697,23 @@ touch_umi_start(void)
+ 	if (touch_rd(st.se, 0x64) & 1u) {
+ 		int use_gpi = 0;
+ 		(void)PE_parse_boot_argn("sweettouchgpi", &use_gpi, sizeof(use_gpi));
+-		if (!use_gpi) {
++		if (!use_gpi && !st.test_stage) {
+ 			/* 0093/0094: transfers fail (code 16) and the phone resets ~1 s later; opt-in until fixed */
+ 			printf("SWEET TOUCH: SE5 FIFO disabled; GPI path is experimental (sweettouchgpi=1); stopping\n");
+ 			return false;
+ 		}
+ 		printf("SWEET TOUCH: SE5 FIFO disabled (fw %#x): I2C through GPI DMA\n", touch_rd(st.se, SE_FW));
+-		int gerr = sweet_gpi_i2c_init(st.se, 5);
++		int gerr = sweet_gpi_i2c_init(st.se, 5, st.test_stage ? st.test_stage : 9);
+ 		if (gerr) {
+ 			printf("SWEET TOUCH: GPI setup failed %d; stopping\n", gerr);
+ 			return false;
+ 		}
+ 		st.gpi = true;
++		if (st.test_stage == 1 || st.test_stage == 2) {
++			printf("SWEET TEST: stage %u reached (GPI%s)\n", st.test_stage,
++			    st.test_stage == 1 ? " SMMU route" : " channels started");
++			return false;
++		}
+ 	} else if (!touch_se_init()) {
+ 		return false;
+ 	}
+@@ -719,7 +725,13 @@ touch_umi_start(void)
+ 	/* Keep the IC in reset while its rails settle; IRQ (active low) stays an input. */
+ 	touch_gpio(UMI_PIN_IRQ, 0, 3, 0, false, false);
+ 	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, false);
+-	int power_error = sweet_rpmh_vreg_enable("ldoc1", 1800);
++	int ldo = 1, power_error = 0;
++	(void)PE_parse_boot_argn("sweettouchldo", &ldo, sizeof(ldo));       /* the DT has no vdd-supply */
++	if (ldo) {
++		power_error = sweet_rpmh_vreg_enable("ldoc1", 1800);
++	} else {
++		printf("SWEET TOUCH: ldoc1 vote skipped (sweettouchldo=0)\n");
++	}
+ 	if (power_error) {
+ 		printf("SWEET TOUCH: ldoc1 RPMh enable failed %d; probes skipped\n", power_error);
+ 		return false;
+@@ -735,13 +747,17 @@ touch_umi_start(void)
+ 	touch_wait(10);
+ 	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, true);
+ 	touch_wait(300); /* FTM5 boots its flash firmware and queues CONTROLLER_READY */
++	if (st.test_stage == 3) {
++		printf("SWEET TEST: stage 3 reached (touch powered and out of reset, no transfers)\n");
++		return false;
++	}
+ 	uint8_t ev[STFTS_EVENT_LEN];
+ 	int err = EIO;
+ 	st.probing = true;
+ 	for (unsigned i = 0, tries = 0; i < 4; ++i) {
+ 		memset(ev, 0xa5, sizeof(ev));
+ 		err = touch_read(STFTS_ADDR, STFTS_FIFO_READ, false, ev, sizeof(ev));
+-		if (err && st.gpi && ++tries < 6) {
++		if (err && st.gpi && st.test_stage != 4 && ++tries < 6) {
+ 			/* the IC may still be booting its firmware: try again a little later */
+ 			printf("SWEET TOUCH: stfts probe err=%d, retrying\n", err);
+ 			touch_wait(100);
+@@ -775,6 +791,32 @@ touch_umi_start(void)
+ 	return true;
+ }
+ 
++/*
++ * Test mode (sweetgpistage=N): one line a second for sweettestsecs (40) so the persistent log
++ * shows when the phone died, then reboot into recovery (IMEM restart reason, PSCI SYSTEM_RESET)
++ * so the log can be read without anyone at the phone.
++ */
++static void
++touch_test_hold(void)
++{
++	unsigned secs = 40;
++	(void)PE_parse_boot_argn("sweettestsecs", &secs, sizeof(secs));
++	for (unsigned i = 1; i <= secs; i++) {
++		touch_wait(1000);
++		printf("SWEET TEST: stage %u alive %u s\n", st.test_stage, i);
++	}
++	printf("SWEET TEST: stage %u survived %u s; rebooting to recovery\n", st.test_stage, secs);
++	touch_wait(3000);       /* two persistent-log flushes */
++	vm_offset_t imem = ml_io_map(0x146bf000, 0x1000);
++	if (imem != 0) {
++		*(volatile uint32_t *)(imem + 0x65c) = 0x77665502u;    /* RECOVERY_MODE */
++		__asm__ volatile ("dsb sy" ::: "memory");
++	}
++	register uint64_t x0 __asm__("x0") = 0x84000009ull;     /* PSCI SYSTEM_RESET */
++	__asm__ volatile ("smc #0" : "+r"(x0) :: "x1", "x2", "x3", "memory");
++	printf("SWEET TEST: PSCI reset returned %#llx\n", x0);
++}
++
+ static void
+ touch_thread(void *arg, wait_result_t result)
+ {
+@@ -880,6 +922,9 @@ poll:;
+ 	}
+ 	touch_report(0, st.x, st.y);
+ out:
++	if (st.test_stage) {
++		touch_test_hold();
++	}
+ 	(void)thread_terminate(current_thread());
+ 	thread_block(THREAD_CONTINUE_NULL);
+ }
+@@ -895,6 +940,7 @@ sweet_touch_init(void)
+ 	st.started = true;
+ 	(void)PE_parse_boot_argn("sweettouch", &enabled, sizeof(enabled));
+ 	(void)PE_parse_boot_argn("sweettouchirq", &st.irq_hint, sizeof(st.irq_hint));
++	(void)PE_parse_boot_argn("sweetgpistage", &st.test_stage, sizeof(st.test_stage));
+ 	if (!enabled) {
+ 		printf("SWEET TOUCH: disabled (sweettouch=0)\n");
+ 		return;

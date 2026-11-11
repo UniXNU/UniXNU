@@ -1,0 +1,71 @@
+diff --git a/crates/metal2vulkan-runtime/src/linear_plan.rs b/crates/metal2vulkan-runtime/src/linear_plan.rs
+index fdb8233..acf8ae7 100644
+--- a/crates/metal2vulkan-runtime/src/linear_plan.rs
++++ b/crates/metal2vulkan-runtime/src/linear_plan.rs
+@@ -766,6 +766,26 @@ pub(super) fn only_reads(usage: TextureUsage) -> bool {
+     )
+ }
+ 
++/// Whether a render pass that keeps a texture `width` texels wide over `layout`'s texels in tile
++/// memory stores it back within the bytes an image over them may hold, in a buffer of
++/// `buffer_length` bytes: a tile store reaching the texture's right or bottom edge writes whole
++/// 16x4-texel blocks, so up to 15 texels past a row's last and 3 rows past its last row. Every
++/// row's block must end within its pitch, and the last block within the buffer; one slice only.
++pub(super) fn tile_store_fits(layout: &BufferLayout, width: u64, buffer_length: u64) -> bool {
++    const TILE: (u64, u64) = (16, 4);
++    if layout.slices != 1 || width == 0 || !layout.row_bytes.is_multiple_of(width) {
++        return false;
++    }
++    let block_row = width.next_multiple_of(TILE.0) * (layout.row_bytes / width);
++    let last_row = layout.rows.next_multiple_of(TILE.1) - 1;
++    layout.row_pitch >= block_row
++        && layout
++            .offset
++            .saturating_add(layout.row_pitch.saturating_mul(last_row))
++            .saturating_add(block_row)
++            <= buffer_length
++}
++
+ /// What an image over `layout`'s texels may hold beside them, for a texture of Metal `usage` (as
+ /// [`only_reads`] takes it) under `policy`, or why no image may hold them: the texels alone
+ /// where its rows (and slices) lie one after another, or it has one row (one slice); else, where
+diff --git a/crates/metal2vulkan-runtime/src/texture.rs b/crates/metal2vulkan-runtime/src/texture.rs
+index c3356f3..071beb8 100644
+--- a/crates/metal2vulkan-runtime/src/texture.rs
++++ b/crates/metal2vulkan-runtime/src/texture.rs
+@@ -83,8 +83,8 @@ use super::image_plan::{
+     ImagePlan, ImageRefusal,
+ };
+ use super::linear_plan::{
+-    aliases, check_linear_limits, holding, linear_lack, BufferLayout, Holds, LinearImage,
+-    LinearLack,
++    aliases, check_linear_limits, holding, linear_lack, tile_store_fits, BufferLayout, Holds,
++    LinearImage, LinearLack,
+ };
+ use super::memory::{MemoryClass, Placement};
+ use super::metal_texture::{self, MetalOver};
+@@ -121,7 +121,7 @@ use first_move::{FirstMove, Fresh, Pattern, Patterned, TexelCopy, PATTERN_BYTES}
+ use heap_tiled::{FreshDepth, FreshPattern};
+ use metal2vulkan::bind::{ImageViewDesc, TextureFacts};
+ use metal2vulkan::device::{
+-    DeviceDescription, DeviceProfile, DriverFact, FormatSupport, VkFeature,
++    DeviceDescription, DeviceProfile, DriverFact, FormatSupport, PaddedReadsPolicy, VkFeature,
+ };
+ use metal2vulkan::error::{
+     Capability, Feature, LinearNeed, RuntimeDriverDefect, SparseNeed, Unsupported,
+@@ -1961,7 +1961,14 @@ impl Device {
+         })?;
+         // What an image over the texels may hold beside them: the bytes between padded rows too
+         // where the texture only reads, by the policy (`linear_plan::holding`); else why none may.
+-        let policy = self.compile_device().policy().padded_reads;
++        let mut policy = self.compile_device().policy().padded_reads;
++        // A written texture's tile stores may reach past its rows (`linear_plan::tile_store_fits`):
++        // where they would leave the row gaps or the buffer, only a texture that reads aliases.
++        if policy == PaddedReadsPolicy::AliasWrites
++            && !tile_store_fits(&texels.layout, u64::from(layout.extent[0]), texels.buffer.length())
++        {
++            policy = PaddedReadsPolicy::Alias;
++        }
+         let holds = holding(&texels.layout, usage, policy);
+         // Over bytes detached from their pages (`detach.rs`) no image aliases them: the texture
+         // is their shadow, which presents a stand-in until they lie in pages again.

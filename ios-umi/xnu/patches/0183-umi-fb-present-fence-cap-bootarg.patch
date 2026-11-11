@@ -1,0 +1,54 @@
+From c7a597c22dda00ffe9534117f360e31cf343d192 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 22:47:14 +0100
+Subject: [PATCH] umi: make the present-path fence cap a boot argument
+
+CA frames take seconds at 305 MHz; the hard 500 ms cap meant present()
+usually copied the drawable while the GPU still rendered it (the panel's
+noise), and only a fast frame occasionally completed in time (the user
+saw one ~97% correct frame appear and disappear). sweetfb_finwait=N ms
+now selects the cap; the present log line no longer hardcodes 500 ms.
+
+Co-Authored-By: Mistral Vibe <vibe@mistral.ai>
+---
+ bsd/dev/sweet_adreno.c                | 8 +++++++-
+ iokit/Kernel/arm/SweetFramebuffer.cpp | 2 +-
+ 2 files changed, 8 insertions(+), 2 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index ae4585d..3b4cb12 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3248,9 +3248,15 @@ bool
+ sweet_adreno_finish(void)
+ {
+ 	uint32_t seqno = sa_fence_seqno;
++	static uint32_t wait_ms;
++
++	if (wait_ms == 0) {
++		wait_ms = 500;
++		PE_parse_boot_argn("sweetfb_finwait", &wait_ms, sizeof(wait_ms));
++	}
+ 
+ 	if (seqno != 0) {
+-		return sa_fence_wait(seqno, 500);
++		return sa_fence_wait(seqno, wait_ms);
+ 	}
+ 	return true;
+ }
+diff --git a/iokit/Kernel/arm/SweetFramebuffer.cpp b/iokit/Kernel/arm/SweetFramebuffer.cpp
+index b541e00..bf41ce2 100644
+--- a/iokit/Kernel/arm/SweetFramebuffer.cpp
++++ b/iokit/Kernel/arm/SweetFramebuffer.cpp
+@@ -1252,7 +1252,7 @@ AppleCLCD::present(const uint8_t *rec)
+ 	bool fin = sweet_adreno_finish();
+ 	static uint32_t fin_logged;
+ 	if (fin_logged++ < 32) {
+-		IOLog("SWEET FB: present %llu finish fence wait %s (500 ms cap)\n",
++		IOLog("SWEET FB: present %llu finish fence wait %s\n",
+ 		    sweet_fb_present_count, fin ? "ok" : "TIMED OUT");
+ 	}
+ 
+-- 
+2.54.0 (Apple Git-157)
+

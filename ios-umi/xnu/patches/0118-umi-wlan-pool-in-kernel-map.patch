@@ -1,0 +1,67 @@
+From 78bd0fa6c3cec946b0b1271f28362853d17761c0 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 10:30:09 +0200
+Subject: [PATCH] umi-0118
+
+---
+ bsd/dev/sweet_mon.c  | 4 ++--
+ bsd/dev/sweet_wlan.c | 7 ++++---
+ 2 files changed, 6 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_mon.c b/bsd/dev/sweet_mon.c
+index 9285a0b..d8982b7 100644
+--- a/bsd/dev/sweet_mon.c
++++ b/bsd/dev/sweet_mon.c
+@@ -17,7 +17,7 @@
+ #include <sys/kpi_socket.h>
+ #include <netinet/in.h>
+ 
+-extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern void ml_io_unmap(vm_offset_t, vm_size_t);
+ extern int sweet_pcie_run(unsigned stage);
+ extern void IOSleep(unsigned int milliseconds);
+@@ -39,7 +39,7 @@ mon_reg(uint64_t pa)
+ 		if (mon.va) {
+ 			ml_io_unmap(mon.va, MON_WINDOW);
+ 		}
+-		mon.va = ml_io_map((vm_offset_t)base, MON_WINDOW);
++		mon.va = ml_io_map_unmappable((vm_offset_t)base, MON_WINDOW, 0x7u);  /* VM_WIMG_IO; freeable: kernel_map */
+ 		mon.pa = base;
+ 	}
+ 	return mon.va ? (volatile uint32_t *)(mon.va + (pa - base)) : NULL;
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index a8aea5c..ec37497 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -6,7 +6,8 @@
+  *   stage 6: BHIe - the whole image as 512 KiB segments (Linux fbc_download)
+  * DMA memory: low RAM that highmem XNU does not manage (sweetwlanpool, default
+  * 0xd0000000, 4.6 MiB; the chip is a 32-bit DMA master), mapped write-combined.
+- * A 32 MiB I/O mapping does not fit (0116: kmem_alloc 33554432 failed with 3, panic).
++ * Mapped in kernel_map: the arm I/O submap is only 8 MiB (IO_MAP_SIZE) of permanent mappings
++ * (0116 32 MiB and 0117 4.6 MiB both panicked: kmem_alloc ... failed with 3).
+  * The chip masters through SMMU streams 0x1c00/0x1c01 (DT pcie0 iommu-map).
+  */
+ #if defined(ARM64_BOARD_CONFIG_SWEET)
+@@ -17,7 +18,7 @@
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+ 
+-extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
++extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len);
+ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+@@ -343,7 +344,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (sw.pool == 0) {
+ 		uint32_t pa = WLAN_POOL_PA;
+ 		(void)PE_parse_boot_argn("sweetwlanpool", &pa, sizeof(pa));
+-		sw.pool = ml_io_map_wcomb(pa, WLAN_POOL_SIZE);
++		sw.pool = ml_io_map_unmappable(pa, WLAN_POOL_SIZE, 0x6u);  /* VM_WIMG_WCOMB */
+ 		sw.pool_pa = pa;
+ 		if (sw.pool == 0) {
+ 			return 12;
+-- 
+2.54.0 (Apple Git-157)
+

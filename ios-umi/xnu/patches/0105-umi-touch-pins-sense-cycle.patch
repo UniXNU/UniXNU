@@ -1,0 +1,62 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index c326893..40dcca3 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -114,6 +114,7 @@ static struct {
+ 	bool gpi;               /* umi: SE5 FIFO disabled, transfers through GPI DMA */
+ 	unsigned test_stage;    /* sweetgpistage=N: stop after step N, heartbeat, reboot */
+ 	unsigned reads, nonempty, evlogged, replogged;   /* umi touch diagnostics */
++	unsigned irqlow;        /* polls that saw the IC's interrupt line asserted (low) */
+ 	int kind, irq_hint;
+ 	/* Board clock and pin choices (sweet defaults, see touch_umi_board). */
+ 	uint32_t gcc_vote, vote_mask, rcg, clk_level, irq_pin;
+@@ -778,6 +779,11 @@ touch_umi_start(void)
+ 	touch_wait(10);
+ 	touch_gpio(UMI_PIN_RESET, 0, 0, 0, true, true);
+ 	touch_wait(300); /* FTM5 boots its flash firmware and queues CONTROLLER_READY */
++	printf("SWEET TOUCH: pins after power-on: avdd69 cfg %#x io %#x, reset38 cfg %#x io %#x, irq39 cfg %#x io %#x, sda36 cfg %#x\n",
++	    touch_rd(st.gpio, TOUCH_GPIO_CFG(UMI_PIN_AVDD)), touch_rd(st.gpio, TOUCH_GPIO_IO(UMI_PIN_AVDD)),
++	    touch_rd(st.gpio, TOUCH_GPIO_CFG(UMI_PIN_RESET)), touch_rd(st.gpio, TOUCH_GPIO_IO(UMI_PIN_RESET)),
++	    touch_rd(st.gpio, TOUCH_GPIO_CFG(UMI_PIN_IRQ)), touch_rd(st.gpio, TOUCH_GPIO_IO(UMI_PIN_IRQ)),
++	    touch_rd(st.gpio, TOUCH_GPIO_CFG(UMI_PIN_SDA)));
+ 	if (st.test_stage == 3) {
+ 		printf("SWEET TEST: stage 3 reached (touch powered and out of reset, no transfers)\n");
+ 		return false;
+@@ -832,8 +838,16 @@ touch_umi_start(void)
+ 		    STFTS_ADDR, err, st.dead);
+ 		return false;
+ 	}
+-	/* setScanMode(SCAN_MODE_ACTIVE, 0x01): A0 00 01, as fts_521 does on resume. */
+-	static const uint8_t scan[3] = {0xa0, 0x00, 0x01};
++	/*
++	 * fts_init_sensing (FOD build): sense off (A0 00 00), WAIT_AFTER_SENSEOFF, then sense on
++	 * setScanMode(SCAN_MODE_ACTIVE, 0x01) = A0 00 01. sweetftsscan=N picks the active-scan bits.
++	 */
++	uint32_t scanbits = 0x01;
++	(void)PE_parse_boot_argn("sweetftsscan", &scanbits, sizeof(scanbits));
++	static const uint8_t senseoff[3] = {0xa0, 0x00, 0x00};
++	(void)touch_msg(STFTS_ADDR, senseoff, sizeof(senseoff), NULL, 0, false);
++	touch_wait(20);
++	uint8_t scan[3] = {0xa0, 0x00, (uint8_t)scanbits};
+ 	err = touch_msg(STFTS_ADDR, scan, sizeof(scan), NULL, 0, false);
+ 	st.probing = false;
+ 	if (err) {
+@@ -976,9 +990,15 @@ poll:;
+ 		}
+ 		touch_wait(10);
+ 		static unsigned stat_ticks;
+-		if (st.kind == TOUCH_STFTS && ++stat_ticks % 1000u == 0) {
+-			printf("SWEET TOUCH: %u FIFO reads, %u non-empty, %u errors in a row, active %#x\n",
+-			    st.reads, st.nonempty, errors, st.active);
++		if (st.kind == TOUCH_STFTS) {
++			if (!(touch_rd(st.gpio, TOUCH_GPIO_IO(UMI_PIN_IRQ)) & 1u)) {
++				st.irqlow++;
++			}
++			if (++stat_ticks % 1000u == 0) {
++				printf("SWEET TOUCH: %u FIFO reads, %u non-empty, %u errors in a row, active %#x, irq low %u, avdd69 io %#x\n",
++				    st.reads, st.nonempty, errors, st.active, st.irqlow,
++				    touch_rd(st.gpio, TOUCH_GPIO_IO(UMI_PIN_AVDD)));
++			}
+ 		}
+ 		if (st.test_stage && ++ticks >= 1000u) {
+ 			printf("SWEET TEST: touch polled for 10 s without errors piling up (errors now %u)\n", errors);

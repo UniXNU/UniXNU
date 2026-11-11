@@ -1,0 +1,397 @@
+From 614b69281a70abf7d809daf90d14106a3b60ee5b Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sun, 25 Oct 2026 11:29:51 +0100
+Subject: [PATCH] umi-0150
+
+---
+ bsd/conf/files       |   1 +
+ bsd/dev/sweet_wlce.c |  11 +-
+ bsd/dev/sweet_wlif.c | 309 +++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_wlip.c |   9 ++
+ 4 files changed, 329 insertions(+), 1 deletion(-)
+ create mode 100644 bsd/dev/sweet_wlif.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 669b0d4..d787d7f 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -121,6 +121,7 @@ bsd/dev/sweet_wlfw.c			standard
+ bsd/dev/sweet_wlce.c			standard
+ bsd/dev/sweet_wldp.c			standard
+ bsd/dev/sweet_wlip.c			standard
++bsd/dev/sweet_wlif.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+diff --git a/bsd/dev/sweet_wlce.c b/bsd/dev/sweet_wlce.c
+index f161f0d..4773fb2 100644
+--- a/bsd/dev/sweet_wlce.c
++++ b/bsd/dev/sweet_wlce.c
+@@ -20,6 +20,8 @@ extern int sweet_wldp_rx_init(void);
+ extern void sweet_wldp_rx_report(const char *when);
+ extern int sweet_wldp_mon_filter(void);
+ extern void sweet_wldp_mon_reap(void);
++extern void sweet_wlip_lease(uint32_t *addr, uint32_t *mask, uint32_t *router);
++extern int sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void));
+ extern void sweet_wldp_mon_report(void);
+ extern int sweet_wldp_rx_tid_qdesc(unsigned tid, uint32_t *pa);
+ extern void sweet_wldp_data_poll(void);
+@@ -1284,7 +1286,14 @@ wmi_join(void)
+ 	sweet_wldp_data_report();
+ 	sweet_wldp_mon_report();                /* did the radio still hear frames during DHCP? */
+ 	sweet_wldp_rx_report("after DHCP");     /* 0147: are both MACs stocked with receive buffers? */
+-	return ipr ? 11 + ipr : 0;              /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
++	if (ipr != 0) {
++		return 11 + ipr;                /* 12 no DHCP offer, 13 no ACK, 14 no ARP, 15 no echo reply */
++	}
++	/* 0150: the BSD interface wl0 with the lease; from here a kernel thread polls (sweet_wlif.c) */
++	uint32_t addr, mask, router;
++	sweet_wlip_lease(&addr, &mask, &router);
++	int ifr = sweet_wlif_attach(wlce_mac, addr, mask, router, htc_poll);
++	return ifr ? 15 + ifr : 0;              /* 16 no DNS reply over wl0, 17-19 wl0 not created / attached / addressed */
+ }
+ 
+ /*
+diff --git a/bsd/dev/sweet_wlif.c b/bsd/dev/sweet_wlif.c
+new file mode 100644
+index 0000000..e3a4840
+--- /dev/null
++++ b/bsd/dev/sweet_wlif.c
+@@ -0,0 +1,309 @@
++/*
++ * umi Wi-Fi bring-up: the BSD network interface wl0 on top of the QCA6390
++ * data path (sweet_wldp.c), as sweet_usb.c does for ue0. Frames are Ethernet
++ * both ways: ifnet output copies the mbuf chain into a flat frame for
++ * sweet_wldp_tx, and frames from the REO rings become mbufs for ifnet_input.
++ * There are no interrupts: once stage 8 is done a kernel thread polls the
++ * copy engines and data rings (sweet_wlce.c's htc_poll) every 2 ms under the
++ * same mutex that transmit takes. The address comes from sweet_wlip.c's DHCP
++ * lease (no renewal yet); a DNS query to the router over an ordinary UDP
++ * socket checks that the BSD stack sends and receives through wl0.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <kern/locks.h>
++#include <sys/kpi_mbuf.h>
++#include <sys/kpi_socket.h>
++#include <sys/socket.h>
++#include <sys/sockio.h>
++#include <net/if.h>
++#include <net/if_types.h>
++#include <net/ethernet.h>
++#include <net/if_ether.h>
++#include <net/ether_if_module.h>
++#include <net/kpi_interface.h>
++#include <net/kpi_protocol.h>
++#include <net/if_media.h>
++#include <net/dlil.h>
++#include <netinet/in.h>
++#include <sys/kern_event.h>
++
++extern int sweet_wldp_tx(const void *frame, uint32_t len);
++extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
++int sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void));
++
++#define WLIF_FRAME_MAX  (ETHER_MAX_LEN - ETHER_CRC_LEN)
++
++static struct {
++	ifnet_t ifp;
++	lck_mtx_t *lock;
++	void (*poll)(void);
++	uint8_t frame[WLIF_FRAME_MAX];  /* transmit staging, under lock */
++	uint64_t rx_frames, tx_frames, tx_drops;
++} wl;
++
++/* Called from the poll (lock held): one received Ethernet frame. */
++static void
++wlif_rx(const uint8_t *f, uint32_t len)
++{
++	if (wl.ifp == NULL || len < ETHER_HDR_LEN || len > WLIF_FRAME_MAX) {
++		return;
++	}
++	mbuf_t m = NULL;
++	if (mbuf_gethdr(MBUF_DONTWAIT, MBUF_TYPE_DATA, &m) == 0 &&
++	    mbuf_mclget(MBUF_DONTWAIT, MBUF_TYPE_DATA, &m) == 0 &&
++	    (mbuf_flags(m) & MBUF_EXT) && mbuf_maxlen(m) >= len) {
++		struct ifnet_stat_increment_param stats = {};
++		memcpy(mbuf_data(m), f, len);
++		mbuf_setlen(m, len);
++		mbuf_pkthdr_setlen(m, len);
++		void *frame_header = mbuf_data(m);
++		mbuf_pkthdr_setrcvif(m, wl.ifp);
++		mbuf_pkthdr_setheader(m, frame_header);
++		mbuf_pkthdr_adjustlen(m, -ETHER_HDR_LEN);
++		(void)mbuf_setdata(m, (char *)mbuf_data(m) + ETHER_HDR_LEN, mbuf_len(m) - ETHER_HDR_LEN);
++		stats.packets_in = 1;
++		stats.bytes_in = len;
++		wl.rx_frames++;
++		ifnet_input(wl.ifp, m, &stats);
++	} else if (m != NULL) {
++		mbuf_freem(m);
++	}
++}
++
++static errno_t
++wlif_output(ifnet_t ifp, mbuf_t m)
++{
++	size_t len = mbuf_pkthdr_len(m);
++	int e = EINVAL;
++	lck_mtx_lock(wl.lock);
++	if (len >= ETHER_HDR_LEN && len <= WLIF_FRAME_MAX && mbuf_copydata(m, 0, len, wl.frame) == 0) {
++		e = sweet_wldp_tx(wl.frame, (uint32_t)len);
++	}
++	if (e == 0) {
++		wl.tx_frames++;
++	} else {
++		wl.tx_drops++;
++	}
++	lck_mtx_unlock(wl.lock);
++	mbuf_freem(m);
++	ifnet_stat_increment_out(ifp, e == 0, e == 0 ? (uint32_t)len : 0, e != 0);
++	return 0;
++}
++
++static errno_t
++wlif_ioctl(ifnet_t ifp, unsigned long cmd, void *data)
++{
++	switch (cmd) {
++	case SIOCGIFMEDIA32:
++	case SIOCGIFMEDIA64: {
++		struct ifmediareq *ifmr = (struct ifmediareq *)data;
++		user_addr_t list = (cmd == SIOCGIFMEDIA64) ?
++		    ((struct ifmediareq64 *)ifmr)->ifmu_ulist :
++		    CAST_USER_ADDR_T(((struct ifmediareq32 *)ifmr)->ifmu_ulist);
++		int media = IFM_ETHER | IFM_AUTO;
++		ifmr->ifm_current = media;
++		ifmr->ifm_active = media;
++		ifmr->ifm_mask = 0;
++		ifmr->ifm_status = IFM_AVALID | IFM_ACTIVE;
++		if (list != USER_ADDR_NULL && ifmr->ifm_count > 0) {
++			ifmr->ifm_count = 1;
++			return copyout(&media, list, sizeof(media));
++		}
++		ifmr->ifm_count = 1;
++		return 0;
++	}
++	case SIOCSIFADDR:
++	case SIOCAIFADDR:
++		ifnet_set_flags(ifp, IFF_UP, IFF_UP);
++		return 0;
++	case SIOCSIFFLAGS:
++	case SIOCADDMULTI:
++	case SIOCDELMULTI:
++		return 0;
++	default:
++		return EOPNOTSUPP;
++	}
++}
++
++static void
++wlif_detach(ifnet_t ifp __unused)
++{
++}
++
++static void
++wlif_poll_thread(void *arg __unused, wait_result_t wr __unused)
++{
++	uint64_t n = 0;
++	for (;;) {
++		lck_mtx_lock(wl.lock);
++		wl.poll();
++		lck_mtx_unlock(wl.lock);
++		delay(2000);
++		if (++n % 30000 == 0) {         /* about once a minute */
++			printf("SWEET WLIF: wl0 rx %llu tx %llu frames, %llu tx dropped\n", wl.rx_frames, wl.tx_frames,
++			    wl.tx_drops);
++		}
++	}
++}
++
++static void
++wlif_sin(struct sockaddr *sa, uint32_t addr)
++{
++	struct sockaddr_in *a = (struct sockaddr_in *)sa;
++	a->sin_len = sizeof(*a);
++	a->sin_family = AF_INET;
++	a->sin_addr.s_addr = addr;
++}
++
++/*
++ * A DNS A query for apple.com to the router (the hotspot's resolver) from an
++ * ordinary kernel UDP socket: the reply has to come back through ARP, IP and
++ * UDP on wl0. 0 = answer received (rcode and answer count logged).
++ */
++static int
++wlif_dns_test(uint32_t router)
++{
++	static const uint8_t q[] = {
++		0x53, 0x57, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
++		5, 'a', 'p', 'p', 'l', 'e', 3, 'c', 'o', 'm', 0, 0x00, 0x01, 0x00, 0x01,
++	};
++	socket_t so = NULL;
++	struct sockaddr_in to;
++	bzero(&to, sizeof(to));
++	wlif_sin((struct sockaddr *)&to, router);
++	to.sin_port = htons(53);
++	errno_t e = sock_socket(PF_INET, SOCK_DGRAM, IPPROTO_UDP, NULL, NULL, &so);
++	if (e == 0) {
++		e = sock_connect(so, (struct sockaddr *)&to, 0);
++	}
++	for (unsigned tries = 0; e == 0 && tries < 3; ++tries) {
++		struct iovec iov = { .iov_base = (void *)(uintptr_t)q, .iov_len = sizeof(q) };
++		struct msghdr msg;
++		size_t n = 0;
++		bzero(&msg, sizeof(msg));
++		msg.msg_iov = &iov;
++		msg.msg_iovlen = 1;
++		e = sock_send(so, &msg, 0, &n);
++		printf("SWEET WLIF: DNS query for apple.com to the router (send %d, %u bytes)\n", e, (unsigned)n);
++		for (unsigned t = 0; e == 0 && t < 200; ++t) {         /* 2 s */
++			uint8_t r[512];
++			iov.iov_base = r;
++			iov.iov_len = sizeof(r);
++			bzero(&msg, sizeof(msg));
++			msg.msg_iov = &iov;
++			msg.msg_iovlen = 1;
++			n = 0;
++			errno_t re = sock_receive(so, &msg, MSG_DONTWAIT, &n);
++			if (re == 0 && n >= 12 && r[0] == 0x53 && r[1] == 0x57) {
++				printf("SWEET WLIF: DNS reply over wl0: %u bytes, rcode %u, %u answers\n", (unsigned)n, r[3] & 0xfu,
++				    (unsigned)(r[6] << 8 | r[7]));
++				sock_close(so);
++				return 0;
++			}
++			if (re != 0 && re != EWOULDBLOCK) {
++				e = re;
++			}
++			delay(10000);
++		}
++	}
++	printf("SWEET WLIF: no DNS reply over wl0 (err %d)\n", e);
++	if (so != NULL) {
++		sock_close(so);
++	}
++	return 1;
++}
++
++/*
++ * wl0 with the DHCP lease (all addresses in network byte order), then the poll
++ * thread and the DNS check. 0 = DNS answered, 1 = no DNS reply, 2-4 = the
++ * interface could not be created, attached or addressed.
++ */
++int
++sweet_wlif_attach(const uint8_t mac[6], uint32_t addr, uint32_t mask, uint32_t router, void (*poll)(void))
++{
++	struct ifnet_init_eparams init;
++	lck_grp_t *grp = lck_grp_alloc_init("sweet_wlif", LCK_GRP_ATTR_NULL);
++	wl.lock = lck_mtx_alloc_init(grp, LCK_ATTR_NULL);
++	wl.poll = poll;
++
++	bzero(&init, sizeof(init));
++	init.ver = IFNET_INIT_CURRENT_VERSION;
++	init.len = sizeof(init);
++	init.flags = IFNET_INIT_LEGACY;
++	init.uniqueid = "sweet-qca6390";
++	init.uniqueid_len = sizeof("sweet-qca6390") - 1;
++	init.name = "wl";
++	init.unit = 0;
++	init.family = IFNET_FAMILY_ETHERNET;
++	init.type = IFT_ETHER;
++	init.output = wlif_output;
++	init.demux = ether_demux;
++	init.add_proto = ether_add_proto;
++	init.del_proto = ether_del_proto;
++	init.check_multi = ether_check_multi;
++	init.framer_extended = ether_frameout_extended;
++	init.ioctl = wlif_ioctl;
++	init.detach = wlif_detach;
++	init.broadcast_addr = etherbroadcastaddr;
++	init.broadcast_len = ETHER_ADDR_LEN;
++	if (ifnet_allocate_extended(&init, &wl.ifp) != 0) {
++		printf("SWEET WLIF: ifnet_allocate failed\n");
++		wl.ifp = NULL;
++		return 2;
++	}
++	ifnet_set_addrlen(wl.ifp, ETHER_ADDR_LEN);
++	ifnet_set_hdrlen(wl.ifp, sizeof(struct ether_header));
++	ifnet_set_mtu(wl.ifp, ETHERMTU);
++	ifnet_set_baudrate(wl.ifp, 54000000);
++	ifnet_set_flags(wl.ifp, IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST, 0xffff);
++	if (ifnet_attach(wl.ifp, NULL) != 0) {
++		printf("SWEET WLIF: ifnet_attach failed\n");
++		wl.ifp = NULL;
++		return 3;
++	}
++	ifnet_set_lladdr(wl.ifp, mac, ETHER_ADDR_LEN);
++
++	if (mask == 0) {
++		mask = htonl(0xffffff00);
++	}
++	errno_t err = proto_plumb(PF_INET, wl.ifp);
++	socket_t so = NULL;
++	if (err == 0) {
++		err = sock_socket(PF_INET, SOCK_DGRAM, 0, NULL, NULL, &so);
++	}
++	if (err == 0) {
++		struct ifaliasreq ifra;
++		bzero(&ifra, sizeof(ifra));
++		snprintf(ifra.ifra_name, sizeof(ifra.ifra_name), "wl0");
++		wlif_sin(&ifra.ifra_addr, addr);
++		wlif_sin(&ifra.ifra_mask, mask);
++		wlif_sin(&ifra.ifra_broadaddr, addr | ~mask);
++		err = sock_ioctl(so, SIOCAIFADDR, &ifra);
++		sock_close(so);
++	}
++	ifnet_set_flags(wl.ifp, IFF_UP | IFF_RUNNING, IFF_UP | IFF_RUNNING);
++	dlil_post_msg(wl.ifp, KEV_DL_SUBCLASS, KEV_DL_LINK_ON, NULL, 0, FALSE);
++	const uint8_t *a = (const uint8_t *)&addr;
++	printf("SWEET WLIF: wl0 %u.%u.%u.%u/%u %s (err %d)\n", a[0], a[1], a[2], a[3], (unsigned)__builtin_popcount(mask),
++	    err ? "NOT configured" : "up", err);
++	if (err != 0) {
++		return 4;
++	}
++
++	lck_mtx_lock(wl.lock);
++	sweet_wldp_set_rx_handler(wlif_rx);
++	lck_mtx_unlock(wl.lock);
++	thread_t thread;
++	if (kernel_thread_start(wlif_poll_thread, NULL, &thread) != KERN_SUCCESS) {
++		printf("SWEET WLIF: poll thread failed\n");
++		return 2;
++	}
++	thread_deallocate(thread);
++	return wlif_dns_test(router);
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlip.c b/bsd/dev/sweet_wlip.c
+index 9bbe96d..0d3f1b8 100644
+--- a/bsd/dev/sweet_wlip.c
++++ b/bsd/dev/sweet_wlip.c
+@@ -14,6 +14,7 @@
+ extern int sweet_wldp_tx(const void *frame, uint32_t len);
+ extern void sweet_wldp_set_rx_handler(void (*fn)(const uint8_t *frame, uint32_t len));
+ int sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void));
++void sweet_wlip_lease(uint32_t *addr, uint32_t *mask, uint32_t *router);
+ 
+ static struct {
+ 	uint8_t mac[6], router_mac[6], ap_mac[6];
+@@ -337,4 +338,12 @@ sweet_wlip_run(const uint8_t mac[6], const uint8_t ap_mac[6], void (*poll)(void)
+ 	sweet_wldp_set_rx_handler(NULL);
+ 	return ip.pings_back ? 0 : 4;
+ }
++/* The DHCP lease for wl0 (0150), network byte order; router falls back to the DHCP server. */
++void
++sweet_wlip_lease(uint32_t *addr, uint32_t *mask, uint32_t *router)
++{
++	*addr = ip.ip;
++	*mask = ip.mask;
++	*router = ip.router != 0 ? ip.router : ip.server;
++}
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+-- 
+2.54.0 (Apple Git-157)
+

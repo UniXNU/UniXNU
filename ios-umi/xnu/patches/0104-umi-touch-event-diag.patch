@@ -1,0 +1,60 @@
+diff --git a/bsd/dev/sweet_touch.c b/bsd/dev/sweet_touch.c
+index 165449b..c326893 100644
+--- a/bsd/dev/sweet_touch.c
++++ b/bsd/dev/sweet_touch.c
+@@ -113,6 +113,7 @@ static struct {
+ 	bool started, dead, probing;
+ 	bool gpi;               /* umi: SE5 FIFO disabled, transfers through GPI DMA */
+ 	unsigned test_stage;    /* sweetgpistage=N: stop after step N, heartbeat, reboot */
++	unsigned reads, nonempty, evlogged, replogged;   /* umi touch diagnostics */
+ 	int kind, irq_hint;
+ 	/* Board clock and pin choices (sweet defaults, see touch_umi_board). */
+ 	uint32_t gcc_vote, vote_mask, rcg, clk_level, irq_pin;
+@@ -447,11 +448,19 @@ touch_report(uint32_t mask, const int *x, const int *y)
+ 		uint32_t bit = 1u << id;
+ 		if (mask & bit) {
+ 			if (!(st.active & bit) || x[id] != st.x[id] || y[id] != st.y[id]) {
++				if (!(st.active & bit) && st.replogged < 20) {
++					st.replogged++;
++					printf("SWEET TOUCH: down id %u at %d,%d\n", id, x[id], y[id]);
++				}
+ 				sweet_hid_touch((int)id, 1, x[id], y[id]);
+ 			}
+ 			st.x[id] = x[id];
+ 			st.y[id] = y[id];
+ 		} else if (st.active & bit) {
++			if (st.replogged < 20) {
++				st.replogged++;
++				printf("SWEET TOUCH: up id %u at %d,%d\n", id, st.x[id], st.y[id]);
++			}
+ 			sweet_hid_touch((int)id, 0, st.x[id], st.y[id]);
+ 		}
+ 	}
+@@ -580,6 +589,15 @@ touch_stfts(void)
+ 		if (err) {
+ 			return err;
+ 		}
++		st.reads++;
++		if (ev[0] != STFTS_EVT_NONE) {
++			st.nonempty++;
++			if (st.evlogged < 32) {
++				st.evlogged++;
++				printf("SWEET TOUCH: fifo %02x %02x %02x %02x %02x %02x %02x %02x\n",
++				    ev[0], ev[1], ev[2], ev[3], ev[4], ev[5], ev[6], ev[7]);
++			}
++		}
+ 		unsigned id = ev[1] >> 4;
+ 		switch (ev[0]) {
+ 		case STFTS_EVT_NONE:
+@@ -957,6 +975,11 @@ poll:;
+ 			}
+ 		}
+ 		touch_wait(10);
++		static unsigned stat_ticks;
++		if (st.kind == TOUCH_STFTS && ++stat_ticks % 1000u == 0) {
++			printf("SWEET TOUCH: %u FIFO reads, %u non-empty, %u errors in a row, active %#x\n",
++			    st.reads, st.nonempty, errors, st.active);
++		}
+ 		if (st.test_stage && ++ticks >= 1000u) {
+ 			printf("SWEET TEST: touch polled for 10 s without errors piling up (errors now %u)\n", errors);
+ 			break;          /* test mode: heartbeat and reboot below */

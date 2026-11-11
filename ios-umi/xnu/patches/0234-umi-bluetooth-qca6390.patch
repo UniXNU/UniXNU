@@ -1,0 +1,2319 @@
+From 3c5be0e1614ad9efcddbf4898c8fdb5929f7d5c9 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 3 Nov 2026 22:30:34 +0100
+Subject: [PATCH] umi: QCA6390 Bluetooth over SE6's UART (sweetbt=N), firmware
+ from the bluetooth partition
+
+sweet_bt.c / sweet_bt.h / SweetBluetooth.cpp from project-BadApple (ios-apollo, MIT; there
+ported from the Mi 10 port hackios-xnu-kernel-umi, MIT), adapted for umi: firmware read
+read-only from the bluetooth partition's FAT (image/htbtfw20.tlv, image/htnv20.bin), rails voted
+with umi's RPMh calls and only logged on failure, umi-only, 30 s after UFS. sweet_wlan.c's FAT
+reader works on any partition (sweet_fat_read_file), matches 8.3 names, "*" lists a directory.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/conf/files                      |    1 +
+ bsd/dev/sweet_bt.c                  | 1506 +++++++++++++++++++++++++++
+ bsd/dev/sweet_bt.h                  |  300 ++++++
+ bsd/dev/sweet_ufs.c                 |    2 +
+ bsd/dev/sweet_wlan.c                |  182 +++-
+ iokit/Kernel/arm/SweetBluetooth.cpp |   94 ++
+ iokit/conf/files.arm64              |    1 +
+ 7 files changed, 2032 insertions(+), 54 deletions(-)
+ create mode 100644 bsd/dev/sweet_bt.c
+ create mode 100644 bsd/dev/sweet_bt.h
+ create mode 100644 iokit/Kernel/arm/SweetBluetooth.cpp
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index 794cb29..6811786 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -117,6 +117,7 @@ bsd/dev/sweet_pcie.c			standard
+ bsd/dev/sweet_adreno.c			standard
+ bsd/dev/sweet_mon.c			standard
+ bsd/dev/sweet_wlan.c			standard
++bsd/dev/sweet_bt.c			standard
+ bsd/dev/sweet_mhi.c			standard
+ bsd/dev/sweet_ipcr.c			standard
+ bsd/dev/sweet_wlfw.c			standard
+diff --git a/bsd/dev/sweet_bt.c b/bsd/dev/sweet_bt.c
+new file mode 100644
+index 0000000..d948042
+--- /dev/null
++++ b/bsd/dev/sweet_bt.c
+@@ -0,0 +1,1506 @@
++/*
++ * umi Bluetooth: the Bluetooth side of the QCA6390 -- the Wi-Fi's chip -- on the UART of QUP
++ * serial engine 6 (HCI over H4). Nothing runs unless boot-arg sweetbt=N asks for steps 1..N; they
++ * run in a thread of their own, sweetbtdelay seconds (default 30: after the Wi-Fi thread has voted
++ * the chip's shared rails) after sweet_ufs_init() starts it.
++ *
++ * Adapted from project-BadApple (github.com/aTechGeekDev/ios-apollo, xnu 0136, 0137, 0141, 0143,
++ * 0145: bsd/dev/sweet_bt.c; MIT, Copyright (c) 2026 Leo Malik, dipa-studio), itself ported from
++ * the Xiaomi Mi 10 port of github.com/JopangJovan/hackios-xnu-kernel-umi, devices/xiaomi-mi-10
++ * (umi_bluetooth.c, hakios.bluetooth.h, hakios.bluetooth.cpp, umi_rpmh.c; MIT). umi's DT wires
++ * the chip as apollo's: BT_EN GPIO 21 (cnss-qca6390 qcom,bt-en-gpio), SW_CTRL GPIO 124
++ * (qcom,sw-ctrl-gpio), qupv3_se6_4uart at 0x998000 on GPIO 16-19 (CTS, RTS, TX, RX).
++ *
++ * The firmware is the phone's own, read (read-only, like the Wi-Fi's from "modem") from the FAT
++ * of the "bluetooth" partition: image/htbtfw20.tlv (patch) and image/htnv20.bin (NVM); boot-args
++ * sweetbtpart, sweetbtfw and sweetbtnv name others. A missing file lists the directory.
++ *
++ *   1  read   SE6's GCC clocks and the pins
++ *   2  write  SE6's clocks voted for a moment: the UART's GENI registers; put back
++ *   3  write  ... and the UART looped back on itself inside the SoC (nothing reaches the chip)
++ *   4  write  rails, BT_EN, the UART at 115200 baud (H4): HCI reset and the version from the
++ *             chip's ROM; then BT_EN low again and the UART put back
++ *   5  write  ... the UART moved to sweetbtbaud (below), the firmware (patch, then NVM), reset, the
++ *             version it runs, the address (/chosen mac-address-bluetooth0), and what the radio
++ *             hears: 3 s of LE scan and 4 s of classic inquiry; then BT_EN low again
++ *   6  write  as 5 without the scans, and the radio stays up for iOS: an H4 endpoint (the kernel
++ *             control "com.sweet.bluetooth", for bluetoothd) and the registry entry "bluetooth"
++ *             that bluetoothd looks for (iokit/Kernel/arm/SweetBluetooth.cpp)
++ *
++ * The chip's ROM talks at 115200 baud. From step 5 on the UART is moved to boot-arg sweetbtbaud
++ * (default 921600; 115200 keeps it there) before the firmware goes in, as Linux's hci_qca does, and
++ * the NVM is made to say the same speed. Should the new speed not work the chip is started over at
++ * 115200. No interrupt is taken: the FIFOs are polled. SW_CTRL is an input that is read, as
++ * Android's btpower.c has it (sweetbtswctrl=1 drives it high instead). The ADT's address is given
++ * to the chip (0xfc14, as Linux's qca_set_bdaddr), else it keeps the NVM's.
++ *
++ * project-BadApple's licence, for this file, sweet_bt.h and SweetBluetooth.cpp:
++ *   Copyright (c) 2026 Leo Malik
++ *   Copyright (c) 2026 dipa-studio
++ *   Permission is hereby granted, free of charge, to any person obtaining a copy of this software
++ *   and associated documentation files (the "Software"), to deal in the Software without
++ *   restriction, including without limitation the rights to use, copy, modify, merge, publish,
++ *   distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the
++ *   Software is furnished to do so, subject to the following conditions: The above copyright
++ *   notice and this permission notice shall be included in all copies or substantial portions of
++ *   the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
++ *   IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
++ *   PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
++ *   LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
++ *   OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
++ *   IN THE SOFTWARE.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <sys/errno.h>
++#include <sys/kauth.h>
++#include <sys/kern_control.h>
++#include <sys/kpi_mbuf.h>
++#include <sys/termios.h>
++#include <sys/ttycom.h>
++#include <kern/clock.h>
++#include <kern/locks.h>
++#include <kern/thread.h>
++#include <machine/machine_routines.h>
++#include <mach/vm_param.h>
++#include <pexpert/pexpert.h>
++#include <pexpert/device_tree.h>
++#include <libkern/libkern.h>
++#include "sweet_bt.h"
++
++extern vm_offset_t ml_io_map(vm_offset_t phys_addr, vm_size_t size);
++extern void thread_set_thread_name(thread_t thread, const char *name);
++extern kern_return_t thread_terminate(thread_t);
++extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
++extern int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++extern int sweet_fat_read_file(const char *part, const char *dir, const char *name, void *dst, uint32_t max,
++    uint32_t *size);    /* sweet_wlan.c */
++extern bool sweet_board_is_umi(void);
++extern int SweetBluetoothPublish(const uint8_t address[6], const uint8_t commands[64]);  /* SweetBluetooth.cpp */
++extern void SweetBluetoothSetReady(bool ready);
++void sweet_bt_init(void);
++
++#define GCC_PA          0x00100000u
++#define TLMM_NORTH_PA   0x0f900000u     /* GPIO 16-21 and 124 are on the north tile */
++#define SE6_PA          0x00998000u
++
++/* GCC: the QUP wrapper 0 votes (bits 6 and 7: its AHB clocks, 16: SE6), SE6's branches and root */
++#define GCC_QUP_VOTE    0x52008u
++#define GCC_QUP_M_AHB   0x17004u
++#define GCC_QUP_S_AHB   0x17008u        /* bit 1: hardware clock gating */
++#define GCC_SE6_CBCR    0x1772cu
++#define GCC_SE6_CMD     0x17730u
++#define GCC_SE6_CFG     0x17734u
++#define GCC_SE6_M       0x17738u
++#define GCC_SE6_N       0x1773cu
++#define GCC_SE6_D       0x17740u
++#define GCC_QUP_BITS    ((1u << 6) | (1u << 7) | (1u << 16))
++#define CBCR_OFF        0x80000000u
++
++#define PIN_BT_EN       21u
++#define PIN_SW_CTRL     124u
++#define TLMM_CFG(p)     ((p) * 0x1000u)
++#define TLMM_IO(p)      ((p) * 0x1000u + 4u)
++
++/* GENI serial engine registers (the UART's) */
++#define GENI_STATUS     0x40u           /* bits 0 and 12: the main and secondary sequencers are busy */
++#define GENI_TX_LEN     0x270u
++#define GENI_M_CMD      0x600u
++#define GENI_M_CANCEL   0x604u
++#define GENI_M_IRQ      0x610u
++#define GENI_M_IRQ_CLR  0x618u
++#define GENI_S_CMD      0x630u
++#define GENI_S_CANCEL   0x634u
++#define GENI_S_IRQ      0x640u
++#define GENI_S_IRQ_CLR  0x648u
++#define GENI_TX_FIFO    0x700u
++#define GENI_RX_FIFO    0x780u
++#define GENI_TX_STATUS  0x800u
++#define GENI_RX_STATUS  0x804u
++#define GENI_TX_DEPTH   0xe24u
++#define GENI_RX_DEPTH   0xe28u
++
++#define BT_EVENT_MAX    258u
++#define BT_RX_RAW_SIZE  16384u          /* a power of two */
++#define BT_TX_QUEUE     65536u          /* a power of two */
++#define BT_NVM_MOST     16384u
++#define BT_PATCH_MOST   (512u * 1024u)
++
++static uint32_t bt_steps, bt_delay = 30, bt_swctrl_drive;
++static uint32_t bt_baud = 921600;
++static const struct sweet_bt_speed *bt_want;                    /* sweetbtbaud */
++static const struct sweet_bt_speed *bt_speed = &sweet_bt_speeds[0];     /* what the UART runs at */
++static uint32_t bt_uart_div = 4;        /* GENI's clock divider for bt_speed */
++
++/* the UART's registers that steps 3-6 set, put back as they were found afterwards */
++static const uint32_t bt_uart_regs[] = {
++	0x48, 0x4c, 0x22c, 0x258, 0x25c, 0x260, 0x264, 0x268, 0x26c, 0x270, 0x280, 0x284, 0x288, 0x28c,
++	0x294, 0x2a4, 0x2a8, 0x80c, 0x810, 0x814
++};
++#define BT_UART_REGS    (sizeof(bt_uart_regs) / sizeof(bt_uart_regs[0]))
++
++static uint32_t
++bt_read(vm_offset_t base, uint32_t offset)
++{
++	uint32_t value = *(volatile uint32_t *)(base + offset);
++
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return value;
++}
++
++static void
++bt_write(vm_offset_t base, uint32_t offset, uint32_t value)
++{
++	__asm__ volatile ("dmb oshst" ::: "memory");
++	*(volatile uint32_t *)(base + offset) = value;
++	__asm__ volatile ("dsb osh" ::: "memory");
++}
++
++static uint16_t
++bt_le16(const uint8_t *p)
++{
++	return (uint16_t)(p[0] | p[1] << 8);
++}
++
++static uint32_t
++bt_le32(const uint8_t *p)
++{
++	return bt_le16(p) | (uint32_t)bt_le16(p + 2) << 16;
++}
++
++static uint8_t *bt_patch, *bt_nvm;
++static unsigned int bt_patch_size, bt_nvm_size;
++
++/* The firmware from the bluetooth partition, once (see the top); a missing file lists image/. */
++static void
++bt_firmware_load(void)
++{
++	char part[16] = "bluetooth", patch[32] = "htbtfw20.tlv", nvm[32] = "htnv20.bin";
++	uint32_t size = 0;
++
++	if (bt_patch != NULL) {
++		return;
++	}
++	(void)PE_parse_boot_argn("sweetbtpart", part, sizeof(part));
++	(void)PE_parse_boot_argn("sweetbtfw", patch, sizeof(patch));
++	(void)PE_parse_boot_argn("sweetbtnv", nvm, sizeof(nvm));
++	bt_patch = kalloc_data(BT_PATCH_MOST, Z_WAITOK | Z_ZERO);
++	bt_nvm = kalloc_data(BT_NVM_MOST, Z_WAITOK | Z_ZERO);
++	if (bt_patch == NULL || bt_nvm == NULL) {
++		return;
++	}
++	if (sweet_fat_read_file(part, "image", patch, bt_patch, BT_PATCH_MOST, &size) == 0) {
++		bt_patch_size = size;
++	}
++	if (sweet_fat_read_file(part, "image", nvm, bt_nvm, BT_NVM_MOST, &size) == 0) {
++		bt_nvm_size = size;
++	}
++	printf("SWEET BT: firmware from %s: image/%s %u bytes, image/%s %u bytes\n", part, patch, bt_patch_size,
++	    nvm, bt_nvm_size);
++	if (!bt_patch_size || !bt_nvm_size) {
++		uint32_t unused;
++
++		(void)sweet_fat_read_file(part, NULL, "*", bt_nvm, BT_NVM_MOST, &unused);
++		(void)sweet_fat_read_file(part, "image", "*", bt_nvm, BT_NVM_MOST, &unused);
++		bt_nvm_size = 0;
++	}
++}
++
++static const uint8_t *
++bt_file(const char *name, unsigned int *size)
++{
++	bool is_patch = strcmp(name, "patch") == 0;
++
++	*size = is_patch ? bt_patch_size : bt_nvm_size;
++	return *size ? (is_patch ? bt_patch : bt_nvm) : NULL;
++}
++
++/*
++ * The QCA6390's Bluetooth supplies, as Android's btpower and the Mi 10 port vote them: AON and
++ * digital (PM8150 S6, 950 mV), RFA1 (S5, 1.9 V), RFA2 (PM8150A S8, 1.35 V) -- the Wi-Fi's too --
++ * and ASD (PM8150 L16, 3.025 V). A vote that fails is only logged, as sweet_pcie.c does for the
++ * same SMPS rails: they are on from the bootloader (umi's cmd-db lists smpa6 twice, at the same
++ * address, and sweet_rpmh.c refuses such a lookup). Nothing is switched off.
++ */
++static int
++sweet_rpmh_bt_power(void)
++{
++	static const struct { const char *res; unsigned mv; bool ldo; } rails[] = {
++		{ "smpa6", 950, false }, { "smpa5", 1900, false }, { "smpc8", 1350, false }, { "ldoa16", 3025, true },
++	};
++
++	for (unsigned i = 0; i < sizeof(rails) / sizeof(rails[0]); i++) {
++		int error = rails[i].ldo ? sweet_rpmh_vreg_enable(rails[i].res, rails[i].mv) :
++		    sweet_rpmh_smps_enable(rails[i].res, rails[i].mv);
++
++		if (error == EBUSY) {
++			return EBUSY;   /* the caller tries again */
++		}
++		printf("SWEET BT: rail %s %u mV: errno %d\n", rails[i].res, rails[i].mv, error);
++	}
++	return 0;
++}
++
++/*
++ * The UART set up as umi's (and Android's) driver has it: 8 bits, no parity, 1 stop bit, words of bytes;
++ * the clock divided by bt_uart_div.
++ */
++static void
++bt_uart_setup(vm_offset_t uart)
++{
++	bt_write(uart, 0x48, (bt_uart_div << 4) | 1);
++	bt_write(uart, 0x4c, (bt_uart_div << 4) | 1);
++	bt_write(uart, 0x258, 0);
++	bt_write(uart, 0x22c, 0);
++	bt_write(uart, 0x25c, 2);
++	bt_write(uart, 0x280, 0);
++	bt_write(uart, 0x260, 0xf);
++	bt_write(uart, 0x264, 0);
++	bt_write(uart, 0x284, 0x4380e);
++	bt_write(uart, 0x288, 0xc3e0e);
++	bt_write(uart, 0x268, 8);
++	bt_write(uart, 0x28c, 8);
++	bt_write(uart, 0x26c, 0);
++	bt_write(uart, 0x294, 160);
++	bt_write(uart, 0x2a4, 0);
++	bt_write(uart, 0x2a8, 0);
++	bt_write(uart, 0x80c, 1);
++	bt_write(uart, 0x810, 0);
++	bt_write(uart, 0x814, 6);
++	bt_write(uart, GENI_M_IRQ_CLR, 0xffffffff);
++	bt_write(uart, GENI_S_IRQ_CLR, 0xffffffff);
++}
++
++/* Both sequencers stopped (cancelled, then aborted) and the receive FIFO emptied. */
++static int
++bt_uart_quiesce(vm_offset_t uart)
++{
++	unsigned depth, words;
++
++	for (unsigned attempt = 0; attempt < 2; attempt++) {
++		uint32_t active = bt_read(uart, GENI_STATUS);
++
++		if (!(active & 0x1001)) {
++			break;
++		}
++		if (active & 1) {
++			bt_write(uart, GENI_M_CANCEL, attempt ? 2 : 4);
++		}
++		if (active & 0x1000) {
++			bt_write(uart, GENI_S_CANCEL, attempt ? 2 : 4);
++		}
++		for (unsigned t = 0; t < 10000 && (bt_read(uart, GENI_STATUS) & 0x1001); t++) {
++			delay(1);
++		}
++	}
++	if (bt_read(uart, GENI_STATUS) & 0x1001) {
++		return ETIMEDOUT;
++	}
++	depth = (bt_read(uart, GENI_RX_DEPTH) >> 16) & 0x3f;
++	words = bt_read(uart, GENI_RX_STATUS) & 0x1ffffff;
++	if (!depth || words > depth) {
++		return EIO;
++	}
++	while (words--) {
++		(void)bt_read(uart, GENI_RX_FIFO);
++	}
++	bt_write(uart, GENI_M_IRQ_CLR, 0xffffffff);
++	bt_write(uart, GENI_S_IRQ_CLR, 0xffffffff);
++	return 0;
++}
++
++/* Step 3: eight bytes through the UART's internal loopback, nothing on the pins. */
++static void
++bt_loopback(vm_offset_t uart)
++{
++	static const uint8_t pattern[] = { 0x01, 0x03, 0x0c, 0x00, 0x55, 0xaa, 0x7e, 0xff };
++	uint32_t saved[BT_UART_REGS];
++	uint8_t received[sizeof(pattern)];
++	unsigned count = 0, elapsed;
++
++	if ((bt_read(uart, GENI_STATUS) & 0x1001) || bt_read(uart, GENI_TX_STATUS) || bt_read(uart, GENI_RX_STATUS)) {
++		printf("SWEET BT: step 3: loopback skipped: the UART is busy\n");
++		return;
++	}
++	for (unsigned i = 0; i < BT_UART_REGS; i++) {
++		saved[i] = bt_read(uart, bt_uart_regs[i]);
++	}
++	bt_uart_setup(uart);
++	bt_write(uart, 0x22c, 1);       /* loopback */
++	bt_write(uart, GENI_S_CMD, (1u << 27) | 0x80);
++	bt_write(uart, GENI_TX_LEN, sizeof(pattern));
++	bt_write(uart, GENI_M_CMD, 1u << 27);
++	for (unsigned i = 0; i < sizeof(pattern); i++) {
++		bt_write(uart, GENI_TX_FIFO, pattern[i]);
++	}
++	for (elapsed = 0; elapsed < 20000 && count < sizeof(pattern); elapsed++) {
++		uint32_t status = bt_read(uart, GENI_RX_STATUS), words = status & 0x1ffffff;
++
++		while (words--) {
++			unsigned bytes = 4;
++			uint32_t value;
++
++			if (!words && (status & (1u << 31))) {
++				bytes = (status >> 28) & 7;
++			}
++			value = bt_read(uart, GENI_RX_FIFO);
++			for (unsigned b = 0; b < bytes; b++) {
++				if (count < sizeof(received)) {
++					received[count++] = (uint8_t)(value >> (8 * b));
++				}
++			}
++		}
++		delay(1);
++	}
++	printf("SWEET BT: step 3: loopback %s: %u of %u bytes in %u us\n",
++	    count == sizeof(pattern) && !memcmp(pattern, received, sizeof(pattern)) ? "WORKS" : "FAILED",
++	    count, (unsigned)sizeof(pattern), elapsed);
++	(void)bt_uart_quiesce(uart);
++	for (unsigned i = 0; i < BT_UART_REGS; i++) {
++		bt_write(uart, bt_uart_regs[i], saved[i]);
++	}
++	bt_write(uart, GENI_M_IRQ_CLR, 0xffffffff);
++	bt_write(uart, GENI_S_IRQ_CLR, 0xffffffff);
++}
++
++/* ---- H4 over the UART ----------------------------------------------------------------------------- */
++
++static struct sweet_bt_h4 bt_rx_packet;
++static uint8_t bt_rx_raw[BT_RX_RAW_SIZE];
++static unsigned bt_rx_head, bt_rx_tail;
++static bool bt_ibs_ack_pending, bt_chip_awake;
++static unsigned bt_ibs_wakes, bt_ibs_sleeps;
++static uint8_t bt_nvm_work[BT_NVM_MOST];
++static uint8_t bt_address[6];           /* display order */
++static uint8_t bt_commands[64];         /* Read Local Supported Commands */
++
++/* What the receive FIFO holds, into bt_rx_raw. */
++static int
++bt_rx_capture(vm_offset_t uart)
++{
++	uint32_t irq = bt_read(uart, GENI_S_IRQ);
++
++	if (irq) {
++		bt_write(uart, GENI_S_IRQ_CLR, irq);
++	}
++	for (unsigned budget = 0; budget < 64; budget++) {
++		uint32_t status = bt_read(uart, GENI_RX_STATUS), words = status & 0x1ffffff, word;
++		unsigned last, bytes;
++
++		if (!words) {
++			return 0;
++		}
++		if (words > ((bt_read(uart, GENI_RX_DEPTH) >> 16) & 0x3f)) {
++			return EIO;
++		}
++		last = (status >> 28) & 7;
++		bytes = words == 1 && (status >> 31) && last ? last : 4;
++		if (bytes > 4) {
++			return EIO;
++		}
++		if (BT_RX_RAW_SIZE - (bt_rx_head - bt_rx_tail) < bytes) {
++			return ENOBUFS;
++		}
++		word = bt_read(uart, GENI_RX_FIFO);
++		for (unsigned b = 0; b < bytes; b++) {
++			bt_rx_raw[bt_rx_head++ & (BT_RX_RAW_SIZE - 1)] = (uint8_t)(word >> (8 * b));
++		}
++	}
++	return 0;
++}
++
++/* The next whole packet from the chip (only events if `events_only`): 1, 0 if none yet, or -errno. */
++static int
++bt_rx_frame(vm_offset_t uart, uint8_t *frame, unsigned capacity, unsigned *length, bool events_only)
++{
++	int error = bt_rx_capture(uart);
++
++	if (error) {
++		return -error;
++	}
++	while (bt_rx_head != bt_rx_tail) {
++		uint8_t byte = bt_rx_raw[bt_rx_tail++ & (BT_RX_RAW_SIZE - 1)];
++		int result = sweet_bt_h4_push(&bt_rx_packet, byte);
++
++		if (result < 0) {
++			printf("SWEET BT: H4 out of step (%d) at byte %#x\n", result, byte);
++			memset(&bt_rx_packet, 0, sizeof(bt_rx_packet));
++			return -EILSEQ;
++		}
++		if (result == 2) {
++			if (byte == 0xfd) {
++				bt_ibs_ack_pending = true;
++				bt_ibs_wakes++;
++			} else if (byte == 0xfe) {
++				bt_ibs_sleeps++;
++			} else {
++				bt_chip_awake = true;
++			}
++		}
++		if (result != 1 || (events_only && bt_rx_packet.bytes[0] != 4)) {
++			continue;
++		}
++		if (bt_rx_packet.used > capacity) {
++			return -EMSGSIZE;
++		}
++		*length = bt_rx_packet.used;
++		memcpy(frame, bt_rx_packet.bytes, *length);
++		return 1;
++	}
++	return 0;
++}
++
++static int
++bt_uart_tx(vm_offset_t uart, const uint8_t *packet, unsigned length)
++{
++	unsigned sent = 0, depth = (bt_read(uart, GENI_TX_DEPTH) >> 16) & 0x3f;
++
++	if (!depth || depth > 64 || !length || length > SWEET_BT_H4_MAX) {
++		return EINVAL;
++	}
++	bt_write(uart, GENI_M_IRQ_CLR, 0xffffffff);
++	bt_write(uart, GENI_TX_LEN, length);
++	bt_write(uart, GENI_M_CMD, 1u << 27);
++	/* ~87 us a byte at 115200 baud, the slowest: twice that, and 10 ms */
++	for (unsigned elapsed = 0; elapsed < length * 180 + 10000; elapsed++) {
++		int rx_error = bt_rx_capture(uart);
++		unsigned used;
++		uint32_t irq;
++
++		if (rx_error) {
++			return rx_error;
++		}
++		used = bt_read(uart, GENI_TX_STATUS) & 0x0fffffff;
++		if (used > depth) {
++			return EIO;
++		}
++		for (unsigned room = depth - used; room && sent < length; room--) {
++			bt_write(uart, GENI_TX_FIFO, packet[sent++]);
++		}
++		irq = bt_read(uart, GENI_M_IRQ);
++		if (sent == length && (irq & 1)) {
++			bt_write(uart, GENI_M_IRQ_CLR, irq);
++			return 0;
++		}
++		delay(1);
++	}
++	printf("SWEET BT: sending timed out: %u of %u bytes, irq %#x, fifo %#x\n", sent, length,
++	    bt_read(uart, GENI_M_IRQ), bt_read(uart, GENI_TX_STATUS));
++	bt_write(uart, GENI_M_CANCEL, 4);
++	return ETIMEDOUT;
++}
++
++/* The chip woke up and said so (IBS 0xfd): it is acknowledged (0xfc). */
++static int
++bt_service_ibs(vm_offset_t uart)
++{
++	const uint8_t ack = 0xfc;
++	int error;
++
++	if (!bt_ibs_ack_pending) {
++		return 0;
++	}
++	error = bt_uart_tx(uart, &ack, 1);
++	if (!error) {
++		bt_ibs_ack_pending = false;
++	}
++	return error;
++}
++
++/* An HCI command; with `wait`, its Command Complete or Command Status (1 s at most). 0, or an errno. */
++static int
++bt_hci_command(vm_offset_t uart, uint16_t opcode, const uint8_t *params, unsigned param_length, bool wait,
++    uint8_t event[BT_EVENT_MAX], unsigned *event_length)
++{
++	uint8_t packet[259];
++	int error;
++
++	if (param_length > 255) {
++		return EINVAL;
++	}
++	packet[0] = 1;
++	packet[1] = (uint8_t)opcode;
++	packet[2] = (uint8_t)(opcode >> 8);
++	packet[3] = (uint8_t)param_length;
++	if (param_length) {
++		memcpy(packet + 4, params, param_length);
++	}
++	*event_length = 0;
++	error = bt_uart_tx(uart, packet, param_length + 4);
++	if (error || !wait) {
++		return error;
++	}
++	for (unsigned elapsed = 0; elapsed < 100000; elapsed++) {
++		int result = bt_rx_frame(uart, event, BT_EVENT_MAX, event_length, true);
++
++		if (result < 0) {
++			return -result;
++		}
++		error = bt_service_ibs(uart);
++		if (error) {
++			return error;
++		}
++		if (result == 1) {
++			int status = sweet_bt_cc_status(event, *event_length, opcode);
++
++			if (status >= 0) {
++				if (status) {
++					printf("SWEET BT: HCI %#x: status %#x\n", opcode, status);
++				}
++				return status ? EIO : 0;
++			}
++			if (opcode == 0xfc00 && sweet_bt_qca_tlv_ack(event, *event_length)) {
++				return 0;
++			}
++			/* the address (Linux's qca_set_bdaddr waits for a vendor event) */
++			if (opcode == 0xfc14 && *event_length >= 3 && event[1] == 0xff) {
++				return 0;
++			}
++			/* inquiry and other slow commands are acknowledged with Command Status */
++			if (*event_length == 7 && event[1] == 0x0f && event[5] == (uint8_t)opcode &&
++			    event[6] == (uint8_t)(opcode >> 8)) {
++				return event[3] ? EIO : 0;
++			}
++			printf("SWEET BT: event %#x while waiting for %#x\n", event[1], opcode);
++		}
++		*event_length = 0;
++		delay(10);
++	}
++	printf("SWEET BT: HCI %#x timed out (rx %#x, irq %#x)\n", opcode, bt_read(uart, GENI_RX_STATUS),
++	    bt_read(uart, GENI_S_IRQ));
++	return ETIMEDOUT;
++}
++
++/* A firmware file (TLV: patch or NVM) in segments of 243 bytes (EDL patch request 0x1e). */
++static int
++bt_qca_download(vm_offset_t uart, const uint8_t *tlv, size_t size, bool skip_events)
++{
++	size_t offset = 0;
++	unsigned segment = 0;
++
++	if (!tlv || size < 4 || size > BT_PATCH_MOST ||
++	    (tlv[1] | (uint32_t)tlv[2] << 8 | (uint32_t)tlv[3] << 16) != size - 4) {
++		return EINVAL;
++	}
++	while (offset < size) {
++		unsigned part = size - offset > 243 ? 243 : (unsigned)(size - offset), length = 0;
++		uint8_t params[245], event[BT_EVENT_MAX];
++		bool ack;
++		int error;
++
++		params[0] = 0x1e;
++		params[1] = (uint8_t)part;
++		memcpy(params + 2, tlv + offset, part);
++		offset += part;
++		segment++;
++		ack = !skip_events || offset == size;
++		error = bt_hci_command(uart, 0xfc00, params, part + 2, ack, event, &length);
++		if (!error && ack && !sweet_bt_qca_tlv_ack(event, length)) {
++			error = EIO;
++		}
++		if (error) {
++			printf("SWEET BT: firmware record type %u: segment %u of %u refused, errno %d\n", tlv[0], segment,
++			    (unsigned)((size + 242) / 243), error);
++			return error;
++		}
++	}
++	printf("SWEET BT: firmware record type %u taken: %u bytes, %u segments\n", tlv[0], (unsigned)size, segment);
++	return 0;
++}
++
++/* The ADT's address for Bluetooth (mkadt.py: the Wi-Fi's address + 1), if it has one. */
++static bool
++bt_adt_address(uint8_t address[6])
++{
++	DTEntry node;
++	void const *prop = NULL;
++	unsigned int size = 0;
++
++	if (SecureDTLookupEntry(NULL, "/chosen", &node) != kSuccess ||
++	    SecureDTGetProperty(node, "mac-address-bluetooth0", &prop, &size) != kSuccess || size != 6) {
++		return false;
++	}
++	memcpy(address, prop, 6);
++	return (address[0] & 1) == 0 && (address[0] | address[1] | address[2] | address[3] | address[4] | address[5]);
++}
++
++/* Steps 5 and 6: the firmware into the chip, then what it now is: version, commands, address. */
++static int
++bt_qca_firmware(vm_offset_t uart)
++{
++	uint8_t event[BT_EVENT_MAX], wanted[6] = { 0 };
++	unsigned length = 0, patch_size = 0, nvm_size = 0, mode, nonzero = 0;
++	bool have_wanted;
++	const uint8_t version_request = 0x19;
++	const uint8_t logging[] = { 0x14, 0 };
++	const uint8_t *patch = bt_file("patch", &patch_size), *nvm = bt_file("nvm", &nvm_size);
++	uint32_t product, soc;
++	uint16_t rom;
++	int error;
++
++	error = bt_hci_command(uart, 0xfc00, &version_request, 1, true, event, &length);
++	if (error) {
++		return error;
++	}
++	if (length != 21 || event[7] != 0x19) {
++		printf("SWEET BT: the chip's version answer is %u bytes, not 21\n", length);
++		return ENODEV;
++	}
++	product = bt_le32(event + 9);
++	rom = bt_le16(event + 15);
++	soc = bt_le32(event + 17);
++	printf("SWEET BT: QCA product %#x, ROM %#x, SoC %#x, patch %#x\n", product, rom, soc, bt_le16(event + 13));
++	if (product != 0x10 || rom != 0x200 || soc != 0x400a0200) {
++		printf("SWEET BT: not the QCA6390 (product 0x10, ROM 0x200, SoC 0x400a0200) the firmware is for\n");
++		return ENODEV;
++	}
++	if (patch == NULL || nvm == NULL || patch_size < 28 || nvm_size < 4) {
++		printf("SWEET BT: no firmware (the bluetooth partition's image/htbtfw20.tlv and htnv20.bin; sweetbtfw, sweetbtnv)\n");
++		return ENOENT;
++	}
++	if (bt_le16(patch + 16) != product || bt_le16(patch + 18) != rom) {
++		printf("SWEET BT: the patch is for product %#x ROM %#x\n", bt_le16(patch + 16), bt_le16(patch + 18));
++		return EINVAL;
++	}
++	mode = patch[14];               /* 3: the chip answers only the last segment */
++	if (mode != 0 && mode != 3) {
++		return EINVAL;
++	}
++	if (nvm_size > sizeof(bt_nvm_work)) {
++		return E2BIG;
++	}
++	memcpy(bt_nvm_work, nvm, nvm_size);
++	if (sweet_bt_qca6390_nvm_prepare(bt_nvm_work, nvm_size, bt_speed->qca)) {
++		printf("SWEET BT: the NVM file is not one this knows (no HCI transport record)\n");
++		return EINVAL;
++	}
++	printf("SWEET BT: firmware: patch %u bytes, NVM %u bytes, at %u baud (about %u s)\n", patch_size, nvm_size,
++	    bt_speed->baud, (patch_size + nvm_size) * 10 / bt_speed->baud + 1);
++	error = bt_qca_download(uart, patch, patch_size, mode == 3);
++	if (error) {
++		return error;
++	}
++	delay(10000);
++	error = bt_qca_download(uart, bt_nvm_work, nvm_size, false);
++	if (error) {
++		return error;
++	}
++	/* as Linux's QCA6390 setup: the chip's own diagnostic log off, then a reset */
++	error = bt_hci_command(uart, 0xfc17, logging, sizeof(logging), true, event, &length);
++	if (!error) {
++		error = bt_hci_command(uart, 0x0c03, NULL, 0, true, event, &length);
++	}
++	if (!error) {
++		error = bt_hci_command(uart, 0x1001, NULL, 0, true, event, &length);
++	}
++	if (error) {
++		return error;
++	}
++	if (length != 15 || bt_le16(event + 11) != 29 || bt_le16(event + 13) == 0x0d2b) {
++		printf("SWEET BT: after the firmware the chip does not say it runs it (manufacturer %u, subversion %#x)\n",
++		    length == 15 ? bt_le16(event + 11) : 0, length == 15 ? bt_le16(event + 13) : 0);
++		return EIO;
++	}
++	printf("SWEET BT: THE FIRMWARE RUNS: HCI %#x, LMP %#x, subversion %#x\n", event[7], event[10], bt_le16(event + 13));
++	error = bt_hci_command(uart, 0x1002, NULL, 0, true, event, &length);
++	if (error) {
++		return error;
++	}
++	if (length != 71) {
++		return EILSEQ;
++	}
++	memcpy(bt_commands, event + 7, sizeof(bt_commands));
++	have_wanted = bt_adt_address(wanted);
++	if (have_wanted) {
++		/*
++		 * (xnu 0137) In display order, the first byte first: QCA's chips after ROME take 0xfc14's
++		 * address big-endian, unlike every other HCI address (Linux: "Bluetooth: qca: fix
++		 * device-address endianness", 2024). Boot 61 sent it the HCI way, last byte first, and the
++		 * address the chip then said it had was one no device can have (reversed, the ADT's last
++		 * byte comes first: if odd, a group address; presumably that, not checked).
++		 */
++		error = bt_hci_command(uart, 0xfc14, wanted, sizeof(wanted), true, event, &length);
++		printf("SWEET BT: the ADT's address given to the chip: errno %d%s\n", error,
++		    error ? " (it keeps the NVM's)" : "");
++	}
++	error = bt_hci_command(uart, 0x1009, NULL, 0, true, event, &length);
++	if (error) {
++		return error;
++	}
++	if (length != 13) {
++		return EILSEQ;
++	}
++	for (unsigned i = 0; i < 6; i++) {
++		bt_address[i] = event[12 - i];
++		nonzero |= bt_address[i];
++	}
++	if (!nonzero || (bt_address[0] & 1)) {
++		printf("SWEET BT: the chip's address is not one a device can have (%s, first byte %#x)\n",
++		    nonzero ? "a group address" : "zero", bt_address[0]);
++		return EINVAL;
++	}
++	printf("SWEET BT: the chip's address: %s\n", !have_wanted ? "its own (the ADT has none for Bluetooth)" :
++	    memcmp(bt_address, wanted, 6) ? "its own, NOT the ADT's" : "the ADT's");
++	return 0;
++}
++
++/* Step 5: 3 s of LE passive scan and 4 s of classic inquiry; how many answers. */
++static int
++bt_radio_scan(vm_offset_t uart)
++{
++	static const uint8_t mask[] = { 0xff, 0xff, 0xfb, 0xff, 0x07, 0xf8, 0xbf, 0x3d };
++	static const uint8_t le_mask[] = { 2, 0, 0, 0, 0, 0, 0, 0 };
++	static const uint8_t params[] = { 0, 0x60, 0, 0x30, 0, 0, 0 };     /* passive: 30 ms of every 60 */
++	static const uint8_t enable[] = { 1, 1 }, disable[] = { 0, 0 };
++	static const uint8_t inquiry[] = { 0x33, 0x8b, 0x9e, 2, 0 };       /* GIAC, 2 x 1.28 s */
++	uint8_t event[BT_EVENT_MAX];
++	unsigned length = 0, reports = 0, classic = 0;
++	uint64_t deadline;
++	bool complete = false;
++	int error, stop;
++
++	error = bt_hci_command(uart, 0x0c01, mask, sizeof(mask), true, event, &length);
++	if (!error) {
++		error = bt_hci_command(uart, 0x2001, le_mask, sizeof(le_mask), true, event, &length);
++	}
++	if (!error) {
++		error = bt_hci_command(uart, 0x200b, params, sizeof(params), true, event, &length);
++	}
++	if (!error) {
++		error = bt_hci_command(uart, 0x200c, enable, sizeof(enable), true, event, &length);
++	}
++	if (error) {
++		return error;
++	}
++	clock_interval_to_deadline(3000, NSEC_PER_MSEC, &deadline);
++	while (mach_absolute_time() < deadline) {
++		int result = bt_rx_frame(uart, event, BT_EVENT_MAX, &length, true);
++
++		if (result < 0) {
++			error = -result;
++			break;
++		}
++		error = bt_service_ibs(uart);
++		if (error) {
++			break;
++		}
++		if (result == 1 && event[1] == 0x3e && length >= 5 && event[3] == 2) {
++			reports += event[4];
++		}
++		delay(100);
++	}
++	stop = bt_hci_command(uart, 0x200c, disable, sizeof(disable), true, event, &length);
++	printf("SWEET BT: LE scan: %u advertisements heard (stop: %d)\n", reports, stop);
++	if (error || stop) {
++		return error ? error : stop;
++	}
++	error = bt_hci_command(uart, 0x0401, inquiry, sizeof(inquiry), true, event, &length);
++	if (error) {
++		return error;
++	}
++	clock_interval_to_deadline(4000, NSEC_PER_MSEC, &deadline);
++	while (mach_absolute_time() < deadline) {
++		int result = bt_rx_frame(uart, event, BT_EVENT_MAX, &length, true);
++
++		if (result < 0) {
++			return -result;
++		}
++		error = bt_service_ibs(uart);
++		if (error) {
++			return error;
++		}
++		if (result == 1) {
++			/* inquiry results: plain, with RSSI, extended */
++			if ((event[1] == 2 || event[1] == 0x22 || event[1] == 0x2f) && length >= 4) {
++				classic += event[3];
++			}
++			if (event[1] == 1) {
++				complete = true;
++				break;
++			}
++		}
++		delay(100);
++	}
++	printf("SWEET BT: classic inquiry: %u answers%s; in-band sleep: %u wakes, %u sleeps\n", classic,
++	    complete ? "" : " (not over in 4 s)", bt_ibs_wakes, bt_ibs_sleeps);
++	if (complete) {
++		printf("SWEET BT: THE RADIO HEARS: %u LE advertisements, %u classic devices\n", reports, classic);
++	}
++	return complete ? 0 : ETIMEDOUT;
++}
++
++/* ---- step 6: the H4 endpoint for bluetoothd ---------------------------------------------------------- */
++
++/*
++ * bluetoothd's H4:POSIX transport is a stream kernel control socket (its job's environment
++ * BT_HCI_TRANSPORT=H4:POSIX:com.sweet.bluetooth,115200 names it). Only the worker thread touches
++ * the UART; the socket's calls only queue the host's bytes.
++ */
++static LCK_GRP_DECLARE(bt_control_group, "sweet-bt");
++static LCK_MTX_DECLARE(bt_control_lock, &bt_control_group);
++static kern_ctl_ref bt_control;
++static vm_offset_t bt_control_uart;
++static uint32_t bt_control_unit, bt_control_generation;
++static uint8_t bt_tx_queue[BT_TX_QUEUE];
++static unsigned bt_tx_head, bt_tx_tail;
++static bool bt_control_fault;
++static struct termios bt_control_termios;
++
++/*
++ * bluetoothd's commands answered here on the chip's behalf and never sent (sweet_bt_local_answer): Broadcom vendor
++ * commands, Read/Write Default Erroneous Data Reporting, LE Read Periodic Advertiser List Size (0x204a), and those
++ * boot-arg sweetbtfake=0xOPCODE[,...] names (up to 8). Boot-arg sweetbtvsc=0 sends everything to the chip, as before.
++ */
++static bool bt_answer_here;
++static uint16_t bt_answer_extra[8];
++static unsigned bt_answer_extras;
++
++static errno_t
++bt_control_connect(__unused kern_ctl_ref ref, struct sockaddr_ctl *address, void **info)
++{
++	uid_t uid = kauth_cred_getuid(kauth_cred_get());
++	int error;
++
++	if (uid != 0 && uid != 501) {
++		return EPERM;
++	}
++	lck_mtx_lock(&bt_control_lock);
++	error = bt_control_fault ? EIO : bt_control_unit ? EBUSY : 0;
++	if (!error) {
++		bt_control_unit = address->sc_unit;
++		bt_control_generation++;
++		bt_tx_head = bt_tx_tail = 0;
++		*info = NULL;
++		printf("SWEET BT: H4: connected (uid %u, unit %u)\n", uid, bt_control_unit);
++	}
++	lck_mtx_unlock(&bt_control_lock);
++	return error;
++}
++
++static errno_t
++bt_control_disconnect(__unused kern_ctl_ref ref, uint32_t unit, __unused void *info)
++{
++	lck_mtx_lock(&bt_control_lock);
++	if (bt_control_unit == unit) {
++		bt_control_unit = 0;
++		bt_control_generation++;
++		bt_tx_head = bt_tx_tail = 0;
++		printf("SWEET BT: H4: disconnected (unit %u)\n", unit);
++	}
++	lck_mtx_unlock(&bt_control_lock);
++	return 0;
++}
++
++static errno_t
++bt_control_send(__unused kern_ctl_ref ref, uint32_t unit, __unused void *info, mbuf_t message, __unused int flags)
++{
++	size_t length = mbuf_pkthdr_len(message);
++	int error = 0;
++
++	lck_mtx_lock(&bt_control_lock);
++	if (bt_control_fault) {
++		error = EIO;
++	} else if (unit != bt_control_unit) {
++		error = ENOTCONN;
++	} else if (length > BT_TX_QUEUE - (bt_tx_head - bt_tx_tail)) {
++		error = ENOBUFS;
++	}
++	for (size_t offset = 0; !error && offset < length;) {
++		uint8_t bytes[256];
++		size_t count = length - offset > sizeof(bytes) ? sizeof(bytes) : length - offset;
++
++		error = mbuf_copydata(message, offset, count, bytes);
++		if (error) {
++			break;
++		}
++		for (size_t i = 0; i < count; i++) {
++			bt_tx_queue[bt_tx_head++ & (BT_TX_QUEUE - 1)] = bytes[i];
++		}
++		offset += count;
++	}
++	lck_mtx_unlock(&bt_control_lock);
++	mbuf_freem(message);
++	return error;
++}
++
++/* bluetoothd asks the serial port's settings and lines as socket options (the tty ioctl numbers). */
++static errno_t
++bt_control_getopt(__unused kern_ctl_ref ref, __unused uint32_t unit, __unused void *info, int option, void *data,
++    size_t *length)
++{
++	int lines = TIOCM_CTS | TIOCM_DSR | TIOCM_CAR;
++	uint32_t opt = (uint32_t)option;
++	size_t wanted;
++
++	if (opt == (uint32_t)TIOCGETA) {
++		wanted = sizeof(bt_control_termios);
++	} else if (opt == (uint32_t)TIOCMGET) {
++		wanted = sizeof(lines);
++	} else {
++		printf("SWEET BT: H4: unknown option %#x asked\n", opt);
++		return ENOPROTOOPT;
++	}
++	if (!data) {
++		*length = wanted;
++		return 0;
++	}
++	if (*length < wanted) {
++		return EMSGSIZE;
++	}
++	lck_mtx_lock(&bt_control_lock);
++	if (opt == (uint32_t)TIOCGETA) {
++		memcpy(data, &bt_control_termios, wanted);
++	} else {
++		memcpy(data, &lines, wanted);
++	}
++	lck_mtx_unlock(&bt_control_lock);
++	*length = wanted;
++	return 0;
++}
++
++static errno_t
++bt_control_setopt(__unused kern_ctl_ref ref, __unused uint32_t unit, __unused void *info, int option, void *data,
++    size_t length)
++{
++	uint32_t opt = (uint32_t)option;
++
++	if (opt == (uint32_t)TIOCSETA || opt == (uint32_t)TIOCSETAW || opt == (uint32_t)TIOCSETAF) {
++		const struct termios *settings = data;
++
++		if (length != sizeof(struct termios) || !data) {
++			return EINVAL;
++		}
++		if ((settings->c_ispeed && settings->c_ispeed != 115200) ||
++		    (settings->c_ospeed && settings->c_ospeed != 115200)) {
++			return EINVAL;  /* bluetoothd's own idea of the speed (BT_HCI_TRANSPORT); the kernel picks the UART's */
++		}
++		lck_mtx_lock(&bt_control_lock);
++		bt_control_termios = *settings;
++		lck_mtx_unlock(&bt_control_lock);
++		return 0;
++	}
++	if (opt == (uint32_t)TIOCSDTR || opt == (uint32_t)TIOCCDTR || opt == (uint32_t)TIOCMSET ||
++	    opt == (uint32_t)TIOCMBIS || opt == (uint32_t)TIOCMBIC || opt == (uint32_t)TIOCFLUSH) {
++		return 0;
++	}
++	printf("SWEET BT: H4: unknown option %#x set (%u bytes)\n", opt, (unsigned)length);
++	return ENOPROTOOPT;
++}
++
++static void bt_control_worker(void *unused, wait_result_t result) __attribute__((noreturn));
++
++static void
++bt_control_worker(__unused void *unused, __unused wait_result_t result)
++{
++	static struct sweet_bt_h4 tx;
++	static uint8_t receive[SWEET_BT_H4_MAX];
++	unsigned receive_length = 0, commands = 0, answered = 0;
++	uint32_t generation = 0;
++	bool waking = false;
++	uint64_t wake_deadline = 0;
++
++	for (;;) {
++		uint32_t unit;
++		bool fault;
++		int error = 0;
++
++		lck_mtx_lock(&bt_control_lock);
++		unit = bt_control_unit;
++		fault = bt_control_fault;
++		if (generation != bt_control_generation) {
++			generation = bt_control_generation;
++			memset(&tx, 0, sizeof(tx));
++			receive_length = 0;
++			commands = answered = 0;
++		}
++		while (unit && !fault && !tx.complete && bt_tx_head != bt_tx_tail) {
++			uint8_t byte = bt_tx_queue[bt_tx_tail++ & (BT_TX_QUEUE - 1)];
++			int state = sweet_bt_h4_push(&tx, byte);
++
++			/* the host sends commands and data, never events or IBS bytes */
++			if (state < 0 || state == 2 || (tx.used && tx.bytes[0] == 4)) {
++				fault = bt_control_fault = true;
++				printf("SWEET BT: H4: what the host sent is not H4; the endpoint stops\n");
++			}
++		}
++		lck_mtx_unlock(&bt_control_lock);
++		if (unit && !fault && tx.complete) {
++			uint8_t local[SWEET_BT_LOCAL_EVENT_MAX];
++			unsigned answer = bt_answer_here ?
++			    sweet_bt_local_answer(tx.bytes, tx.used, bt_answer_extra, bt_answer_extras, local) : 0;
++
++			if (answer) {
++				/* answered on the chip's behalf, once any packet of the chip's waiting to go up has gone */
++				if (!receive_length) {
++					if (answered++ < 128) {
++						printf("SWEET BT: iOS: HCI %#x (%u bytes) answered here, not sent to the chip\n",
++						    bt_le16(tx.bytes + 1), tx.used);
++					}
++					memcpy(receive, local, answer);
++					receive_length = answer;
++					memset(&tx, 0, sizeof(tx));
++				}
++			} else if (!bt_chip_awake) {
++				/* the chip may be asleep (IBS): woken first, and the packet goes once it says it is awake */
++				if (!waking) {
++					const uint8_t wake = 0xfd;
++
++					error = bt_uart_tx(bt_control_uart, &wake, 1);
++					clock_interval_to_deadline(1000, NSEC_PER_MSEC, &wake_deadline);
++					waking = true;
++				} else if (mach_absolute_time() >= wake_deadline) {
++					error = ETIMEDOUT;
++				}
++			} else {
++				waking = false;
++				if (tx.bytes[0] == 1 && commands++ < 128) {
++					printf("SWEET BT: iOS: HCI %#x (%u bytes)\n", bt_le16(tx.bytes + 1), tx.used);
++				}
++				error = bt_uart_tx(bt_control_uart, tx.bytes, tx.used);
++				memset(&tx, 0, sizeof(tx));
++			}
++		}
++		if (!error && !receive_length) {
++			int state = bt_rx_frame(bt_control_uart, receive, sizeof(receive), &receive_length, false);
++
++			if (state < 0) {
++				error = -state;
++			}
++			if (state > 0 && receive_length >= 7 && receive[0] == 4 && receive[1] == 0x0e && receive[6]) {
++				printf("SWEET BT: iOS: HCI %#x refused by the chip: status %#x\n", bt_le16(receive + 4), receive[6]);
++			}
++			if (state > 0 && receive_length >= 7 && receive[0] == 4 && receive[1] == 0x0f && receive[3]) {
++				printf("SWEET BT: iOS: HCI %#x refused by the chip (Command Status): %#x\n", bt_le16(receive + 5),
++				    receive[3]);
++			}
++			if (state > 0 && bt_answer_here && sweet_bt_fix_supported_commands(receive, receive_length)) {
++				printf("SWEET BT: iOS: the chip's Supported Commands given octet 18 = %#x (Read/Write Default "
++				    "Erroneous Data Reporting, answered here)\n", receive[7 + 18]);
++			}
++		}
++		if (!error) {
++			error = bt_service_ibs(bt_control_uart);
++		}
++		if (error && !fault) {
++			lck_mtx_lock(&bt_control_lock);
++			bt_control_fault = true;
++			lck_mtx_unlock(&bt_control_lock);
++			SweetBluetoothSetReady(false);
++			printf("SWEET BT: H4: the UART failed (errno %d); the endpoint stops\n", error);
++		}
++		/* (never queued under bt_control_lock: the socket's calls take it) */
++		if (receive_length) {
++			int queued = unit ? ctl_enqueuedata(bt_control, unit, receive, receive_length, 0) : ENOTCONN;
++
++			if (queued != ENOBUFS) {
++				receive_length = 0;
++			}
++		}
++		delay(1000);
++	}
++}
++
++static int
++bt_control_start(vm_offset_t uart)
++{
++	struct kern_ctl_reg registration;
++	thread_t thread;
++	int error;
++
++	bzero(&registration, sizeof(registration));
++	strlcpy(registration.ctl_name, "com.sweet.bluetooth", sizeof(registration.ctl_name));
++	registration.ctl_flags = CTL_FLAG_REG_SOCK_STREAM;
++	registration.ctl_sendsize = BT_TX_QUEUE;
++	registration.ctl_recvsize = BT_TX_QUEUE;
++	registration.ctl_connect = bt_control_connect;
++	registration.ctl_disconnect = bt_control_disconnect;
++	registration.ctl_send = bt_control_send;
++	registration.ctl_getopt = bt_control_getopt;
++	registration.ctl_setopt = bt_control_setopt;
++	{
++		uint32_t answer = 1;
++		char list[96];
++
++		(void)PE_parse_boot_argn("sweetbtvsc", &answer, sizeof(answer));
++		bt_answer_here = answer != 0;
++		bzero(list, sizeof(list));
++		if (PE_parse_boot_arg_str("sweetbtfake", list, sizeof(list))) {
++			bt_answer_extras = sweet_bt_parse_opcodes(list, bt_answer_extra,
++			    sizeof(bt_answer_extra) / sizeof(bt_answer_extra[0]));
++		}
++		printf("SWEET BT: bluetoothd's vendor, erroneous-data-reporting and 0x204a commands %s, %u more opcode(s)\n",
++		    bt_answer_here ? "answered here" : "sent to the chip (sweetbtvsc=0)", bt_answer_extras);
++	}
++	bt_control_termios.c_cflag = CS8 | CREAD | CLOCAL;
++	bt_control_termios.c_ispeed = bt_control_termios.c_ospeed = 115200;
++	error = ctl_register(&registration, &bt_control);
++	if (error) {
++		return error;
++	}
++	error = SweetBluetoothPublish(bt_address, bt_commands);
++	if (error) {
++		(void)ctl_deregister(bt_control);
++		return error;
++	}
++	bt_control_uart = uart;
++	bt_chip_awake = false;
++	SweetBluetoothSetReady(true);
++	if (kernel_thread_start(bt_control_worker, NULL, &thread) != KERN_SUCCESS) {
++		SweetBluetoothSetReady(false);
++		(void)ctl_deregister(bt_control);
++		return EIO;
++	}
++	thread_set_thread_name(thread, "sweet-bt-h4");
++	thread_deallocate(thread);
++	printf("SWEET BT: THE RADIO IS UP for iOS: H4 at com.sweet.bluetooth, registry entry \"bluetooth\"\n");
++	return 0;
++}
++
++/* ---- the steps ------------------------------------------------------------------------------------- */
++
++/* SE6's root for `speed`: GPLL0's even output (parent 6) x m/n, dual-edge M/N (115200: 7.3728 MHz, 384/15625). */
++static bool
++bt_uart_clock(vm_offset_t gcc, const struct sweet_bt_speed *speed)
++{
++	bt_write(gcc, GCC_SE6_M, speed->m);
++	bt_write(gcc, GCC_SE6_N, ~((uint32_t)speed->n - speed->m) & 0xffff);
++	bt_write(gcc, GCC_SE6_D, ~(uint32_t)speed->n & 0xffff);
++	bt_write(gcc, GCC_SE6_CFG, 0x2601);
++	bt_write(gcc, GCC_SE6_CMD, 1);
++	for (unsigned i = 0; i < 10000; i++) {
++		if (!(bt_read(gcc, GCC_SE6_CMD) & 1)) {
++			return true;
++		}
++		delay(1);
++	}
++	return false;
++}
++
++/*
++ * The chip and the UART moved to `speed`, as Linux's qca_set_speed does for the QCA6390: the set-baudrate
++ * vendor command (0xfc48, the speed's QCA index) at the old speed and 300 ms for the chip to take it, then
++ * SE6's clock and divider (bt_speed); whatever came in meanwhile is dropped, and Read Local Version must
++ * then work at the new speed. 0, or an errno (the chip's speed is then not known).
++ */
++static int
++bt_set_speed(vm_offset_t gcc, vm_offset_t uart, const struct sweet_bt_speed *speed)
++{
++	uint8_t event[BT_EVENT_MAX];
++	unsigned length = 0;
++	int error;
++
++	error = bt_hci_command(uart, 0xfc48, &speed->qca, 1, false, event, &length);
++	if (error) {
++		return error;
++	}
++	delay(300000);
++	error = bt_uart_quiesce(uart);
++	if (error) {
++		return error;
++	}
++	if (!bt_uart_clock(gcc, speed)) {
++		return ETIMEDOUT;
++	}
++	bt_speed = speed;
++	bt_uart_div = speed->div;
++	bt_write(uart, 0x48, (bt_uart_div << 4) | 1);
++	bt_write(uart, 0x4c, (bt_uart_div << 4) | 1);
++	memset(&bt_rx_packet, 0, sizeof(bt_rx_packet));
++	bt_rx_head = bt_rx_tail = 0;
++	bt_write(uart, GENI_S_CMD, (1u << 27) | 0x80);      /* reading again; RFR open */
++	error = bt_hci_command(uart, 0x1001, NULL, 0, true, event, &length);
++	if (!error && length != 15) {
++		error = EILSEQ;
++	}
++	return error;
++}
++
++/* A pin as a GPIO: its config (function 0, drive, pull, output enable) and, for an output, its level. */
++static void
++bt_gpio(vm_offset_t tlmm, unsigned pin, uint32_t cfg, bool high)
++{
++	bt_write(tlmm, TLMM_IO(pin), high ? 2 : 0);
++	bt_write(tlmm, TLMM_CFG(pin), cfg);
++}
++
++static bool
++bt_clocks_running(vm_offset_t gcc)
++{
++	return !((bt_read(gcc, GCC_QUP_M_AHB) | bt_read(gcc, GCC_QUP_S_AHB) | bt_read(gcc, GCC_SE6_CBCR)) & CBCR_OFF);
++}
++
++/*
++ * Steps 4-6: the chip powered and its ROM (4) or its firmware (5, 6) talked to. With 6 and success
++ * it stays so (true); otherwise BT_EN goes low again and the UART, its pins and clock are put back.
++ */
++static bool
++bt_chip(vm_offset_t gcc, vm_offset_t tlmm, vm_offset_t uart, unsigned steps)
++{
++	uint32_t root[5] = { bt_read(gcc, GCC_SE6_CMD), bt_read(gcc, GCC_SE6_CFG), bt_read(gcc, GCC_SE6_M),
++		             bt_read(gcc, GCC_SE6_N), bt_read(gcc, GCC_SE6_D) };
++	uint32_t en_cfg = bt_read(tlmm, TLMM_CFG(PIN_BT_EN)), en_io = bt_read(tlmm, TLMM_IO(PIN_BT_EN));
++	uint32_t sw_cfg = bt_read(tlmm, TLMM_CFG(PIN_SW_CTRL)), sw_io = bt_read(tlmm, TLMM_IO(PIN_SW_CTRL));
++	uint32_t pins[4], uart_saved[BT_UART_REGS];
++	uint32_t vote = bt_read(gcc, GCC_QUP_VOTE), added = GCC_QUP_BITS & ~vote;
++	uint32_t hwcg = bt_read(gcc, GCC_QUP_S_AHB) & 2u;
++	uint8_t event[BT_EVENT_MAX];
++	unsigned length = 0, i;
++	int error, stopped;
++
++	for (unsigned p = 0; p < 4; p++) {
++		pins[p] = bt_read(tlmm, TLMM_CFG(16 + p));
++	}
++	for (unsigned r = 0; r < BT_UART_REGS; r++) {
++		uart_saved[r] = bt_read(uart, bt_uart_regs[r]);
++	}
++	bt_write(gcc, GCC_QUP_S_AHB, bt_read(gcc, GCC_QUP_S_AHB) & ~2u);
++	bt_write(gcc, GCC_QUP_VOTE, vote | GCC_QUP_BITS);
++	for (i = 0; i < 10000 && !bt_clocks_running(gcc); i++) {
++		delay(1);
++	}
++	error = i == 10000 ? ETIMEDOUT : bt_uart_quiesce(uart);
++	bt_speed = &sweet_bt_speeds[0];
++	bt_uart_div = bt_speed->div;
++	if (!error && !bt_uart_clock(gcc, bt_speed)) {
++		error = ETIMEDOUT;
++	}
++	if (!error) {
++		/* (the rails are shared with the Wi-Fi, whose thread may be voting just now) */
++		for (unsigned tries = 0; tries < 50; tries++) {
++			error = sweet_rpmh_bt_power();
++			if (error != EBUSY) {
++				break;
++			}
++			delay(100000);
++		}
++	}
++	if (error) {
++		printf("SWEET BT: step 4: clocks or rails failed: errno %d\n", error);
++		goto put_back;
++	}
++	/*
++	 * BT_EN low, then high, as Android's btpower.c: 50 ms and more each (umi's 56). The ROM answers at
++	 * 115200 baud; from step 5 on the UART then goes to sweetbtbaud, and if that, or the firmware at that
++	 * speed, does not work, the chip is started over and everything stays at 115200.
++	 */
++again:
++	for (unsigned attempt = 0;; attempt++) {
++		if (bt_speed != &sweet_bt_speeds[0]) {
++			bt_speed = &sweet_bt_speeds[0];
++			bt_uart_div = bt_speed->div;
++			(void)bt_uart_quiesce(uart);
++			if (!bt_uart_clock(gcc, bt_speed)) {
++				error = ETIMEDOUT;
++				break;
++			}
++		}
++		bt_gpio(tlmm, PIN_BT_EN, 0x241, false);             /* GPIO, 4 mA, pull-down, output */
++		if (bt_swctrl_drive) {
++			bt_gpio(tlmm, PIN_SW_CTRL, 0x240, true);    /* as umi: output, high */
++		} else {
++			bt_gpio(tlmm, PIN_SW_CTRL, 0x040, false);   /* an input, no pull, as Android */
++		}
++		delay(56000);
++		bt_gpio(tlmm, PIN_BT_EN, 0x241, true);
++		delay(56000);
++		printf("SWEET BT: step 4: BT_EN high; SW_CTRL reads %u\n", bt_read(tlmm, TLMM_IO(PIN_SW_CTRL)) & 1);
++		/* the UART's pins: QUP function 1; RTS (17) pulled down, TX (18) pulled up, as the DT's active state */
++		for (unsigned pin = 16; pin <= 19; pin++) {
++			bt_write(tlmm, TLMM_CFG(pin), pin == 17 ? 5u : pin == 18 ? 7u : 4u);
++		}
++		bt_uart_setup(uart);
++		bt_write(uart, GENI_S_CMD, (1u << 27) | 0x80);      /* start reading; RFR open */
++		memset(&bt_rx_packet, 0, sizeof(bt_rx_packet));
++		bt_rx_head = bt_rx_tail = 0;
++		bt_chip_awake = bt_ibs_ack_pending = false;
++		bt_ibs_wakes = bt_ibs_sleeps = 0;
++		error = bt_hci_command(uart, 0x0c03, NULL, 0, true, event, &length);
++		if (!error) {
++			error = bt_hci_command(uart, 0x1001, NULL, 0, true, event, &length);
++		}
++		if (error || length != 15) {
++			break;
++		}
++		printf("SWEET BT: step 4: THE CHIP ANSWERS from its ROM: HCI %#x, manufacturer %u, subversion %#x\n",
++		    event[7], bt_le16(event + 11), bt_le16(event + 13));
++		if (steps < 5 || attempt || bt_want == NULL || bt_want == bt_speed) {
++			break;
++		}
++		error = bt_set_speed(gcc, uart, bt_want);
++		if (!error) {
++			printf("SWEET BT: the UART now runs at %u baud (sweetbtbaud)\n", bt_speed->baud);
++			break;
++		}
++		printf("SWEET BT: %u baud did not work (errno %d): the chip is started over at 115200\n",
++		    bt_want->baud, error);
++	}
++	if (!error && length == 15) {
++		if (steps >= 5) {
++			error = bt_qca_firmware(uart);
++			if (error && bt_speed != &sweet_bt_speeds[0]) {
++				printf("SWEET BT: the firmware did not go in at %u baud (errno %d): all again at 115200\n",
++				    bt_speed->baud, error);
++				bt_want = &sweet_bt_speeds[0];
++				goto again;
++			}
++			if (!error && steps == 5) {
++				error = bt_radio_scan(uart);
++			}
++			if (!error && steps == 6) {
++				error = bt_control_start(uart);
++				if (!error) {
++					return true;
++				}
++			}
++		}
++	} else if (!error) {
++		error = EILSEQ;
++	}
++	printf("SWEET BT: step %u: errno %d; BT_EN low again\n", steps, error);
++	bt_gpio(tlmm, PIN_BT_EN, 0x241, false);
++	stopped = bt_uart_quiesce(uart);
++	if (stopped) {
++		printf("SWEET BT: the UART did not stop: errno %d\n", stopped);
++	}
++put_back:
++	for (unsigned r = 0; r < BT_UART_REGS; r++) {
++		bt_write(uart, bt_uart_regs[r], uart_saved[r]);
++	}
++	bt_write(uart, GENI_M_IRQ_CLR, 0xffffffff);
++	bt_write(uart, GENI_S_IRQ_CLR, 0xffffffff);
++	bt_write(tlmm, TLMM_IO(PIN_BT_EN), en_io & 2);
++	bt_write(tlmm, TLMM_CFG(PIN_BT_EN), en_cfg);
++	bt_write(tlmm, TLMM_IO(PIN_SW_CTRL), sw_io & 2);
++	bt_write(tlmm, TLMM_CFG(PIN_SW_CTRL), sw_cfg);
++	for (unsigned p = 0; p < 4; p++) {
++		bt_write(tlmm, TLMM_CFG(16 + p), pins[p]);
++	}
++	bt_write(gcc, GCC_SE6_M, root[2]);
++	bt_write(gcc, GCC_SE6_N, root[3]);
++	bt_write(gcc, GCC_SE6_D, root[4]);
++	bt_write(gcc, GCC_SE6_CFG, root[1]);
++	bt_write(gcc, GCC_SE6_CMD, root[0] | 1);
++	for (i = 0; i < 10000 && (bt_read(gcc, GCC_SE6_CMD) & 1); i++) {
++		delay(1);
++	}
++	if (added) {
++		bt_write(gcc, GCC_QUP_VOTE, bt_read(gcc, GCC_QUP_VOTE) & ~added);
++	}
++	bt_write(gcc, GCC_QUP_S_AHB, (bt_read(gcc, GCC_QUP_S_AHB) & ~2u) | hwcg);
++	return false;
++}
++
++static void
++bt_run(unsigned steps)
++{
++	static const uint32_t clocks[] = {
++		GCC_QUP_VOTE, GCC_QUP_M_AHB, GCC_QUP_S_AHB, GCC_SE6_CBCR, GCC_SE6_CMD, GCC_SE6_CFG, GCC_SE6_M,
++		GCC_SE6_N, GCC_SE6_D
++	};
++	static const unsigned pin_list[] = { 16, 17, 18, 19, PIN_BT_EN, PIN_SW_CTRL };
++	static const uint32_t geni[] = {
++		GENI_STATUS, 0x48, 0x4c, 0x64, 0x68, 0x6c, 0x7c, 0x258, GENI_M_IRQ, GENI_S_IRQ, GENI_TX_STATUS,
++		GENI_RX_STATUS, GENI_TX_DEPTH, GENI_RX_DEPTH
++	};
++	vm_offset_t gcc = ml_io_map(GCC_PA, 0x80000), tlmm = ml_io_map(TLMM_NORTH_PA, 0x80000), uart;
++	uint32_t added = 0, hwcg = 0;
++
++	if (!gcc || !tlmm) {
++		printf("SWEET BT: GCC or TLMM not mapped\n");
++		return;
++	}
++	for (unsigned i = 0; i < sizeof(clocks) / sizeof(clocks[0]); i++) {
++		printf("SWEET BT: step 1: GCC %#x = %#x\n", clocks[i], bt_read(gcc, clocks[i]));
++	}
++	for (unsigned i = 0; i < sizeof(pin_list) / sizeof(pin_list[0]); i++) {
++		printf("SWEET BT: step 1: gpio%u config %#x io %#x\n", pin_list[i], bt_read(tlmm, TLMM_CFG(pin_list[i])),
++		    bt_read(tlmm, TLMM_IO(pin_list[i])));
++	}
++	if (steps < 2) {
++		return;
++	}
++	/* step 2 on: the UART's clocks voted for as long as it is looked at */
++	{
++		uint32_t vote = bt_read(gcc, GCC_QUP_VOTE);
++		unsigned waited;
++
++		added = GCC_QUP_BITS & ~vote;
++		hwcg = bt_read(gcc, GCC_QUP_S_AHB) & 2u;
++		bt_write(gcc, GCC_QUP_S_AHB, bt_read(gcc, GCC_QUP_S_AHB) & ~2u);
++		bt_write(gcc, GCC_QUP_VOTE, vote | GCC_QUP_BITS);
++		for (waited = 0; waited < 10000 && !bt_clocks_running(gcc); waited++) {
++			delay(1);
++		}
++		printf("SWEET BT: step 2: the UART's clocks after %u us: %#x %#x %#x\n", waited,
++		    bt_read(gcc, GCC_QUP_M_AHB), bt_read(gcc, GCC_QUP_S_AHB), bt_read(gcc, GCC_SE6_CBCR));
++	}
++	/* (a GENI register read without its clocks can stall the interconnect) */
++	if (!bt_clocks_running(gcc)) {
++		printf("SWEET BT: step 2: the UART's clocks do not run: its registers are not read\n");
++	} else if ((uart = ml_io_map(SE6_PA, 0x4000)) != 0) {
++		for (unsigned i = 0; i < sizeof(geni) / sizeof(geni[0]); i++) {
++			printf("SWEET BT: step 2: GENI %#x = %#x\n", geni[i], bt_read(uart, geni[i]));
++		}
++		if (steps == 3) {
++			bt_loopback(uart);
++		}
++		if (steps >= 4 && bt_chip(gcc, tlmm, uart, steps)) {
++			return;                 /* step 6: the radio stays up, with its clocks */
++		}
++	}
++	bt_write(gcc, GCC_QUP_S_AHB, (bt_read(gcc, GCC_QUP_S_AHB) & ~2u) | hwcg);
++	if (added) {
++		bt_write(gcc, GCC_QUP_VOTE, bt_read(gcc, GCC_QUP_VOTE) & ~added);
++	}
++}
++
++static void
++bt_thread(__unused void *unused, __unused wait_result_t result)
++{
++	if (bt_delay) {
++		delay((int)(bt_delay * 1000000));
++	}
++	printf("SWEET BT: steps 1..%u\n", bt_steps);
++	if (bt_steps >= 5) {
++		bt_firmware_load();
++	}
++	bt_run(bt_steps);
++	printf("SWEET BT: done: steps 1..%u\n", bt_steps);
++	(void)thread_terminate(current_thread());
++}
++
++void
++sweet_bt_init(void)
++{
++	thread_t thread;
++
++	if (!sweet_board_is_umi()) {
++		return;
++	}
++	(void)PE_parse_boot_argn("sweetbt", &bt_steps, sizeof(bt_steps));
++	(void)PE_parse_boot_argn("sweetbtdelay", &bt_delay, sizeof(bt_delay));
++	(void)PE_parse_boot_argn("sweetbtswctrl", &bt_swctrl_drive, sizeof(bt_swctrl_drive));
++	(void)PE_parse_boot_argn("sweetbtbaud", &bt_baud, sizeof(bt_baud));
++	bt_want = sweet_bt_speed_for(bt_baud);
++	if (bt_want == NULL) {
++		printf("SWEET BT: sweetbtbaud=%u is not a speed this knows; 115200\n", bt_baud);
++		bt_want = &sweet_bt_speeds[0];
++	}
++	if (!bt_steps) {
++		return;
++	}
++	if (bt_steps > 6) {
++		bt_steps = 6;
++	}
++	if (bt_delay > 600) {
++		bt_delay = 600;
++	}
++	if (kernel_thread_start(bt_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_set_thread_name(thread, "sweet-bt");
++		thread_deallocate(thread);
++	} else {
++		printf("SWEET BT: kernel_thread_start failed\n");
++	}
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_bt.h b/bsd/dev/sweet_bt.h
+new file mode 100644
+index 0000000..0f50785
+--- /dev/null
++++ b/bsd/dev/sweet_bt.h
+@@ -0,0 +1,300 @@
++/*
++ * Bluetooth H4 framing and the QCA6390's firmware records, for sweet_bt.c (umi xnu 0234; from
++ * project-BadApple, github.com/aTechGeekDev/ios-apollo, MIT: licence in sweet_bt.c).
++ *
++ * From the Xiaomi Mi 10 port of github.com/JopangJovan/hackios-xnu-kernel-umi,
++ * devices/xiaomi-mi-10/overlays/xnu/files/bsd/sys/hakios.bluetooth.h (MIT). Between whole H4
++ * packets the chip also sends single bytes of its in-band sleep protocol (IBS): 0xfd "wake",
++ * 0xfe "sleep", 0xfc "awake, acknowledged".
++ */
++#ifndef SWEET_BT_H
++#define SWEET_BT_H
++#include <stdint.h>
++#include <stddef.h>
++
++#define SWEET_BT_H4_MAX 4096u
++
++struct sweet_bt_h4 {
++	uint8_t bytes[SWEET_BT_H4_MAX];
++	uint32_t used, wanted, header;
++	int complete;
++};
++
++/*
++ * One more byte of an H4 stream: 0 not yet a packet, 1 a packet is complete (bytes[0..used)), 2 an
++ * IBS byte, -1 a byte that begins no packet type, -2 a packet longer than SWEET_BT_H4_MAX. After
++ * -1 or -2 the stream is out of step and the caller starts over.
++ */
++static inline int
++sweet_bt_h4_push(struct sweet_bt_h4 *p, uint8_t byte)
++{
++	if (p->complete) {
++		p->used = p->wanted = p->header = 0;
++		p->complete = 0;
++	}
++	if (p->used == 0) {
++		if (byte >= 0xfc && byte <= 0xfe) {
++			return 2;
++		}
++		switch (byte) {
++		case 1:                 /* command: type, opcode (2), length (1) */
++		case 3:                 /* SCO data: type, handle (2), length (1) */
++			p->header = 4;
++			break;
++		case 2:                 /* ACL data: type, handle (2), length (2) */
++		case 5:                 /* ISO data: type, handle (2), length (2, 14 bits) */
++			p->header = 5;
++			break;
++		case 4:                 /* event: type, code, length (1) */
++			p->header = 3;
++			break;
++		default:
++			return -1;
++		}
++		p->wanted = p->header;
++	}
++	if (p->used >= SWEET_BT_H4_MAX) {
++		return -2;
++	}
++	p->bytes[p->used++] = byte;
++	if (p->used == p->header) {
++		uint32_t length;
++
++		switch (p->bytes[0]) {
++		case 1:
++		case 3:
++			length = p->bytes[3];
++			break;
++		case 4:
++			length = p->bytes[2];
++			break;
++		default:
++			length = p->bytes[3] | (uint32_t)p->bytes[4] << 8;
++			if (p->bytes[0] == 5) {
++				length &= 0x3fff;
++			}
++			break;
++		}
++		if (length > SWEET_BT_H4_MAX - p->header) {
++			p->used = p->wanted = p->header = 0;
++			return -2;
++		}
++		p->wanted = p->header + length;
++	}
++	if (p->used == p->wanted) {
++		p->complete = 1;
++		return 1;
++	}
++	return 0;
++}
++
++/* The status of an HCI Command Complete event for `opcode`, or -1 if `e` is not one. */
++static inline int
++sweet_bt_cc_status(const uint8_t *e, size_t n, uint16_t opcode)
++{
++	if (n < 7 || e[0] != 4 || e[1] != 0x0e || (size_t)e[2] + 3 != n ||
++	    e[4] != (uint8_t)opcode || e[5] != (uint8_t)(opcode >> 8)) {
++		return -1;
++	}
++	return e[6];
++}
++
++/* Whether `e` acknowledges a firmware record segment (0xfc00, EDL patch request 0x1e). */
++static inline int
++sweet_bt_qca_tlv_ack(const uint8_t *e, size_t n)
++{
++	/* the QCA6390 ("Hastings") answers with Command Complete, its sub-opcode included */
++	return (n == 8 && sweet_bt_cc_status(e, n, 0xfc00) == 0 && e[7] == 0x1e) ||
++	       (n == 6 && e[0] == 4 && e[1] == 0xff && e[2] == 3 && e[3] == 0 && e[4] == 4 && e[5] == 0);
++}
++
++/*
++ * The UART speeds this knows (xnu 0145): the QCA set-baudrate/NVM index (Linux's enum qca_baudrate)
++ * and how SE6 makes it -- its root clock from GPLL0's even output (300 MHz) x m / n, an M/N/D
++ * counter, as Linux's gcc-kona QUP table, and the GENI divider: root = 16 x baud x div.
++ */
++struct sweet_bt_speed {
++	uint32_t baud;
++	uint8_t qca;
++	uint16_t m, n;
++	uint8_t div;
++};
++
++static const struct sweet_bt_speed sweet_bt_speeds[] = {
++	{ 115200, 0, 384, 15625, 4 },   /* 7.3728 MHz, the speed the chip's ROM starts at */
++	{ 230400, 5, 384, 15625, 2 },
++	{ 460800, 7, 384, 15625, 1 },
++	{ 921600, 10, 768, 15625, 1 },  /* 14.7456 MHz */
++	{ 1000000, 11, 4, 75, 1 },      /* 16 MHz */
++	{ 2000000, 13, 8, 75, 1 },      /* 32 MHz */
++	{ 3000000, 14, 4, 25, 1 },      /* 48 MHz */
++	{ 3200000, 17, 64, 375, 1 },    /* 51.2 MHz, Linux's operating speed for the QCA6390 */
++};
++
++/* The entry for `baud`, or NULL. */
++static inline const struct sweet_bt_speed *
++sweet_bt_speed_for(uint32_t baud)
++{
++	for (size_t i = 0; i < sizeof(sweet_bt_speeds) / sizeof(sweet_bt_speeds[0]); i++) {
++		if (sweet_bt_speeds[i].baud == baud) {
++			return &sweet_bt_speeds[i];
++		}
++	}
++	return NULL;
++}
++
++/*
++ * The NVM file (TLV type 2) made to put the UART at the speed with QCA index `qca` once the
++ * firmware runs: tag 17 (the HCI transport) has the baud rate in its byte 1 on the QCA6390 (byte 2
++ * on the older ROME), as Linux's qca_tlv_check_data sets it. Every record is checked before
++ * anything is changed. 0, or -1 if the file is not what it should be.
++ */
++static inline int
++sweet_bt_qca6390_nvm_prepare(uint8_t *data, size_t n, uint8_t qca)
++{
++	size_t hci = 0;
++
++	if (n < 4 || data[0] != 2 ||
++	    ((uint32_t)data[1] | (uint32_t)data[2] << 8 | (uint32_t)data[3] << 16) != n - 4) {
++		return -1;
++	}
++	for (size_t off = 4; off < n;) {
++		unsigned id, len;
++
++		if (n - off < 12) {
++			return -1;
++		}
++		id = data[off] | (unsigned)data[off + 1] << 8;
++		len = data[off + 2] | (unsigned)data[off + 3] << 8;
++		if (len > n - off - 12) {
++			return -1;
++		}
++		if (id == 17) {
++			if (len < 3 || hci) {
++				return -1;
++			}
++			hci = off + 12;
++		}
++		off += 12 + len;
++	}
++	if (!hci) {
++		return -1;
++	}
++	data[hci + 1] = qca;
++	return 0;
++}
++/*
++ * Apple's bluetoothd was written for Broadcom-descended chips and sends their vendor commands (OGF 0x3f, opcodes
++ * 0xfcxx: sleep mode, BD_ADDR, verbose config, LE features...) while it starts the controller. The QCA6390 does not
++ * know them, or takes them as its own: Qualcomm's vendor commands share the range. bluetoothd also treats the
++ * optional Read/Write Default Erroneous Data Reporting (0x0c5a/0x0c5b), which the QCA6390 lacks, as mandatory. Those
++ * are answered here on the chip's behalf instead of being sent, as the Xiaomi 15 port answers them
++ * (github.com/superboyyy/hakios-arm64e-dada, kernel patch, hakios_dada_wifi.c bt_answer_vendor; APSL 2.0). The Mi 10
++ * port skipped the same init step inside bluetoothd instead (inject_bluetooth.c).
++ *
++ * LE Read Periodic Advertiser List Size (0x204a) is answered here too. It is one of Bluetooth 5's extended
++ * advertising commands, and once a controller has had one of those since reset the specification makes it refuse
++ * the legacy advertising and scanning commands with Command Disallowed (Core 5.x Vol 4 Part E 3.1.1). bluetoothd asks
++ * for it during init (step 0x10b590, OI_HCICMD_ReadPeriodicAdvListSize) but then advertises and scans the legacy way
++ * (enableExtendedScanning=0): the QCA6390 refused 0x2007 and LE Set Scan Parameters 0x200b with 0x0c, and bluetoothd
++ * restarted ("Bluetooth error - restarting", reason 712; apollo boot 75). The Mi 10 port replaced the same step.
++ *
++ * If the H4 command cmd[0..n) is one to answer here (a vendor command, 0x0c5a, 0x0c5b, 0x204a, or one of
++ * extra[0..nextra)), its Command Complete goes into ev (SWEET_BT_LOCAL_EVENT_MAX bytes) and its length is returned;
++ * 0 sends it on:
++ *   vendor: status 0, the first parameter byte echoed (often a sub-opcode) and 8 zero bytes -- bluetoothd's vendor
++ *     command code asserts on an answer with nothing after the status (dada port: aci_vsc.c:135)
++ *   0x0c5a: status 0 and the setting, 0 (off)
++ *   0x204a: status 0 and the list size, 0 (bluetoothd does not use periodic advertising here)
++ *   others: status 0 alone
++ */
++#define SWEET_BT_LOCAL_EVENT_MAX 16u
++
++static inline unsigned
++sweet_bt_local_answer(const uint8_t *cmd, size_t n, const uint16_t *extra, unsigned nextra, uint8_t *ev)
++{
++	uint16_t op;
++	int vendor, hit;
++	unsigned len;
++
++	if (n < 4 || cmd[0] != 1 || (size_t)cmd[3] + 4 != n) {
++		return 0;
++	}
++	op = (uint16_t)(cmd[1] | cmd[2] << 8);
++	vendor = (op & 0xfc00) == 0xfc00;
++	hit = vendor || op == 0x0c5a || op == 0x0c5b || op == 0x204a;
++	for (unsigned i = 0; !hit && i < nextra; i++) {
++		hit = extra[i] != 0 && extra[i] == op;
++	}
++	if (!hit) {
++		return 0;
++	}
++	for (unsigned i = 0; i < SWEET_BT_LOCAL_EVENT_MAX; i++) {
++		ev[i] = 0;
++	}
++	ev[0] = 4;                      /* an event */
++	ev[1] = 0x0e;                   /* Command Complete */
++	ev[3] = 1;                      /* the host may send one more command */
++	ev[4] = cmd[1];
++	ev[5] = cmd[2];
++	if (vendor) {
++		ev[7] = n > 4 ? cmd[4] : 0;
++		len = 7 + 1 + 8;
++	} else if (op == 0x0c5a || op == 0x204a) {
++		len = 8;
++	} else {
++		len = 7;
++	}
++	ev[2] = (uint8_t)(len - 3);
++	return len;
++}
++
++/*
++ * The chip's answer to Read Local Supported Commands (0x1002: Command Complete, status 0, 64 octets) given octet 18
++ * bits 2 and 3, Read/Write Default Erroneous Data Reporting, which are answered here: bluetoothd will not start
++ * without them in the mask (dada port, "status 628"). 1 if e[0..n) was that answer.
++ */
++static inline int
++sweet_bt_fix_supported_commands(uint8_t *e, size_t n)
++{
++	if (n != 7 + 64 || sweet_bt_cc_status(e, n, 0x1002) != 0) {
++		return 0;
++	}
++	e[7 + 18] |= 0x0c;
++	return 1;
++}
++
++/* "0x0c5b,0x2011": up to max hex opcodes (0x optional) into out[]; how many. Stops at anything else. */
++static inline unsigned
++sweet_bt_parse_opcodes(const char *s, uint16_t *out, unsigned max)
++{
++	unsigned count = 0;
++
++	while (*s != 0 && count < max) {
++		uint32_t v = 0;
++		int digits = 0;
++
++		if (s[0] == '0' && (s[1] == 'x' || s[1] == 'X')) {
++			s += 2;
++		}
++		for (;; s++, digits++) {
++			int d = (*s >= '0' && *s <= '9') ? *s - '0' : (*s >= 'a' && *s <= 'f') ? *s - 'a' + 10 :
++			    (*s >= 'A' && *s <= 'F') ? *s - 'A' + 10 : -1;
++
++			if (d < 0 || digits > 4) {
++				break;
++			}
++			v = v << 4 | (uint32_t)d;
++		}
++		if (!digits || digits > 4) {
++			break;
++		}
++		out[count++] = (uint16_t)v;
++		if (*s != ',') {
++			break;
++		}
++		s++;
++	}
++	return count;
++}
++#endif /* SWEET_BT_H */
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 7bfd66a..6b7b53f 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -54,6 +54,7 @@ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+ extern void sweet_usb_probe(void);
+ extern void sweet_pcie_init(void);
++extern void sweet_bt_init(void);     /* sweet_bt.c, boot-arg sweetbt */
+ extern void redwood_net_init(void);
+ extern void sweet_adreno_init(void);   /* sweet_adreno.c, boot-arg sweetgpu */
+ 
+@@ -767,6 +768,7 @@ sweet_ufs_init(void)
+ 	sweet_usb_probe();
+ 	redwood_net_init();       /* en0's boot-args (net_trace, net_names): bsd/dev/redwood_net.c */
+ 	sweet_pcie_init();
++	sweet_bt_init();
+ 	sweet_adreno_init();
+ 	return 0;
+ }
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 713c107..985c84a 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -23,6 +23,7 @@ extern int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64
+ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
+ int sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size);
++int sweet_fat_read_file(const char *part, const char *dir, const char *name, void *dst, uint32_t max, uint32_t *size);
+ extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ extern int sweet_pcie_msi(uint32_t addr, uint32_t data);
+@@ -64,12 +65,20 @@ static struct {
+ 	uint32_t fw_size;
+ 	uint32_t seq;
+ 	bool routed;
+-	/* FAT */
++} sw;
++
++#define FAT_BUF_SIZE    65536u
++
++/* A FAT partition read through sweet_ufs_read_part: the modem's, or another (sweet_fat_read_file). */
++struct fatvol {
++	const char *part;
++	uint8_t *buf;           /* FAT_BUF_SIZE bytes */
+ 	uint32_t bps, spc, fat_start, root_start, root_secs, data_start, root_clus;
+ 	bool fat32;
+-} sw;
++};
+ 
+-static uint8_t fat_buf[65536];
++static uint8_t fat_buf[FAT_BUF_SIZE];
++static struct fatvol modem_vol = { .part = "modem", .buf = fat_buf };
+ 
+ static uint32_t
+ wl_rd(vm_offset_t base, uint32_t off)
+@@ -100,69 +109,69 @@ le32(const uint8_t *p)
+ }
+ 
+ static int
+-fat_mount(void)
++fat_mount(struct fatvol *v)
+ {
+ 	uint8_t bs[512];
+-	int err = sweet_ufs_read_part("modem", 0, bs, sizeof(bs));
++	int err = sweet_ufs_read_part(v->part, 0, bs, sizeof(bs));
+ 	if (err) {
+-		printf("SWEET WLAN: modem partition read failed %d\n", err);
++		printf("SWEET WLAN: %s partition read failed %d\n", v->part, err);
+ 		return err;
+ 	}
+-	sw.bps = le16(bs + 11);
+-	sw.spc = bs[13];
++	v->bps = le16(bs + 11);
++	v->spc = bs[13];
+ 	uint32_t rsvd = le16(bs + 14), nfats = bs[16], rootent = le16(bs + 17);
+ 	uint32_t fatsz = le16(bs + 22) ? le16(bs + 22) : le32(bs + 36);
+ 	uint32_t total = le16(bs + 19) ? le16(bs + 19) : le32(bs + 32);
+-	if (bs[510] != 0x55 || bs[511] != 0xaa || sw.bps < 512 || sw.bps > 4096 || sw.spc == 0 ||
+-	    sw.bps * sw.spc > sizeof(fat_buf) || nfats == 0 || fatsz == 0) {
+-		printf("SWEET WLAN: modem is not FAT (bps %u spc %u sig %02x%02x)\n", sw.bps, sw.spc, bs[510], bs[511]);
++	if (bs[510] != 0x55 || bs[511] != 0xaa || v->bps < 512 || v->bps > 4096 || v->spc == 0 ||
++	    v->bps * v->spc > FAT_BUF_SIZE || nfats == 0 || fatsz == 0) {
++		printf("SWEET WLAN: %s is not FAT (bps %u spc %u sig %02x%02x)\n", v->part, v->bps, v->spc, bs[510], bs[511]);
+ 		return EINVAL;
+ 	}
+-	sw.fat_start = rsvd;
+-	sw.root_start = rsvd + nfats * fatsz;
+-	sw.root_secs = (rootent * 32 + sw.bps - 1) / sw.bps;
+-	sw.data_start = sw.root_start + sw.root_secs;
+-	uint32_t clusters = (total - sw.data_start) / sw.spc;
+-	sw.fat32 = clusters >= 65525;
+-	sw.root_clus = sw.fat32 ? le32(bs + 44) : 0;
+-	printf("SWEET WLAN: modem FAT%u, %u-byte sectors, %u per cluster, %u clusters\n",
+-	    sw.fat32 ? 32 : 16, sw.bps, sw.spc, clusters);
++	v->fat_start = rsvd;
++	v->root_start = rsvd + nfats * fatsz;
++	v->root_secs = (rootent * 32 + v->bps - 1) / v->bps;
++	v->data_start = v->root_start + v->root_secs;
++	uint32_t clusters = (total - v->data_start) / v->spc;
++	v->fat32 = clusters >= 65525;
++	v->root_clus = v->fat32 ? le32(bs + 44) : 0;
++	printf("SWEET WLAN: %s FAT%u, %u-byte sectors, %u per cluster, %u clusters\n",
++	    v->part, v->fat32 ? 32 : 16, v->bps, v->spc, clusters);
+ 	return clusters < 4085 ? EINVAL : 0;
+ }
+ 
+ static uint32_t
+-fat_next(uint32_t clus)
++fat_next(struct fatvol *v, uint32_t clus)
+ {
+ 	uint8_t e[4] = {0};
+-	uint64_t off = (uint64_t)sw.fat_start * sw.bps + clus * (sw.fat32 ? 4u : 2u);
+-	if (sweet_ufs_read_part("modem", off, e, sw.fat32 ? 4 : 2)) {
++	uint64_t off = (uint64_t)v->fat_start * v->bps + clus * (v->fat32 ? 4u : 2u);
++	if (sweet_ufs_read_part(v->part, off, e, v->fat32 ? 4 : 2)) {
+ 		return 0x0ffffff7;
+ 	}
+-	uint32_t n = sw.fat32 ? le32(e) & 0x0fffffffu : le16(e);
+-	if (!sw.fat32 && n >= 0xfff7) {
++	uint32_t n = v->fat32 ? le32(e) & 0x0fffffffu : le16(e);
++	if (!v->fat32 && n >= 0xfff7) {
+ 		n |= 0x0fff0000u;
+ 	}
+ 	return n;
+ }
+ 
+ static uint64_t
+-clus_off(uint32_t clus)
++clus_off(struct fatvol *v, uint32_t clus)
+ {
+-	return ((uint64_t)sw.data_start + (uint64_t)(clus - 2) * sw.spc) * sw.bps;
++	return ((uint64_t)v->data_start + (uint64_t)(clus - 2) * v->spc) * v->bps;
+ }
+ 
+ /*
+  * Look for a name in a directory (dir_clus 0 = FAT16 root). Xiaomi's modem image
+  * has random 8.3 names ("ERDZKY~2"): the real names are only in the VFAT long
+- * name entries, so match those (ASCII, case-insensitive).
++ * name entries, so match those (ASCII, case-insensitive); an entry without one by its 8.3 name.
+  */
+ static int
+-fat_find(uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
++fat_find(struct fatvol *v, uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
+ {
+-	uint32_t csize = sw.bps * sw.spc;
+-	uint32_t c = dir_clus ? dir_clus : sw.root_clus;
+-	uint32_t root_left = (!dir_clus && !sw.fat32) ? sw.root_secs * sw.bps : 0;
+-	uint64_t pos = (uint64_t)sw.root_start * sw.bps;
++	uint32_t csize = v->bps * v->spc;
++	uint32_t c = dir_clus ? dir_clus : v->root_clus;
++	uint32_t root_left = (!dir_clus && !v->fat32) ? v->root_secs * v->bps : 0;
++	uint64_t pos = (uint64_t)v->root_start * v->bps;
+ 	char lfn[20 * 13 + 1];
+ 	unsigned lfn_parts = 0;
+ 	size_t namelen = strlen(name);
+@@ -172,24 +181,24 @@ fat_find(uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
+ 	for (unsigned guard = 0; guard < 4096; ++guard) {
+ 		uint32_t n;
+ 		if (root_left) {
+-			n = MIN(root_left, (uint32_t)sizeof(fat_buf));
+-			if (sweet_ufs_read_part("modem", pos, fat_buf, n)) {
++			n = MIN(root_left, (uint32_t)FAT_BUF_SIZE);
++			if (sweet_ufs_read_part(v->part, pos, v->buf, n)) {
+ 				return EIO;
+ 			}
+ 			pos += n;
+ 			root_left -= n;
+ 		} else {
+-			if (c < 2 || c >= 0x0ffffff7 || (!dir_clus && !sw.fat32)) {
++			if (c < 2 || c >= 0x0ffffff7 || (!dir_clus && !v->fat32)) {
+ 				return ENOENT;
+ 			}
+ 			n = csize;
+-			if (sweet_ufs_read_part("modem", clus_off(c), fat_buf, n)) {
++			if (sweet_ufs_read_part(v->part, clus_off(v, c), v->buf, n)) {
+ 				return EIO;
+ 			}
+-			c = fat_next(c);
++			c = fat_next(v, c);
+ 		}
+ 		for (uint32_t i = 0; i + 32 <= n; i += 32) {
+-			const uint8_t *d = fat_buf + i;
++			const uint8_t *d = v->buf + i;
+ 			if (d[0] == 0) {
+ 				return ENOENT;
+ 			}
+@@ -216,6 +225,32 @@ fat_find(uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
+ 				continue;
+ 			}
+ 			bool match = lfn_parts && strlen(lfn) == namelen && !strncasecmp(lfn, name, namelen);
++			if (!lfn_parts) {
++				/* no long name: the 8.3 one ("HTBTFW20TLV" is htbtfw20.tlv) */
++				char sfn[13];
++				unsigned k = 0;
++				for (unsigned j = 0; j < 8 && d[j] != ' '; ++j) {
++					sfn[k++] = (char)d[j];
++				}
++				if (d[8] != ' ') {
++					sfn[k++] = '.';
++					for (unsigned j = 8; j < 11 && d[j] != ' '; ++j) {
++						sfn[k++] = (char)d[j];
++					}
++				}
++				sfn[k] = 0;
++				match = k == namelen && !strncasecmp(sfn, name, namelen);
++			}
++			if (name[0] == '*' && !(d[11] & 0x08)) {
++				/* "*": list the directory (what a partition holds, for a missing file) */
++				if (lfn_parts) {
++					printf("SWEET WLAN: %s: %s, %u bytes\n", v->part, lfn, le32(d + 28));
++				} else {
++					printf("SWEET WLAN: %s: %.11s, %u bytes\n", v->part, (const char *)d, le32(d + 28));
++				}
++				lfn_parts = 0;
++				continue;
++			}
+ 			lfn_parts = 0;
+ 			if (d[11] & 0x08) {
+ 				continue;
+@@ -232,20 +267,20 @@ fat_find(uint32_t dir_clus, const char *name, uint32_t *clus, uint32_t *size)
+ 
+ /* Read a file's cluster chain into dst, merging contiguous runs. */
+ static int
+-fat_read(uint32_t clus, uint32_t size, uint8_t *dst)
++fat_read(struct fatvol *v, uint32_t clus, uint32_t size, uint8_t *dst)
+ {
+-	uint32_t csize = sw.bps * sw.spc, done = 0;
++	uint32_t csize = v->bps * v->spc, done = 0;
+ 	while (done < size) {
+ 		if (clus < 2 || clus >= 0x0ffffff7) {
+ 			return EIO;
+ 		}
+-		uint32_t run = 1, next = fat_next(clus);
++		uint32_t run = 1, next = fat_next(v, clus);
+ 		while (next == clus + run && (run + 1) * csize < 0x100000u && done + run * csize < size) {
+ 			++run;
+-			next = fat_next(clus + run - 1);
++			next = fat_next(v, clus + run - 1);
+ 		}
+ 		uint32_t n = MIN(run * csize, size - done);
+-		int err = sweet_ufs_read_part("modem", clus_off(clus), dst + done, n);
++		int err = sweet_ufs_read_part(v->part, clus_off(v, clus), dst + done, n);
+ 		if (err) {
+ 			return err;
+ 		}
+@@ -258,22 +293,23 @@ fat_read(uint32_t clus, uint32_t size, uint8_t *dst)
+ static int
+ wlan_load_fw(void)
+ {
++	struct fatvol *v = &modem_vol;
+ 	uint32_t c = 0, sz = 0, img = 0, fw = 0;
+-	int err = fat_mount();
++	int err = fat_mount(v);
+ 	if (!err) {
+-		err = fat_find(0, "image", &img, &sz);
++		err = fat_find(v, 0, "image", &img, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(img, "qca6390", &c, &sz);
++		err = fat_find(v, img, "qca6390", &c, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(c, "amss20.bin", &fw, &sz);
++		err = fat_find(v, c, "amss20.bin", &fw, &sz);
+ 	}
+ 	if (!err && (sz == 0 || sz > WLAN_FW_MAX)) {
+ 		err = EFBIG;
+ 	}
+ 	if (!err) {
+-		err = fat_read(fw, sz, (uint8_t *)(sw.pool + WLAN_FW_OFF));
++		err = fat_read(v, fw, sz, (uint8_t *)(sw.pool + WLAN_FW_OFF));
+ 	}
+ 	if (err) {
+ 		printf("SWEET WLAN: image/qca6390/amss20.bin: error %d\n", err);
+@@ -290,22 +326,23 @@ wlan_load_fw(void)
+ int
+ sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size)
+ {
++	struct fatvol *v = &modem_vol;
+ 	uint32_t c = 0, sz = 0, img = 0, f = 0;
+-	int err = sw.bps ? 0 : fat_mount();
++	int err = v->bps ? 0 : fat_mount(v);
+ 	if (!err) {
+-		err = fat_find(0, "image", &img, &sz);
++		err = fat_find(v, 0, "image", &img, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(img, "qca6390", &c, &sz);
++		err = fat_find(v, img, "qca6390", &c, &sz);
+ 	}
+ 	if (!err) {
+-		err = fat_find(c, name, &f, &sz);
++		err = fat_find(v, c, name, &f, &sz);
+ 	}
+ 	if (!err && (sz == 0 || sz > max)) {
+ 		err = EFBIG;
+ 	}
+ 	if (!err) {
+-		err = fat_read(f, sz, dst);
++		err = fat_read(v, f, sz, dst);
+ 	}
+ 	if (err) {
+ 		printf("SWEET WLAN: image/qca6390/%s: error %d\n", name, err);
+@@ -315,6 +352,43 @@ sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size)
+ 	return 0;
+ }
+ 
++/*
++ * A file of another FAT partition, by its long names (sweet_bt.c: image/htbtfw20.tlv of the
++ * bluetooth partition). Read-only; each call mounts the partition again, with a buffer of its own.
++ */
++int
++sweet_fat_read_file(const char *part, const char *dir, const char *name, void *dst, uint32_t max, uint32_t *size)
++{
++	struct fatvol vol = { .part = part }, *v = &vol;
++	uint32_t c = 0, sz = 0, f = 0;
++	int err;
++
++	v->buf = kalloc_data(FAT_BUF_SIZE, Z_WAITOK | Z_ZERO);
++	if (v->buf == NULL) {
++		return ENOMEM;
++	}
++	err = fat_mount(v);
++	if (!err && dir != NULL) {
++		err = fat_find(v, 0, dir, &c, &sz);
++	}
++	if (!err) {
++		err = fat_find(v, c, name, &f, &sz);
++	}
++	if (!err && (sz == 0 || sz > max)) {
++		err = EFBIG;
++	}
++	if (!err) {
++		err = fat_read(v, f, sz, dst);
++	}
++	kfree_data(v->buf, FAT_BUF_SIZE);
++	if (err) {
++		printf("SWEET WLAN: %s: %s/%s: error %d\n", part, dir ? dir : "", name, err);
++		return err;
++	}
++	*size = sz;
++	return 0;
++}
++
+ static void
+ wlan_state(vm_offset_t bar0, vm_offset_t bhi, const char *when)
+ {
+diff --git a/iokit/Kernel/arm/SweetBluetooth.cpp b/iokit/Kernel/arm/SweetBluetooth.cpp
+new file mode 100644
+index 0000000..5b9f41a
+--- /dev/null
++++ b/iokit/Kernel/arm/SweetBluetooth.cpp
+@@ -0,0 +1,94 @@
++/* umi xnu 0234, from project-BadApple (github.com/aTechGeekDev/ios-apollo, MIT: licence in
++ * bsd/dev/sweet_bt.c), there from the Mi 10 port's devices/xiaomi-mi-10/overlays/xnu/files/iokit/Kernel/hakios.bluetooth.cpp
++ * (github.com/JopangJovan/hackios-xnu-kernel-umi; MIT), for apollo's Bluetooth (xnu 0136); as with
++ * SweetWLAN.cpp, its warnings are not looked at. */
++#pragma clang diagnostic ignored "-Weverything"
++/*
++ * SweetBluetooth: the registry entry by which iOS finds the Bluetooth controller.
++ *
++ * bluetoothd looks for a service named "bluetooth" and reads its address from the property
++ * local-mac-address; it starts only if that is there and not zero. The HCI traffic itself does
++ * not go through IOKit: it goes through the kernel control "com.sweet.bluetooth" of
++ * bsd/dev/sweet_bt.c (bluetoothd's job environment names it). So this entry only says who the
++ * controller is, as measured once its firmware runs: the address, the commands it supports
++ * (SweetBluetoothSupportedCommands, 64 bytes as Read Local Supported Commands has them) and
++ * whether the H4 endpoint works (SweetBluetoothReady).
++ *
++ * Published by sweet_bt.c (sweetbt=6), once.
++ */
++#include <IOKit/IOService.h>
++#include <IOKit/IOPlatformExpert.h>
++#include <IOKit/IOLib.h>
++#include <libkern/c++/OSData.h>
++#include <sys/errno.h>
++
++extern "C" int SweetBluetoothPublish(const uint8_t address[6], const uint8_t commands[64]);
++extern "C" void SweetBluetoothSetReady(bool ready);
++
++static IOService * bluetooth_service;
++static const uint8_t transport_speed[4] = { 0x00, 0xc2, 0x01, 0x00 };  /* 115200 */
++
++void
++SweetBluetoothSetReady(bool ready)
++{
++	if (bluetooth_service != NULL) {
++		bluetooth_service->setProperty("SweetBluetoothReady", ready);
++	}
++}
++
++int
++SweetBluetoothPublish(const uint8_t address[6], const uint8_t commands[64])
++{
++	IOService * platform = IOService::getPlatform();
++	IOService * service;
++	OSData * data;
++
++	if (bluetooth_service != NULL) {
++		return EEXIST;
++	}
++	service = new IOService;
++	if (platform == NULL || service == NULL || !service->init()) {
++		OSSafeReleaseNULL(service);
++		return ENOMEM;
++	}
++	service->setName("bluetooth");
++	if ((data = OSData::withBytes(address, 6)) == NULL) {
++		service->release();
++		return ENOMEM;
++	}
++	service->setProperty("local-mac-address", data);
++	data->release();
++	if ((data = OSData::withBytes(commands, 64)) == NULL) {
++		service->release();
++		return ENOMEM;
++	}
++	service->setProperty("SweetBluetoothSupportedCommands", data);
++	data->release();
++	/*
++	 * Bytes, as every property in Apple's device tree is: bluetoothd reads transport-speed with
++	 * CFDataGetBytes (4 bytes, little-endian), and a number here made it throw
++	 * -[__NSCFNumber getBytes:range:] (apollo boot 74).
++	 */
++	if ((data = OSData::withBytes(transport_speed, sizeof(transport_speed))) == NULL) {
++		service->release();
++		return ENOMEM;
++	}
++	service->setProperty("transport-speed", data);
++	data->release();
++	service->setProperty("compatible", "qca,qca6390");
++	service->setProperty("SweetBluetoothReady", false);
++	if (!service->attach(platform)) {
++		service->release();
++		return EIO;
++	}
++	if (!service->start(platform)) {
++		service->detach(platform);
++		service->release();
++		return EIO;
++	}
++	service->registerService();
++	bluetooth_service = service;
++	service->release();             /* the registry keeps it */
++	IOLog("SweetBluetooth: the registry entry \"bluetooth\" is published\n");
++	return 0;
++}
+diff --git a/iokit/conf/files.arm64 b/iokit/conf/files.arm64
+index b44e3f6..f598434 100644
+--- a/iokit/conf/files.arm64
++++ b/iokit/conf/files.arm64
+@@ -18,6 +18,7 @@ iokit/Kernel/arm/SweetFramebuffer.cpp                            optional iokitc
+ iokit/Kernel/arm/SweetBattery.cpp                                optional iokitcpp
+ iokit/Kernel/arm/SweetBusy.cpp                                   optional iokitcpp
+ iokit/Kernel/arm/SweetWLAN.cpp                                   optional iokitcpp
++iokit/Kernel/arm/SweetBluetooth.cpp                              optional iokitcpp
+ iokit/Kernel/arm/SweetAdreno.cpp                                 optional iokitcpp
+ iokit/Kernel/arm/hid/SweetHID.cpp                                optional iokitcpp
+ iokit/Kernel/arm/hid/IOHIDEvent.cpp                              optional iokitcpp
+-- 
+2.54.0 (Apple Git-157)
+

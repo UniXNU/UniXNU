@@ -1,0 +1,26 @@
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -247,9 +247,12 @@
+ STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, sweet_amfi_register);
+ 
+ /*
+- * Every signed binary on the root filesystem is a platform binary. New
+- * signatures (ubc_cs_blob_add passes its writable copy; revalidation passes
+- * the read-only blob itself) get their entitlements here.
++ * The signature reached this hook validated, so mark it CS_SIGNED like AMFI
++ * does: exec copies the flag to the process, and csproc_get_blob() (csops
++ * status, cdhash, platform and entitlement queries by process) ignores
++ * processes without it. Every signed binary on the root filesystem is a
++ * platform binary. New signatures (ubc_cs_blob_add passes its writable copy;
++ * revalidation passes the read-only blob itself) get their entitlements here.
+  */
+ static int
+ sweet_amfi_vnode_check_signature(struct vnode *vp, __unused struct label *label,
+@@ -259,6 +262,7 @@
+     __unused char **fatal_failure_desc, __unused size_t *fatal_failure_desc_len)
+ {
+ 	mount_t mp = vnode_mount(vp);
++	*cs_flags |= CS_SIGNED;
+ 	if (mp != NULL && (vfs_flags(mp) & MNT_ROOTFS)) {
+ 		*cs_flags |= CS_PLATFORM_BINARY;
+ 	}

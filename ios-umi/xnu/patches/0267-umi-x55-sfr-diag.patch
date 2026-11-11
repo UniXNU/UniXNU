@@ -1,0 +1,355 @@
+From 6366ab34536f10f84d9257c1fa6984014aac11b6 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Tue, 10 Nov 2026 18:20:25 +0100
+Subject: [PATCH] umi: X55 SFR buffer (MHI command 73) and DIAG on MHI 4/5
+ (HDLC, F3 messages, all subsystems' masks); TFTP unlink; restarts opt-in
+ (0267)
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c | 254 ++++++++++++++++++++++++++++++++++++++++++--
+ 1 file changed, 246 insertions(+), 8 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 8b4ed11..008037b 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -35,7 +35,10 @@
+  *               Also a TFTP server for the modem (QRTR service 0x1000, port 0x4002): reads from the FAT modem
+  *               partition; /readwrite files kept in RAM for this phone boot (never written to the phone); DMS's
+  *               offline reason is logged. When DMS stays "shutting down" (two polls, ~10 s) the modem is restarted
+- *               (PMX55 warm reset, PCIe2 re-init, BHI, Sahara, mission), at most twice per phone boot.
++ *               (PMX55 warm reset, PCIe2 re-init, BHI, Sahara, mission) if sweetmdmrestart=N allows (default 0).
++ *               SFR: a 4 KiB failure reason buffer handed over (MHI command 73) and printed. DIAG on MHI 4 / 5:
++ *               every subsystem's message mask set (sweetmdmdiag, default 0x1c = high / error / fatal) and the
++ *               F3 messages logged (format strings as text, at most 1500). 150 s window.
+  * PCIe sequence as sweet_pcie.c (PCIe0, QCA6390) with the PCIe2 registers (Linux gcc-sm8250.c).
+  * Built inside sweet_spmi.c (the local build cannot add source files).
+  */
+@@ -633,6 +636,14 @@ md_sbl1(void)
+ #define MH_TRE_IP_IN    0x6500u         /* channel 21 */
+ #define MH_RXBUF2       0x20000u        /* IPCR receive buffers, 8 x 4 KiB */
+ #define MH_LBBUF        0x28000u        /* loopback: 4 KiB out, 4 KiB in */
++#define MX_DIAG_OUT     4u
++#define MX_DIAG_IN      5u
++#define MH_TRE_DG_OUT   0x6600u
++#define MH_TRE_DG_IN    0x6700u
++#define MH_DGBUF        0x30000u        /* 8 x 4 KiB receive buffers */
++#define MH_DGTX         0x38000u        /* 4 KiB */
++#define MH_SFR          0x39000u        /* the modem's failure reason buffer, 4 KiB */
++#define MX_SFR_LEN      0x1000u
+ #define MHI_CFG         0x10u
+ #define MHI_CHDBOFF     0x18u
+ #define MHI_ERDBOFF     0x20u
+@@ -753,8 +764,9 @@ mhi_init(bool mission)
+ 		mx_ctx(MH_CHCTX + SAH_OUT * 44u, 2u << 8, 1, 1, 0, 0, 0);
+ 		mx_ctx(MH_CHCTX + SAH_IN * 44u, 2u << 8, 2, 1, 0, 0, 0);
+ 	}
+-	static const uint8_t mc[4][2] = { { 0, 1 }, { 1, 2 }, { MX_IPCR_OUT, 1 }, { MX_IPCR_IN, 2 } };
+-	for (unsigned i = 0; i < 4; ++i) {
++	static const uint8_t mc[6][2] = { { 0, 1 }, { 1, 2 }, { MX_IPCR_OUT, 1 }, { MX_IPCR_IN, 2 }, { MX_DIAG_OUT, 1 },
++		                          { MX_DIAG_IN, 2 } };
++	for (unsigned i = 0; i < 6; ++i) {
+ 		mx_ctx(MH_CHCTX + mc[i][0] * 44u, 2u << 8, mc[i][1], 1, 0, 0, 0);
+ 	}
+ 	mx_ctx(MH_ERCTX, 0, 1, 1, MH_ER0, MH_ER0_N * MH_EL, MH_ER0 + (MH_ER0_N - 1) * MH_EL);
+@@ -829,6 +841,9 @@ mx_rx_queue(unsigned buf)
+ 	mx_ring(mx.rx_ch, mx.rx_ring, mx.in_wp);
+ }
+ 
++static void dg_feed(const uint8_t *b, uint32_t n);
++static void dg_rx_queue(unsigned buf);
++
+ /* Received Sahara packets wait here. */
+ static uint8_t mx_rxq[8][MH_RX_LEN];
+ static uint32_t mx_rxq_len[8];
+@@ -862,6 +877,16 @@ mx_er1(void)
+ 				}
+ 				mx_rx_queue(b);
+ 			}
++		} else if (type == 0x22 && ch == MX_DIAG_IN) {
++			unsigned slot = (unsigned)((ptr - (mx.pa + MH_TRE_DG_IN)) / MH_EL);
++			uint64_t buf = mx_rd64(MH_TRE_DG_IN + slot * MH_EL);
++			unsigned b = (unsigned)((buf - (mx.pa + MH_DGBUF)) / MH_RX_LEN);
++			if (b < MH_RX_N && n <= MH_RX_LEN) {
++				dg_feed((const uint8_t *)(mx.mem + MH_DGBUF + b * MH_RX_LEN), n);
++				dg_rx_queue(b);
++			}
++		} else if (type == 0x22 && ch == MX_DIAG_OUT) {
++			/* a DIAG request went out */
+ 		} else if (type == 0x22 && ch == mx.tx_ch) {
+ 			mx.tx_done = true;
+ 		} else if (type == 0x22 && ch == 1u) {
+@@ -902,6 +927,189 @@ mx_send(uint32_t len)
+ 	return 0;
+ }
+ 
++/* ---- DIAG on MHI 4 (to the modem) / 5 (from it): F3 messages, HDLC framed (CRC-16/CCITT, 0x7e, 0x7d escapes) ---- */
++
++
++static struct {
++	uint32_t in_wp, out_wp;
++	uint8_t frame[4096];
++	uint32_t flen;
++	bool esc, on;
++	unsigned msgs, printed, other, bad;
++} dg;
++
++static uint16_t
++dg_crc(const uint8_t *p, uint32_t n)
++{
++	uint16_t crc = 0xffff;
++	for (uint32_t i = 0; i < n; ++i) {
++		crc ^= p[i];
++		for (int b = 0; b < 8; ++b) {
++			crc = (crc & 1) ? (uint16_t)((crc >> 1) ^ 0x8408) : (uint16_t)(crc >> 1);
++		}
++	}
++	return (uint16_t)~crc;
++}
++
++static void
++dg_rx_queue(unsigned buf)
++{
++	mx_tre(MH_TRE_DG_IN + dg.in_wp * MH_EL, mx.pa + MH_DGBUF + buf * MH_RX_LEN, MH_RX_LEN, 0x2u << 16 | 1u << 9);
++	dg.in_wp = (dg.in_wp + 1) % MH_TRE_N;
++	mx_ring(MX_DIAG_IN, MH_TRE_DG_IN, dg.in_wp);
++}
++
++/* One DIAG request, HDLC framed. */
++static void
++dg_send(const uint8_t *pl, uint32_t n)
++{
++	uint8_t *o = (uint8_t *)(mx.mem + MH_DGTX);
++	uint8_t raw[64];
++	uint32_t k = 0;
++	if (n > sizeof(raw) - 2) {
++		return;
++	}
++	memcpy(raw, pl, n);
++	uint16_t c = dg_crc(pl, n);
++	raw[n] = (uint8_t)c;
++	raw[n + 1] = (uint8_t)(c >> 8);
++	for (uint32_t i = 0; i < n + 2; ++i) {
++		if (raw[i] == 0x7e || raw[i] == 0x7d) {
++			o[k++] = 0x7d;
++			o[k++] = raw[i] ^ 0x20;
++		} else {
++			o[k++] = raw[i];
++		}
++	}
++	o[k++] = 0x7e;
++	mx_tre(MH_TRE_DG_OUT + dg.out_wp * MH_EL, mx.pa + MH_DGTX, k, 0x2u << 16 | 1u << 9);
++	dg.out_wp = (dg.out_wp + 1) % MH_TRE_N;
++	mx_ring(MX_DIAG_OUT, MH_TRE_DG_OUT, dg.out_wp);
++	for (unsigned i = 0; i < 200; ++i) {        /* its completion comes on event ring 1: let it pass */
++		mx_er1();
++		delay(100);
++	}
++}
++
++/* A whole DIAG packet (HDLC removed, CRC checked). */
++static void
++dg_packet(const uint8_t *p, uint32_t n)
++{
++	if (n >= 21 && p[0] == 0x79) {          /* DIAG_EXT_MSG_F: an F3 message */
++		dg.msgs++;
++		unsigned nargs = p[2];
++		uint16_t line = (uint16_t)(p[12] | p[13] << 8), ssid = (uint16_t)(p[14] | p[15] << 8);
++		uint32_t mask = (uint32_t)p[16] | (uint32_t)p[17] << 8 | (uint32_t)p[18] << 16 | (uint32_t)p[19] << 24;
++		uint32_t o = 20 + 4u * nargs;
++		if (o >= n || dg.printed >= 1500) {
++			return;
++		}
++		const char *fmt = (const char *)p + o;
++		size_t fl = strnlen(fmt, n - o);
++		const char *file = fl + 1 < n - o ? fmt + fl + 1 : "";
++		size_t fil = fl + 1 < n - o ? strnlen(file, n - o - fl - 1) : 0;
++		const char *base = file;
++		for (size_t i = 0; i < fil; ++i) {
++			if (file[i] == '/' || file[i] == '\\') {
++				base = file + i + 1;
++			}
++		}
++		uint32_t a[6] = { 0 };
++		for (unsigned i = 0; i < nargs && i < 6; ++i) {
++			memcpy(&a[i], p + 20 + 4 * i, 4);
++		}
++		dg.printed++;
++		/* the modem's format string is printed as text, never used as a format */
++		printf("SWEET MDM: F3 %u/%#x %.*s:%u: %.*s | %x %x %x %x %x %x\n", ssid, mask,
++		    (int)MIN(fil - (size_t)(base - file), (size_t)40), base, line, (int)MIN(fl, (size_t)160), fmt,
++		    a[0], a[1], a[2], a[3], a[4], a[5]);
++		return;
++	}
++	if (dg.other++ < 20) {
++		printf("SWEET MDM: DIAG packet %u bytes: %02x %02x %02x %02x %02x %02x %02x %02x\n", n, p[0], n > 1 ? p[1] : 0,
++		    n > 2 ? p[2] : 0, n > 3 ? p[3] : 0, n > 4 ? p[4] : 0, n > 5 ? p[5] : 0, n > 6 ? p[6] : 0, n > 7 ? p[7] : 0);
++	}
++}
++
++/* Bytes from channel 5: HDLC frames ending in 0x7e. */
++static void
++dg_feed(const uint8_t *b, uint32_t n)
++{
++	for (uint32_t i = 0; i < n; ++i) {
++		uint8_t c = b[i];
++		if (c == 0x7e) {
++			if (dg.flen >= 3) {
++				uint16_t want = (uint16_t)(dg.frame[dg.flen - 2] | dg.frame[dg.flen - 1] << 8);
++				if (dg_crc(dg.frame, dg.flen - 2) == want) {
++					dg_packet(dg.frame, dg.flen - 2);
++				} else if (dg.bad++ < 10) {
++					printf("SWEET MDM: DIAG frame of %u bytes with a bad CRC\n", dg.flen);
++				}
++			}
++			dg.flen = 0;
++			dg.esc = false;
++		} else if (c == 0x7d) {
++			dg.esc = true;
++		} else if (dg.flen < sizeof(dg.frame)) {
++			dg.frame[dg.flen++] = dg.esc ? c ^ 0x20 : c;
++			dg.esc = false;
++		}
++	}
++}
++
++/* The modem's failure reason buffer, if it wrote one. */
++static void
++mx_sfr_print(const char *when)
++{
++	const char *t = (const char *)(mx.mem + MH_SFR);
++	size_t l = strnlen(t, MX_SFR_LEN);
++	if (l) {
++		printf("SWEET MDM: SFR (%s): %.*s\n", when, (int)MIN(l, (size_t)300), t);
++	} else {
++		printf("SWEET MDM: SFR (%s): empty\n", when);
++	}
++}
++
++/* SFR_CFG (MHI command 73): where the modem writes its failure reason. */
++static void
++mx_sfr_cfg(void)
++{
++	bzero((void *)(mx.mem + MH_SFR), MX_SFR_LEN);
++	mx_tre(MH_CMD + mx.cmd_wp * MH_EL, mx.pa + MH_SFR, MX_SFR_LEN, 73u << 16);
++	mx.cmd_wp = (mx.cmd_wp + 1) % MH_CMD_N;
++	uint64_t a = mx.pa + MH_CMD + mx.cmd_wp * MH_EL;
++	mx64(MH_CMDCTX + 36, a);
++	mx.cmd_code = -1;
++	mx_db(MHI_CRDB, a);
++	for (unsigned i = 0; i < 2000 && mx.cmd_code < 0; ++i) {
++		mx_er0();
++		delay(1000);
++	}
++	printf("SWEET MDM: SFR buffer (%u bytes at %#x) handed to the modem: completion %d\n", MX_SFR_LEN, mx.pa + MH_SFR,
++	    mx.cmd_code);
++}
++
++/* DIAG up: channels, receive buffers, every subsystem's real-time message mask set (high / error / fatal). */
++static void
++dg_start(void)
++{
++	bzero(&dg, sizeof(dg));
++	if (mx_chan_start(MX_DIAG_OUT, false, MH_TRE_DG_OUT) || mx_chan_start(MX_DIAG_IN, true, MH_TRE_DG_IN)) {
++		return;
++	}
++	for (unsigned b = 0; b < MH_RX_N; ++b) {
++		dg_rx_queue(b);
++	}
++	dg.on = true;
++	uint32_t m = 0x1c;                      /* MSG_LEGACY high 0x4, error 0x8, fatal 0x10 */
++	(void)PE_parse_boot_argn("sweetmdmdiag", &m, sizeof(m));
++	const uint8_t verno[1] = { 0x00 };      /* DIAG_VERNO_F: a first answer */
++	dg_send(verno, 1);
++	uint8_t all[8] = { 0x7d, 0x05, 0x00, 0x00, (uint8_t)m, (uint8_t)(m >> 8), (uint8_t)(m >> 16), (uint8_t)(m >> 24) };
++	dg_send(all, 8);                        /* DIAG_EXT_MSG_CONFIG_F: set all real-time masks */
++	printf("SWEET MDM: DIAG channels %u/%u running, message mask %#x for every subsystem\n", MX_DIAG_OUT, MX_DIAG_IN, m);
++}
++
+ /* ---- Sahara (Qualcomm's image transfer protocol over channels 2 / 3) ---- */
+ 
+ enum { SAH_HELLO = 1, SAH_HELLO_RESP, SAH_READ_DATA, SAH_END_IMAGE_TX, SAH_DONE, SAH_DONE_RESP, SAH_RESET, SAH_RESET_RESP,
+@@ -1278,7 +1486,7 @@ mt_rx(uint32_t node, uint32_t port, const uint8_t *p, uint32_t len)
+ 		}
+ 		o++;
+ 		uint32_t blksize = 512, seek = 0, rsize = ~0u;
+-		bool oack = false, tsize_asked = false, wsize_asked = false;
++		bool oack = false, tsize_asked = false, wsize_asked = false, unlink_asked = false;
+ 		char opts[96] = { 0 };
+ 		size_t ol = 0;
+ 		while (o < len) {
+@@ -1309,6 +1517,8 @@ mt_rx(uint32_t node, uint32_t port, const uint8_t *p, uint32_t len)
+ 				wsize_asked = oack = true;
+ 			} else if (onl == 7 && strncmp(on, "timeout", 7) == 0) {
+ 				oack = true;
++			} else if (onl == 6 && strncmp(on, "unlink", 6) == 0) {
++				unlink_asked = true;
+ 			}
+ 		}
+ 		if (mt_logged++ < 80) {
+@@ -1329,7 +1539,19 @@ mt_rx(uint32_t node, uint32_t port, const uint8_t *p, uint32_t len)
+ 		mt[s].store = -1;
+ 		uint32_t fsz = 0;
+ 		bool rw = strncmp(path, "/readwrite/", 11) == 0;
+-		if (op == 2) {
++		if (op == 2 && unlink_asked) {
++			/* Qualcomm's delete: a WRQ with "unlink" (0266 kept mcfg.tmp as an empty file instead) */
++			int u = rw ? mts_find(path, false) : -1;
++			if (u >= 0) {
++				kfree_data(mts[u].data, MT_STORE_MAX);
++				mts[u].data = NULL;
++				mts[u].len = 0;
++			}
++			if (mt_logged < 80) {
++				printf("SWEET MDM: TFTP unlink \"%s\"%s\n", path, u >= 0 ? "" : " (was not there)");
++			}
++			mt[s].store = -1;
++		} else if (op == 2) {
+ 			mt[s].store = rw ? mts_find(path, true) : -1;
+ 			if (mt[s].store >= 0) {
+ 				mts[mt[s].store].len = 0;
+@@ -1903,12 +2125,23 @@ md_mission(void)
+ 		mx_rx_queue(b);
+ 	}
+ 	printf("SWEET MDM: IPCR channels %u/%u running: QRTR HELLO sent\n", MX_IPCR_OUT, MX_IPCR_IN);
++	if (md.stage >= 8) {
++		mx_sfr_cfg();
++		dg_start();
++	}
+ 	bzero(&mq, sizeof(mq));
+ 	bzero(mt, sizeof(mt));                  /* TFTP sessions of a previous modem run */
+ 	mx_qctrl(2, 0xffffffffu, 0, 0, 0, 0);
+-	unsigned secs = md.stage >= 8 ? 90 : 30;
++	unsigned secs = md.stage >= 8 ? 150 : 30;
+ 	(void)PE_parse_boot_argn("sweetmdmqrtr", &secs, sizeof(secs));
+-	for (unsigned t = 0; t < secs * 1000u && !mx.gone && !mq.restart_wanted; ++t) {
++	unsigned maxr0 = 0;
++	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr0, sizeof(maxr0));
++	bool printed_sfr = false;
++	for (unsigned t = 0; t < secs * 1000u && !mx.gone && !(mq.restart_wanted && maxr0); ++t) {
++		if (mq.opmode == 5 && !printed_sfr) {
++			printed_sfr = true;
++			mx_sfr_print("shutting down");
++		}
+ 		mx_er0();
+ 		mx_er1();
+ 		while (mx_rxq_head != mx_rxq_tail) {
+@@ -1931,8 +2164,13 @@ md_mission(void)
+ 	}
+ 	printf("SWEET MDM: mission: %u hellos, %u services announced, %u data packets, %u QMI answers%s\n", mq.hellos,
+ 	    mq.servers, mq.data, mq.answers, mx.gone ? " (the modem went away)" : "");
++	printf("SWEET MDM: DIAG: %u F3 messages (%u printed), %u other packets, %u bad frames\n", dg.msgs, dg.printed, dg.other,
++	    dg.bad);
++	mx_sfr_print("end of the run");
+ 	static unsigned restarts;
+-	if (mq.restart_wanted && restarts < 2) {
++	unsigned maxr = 0;                      /* restarts are opt-in now: sweetmdmrestart=N */
++	(void)PE_parse_boot_argn("sweetmdmrestart", &maxr, sizeof(maxr));
++	if (mq.restart_wanted && restarts < maxr) {
+ 		restarts++;
+ 		unsigned files = 0;
+ 		for (unsigned i = 0; i < MT_STORE_N; ++i) {
+-- 
+2.54.0 (Apple Git-157)
+

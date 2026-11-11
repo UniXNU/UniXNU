@@ -1,0 +1,222 @@
+From 38a21a10cda9422d87d2a9a1dea1dfb36acb510c Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Fri, 23 Oct 2026 20:59:18 +0200
+Subject: [PATCH] umi-0114
+
+---
+ bsd/dev/sweet_pcie.c | 37 +++++++++++++++++++++++++++++-----
+ bsd/dev/sweet_rpmh.c | 48 ++++++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_usb.c  | 34 +++++++++++++++++++++++++++----
+ 3 files changed, 110 insertions(+), 9 deletions(-)
+
+diff --git a/bsd/dev/sweet_pcie.c b/bsd/dev/sweet_pcie.c
+index 30456c7..f13e170 100644
+--- a/bsd/dev/sweet_pcie.c
++++ b/bsd/dev/sweet_pcie.c
+@@ -17,6 +17,7 @@
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ extern kern_return_t thread_terminate(thread_t);
+ extern bool sweet_board_is_umi(void);
++extern int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ void sweet_pcie_init(void);
+ 
+ #define PCIE_GCC_PA      0x00100000u
+@@ -59,6 +60,7 @@ void sweet_pcie_init(void);
+ #define DBI_BUSNUM           0x018u
+ #define DBI_LINKCTL          0x080u      /* PCIe cap link control/status: bit 29 DLL active */
+ #define DBI_RO_WR_EN         0x8bcu
++#define ELBI_SYS_STTS        0xf28u      /* DBI + elbi 0xf20 + 8: bit 10 link up, LTSSM in 17:12 */
+ 
+ #define WLAN_EN_PIN          20u
+ #define PERST_PIN            79u
+@@ -301,7 +303,21 @@ pcie_bringup(void)
+ {
+ 	pcie_dump("before");
+ 
+-	/* QCA6390 power: rails are shared, always-on SMPS (S4A/S5A/S6A/S8C); WLAN_EN high. */
++	/* QCA6390 power, cnss2 order: WLAN_EN low, rails aon/dig/io/rfa1/rfa2, then WLAN_EN high. */
++	pcie_gpio(WLAN_EN_PIN, 0, 1, 7, true, false);
++	pcie_wait(10);
++	unsigned vreg = 1;
++	(void)PE_parse_boot_argn("sweetwlanvreg", &vreg, sizeof(vreg));
++	if (vreg) {
++		static const struct { const char *res; unsigned mv; } rails[] = {
++			{ "smpa6", 950 }, { "smpf2", 950 }, { "smpa4", 1800 }, { "smpa5", 1900 }, { "smpc8", 1350 },
++		};
++		for (unsigned i = 0; i < sizeof(rails) / sizeof(rails[0]); ++i) {
++			(void)sweet_rpmh_smps_enable(rails[i].res, rails[i].mv);
++		}
++		pcie_wait(5);
++	}
++	printf("SWEET PCIE: sw_ctrl before WLAN_EN %u\n", pcie_gpio_in(SW_CTRL_PIN));
+ 	pcie_gpio(WLAN_EN_PIN, 0, 3, 7, true, true);
+ 	pcie_wait(100);
+ 	printf("SWEET PCIE: WLAN_EN high, sw_ctrl %u\n", pcie_gpio_in(SW_CTRL_PIN));
+@@ -345,7 +361,7 @@ pcie_bringup(void)
+ 	pcie_wr(sp.parf, PARF_DEVICE_TYPE, 4);
+ 	pcie_wr(sp.parf, PARF_PHY_CTRL, pcie_rd(sp.parf, PARF_PHY_CTRL) & ~1u);
+ 	pcie_wr(sp.parf, PARF_DBI_BASE_ADDR, 0);
+-	pcie_wr(sp.parf, PARF_SYS_CTRL, pcie_rd(sp.parf, PARF_SYS_CTRL) & ~(1u << 29));
++	pcie_wr(sp.parf, PARF_SYS_CTRL, 0x365e);              /* pci-msm value */
+ 	pcie_wr(sp.parf, PARF_MHI_CLK_RST, pcie_rd(sp.parf, PARF_MHI_CLK_RST) | (1u << 4));
+ 	pcie_wr(sp.parf, PARF_PM_CTRL, pcie_rd(sp.parf, PARF_PM_CTRL) | (1u << 5));
+ 	pcie_wr(sp.parf, PARF_AXI_HALT_V2, pcie_rd(sp.parf, PARF_AXI_HALT_V2) | (1u << 31));
+@@ -374,10 +390,21 @@ pcie_bringup(void)
+ 	pcie_gpio(PERST_PIN, 0, 1, 0, true, true);
+ 	pcie_wait(1);
+ 	pcie_wr(sp.parf, PARF_LTSSM, pcie_rd(sp.parf, PARF_LTSSM) | (1u << 8));
+-	bool up = pcie_poll(sp.dbi, DBI_LINKCTL, 1u << 29, 1u << 29, 1000);
++	/* Up to 1 s; log every LTSSM state the link passes through. */
++	bool up = false;
++	uint32_t last = ~0u, st = 0;
++	for (unsigned i = 0; i < 10000 && !up; ++i) {
++		st = pcie_rd(sp.dbi, ELBI_SYS_STTS);
++		if (((st >> 12) & 0x3f) != last) {
++			last = (st >> 12) & 0x3f;
++			printf("SWEET PCIE: LTSSM %#x at %u00 us (stts %#x)\n", last, i, st);
++		}
++		up = (st & (1u << 10)) && (pcie_rd(sp.dbi, DBI_LINKCTL) & (1u << 29));
++		delay(100);
++	}
+ 	uint32_t ls = pcie_rd(sp.dbi, DBI_LINKCTL);
+-	printf("SWEET PCIE: link %s: linkctl %#x (gen %u x%u) ltssm %#x\n", up ? "UP" : "down",
+-	    ls, (ls >> 16) & 0xf, (ls >> 20) & 0x3f, pcie_rd(sp.parf, PARF_LTSSM));
++	printf("SWEET PCIE: link %s: linkctl %#x (gen %u x%u) stts %#x sw_ctrl %u\n", up ? "UP" : "down",
++	    ls, (ls >> 16) & 0xf, (ls >> 20) & 0x3f, st, pcie_gpio_in(SW_CTRL_PIN));
+ 	if (!up) {
+ 		return 3;
+ 	}
+diff --git a/bsd/dev/sweet_rpmh.c b/bsd/dev/sweet_rpmh.c
+index 9c459ff..de1b22a 100644
+--- a/bsd/dev/sweet_rpmh.c
++++ b/bsd/dev/sweet_rpmh.c
+@@ -13,6 +13,7 @@
+ 
+ extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
+ int sweet_rpmh_vreg_enable(const char *res, unsigned mv);
++int sweet_rpmh_smps_enable(const char *res, unsigned mv);
+ int sweet_rpmh_bcm_vote(const char *res, uint32_t vote_x, uint32_t vote_y);
+ bool sweet_board_is_umi(void);
+ 
+@@ -422,6 +423,53 @@ out:
+ 	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
+ 	return error;
+ }
++/*
++ * umi QCA6390 rails (DT qcom,cnss-qca6390 vdd-wlan-*-supply): voltage and enable votes
++ * only. RPMh aggregates them with every other client, so a shared rail never drops.
++ */
++static const struct {
++	const char *res;
++	unsigned mv;
++} rh_wlan_smps[] = {
++	{ "smpa6", 950 },       /* vdd-wlan-aon */
++	{ "smpf2", 950 },       /* vdd-wlan-dig (PM8009 S2) */
++	{ "smpa4", 1800 },      /* vdd-wlan-io */
++	{ "smpa5", 1900 },      /* vdd-wlan-rfa1 */
++	{ "smpc8", 1350 },      /* vdd-wlan-rfa2 */
++};
++
++int
++sweet_rpmh_smps_enable(const char *res, unsigned mv)
++{
++	bool known = false;
++	for (unsigned i = 0; i < sizeof(rh_wlan_smps) / sizeof(rh_wlan_smps[0]); ++i) {
++		known |= res && !strcmp(res, rh_wlan_smps[i].res) && mv == rh_wlan_smps[i].mv;
++	}
++	if (!sweet_board_is_umi() || !known) {
++		printf("SWEET RPMH: %s %u mV is not a umi Wi-Fi rail\n", res ? res : "?", mv);
++		return EINVAL;
++	}
++	if (__atomic_exchange_n(&rh_lock, 1, __ATOMIC_ACQUIRE)) {
++		return EBUSY;
++	}
++	int error = EIO;
++	uint32_t address = 0;
++	if (!rh_poisoned) {
++		error = rh_map();
++		if (!error) {
++			error = rh_lookup(res, &address);
++		}
++		if (!error) {
++			const uint32_t addrs[2] = {address, address + 4};
++			const uint32_t values[2] = {mv, 1};
++			error = rh_send_cmds(address, addrs, values, 2, "SMPS voltage/enable");
++		}
++	}
++	printf("SWEET RPMH: %s %u mV at %#x -> %d\n", res, mv, address, error);
++	__atomic_store_n(&rh_lock, 0, __ATOMIC_RELEASE);
++	return error;
++}
++
+ /*
+  * One ACTIVE bandwidth/clock vote (BCM_TCS_CMD: commit, valid, vote_x = average,
+  * vote_y = peak). umi: Linux keeps QUP0 voted (msm-bus client qupv3_1_geni_se,
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+index 72b2557..26e73b0 100644
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -255,6 +255,7 @@ static struct {
+ 	uint32_t    events;
+ 	bool        configured;
+ 	uint8_t     data_alt;       /* data interface alternate setting */
++	bool        notify_connect; /* NETWORK_CONNECTION follows the speed notification */
+ 	/* network */
+ 	ifnet_t     ifp;
+ 	lck_mtx_t  *lock;           /* TX ring and TX endpoint */
+@@ -406,16 +407,37 @@ static void ud_rx_arm(void);
+ static void ud_tx_kick_locked(void);
+ static void ud_link_event(bool up);
+ 
+-/* NETWORK_CONNECTION notification: the host brings its link up on it. */
++/*
++ * CONNECTION_SPEED_CHANGE, then NETWORK_CONNECTION once it is sent (Linux f_ecm order).
++ * macOS (AppleUserECM) keeps the link inactive until it has both.
++ */
+ static void
+ ud_notify_connected(void)
+ {
+ 	uint8_t *n = (uint8_t *)(ud.dma + UD_NOTIFY);
++	uint32_t bps = 480000000u;
++	memset(n, 0, 16);
++	n[0] = 0xa1; n[1] = 0x2a;       /* CONNECTION_SPEED_CHANGE, interface 0 */
++	n[6] = 8;                       /* wLength: DLBitRate, ULBitRate */
++	memcpy(n + 8, &bps, 4);
++	memcpy(n + 12, &bps, 4);
++	ud.notify_connect = true;
++	ud_start_trb(EP_INT, UD_TRB_INT, UD_NOTIFY, 16, TRBCTL_NORMAL);
++}
++
++static void
++ud_notify_done(void)
++{
++	if (!ud.notify_connect) {
++		return;
++	}
++	ud.notify_connect = false;
++	uint8_t *n = (uint8_t *)(ud.dma + UD_NOTIFY);
++	memset(n, 0, 16);
+ 	n[0] = 0xa1; n[1] = 0x00;       /* NETWORK_CONNECTION */
+-	n[2] = 1; n[3] = 0;             /* connected */
+-	n[4] = 0; n[5] = 0;             /* interface 0 */
+-	n[6] = 0; n[7] = 0;
++	n[2] = 1;                       /* connected, interface 0 */
+ 	ud_start_trb(EP_INT, UD_TRB_INT, UD_NOTIFY, 8, TRBCTL_NORMAL);
++	printf("SWEET USB: link notifications sent\n");
+ }
+ 
+ /* SET_CONFIGURATION(1): bulk IN/OUT and the interrupt endpoint. */
+@@ -766,6 +788,10 @@ ud_event(uint32_t ev)
+ 		lck_mtx_unlock(ud.lock);
+ 		return;
+ 	}
++	if (ep == EP_INT && type == 1) {
++		ud_notify_done();
++		return;
++	}
+ 	if (ep > 1) {
+ 		return;
+ 	}
+-- 
+2.54.0 (Apple Git-157)
+

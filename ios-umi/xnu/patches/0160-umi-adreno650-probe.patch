@@ -1,0 +1,387 @@
+From 029428ec34a6ccb817554af4c64a1a74f4d053a7 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Sun, 25 Oct 2026 20:20:11 +0100
+Subject: [PATCH] umi-0160-adreno-probe
+
+---
+ bsd/conf/files         |   1 +
+ bsd/dev/sweet_adreno.c | 334 +++++++++++++++++++++++++++++++++++++++++
+ bsd/dev/sweet_ufs.c    |   2 +
+ 3 files changed, 337 insertions(+)
+ create mode 100644 bsd/dev/sweet_adreno.c
+
+diff --git a/bsd/conf/files b/bsd/conf/files
+index d787d7f..d4694f1 100644
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -113,6 +113,7 @@ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
+ bsd/dev/sweet_usb.c			standard
+ bsd/dev/sweet_pcie.c			standard
++bsd/dev/sweet_adreno.c			standard
+ bsd/dev/sweet_mon.c			standard
+ bsd/dev/sweet_wlan.c			standard
+ bsd/dev/sweet_mhi.c			standard
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+new file mode 100644
+index 0000000..75e5b80
+--- /dev/null
++++ b/bsd/dev/sweet_adreno.c
+@@ -0,0 +1,334 @@
++/*
++ * umi (Mi 10, SM8250): the Adreno 650 (chip ID 6.5.0.2), woken step by step. Nothing here runs
++ * unless boot-arg sweetgpu=N asks for it; steps 1 to N are performed in order, and a step that
++ * does not find what it needs ends the sequence.
++ *
++ * The step-by-step bring-up is adapted from HackiOS (OOSEX GANG, github.com/oosexgang/hakios-os,
++ * xnu/files/bsd/dev/hakios.adreno.c, APSL 2.0), which brings up the Adreno 642L of the POCO X5
++ * Pro (SM7325) the same way: same GPU block layout (registers 0x3d00000, GMU 0x3d6a000, GPU
++ * clock controller 0x3d90000, SMMU 0x3da0000). Changed for umi: addresses and fuse cells from
++ * umi's device tree, clock offsets from Linux gcc-sm8250.c / gpucc-sm8250.c (SM8250 has no GPU
++ * PLL0 and no hub clocks), and this first part only reads.
++ *
++ *   1  reads   the GPU's clocks in the global clock controller, and its supply rails in cmd-db
++ *   2  reads   the speed-bin fuse
++ *   3  reads   the GPU's clock controller as the boot loader left it (only if the clock of its
++ *              registers, gcc_gpu_cfg_ahb, already runs: nothing is switched on here)
++ *
++ * An access the hypervisor does not allow can reset the phone without a word, so before every
++ * group of accesses a step says what it is about to read and waits sweetgpupause ms (default
++ * 2200) for the persistent log (ufslogsecs) to reach storage.
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <kern/clock.h>
++#include <kern/thread.h>
++#include <machine/machine_routines.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++extern vm_offset_t ml_io_map_wcomb(vm_offset_t, vm_size_t);
++extern kern_return_t thread_terminate(thread_t);
++extern bool sweet_board_is_umi(void);
++void sweet_adreno_init(void);
++
++static uint32_t sa_steps, sa_step, sa_pause_ms = 2200;
++static bool sa_started;
++
++static void
++sa_sleep_ms(uint32_t ms)
++{
++	delay_for_interval(ms, NSEC_PER_MSEC);
++}
++
++/* One plain load per access (some of what is read may be emulated by the hypervisor). */
++static uint32_t __attribute__((noinline))
++sa_rd(vm_offset_t address)
++{
++	uint32_t value;
++	__asm__ volatile ("ldr %w0, [%1]" : "=r" (value) : "r" (address) : "memory");
++	return value;
++}
++
++static uint32_t __attribute__((noinline))
++sa_rd8(vm_offset_t address)
++{
++	uint32_t value;
++	__asm__ volatile ("ldrb %w0, [%1]" : "=r" (value) : "r" (address) : "memory");
++	return value;
++}
++
++struct sa_block {
++	const char *name;
++	uint32_t phys, size;
++	vm_offset_t base;
++};
++
++static void
++sa_need(struct sa_block *b)
++{
++	if (b->base == 0) {
++		b->base = ml_io_map(b->phys, b->size);
++	}
++}
++
++static void
++sa_announce(const char *what)
++{
++	printf("SWEET GPU: step %u: %s\n", sa_step, what);
++	if (sa_step == sa_steps && sa_pause_ms) {
++		sa_sleep_ms(sa_pause_ms);
++	}
++}
++
++static uint32_t
++sa_get(struct sa_block *b, const char *name, uint32_t offset)
++{
++	sa_need(b);
++	uint32_t value = sa_rd(b->base + offset);
++	printf("SWEET GPU: %u: %s %s (%#x) = %#x\n", sa_step, b->name, name, b->phys + offset, value);
++	return value;
++}
++
++static uint32_t
++sa_get8(struct sa_block *b, const char *name, uint32_t offset)
++{
++	sa_need(b);
++	uint32_t value = sa_rd8(b->base + offset);
++	printf("SWEET GPU: %u: %s %s (%#x) = %#x\n", sa_step, b->name, name, b->phys + offset, value);
++	return value;
++}
++
++/* ---- step 1: the clocks from outside, and RPMh's names ---- */
++
++/* dt: clock-controller@100000 (gcc-kona); offsets: Linux gcc-sm8250.c (the same as SC7280's). */
++static struct sa_block sa_gcc = { "gcc", 0x00100000, 0x80000 };
++#define GCC_PLL_VOTE            0x52000         /* bit 15 gcc_gpu_gpll0_clk_src, bit 16 gcc_gpu_gpll0_div_clk_src */
++#define GCC_GPU_CFG_AHB_CBCR    0x71004
++#define GCC_GPU_MEMNOC_GFX_CBCR 0x7100c
++#define GCC_GPU_SNOC_DVM_GFX_CBCR 0x71018
++#define GCC_DDRSS_GPU_AXI_CBCR  0x71154
++#define CBCR_OFF                (1u << 31)
++
++/* dt: reserved-memory cmd_db@80860000 (Linux cmd-db.c layout). */
++#define CMD_DB_PHYS             0x80860000UL
++#define CMD_DB_SIZE             0x20000UL
++
++struct sa_cmd_db_slave {
++	uint16_t id, header_offset, data_offset, count, version, reserved[3];
++};
++struct sa_cmd_db_header {
++	uint32_t version;
++	uint8_t magic[4];
++	struct sa_cmd_db_slave slave[8];
++	uint32_t checksum, reserved;
++	uint8_t data[];
++};
++struct sa_cmd_db_entry {
++	char id[8];
++	uint32_t priority[2];
++	uint32_t address;
++	uint16_t length, offset;
++};
++
++static const struct sa_cmd_db_header *sa_cmd_db;
++
++/* A resource's RPMh address (0: none) and, for a rail, the levels it knows (the GMU is told positions in this list). */
++static uint32_t
++sa_rpmh_resource(const char *name, uint16_t *levels, unsigned *level_count)
++{
++	char id[8] = { 0 };
++
++	*level_count = 0;
++	if (sa_cmd_db == NULL) {
++		sa_cmd_db = (const struct sa_cmd_db_header *)ml_io_map_wcomb(CMD_DB_PHYS, CMD_DB_SIZE);
++	}
++	const struct sa_cmd_db_header *db = sa_cmd_db;
++	if (db == NULL || db->magic[0] != 0xdb || db->magic[1] != 0x30 || db->magic[2] != 0x03 || db->magic[3] != 0x0c) {
++		return 0;
++	}
++	strlcpy(id, name, sizeof(id));
++	for (unsigned s = 0; s < 8; s++) {
++		const struct sa_cmd_db_slave *slave = &db->slave[s];
++		const struct sa_cmd_db_entry *entry = (const struct sa_cmd_db_entry *)(const void *)(db->data + slave->header_offset);
++		if (slave->id == 0 || slave->count > 512) {
++			continue;
++		}
++		for (unsigned i = 0; i < slave->count; i++) {
++			if (memcmp(entry[i].id, id, sizeof(id)) != 0) {
++				continue;
++			}
++			const uint8_t *data = db->data + slave->data_offset + entry[i].offset;
++			unsigned count = entry[i].length / 2u;
++			if ((unsigned)slave->data_offset + entry[i].offset + entry[i].length > CMD_DB_SIZE - 0x1000) {
++				count = 0;
++			}
++			for (unsigned l = 0; l < count && l < 16; l++) {
++				levels[l] = (uint16_t)(data[2 * l] | data[2 * l + 1] << 8);
++				if (l > 0 && levels[l] == 0) {
++					break;
++				}
++				*level_count = l + 1;
++			}
++			return entry[i].address;
++		}
++	}
++	return 0;
++}
++
++static void
++sa_show_rpmh_resource(const char *name)
++{
++	uint16_t level[16];
++	unsigned count = 0;
++	char levels[160];
++	int at = 0;
++	uint32_t address = sa_rpmh_resource(name, level, &count);
++
++	if (address == 0) {
++		printf("SWEET GPU: %u: RPMh has no \"%s\"\n", sa_step, name);
++		return;
++	}
++	levels[0] = 0;
++	for (unsigned l = 0; l < count && at < (int)sizeof(levels) - 8; l++) {
++		at += snprintf(levels + at, sizeof(levels) - (size_t)at, " %u", level[l]);
++	}
++	printf("SWEET GPU: %u: RPMh has \"%s\" at %#x; levels:%s\n", sa_step, name, address, levels);
++}
++
++static bool
++sa_step_outside(void)
++{
++	sa_announce("read the GPU's clocks in the global clock controller");
++	sa_get(&sa_gcc, "pll votes", GCC_PLL_VOTE);
++	sa_get(&sa_gcc, "gpu_cfg_ahb", GCC_GPU_CFG_AHB_CBCR);
++	sa_get(&sa_gcc, "gpu_memnoc_gfx", GCC_GPU_MEMNOC_GFX_CBCR);
++	sa_get(&sa_gcc, "gpu_snoc_dvm_gfx", GCC_GPU_SNOC_DVM_GFX_CBCR);
++	sa_get(&sa_gcc, "ddrss_gpu_axi", GCC_DDRSS_GPU_AXI_CBCR);
++
++	sa_announce("look up the GPU's supply rails in cmd-db (memory at 0x80860000)");
++	sa_show_rpmh_resource("gfx.lvl");       /* the 3D core's rail */
++	sa_show_rpmh_resource("cx.lvl");        /* the CX half, shared with most of the SoC */
++	sa_show_rpmh_resource("mx.lvl");        /* memories */
++	sa_show_rpmh_resource("mmcx.lvl");
++	return true;
++}
++
++/* ---- step 2: the fuses ---- */
++
++/* dt: qfprom@780000, gpu_speed_bin@419b: one byte, 3 bits from bit 5 (qcom,speed-bin 0..4 in the pwrlevel tables). */
++static struct sa_block sa_qfprom = { "qfprom", 0x00780000, 0x7000 };
++#define QFPROM_GPU_SPEED_BIN    0x419b
++#define QFPROM_GPU_LM_EFUSE     0x45c8
++
++static bool
++sa_step_fuses(void)
++{
++	sa_announce("read the GPU's speed-bin fuse (qfprom 0x78419b)");
++	uint32_t raw = sa_get8(&sa_qfprom, "gpu_speed_bin", QFPROM_GPU_SPEED_BIN);
++	printf("SWEET GPU: %u: speed bin %u\n", sa_step, raw >> 5 & 7);
++	sa_get(&sa_qfprom, "gpu_lm_efuse", QFPROM_GPU_LM_EFUSE);
++	return true;
++}
++
++/* ---- step 3: the GPU's clock controller ---- */
++
++/*
++ * dt: clock-controller@3d90000 (gpucc-kona), 0x9000 long; offsets: Linux gpucc-sm8250.c. Its
++ * registers answer only while gcc_gpu_cfg_ahb runs; this step does not switch it on.
++ */
++static struct sa_block sa_gpucc = { "gpucc", 0x03d90000, 0x9000 };
++#define GPUCC_PLL1_MODE         0x0100          /* bit 31 locked, bit 0 output on; +4: L value (x 19.2 MHz) */
++#define GPUCC_CXO_AON_CBCR      0x1004
++#define GPUCC_GX_SW_RESET       0x1008
++#define GPUCC_GX_GDSCR          0x100c          /* gpu_gx_gdsc: the 3D core's power switch (the GMU's to operate) */
++#define GPUCC_GX_GMU_CBCR       0x1064
++#define GPUCC_CX_GDSCR          0x106c          /* gpu_cx_gdsc */
++#define GPUCC_AHB_CBCR          0x1078
++#define GPUCC_CRC_AHB_CBCR      0x107c
++#define GPUCC_CX_APB_CBCR       0x1088
++#define GPUCC_CX_SNOC_DVM_CBCR  0x108c
++#define GPUCC_CX_GMU_CBCR       0x1098
++#define GPUCC_CXO_CBCR          0x109c
++#define GPUCC_GMU_RCGR          0x1120          /* gpu_cc_gmu_clk_src: +0 command, +4 source and divider */
++#define GPUCC_CX_HW_CTRL        0x1540          /* bit 31: CX powered (as the vendor driver checks) */
++#define GPUCC_GX_DOMAIN_MISC    0x158c
++#define GPUCC_SMMU_VOTE_CBCR    0x5000          /* gpu_cc_hlos1_vote_gpu_smmu_clk */
++
++static bool
++sa_step_gpucc(void)
++{
++	sa_need(&sa_gcc);
++	uint32_t ahb = sa_rd(sa_gcc.base + GCC_GPU_CFG_AHB_CBCR);
++	if (ahb & CBCR_OFF) {
++		printf("SWEET GPU: %u: gcc gpu_cfg_ahb is off (%#x): the GPU clock controller would not answer; "
++		    "switching it on is for a later step\n", sa_step, ahb);
++		return false;
++	}
++	sa_announce("read the GPU's clock controller (0x3d90000) as the boot loader left it");
++	sa_get(&sa_gpucc, "cx_gdscr", GPUCC_CX_GDSCR);
++	sa_get(&sa_gpucc, "cx_hw_ctrl", GPUCC_CX_HW_CTRL);
++	sa_get(&sa_gpucc, "gx_gdscr", GPUCC_GX_GDSCR);
++	sa_get(&sa_gpucc, "gx_sw_reset", GPUCC_GX_SW_RESET);
++	sa_get(&sa_gpucc, "gx_domain_misc", GPUCC_GX_DOMAIN_MISC);
++	sa_get(&sa_gpucc, "pll1 mode", GPUCC_PLL1_MODE);
++	sa_get(&sa_gpucc, "pll1 L", GPUCC_PLL1_MODE + 4);
++	sa_get(&sa_gpucc, "gmu_clk_src command", GPUCC_GMU_RCGR);
++	sa_get(&sa_gpucc, "gmu_clk_src config", GPUCC_GMU_RCGR + 4);
++	sa_get(&sa_gpucc, "cxo_aon", GPUCC_CXO_AON_CBCR);
++	sa_get(&sa_gpucc, "gx_gmu", GPUCC_GX_GMU_CBCR);
++	sa_get(&sa_gpucc, "ahb", GPUCC_AHB_CBCR);
++	sa_get(&sa_gpucc, "crc_ahb", GPUCC_CRC_AHB_CBCR);
++	sa_get(&sa_gpucc, "cx_apb", GPUCC_CX_APB_CBCR);
++	sa_get(&sa_gpucc, "cx_snoc_dvm", GPUCC_CX_SNOC_DVM_CBCR);
++	sa_get(&sa_gpucc, "cx_gmu", GPUCC_CX_GMU_CBCR);
++	sa_get(&sa_gpucc, "cxo", GPUCC_CXO_CBCR);
++	sa_get(&sa_gpucc, "smmu vote", GPUCC_SMMU_VOTE_CBCR);
++	return true;
++}
++
++static bool (*const sa_step_fn[])(void) = {
++	NULL, sa_step_outside, sa_step_fuses, sa_step_gpucc,
++};
++
++static void
++sa_thread(__unused void *arg, __unused wait_result_t wr)
++{
++	uint32_t last = sa_steps < sizeof(sa_step_fn) / sizeof(sa_step_fn[0]) ? sa_steps
++	    : (uint32_t)(sizeof(sa_step_fn) / sizeof(sa_step_fn[0]) - 1);
++
++	sa_sleep_ms(5000);              /* let the persistent log start first */
++	printf("SWEET GPU: steps 1 to %u (of %u written)\n", last, (unsigned)(sizeof(sa_step_fn) / sizeof(sa_step_fn[0]) - 1));
++	for (sa_step = 1; sa_step <= last; sa_step++) {
++		if (!sa_step_fn[sa_step]()) {
++			printf("SWEET GPU: step %u ended the sequence\n", sa_step);
++			break;
++		}
++	}
++	printf("SWEET GPU: done\n");
++	(void)thread_terminate(current_thread());
++}
++
++void
++sweet_adreno_init(void)
++{
++	thread_t thread;
++
++	if (sa_started || !sweet_board_is_umi()) {
++		return;
++	}
++	sa_started = true;
++	(void)PE_parse_boot_argn("sweetgpu", &sa_steps, sizeof(sa_steps));
++	(void)PE_parse_boot_argn("sweetgpupause", &sa_pause_ms, sizeof(sa_pause_ms));
++	if (sa_steps == 0) {
++		return;
++	}
++	if (kernel_thread_start(sa_thread, NULL, &thread) == KERN_SUCCESS) {
++		thread_deallocate(thread);
++	}
++}
++#else
++void sweet_adreno_init(void);
++void sweet_adreno_init(void) {}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_ufs.c b/bsd/dev/sweet_ufs.c
+index 23d4ccc..0b535f9 100644
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -54,6 +54,7 @@ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
+ extern void sweet_usb_probe(void);
+ extern void sweet_pcie_init(void);
++extern void sweet_adreno_init(void);   /* sweet_adreno.c, boot-arg sweetgpu */
+ 
+ #define REG_CAP         0x00
+ #define REG_IS          0x20
+@@ -764,6 +765,7 @@ sweet_ufs_init(void)
+ 	sweet_touch_init();
+ 	sweet_usb_probe();
+ 	sweet_pcie_init();
++	sweet_adreno_init();
+ 	return 0;
+ }
+ 
+-- 
+2.54.0 (Apple Git-157)
+

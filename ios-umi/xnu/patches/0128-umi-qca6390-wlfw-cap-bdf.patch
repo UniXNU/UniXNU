@@ -1,0 +1,262 @@
+From dac7606b1d55e98ac63020140bf724bcb7671744 Mon Sep 17 00:00:00 2001
+From: port <p@p>
+Date: Sat, 24 Oct 2026 14:21:11 +0200
+Subject: [PATCH] umi-0128
+
+---
+ bsd/dev/sweet_wlan.c |  32 ++++++++++-
+ bsd/dev/sweet_wlfw.c | 126 +++++++++++++++++++++++++++++++++++++++++--
+ 2 files changed, 153 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 19f788c..90698d5 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -22,6 +22,7 @@ extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern int sweet_ufs_read_part(const char *want, uint64_t off, void *dst, uint64_t len);
+ extern bool sweet_smmu_route_sid(uint32_t sid);
+ int sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage);
++int sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size);
+ extern int sweet_mhi_start(vm_offset_t bar0, vm_offset_t mem, uint32_t mem_pa);
+ extern int sweet_mhi_wait_ee(unsigned want, unsigned ms);
+ extern int sweet_pcie_msi(uint32_t addr, uint32_t data);
+@@ -285,6 +286,35 @@ wlan_load_fw(void)
+ 	return 0;
+ }
+ 
++/* Another file from image/qca6390 (board data, m3.bin) for sweet_wlfw.c. */
++int
++sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size)
++{
++	uint32_t c = 0, sz = 0, img = 0, f = 0;
++	int err = sw.bps ? 0 : fat_mount();
++	if (!err) {
++		err = fat_find(0, "image", &img, &sz);
++	}
++	if (!err) {
++		err = fat_find(img, "qca6390", &c, &sz);
++	}
++	if (!err) {
++		err = fat_find(c, name, &f, &sz);
++	}
++	if (!err && (sz == 0 || sz > max)) {
++		err = EFBIG;
++	}
++	if (!err) {
++		err = fat_read(f, sz, dst);
++	}
++	if (err) {
++		printf("SWEET WLAN: image/qca6390/%s: error %d\n", name, err);
++		return err;
++	}
++	*size = sz;
++	return 0;
++}
++
+ static void
+ wlan_state(vm_offset_t bar0, vm_offset_t bhi, const char *when)
+ {
+@@ -499,7 +529,7 @@ sweet_wlan_fw_boot(vm_offset_t bar0, unsigned stage)
+ 	if (stage < 8) {
+ 		return 0;
+ 	}
+-	int w = sweet_wlfw_run();      /* WLFW QMI: 21-25 = step 1-5 failed */
++	int w = sweet_wlfw_run();      /* WLFW QMI: 21-27 = step 1-7 failed */
+ 	return w ? 20 + w : 0;
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */
+diff --git a/bsd/dev/sweet_wlfw.c b/bsd/dev/sweet_wlfw.c
+index 450f956..1396449 100644
+--- a/bsd/dev/sweet_wlfw.c
++++ b/bsd/dev/sweet_wlfw.c
+@@ -1,7 +1,8 @@
+ /*
+  * umi QCA6390: WLFW QMI client (service 0x45) over QRTR, carried by sweet_ipcr.c.
+  * Follows Linux ath11k qmi.c for "qca6390 hw2.0". Stage 8 (sweetwlan=8):
+- *   IND_REGISTER, HOST_CAP, REQUEST_MEM indication -> RESPOND_MEM, FW_MEM_READY.
++ *   IND_REGISTER, HOST_CAP, REQUEST_MEM indication -> RESPOND_MEM, FW_MEM_READY,
++ *   CAP, BDF_DOWNLOAD (board data from the modem partition, sweet_wlan.c).
+  * QMI: u8 type (0 request, 2 response, 4 indication), u16 transaction, u16 message,
+  * u16 length, then TLVs (u8 type, u16 length, value). Little endian. Polled.
+  */
+@@ -10,12 +11,14 @@
+ #include <sys/systm.h>
+ #include <sys/errno.h>
+ #include <kern/clock.h>
++#include <kern/kalloc.h>
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+ 
+ extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
+ extern int sweet_ipcr_send(const void *qmi, uint32_t len);
+ extern void sweet_ipcr_service(unsigned ms);
++extern int sweet_wlan_read_file(const char *name, void *dst, uint32_t max, uint32_t *size);
+ void sweet_wlfw_rx(const uint8_t *qmi, uint32_t len);
+ int sweet_wlfw_run(void);
+ 
+@@ -23,7 +26,7 @@ int sweet_wlfw_run(void);
+ #define QMI_RESPONSE    2u
+ #define QMI_INDICATION  4u
+ #define QMI_HDR         7u
+-#define QMI_MAX         1024u
++#define QMI_MAX         0x1900u         /* BDF_DOWNLOAD: 6 KiB of data + TLVs; sweet_ipcr TX_LEN is 8 KiB */
+ 
+ /* QMI message: header, then TLVs appended by the q_* helpers */
+ struct qmsg {
+@@ -135,6 +138,8 @@ q_find(const uint8_t *msg, uint32_t len, uint8_t type, uint16_t *n)
+ #define WLFW_REQUEST_MEM_IND    0x35u
+ #define WLFW_RESPOND_MEM        0x36u
+ #define WLFW_FW_MEM_READY_IND   0x37u
++#define WLFW_CAP                0x24u
++#define WLFW_BDF_DOWNLOAD       0x25u
+ #define WLFW_CLIENT_ID          0x4b4e454cu     /* ath11k ATH11K_QMI_WLFW_CLIENT_ID "KNEL" */
+ #define WLFW_SEG_MAX            32u             /* ATH11K_QMI_WLANFW_MAX_NUM_MEM_SEG_V01 */
+ 
+@@ -142,7 +147,10 @@ static struct {
+ 	uint16_t txn;                   /* transaction of the request in flight */
+ 	bool resp;
+ 	uint16_t result, error;
+-	uint64_t ind;                   /* indications seen, bit (id & 63) */
++	uint8_t rbuf[1024];             /* the response itself, for CAP */
++	uint32_t rlen;
++	uint32_t board_id;
++	uint64_t ind;                  /* indications seen, bit (id & 63) */
+ 	unsigned nseg;
+ 	struct {
+ 		uint32_t size, type;
+@@ -193,6 +201,8 @@ sweet_wlfw_rx(const uint8_t *msg, uint32_t len)
+ 		}
+ 		wf.result = get16(r);
+ 		wf.error = get16(r + 2);
++		wf.rlen = MIN(len, (uint32_t)sizeof(wf.rbuf));
++		memcpy(wf.rbuf, msg, wf.rlen);
+ 		wf.resp = true;
+ 	} else if (type == QMI_INDICATION) {
+ 		printf("SWEET WLFW: indication %#x, %u bytes\n", id, len);
+@@ -345,7 +355,108 @@ wf_respond_mem(void)
+ 	return wf_request(&m, "RESPOND_MEM", 2000);
+ }
+ 
+-/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-5) that failed. */
++/*
++ * Step 6: target capabilities. Response TLVs (ath11k qmi_wlanfw_cap_resp_msg_v01):
++ * 0x10 chip {u32 id, u32 family}, 0x11 board_id u32, 0x12 soc_id u32,
++ * 0x13 {u32 fw_version, u8 n, timestamp}, 0x14 build id string, 0x18 otp_version u32.
++ */
++static int
++wf_cap(void)
++{
++	static struct qmsg m;
++	const uint8_t *v;
++	uint16_t n;
++	wf_begin(&m, WLFW_CAP);
++	int r = wf_request(&m, "CAP", 2000);
++	if (r != 0) {
++		return r;
++	}
++	wf.board_id = 0xff;
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x10, &n)) != NULL && n >= 8) {
++		printf("SWEET WLFW: chip id %#x family %#x\n", get32(v), get32(v + 4));
++	}
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x11, &n)) != NULL && n >= 4) {
++		wf.board_id = get32(v);
++	}
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x12, &n)) != NULL && n >= 4) {
++		printf("SWEET WLFW: soc id %#x\n", get32(v));
++	}
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x13, &n)) != NULL && n >= 5) {
++		char ts[33] = {0};
++		memcpy(ts, v + 5, MIN((unsigned)v[4], MIN(n - 5u, 32u)));
++		printf("SWEET WLFW: firmware version %#x built %s\n", get32(v), ts);
++	}
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x14, &n)) != NULL) {
++		char id[129] = {0};
++		memcpy(id, v, MIN(n, 128u));
++		printf("SWEET WLFW: firmware build id %s\n", id);
++	}
++	if ((v = q_find(wf.rbuf, wf.rlen, 0x18, &n)) != NULL && n >= 4) {
++		printf("SWEET WLFW: otp version %#x\n", get32(v));
++	}
++	printf("SWEET WLFW: board id %#x\n", wf.board_id);
++	return 0;
++}
++
++/*
++ * Step 7: board data, named like cnss2 does (bdwlan.elf for board id 0xff,
++ * bdwlan.eXX below that), or the boot-arg sweetwlanbdf=NAME, sent in 6 KiB
++ * segments. Request TLVs: 0x01 valid, 0x10 file_id (board id), 0x11 total size,
++ * 0x12 segment, 0x13 data (u16 length), 0x14 end, 0x15 type (0 bin, 1 ELF).
++ */
++#define WLFW_BDF_SEG    6144u           /* QMI_WLANFW_MAX_DATA_SIZE_V01 */
++#define WLFW_BDF_MAX    0x40000u        /* the bdwlan.e* files are ~57 KiB */
++
++static int
++wf_bdf(void)
++{
++	static struct qmsg m;
++	char name[32];
++	if (!PE_parse_boot_argn("sweetwlanbdf", name, sizeof(name))) {
++		if (wf.board_id == 0xff) {
++			strlcpy(name, "bdwlan.elf", sizeof(name));
++		} else if (wf.board_id < 0xff) {
++			snprintf(name, sizeof(name), "bdwlan.e%02x", wf.board_id);
++		} else {
++			snprintf(name, sizeof(name), "bdwlan%02x.e%02x", (wf.board_id >> 8) & 0xff, wf.board_id & 0xff);
++		}
++	}
++	uint8_t *buf = kalloc_data(WLFW_BDF_MAX, Z_WAITOK | Z_ZERO);
++	if (buf == NULL) {
++		return ENOMEM;
++	}
++	uint32_t size = 0;
++	int r = sweet_wlan_read_file(name, buf, WLFW_BDF_MAX, &size);
++	uint8_t type = (size >= 4 && buf[0] == 0x7f && buf[1] == 'E' && buf[2] == 'L' && buf[3] == 'F') ? 1 : 0;
++	if (r == 0) {
++		printf("SWEET WLFW: board data %s, %u bytes, type %u\n", name, size, type);
++	}
++	for (uint32_t off = 0, seg = 0; r == 0 && off < size; off += WLFW_BDF_SEG, ++seg) {
++		uint32_t n = MIN(WLFW_BDF_SEG, size - off);
++		wf_begin(&m, WLFW_BDF_DOWNLOAD);
++		q_u8(&m, 0x01, 1);
++		q_u32(&m, 0x10, wf.board_id);
++		q_u32(&m, 0x11, size);
++		q_u32(&m, 0x12, seg);
++		uint8_t *p = q_tlv(&m, 0x13, (uint16_t)(2 + n));
++		if (p == NULL) {
++			r = EMSGSIZE;
++			break;
++		}
++		put16(p, (uint16_t)n);
++		memcpy(p + 2, buf + off, n);
++		q_u8(&m, 0x14, off + n >= size);
++		q_u8(&m, 0x15, type);
++		r = wf_request(&m, "BDF_DOWNLOAD", 5000);
++		if (r != 0) {
++			printf("SWEET WLFW: BDF segment %u (offset %#x) failed\n", seg, off);
++		}
++	}
++	kfree_data(buf, WLFW_BDF_MAX);
++	return r;
++}
++
++/* Stage 8, after sweet_ipcr_start found WLFW. 0, or the step (1-7) that failed. */
+ int
+ sweet_wlfw_run(void)
+ {
+@@ -367,6 +478,13 @@ sweet_wlfw_run(void)
+ 		return 5;
+ 	}
+ 	printf("SWEET WLFW: firmware memory ready\n");
++	if (wf_cap() != 0) {
++		return 6;
++	}
++	if (wf_bdf() != 0) {
++		return 7;
++	}
++	printf("SWEET WLFW: board data sent\n");
+ 	sweet_ipcr_service(500);        /* log whatever follows (FW_READY 0x21 is expected after M3) */
+ 	return 0;
+ }
+-- 
+2.54.0 (Apple Git-157)
+

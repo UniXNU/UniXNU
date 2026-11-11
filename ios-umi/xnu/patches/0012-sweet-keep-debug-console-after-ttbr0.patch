@@ -1,0 +1,233 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1825,6 +1825,32 @@
+ #define ARM64_PHYSMAP_ALIGNMENT_PADDING (PTOV_TABLE_SIZE * ARM_TT_TWIG_SIZE)
+ #endif
+ 
++#if defined(SWEET)
++/*
++ * The reserved low-globals/kernel region is excluded from VM allocation.
++ * Use the otherwise empty 32MB block above low globals and below gVirtBase
++ * for a Normal-NC framebuffer alias that survives bootstrap TTBR0 teardown.
++ */
++#define SWEET_EARLY_FB_VA (VM_MIN_KERNEL_ADDRESS + ARM_TT_L2_SIZE)
++
++static void
++sweet_early_map_final(void)
++{
++	const vm_map_address_t va = SWEET_EARLY_FB_VA;
++	assert(va + ARM_TT_L2_SIZE <= gVirtBase);
++	tt_entry_t l1 = cpu_tte[(va & ARM_TT_L1_INDEX_MASK) >> ARM_TT_L1_SHIFT];
++	assert((l1 & (ARM_TTE_VALID | ARM_TTE_TYPE_MASK)) == (ARM_TTE_VALID | ARM_TTE_TYPE_TABLE));
++	tt_entry_t *l2 = (tt_entry_t *)phystokv(l1 & ARM_TTE_TABLE_MASK);
++	tt_entry_t *slot = &l2[(va & ARM_TT_L2_INDEX_MASK) >> ARM_TT_L2_SHIFT];
++	assert(*slot == ARM_TTE_EMPTY);
++	*slot = 0x9c000000ULL | ARM_TTE_VALID | ARM_TTE_TYPE_BLOCK |
++	    ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) |
++	    ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) |
++	    ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX;
++	__asm__ volatile("dsb ishst" ::: "memory");
++}
++#endif
++
+ void
+ arm_vm_init(uint64_t memory_size, boot_args * args)
+ {
+@@ -2153,20 +2179,28 @@
+ 
+ 	arm_set_user_tbi();
+ 
++#if defined(SWEET)
++	/* phystokv() must still refer to the bootstrap aperture here. */
++	sweet_early_map_final();
++#endif
+ 	arm_vm_physmap_init(args);
+ 	set_mmu_ttb_alternate(cpu_ttep & TTBR_BADDR_MASK);
+ 
+ 	ml_enable_monitor();
+ 
+-	/* The framebuffer VA=PA mapping belongs to the outgoing TTBR0. */
+-	sweet_early_disable();
++#if defined(SWEET)
++	/* The final TTBR1 is live; leave the outgoing VA=PA framebuffer alias. */
++	sweet_early_relocate(SWEET_EARLY_FB_VA);
++#endif
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+ 	flush_mmu_tlb();
++	sweet_early_mark(10, "TTBR0 off; TLB flushed");
+ 	kva_active = TRUE;
+ 	// global table pointers may need to be different due to physical aperture remapping
+ 	cpu_tte = (tt_entry_t*)(phystokv(cpu_ttep));
+ 	invalid_tte = (tt_entry_t*)(phystokv(invalid_ttep));
++	sweet_early_mark(11, "physmap table pointers rebound");
+ 
+ 	// From here on out, we're off the bootstrap translation tables.
+ 
+@@ -2259,7 +2293,9 @@
+     }
+ #endif
+ #endif
++	sweet_early_mark(12, "calling pmap_bootstrap");
+ 	pmap_bootstrap(dynamic_memory_begin);
++	sweet_early_mark(13, "pmap_bootstrap done");
+ 
+ 	disable_preemption();
+ 
+@@ -2310,6 +2346,7 @@
+ 		va_l1 = va_l2_end;
+ 		cpu_l1_tte++;
+ 	}
++	sweet_early_mark(14, "early I/O page tables ready");
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
+ 	/*
+diff --git a/osfmk/arm64/sweet_early.c b/osfmk/arm64/sweet_early.c
+--- a/osfmk/arm64/sweet_early.c
++++ b/osfmk/arm64/sweet_early.c
+@@ -2,7 +2,8 @@
+  * Redmi Note 10 Pro bootstrap console. No allocation, locks, ADT parsing or
+  * per-CPU state: panic() can reach this before a current thread exists.
+  * start.s maps the splash framebuffer VA=PA as Normal Non-Cacheable memory.
+- * Stop using that mapping before arm_vm_init tears down bootstrap TTBR0.
++ * arm_vm_init installs a reserved kernel VA alias before removing TTBR0;
++ * retain this console until the normal framebuffer serial console is ready.
+  */
+ #include <arm64/sweet_early.h>
+ 
+@@ -10,7 +11,8 @@
+ #include <stdint.h>
+ #include <kern/misc_protos.h>
+ 
+-#define EARLY_FB ((volatile uint32_t *)(uintptr_t)0x9c000000)
++static volatile uint32_t *early_fb = (volatile uint32_t *)(uintptr_t)0x9c000000;
++#define EARLY_FB early_fb
+ #define EARLY_WIDTH 1080u
+ #define EARLY_HEIGHT 2400u
+ #define EARLY_STRIDE (4320u / 4)
+@@ -87,18 +89,21 @@
+ void
+ sweet_early_mark(unsigned int stage, const char *label)
+ {
+-	if (early_disabled || stage > 8) {
++	if (early_disabled || stage > 20) {
+ 		return;
+ 	}
+-	uint32_t color = 0xff00ff00u | (stage * 28u << 16);
++	uint32_t color = 0xff00ff00u | ((stage & 7u) * 32u << 16);
+ 	for (unsigned int y = EARLY_HEIGHT - 32; y < EARLY_HEIGHT; y++) {
+-		for (unsigned int x = stage * 64; x < (stage + 1) * 64; x++) {
++		for (unsigned int x = stage * 48; x < (stage + 1) * 48; x++) {
+ 			EARLY_FB[y * EARLY_STRIDE + x] = color;
+ 		}
+ 	}
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ 	sweet_early_string("SWEET EARLY ");
+-	sweet_early_putc((char)('0' + stage));
++	if (stage >= 10) {
++		sweet_early_putc((char)('0' + stage / 10));
++	}
++	sweet_early_putc((char)('0' + stage % 10));
+ 	sweet_early_string(": ");
+ 	sweet_early_string(label);
+ 	sweet_early_putc('\n');
+@@ -121,9 +126,17 @@
+ }
+ 
+ void
++sweet_early_relocate(uint64_t base)
++{
++	sweet_early_mark(8, "leaving bootstrap TTBR0");
++	early_fb = (volatile uint32_t *)(uintptr_t)base;
++	__asm__ volatile("dsb sy" ::: "memory");
++	sweet_early_mark(9, "kernel framebuffer VA live");
++}
++
++void
+ sweet_early_disable(void)
+ {
+-	sweet_early_mark(8, "leaving bootstrap TTBR0");
+ 	early_disabled = 1;
+ 	__asm__ volatile("dsb sy" ::: "memory");
+ }
+diff --git a/osfmk/arm64/sweet_early.h b/osfmk/arm64/sweet_early.h
+--- a/osfmk/arm64/sweet_early.h
++++ b/osfmk/arm64/sweet_early.h
+@@ -1,14 +1,16 @@
+-/* Early screen diagnostics, valid only while the bootstrap TTBR0 is live. */
++/* Screen diagnostics through bootstrap TTBR0 and the final kernel TTBR1. */
+ #ifndef _ARM64_SWEET_EARLY_H_
+ #define _ARM64_SWEET_EARLY_H_
+ 
+ #include <pexpert/arm64/board_config.h>
+ #include <stdarg.h>
++#include <stdint.h>
+ 
+ #if defined(SWEET)
+ void sweet_early_mark(unsigned int stage, const char *label);
+ void sweet_early_putc(char c);
+ void sweet_early_panic(const char *fmt, va_list *args);
++void sweet_early_relocate(uint64_t base);
+ void sweet_early_disable(void);
+ #else
+ static inline void sweet_early_mark(unsigned int stage, const char *label)
+diff --git a/osfmk/arm64/Makefile b/osfmk/arm64/Makefile
+--- a/osfmk/arm64/Makefile
++++ b/osfmk/arm64/Makefile
+@@ -40,6 +40,7 @@
+ 	monotonic.h \
+ 	perfmon_arm64_regs.h \
+ 	proc_reg.h \
++	sweet_early.h \
+ 	asm.h \
+ 	tlb.h \
+ 	pal_hibernate.h
+diff --git a/osfmk/arm/arm_init.c b/osfmk/arm/arm_init.c
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -523,6 +523,7 @@
+ 
+ 	sweet_early_mark(7, "entering arm_vm_init");
+ 	arm_vm_init(xmaxmem, args);
++	sweet_early_mark(15, "arm_vm_init returned");
+ 
+ 	if (debug_boot_arg) {
+ 		patch_low_glo();
+@@ -535,9 +536,15 @@
+ 	PE_consistent_debug_inherit();
+ 
+ 	/* Setup debugging output. */
++	sweet_early_mark(16, "calling serial_init");
+ 	const unsigned int serial_exists = serial_init();
++	sweet_early_mark(19, "serial_init returned");
+ 	kernel_startup_initialize_upto(STARTUP_SUB_KPRINTF);
+ 	kprintf("kprintf initialized\n");
++	sweet_early_mark(20, "kprintf startup complete");
++	if (serial_exists) {
++		sweet_early_disable();
++	}
+ 
+ 	serialmode = 0;
+ 	if (PE_parse_boot_argn("serial", &serialmode, sizeof(serialmode))) {
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -26,6 +26,7 @@
+ #include <pexpert/arm/consistent_debug.h>
+ #include <pexpert/arm64/board_config.h>
+ #include <arm64/proc_reg.h>
++#include <arm64/sweet_early.h>
+ #include <pexpert/arm/protos.h>
+ #include <kern/sched_prim.h>
+ #if HIBERNATION
+@@ -833,7 +834,9 @@
+ 	if (!fbcon_width || !fbcon_height || fbcon_stride < fbcon_width * 4) {
+ 		return;
+ 	}
++	sweet_early_mark(17, "fbcon config read; mapping");
+ 	fbcon_base = (volatile uint32_t *)ml_io_map_wcomb(reg[0], reg[1]);
++	sweet_early_mark(18, "fbcon mapping returned");
+ 	if (fbcon_base != NULL) {
+ 		register_serial_functions(&sweet_fbcon_serial_functions);
+ 	}

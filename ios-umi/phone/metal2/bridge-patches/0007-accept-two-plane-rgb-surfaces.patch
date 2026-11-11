@@ -1,0 +1,25 @@
+diff --git a/crates/metal2vulkan-runtime/src/ycbcr.rs b/crates/metal2vulkan-runtime/src/ycbcr.rs
+index 368d62e..7e545d2 100644
+--- a/crates/metal2vulkan-runtime/src/ycbcr.rs
++++ b/crates/metal2vulkan-runtime/src/ycbcr.rs
+@@ -151,8 +151,10 @@ use std::ops::Range;
+ /// range, and `xf20`, `xf22` and `xf44` the same, full range; `p420`, `p422` and `p444`, and
+ /// `pf20`, `pf22` and `pf44`, the same packed three to a 32-bit word. A format reads a surface
+ /// whose chroma plane holds its own: a 4:2:0 format a 4:2:2 or 4:4:4 surface's, a 4:2:2 format a
+-/// 4:4:4 one's, each at the surface's rows.
+-const SURFACES: [(&[u8; 4], u32, bool, YCbCrRange, ChromaSubsampling); 18] = {
++/// 4:4:4 one's, each at the surface's rows. `_RB4` is the render server's own two-plane RGB surface (green codes in plane 0, the
++/// red and blue pairs in plane 1, 8-bit 4:4:4), which widget snapshots are drawn into as `RGB8_444_2P` (542); the code formats
++/// read no range, so its range is only nominal.
++const SURFACES: [(&[u8; 4], u32, bool, YCbCrRange, ChromaSubsampling); 19] = {
+     use ChromaSubsampling::{Chroma420 as C420, Chroma422 as C422, Chroma444 as C444};
+     [
+         (b"420v", 8, false, YCbCrRange::Video, C420),
+@@ -173,6 +175,7 @@ const SURFACES: [(&[u8; 4], u32, bool, YCbCrRange, ChromaSubsampling); 18] = {
+         (b"pf22", 10, true, YCbCrRange::Full, C422),
+         (b"p444", 10, true, YCbCrRange::Video, C444),
+         (b"pf44", 10, true, YCbCrRange::Full, C444),
++        (b"_RB4", 8, false, YCbCrRange::Full, C444),
+     ]
+ };
+ /// What the planes' offsets and rows are multiples of: Metal's GPU reads a plane from its offset

@@ -1,0 +1,13 @@
+diff --git a/osfmk/arm/pmap/pmap.h b/osfmk/arm/pmap/pmap.h
+index df672c6..75f3db0 100644
+--- a/osfmk/arm/pmap/pmap.h
++++ b/osfmk/arm/pmap/pmap.h
+@@ -442,7 +442,7 @@ struct pmap {
+ #if HAS_APPLE_PAC
+ 	bool disable_jop;
+ #else
+-	bool reserved10;
++	bool reserved10b;       /* was a second "reserved10": clashes when !CONFIG_ROSETTA */
+ #endif /* HAS_APPLE_PAC */
+ 
+ 	bool reserved11;

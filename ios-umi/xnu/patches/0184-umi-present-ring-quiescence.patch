@@ -1,0 +1,81 @@
+From 2b78d5f01af37e9ec3d8f8474125d8125f04d5e7 Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Wed, 28 Oct 2026 23:39:31 +0100
+Subject: [PATCH] umi: require ring quiescence before the present path reads a
+ frame
+
+A signalled newest fence is not completion of the frame the presenter
+copies: CA's render server publishes a swap while its pipeline keeps
+submitting the next frame (renders take seconds at these clocks), so
+the surface is written again behind the fence and the copy lands
+mid-render (the panel's noise; a completed frame only when the copy
+happens to fall in the gap between frames, which the user photographed
+clean once). After the newest fence signals, wait until no new
+submission arrived during the wait - the ring quiet means every submit
+before it retired and the tiles are in memory. A late submit (swap
+before its frame) appears as a new sequence number and is waited for
+in the next round. sweetfb_finrounds bounds the chase (default 4); the
+copy after the budget is no worse than before.
+
+Co-Authored-By: Mistral Vibe <vibe@mistral.ai>
+---
+ bsd/dev/sweet_adreno.c | 32 +++++++++++++++++++++++++++-----
+ 1 file changed, 27 insertions(+), 5 deletions(-)
+
+diff --git a/bsd/dev/sweet_adreno.c b/bsd/dev/sweet_adreno.c
+index 3b4cb12..b01a701 100644
+--- a/bsd/dev/sweet_adreno.c
++++ b/bsd/dev/sweet_adreno.c
+@@ -3243,22 +3243,44 @@ sweet_adreno_clean(vm_offset_t kva, uint64_t len)
+ 
+ /* Wait for everything submitted so far (the present path reads GPU-written surfaces).
+  * Returns false when the wait gave up: the newest fence had not signalled within the
+- * cap, so a frame read right after it may be mid-render (its tiles not all stored). */
++ * cap, so a frame read right after it may be mid-render (its tiles not all stored).
++ *
++ * A signalled fence alone is not completion of THE frame the presenter is about to
++ * copy: CoreAnimation's render server publishes a swap while its own pipeline keeps
++ * submitting the next frame's passes (renders take seconds at 305 MHz), so the
++ * surface can be written again behind the fence. So after the newest fence signals,
++ * REQUIRE QUIESCENCE as well: no new submission arrived during the wait. When the
++ * ring is quiet, every submit before it has retired and the last frame's tiles are
++ * in memory - that is the moment a completed frame can be read. A submit that was
++ * merely late (swap before its frame's submit) shows up as a new sequence number
++ * and is waited for in the next round. Bounded rounds, then best effort: a copy
++ * after the budget is no worse than today's. */
+ bool
+ sweet_adreno_finish(void)
+ {
+-	uint32_t seqno = sa_fence_seqno;
+ 	static uint32_t wait_ms;
++	static uint32_t rounds = 4;
+ 
+ 	if (wait_ms == 0) {
+ 		wait_ms = 500;
+ 		PE_parse_boot_argn("sweetfb_finwait", &wait_ms, sizeof(wait_ms));
++		PE_parse_boot_argn("sweetfb_finrounds", &rounds, sizeof(rounds));
+ 	}
+ 
+-	if (seqno != 0) {
+-		return sa_fence_wait(seqno, wait_ms);
++	for (uint32_t round = 0; round < rounds; round++) {
++		uint32_t seqno = sa_fence_seqno;
++
++		if (seqno == 0) {
++			return true;          /* nothing was ever submitted: quiet */
++		}
++		if (!sa_fence_wait(seqno, wait_ms)) {
++			return false;         /* the newest fence did not signal within the cap */
++		}
++		if (sa_fence_seqno == seqno) {
++			return true;          /* fence signalled and nothing new arrived: quiet */
++		}
+ 	}
+-	return true;
++	return true;                  /* budget spent: best effort, as before */
+ }
+ 
+ static bool (*const sa_step_fn[])(void) = {
+-- 
+2.54.0 (Apple Git-157)
+

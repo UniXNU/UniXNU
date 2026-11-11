@@ -1,0 +1,71 @@
+diff --git a/bsd/dev/sweet_usb.c b/bsd/dev/sweet_usb.c
+--- a/bsd/dev/sweet_usb.c
++++ b/bsd/dev/sweet_usb.c
+@@ -47,10 +47,12 @@ extern ppnum_t pmap_find_phys(pmap_t pmap, addr64_t va);
+ #define GCC_USB30_PRIM_GDSCR    0x0f004         /* bit 31: power on */
+ #define CBCR_CLK_OFF            (1u << 31)
+ 
+-static const struct {
++struct usb_clk {
+ 	const char *name;
+ 	uint32_t    off;
+-} usb_cbcr[] = {
++};
++/* Index 0 (master) and 3 (cfg-noc-axi) gate DWC3 access, 5 gates the PHY read. */
++static const struct usb_clk usb_cbcr[] = {
+ 	{ "master", 0x0f010 },
+ 	{ "sleep", 0x0f014 },
+ 	{ "utmi", 0x0f018 },
+@@ -59,6 +61,21 @@ static const struct {
+ 	{ "ahb2phy", 0x6a004 },
+ 	{ "clkref", 0x8c010 },
+ };
++/*
++ * umi (Mi 10, SM8250, gcc-kona.c): same DWC3, QSCRATCH and GDSC addresses,
++ * but a Synopsys femto HS PHY at 0x088e3000 instead of QUSB2, so no QUSB2
++ * read. ABL's fastboot leaves the PHY configured, as on sweet.
++ */
++static const struct usb_clk usb_cbcr_umi[] = {
++	{ "master", 0x0f010 },
++	{ "sleep", 0x0f018 },
++	{ "utmi", 0x0f01c },
++	{ "cfg-noc-axi", 0x0f07c },
++	{ "aggre-axi", 0x0f080 },
++	{ "phy-aux", 0x0f054 },
++	{ "phy-com-aux", 0x0f058 },
++};
++extern bool sweet_board_is_umi(void);
+ 
+ #define DWC3_PA                 0x0a600000
+ #define DWC3_SIZE               0x0000d000
+@@ -79,6 +96,9 @@ sweet_usb_probe(void)
+ 	int enabled = 1;
+ 	uint32_t gdscr, cbcr[sizeof(usb_cbcr) / sizeof(usb_cbcr[0])];
+ 	bool clocks_on = true;
++	bool umi = sweet_board_is_umi();
++	const struct usb_clk *clk = umi ? usb_cbcr_umi : usb_cbcr;
++	_Static_assert(sizeof(usb_cbcr) == sizeof(usb_cbcr_umi), "one cbcr[] for both boards");
+ 
+ 	/* sweetusb=0 off, 1 (default) report state only, 2 also start the USB device */
+ 	PE_parse_boot_argn("sweetusb", &enabled, sizeof(enabled));
+@@ -93,8 +113,8 @@ sweet_usb_probe(void)
+ 	gdscr = usb_rd(gcc, GCC_USB30_PRIM_GDSCR);
+ 	printf("SWEET USB: GDSC usb30_prim 0x%08x (%s)\n", gdscr, (gdscr & (1u << 31)) ? "on" : "off");
+ 	for (unsigned i = 0; i < sizeof(usb_cbcr) / sizeof(usb_cbcr[0]); i++) {
+-		cbcr[i] = usb_rd(gcc, usb_cbcr[i].off);
+-		printf("SWEET USB: clk %-12s CBCR 0x%08x (%s)\n", usb_cbcr[i].name, cbcr[i],
++		cbcr[i] = usb_rd(gcc, clk[i].off);
++		printf("SWEET USB: clk %-12s CBCR 0x%08x (%s)\n", clk[i].name, cbcr[i],
+ 		    (cbcr[i] & CBCR_CLK_OFF) ? "off" : "on");
+ 	}
+ 	/* DWC3 registers need the GDSC, the master clock and the config-NoC path. */
+@@ -119,6 +139,9 @@ sweet_usb_probe(void)
+ 	if (enabled >= 2) {
+ 		sweet_usb_gadget_start(dwc);
+ 	}
++	if (umi) {
++		return;
++	}
+ 	if (cbcr[5] & CBCR_CLK_OFF) {
+ 		printf("SWEET USB: ahb2phy clock off; QUSB2 PHY not read\n");
+ 		return;

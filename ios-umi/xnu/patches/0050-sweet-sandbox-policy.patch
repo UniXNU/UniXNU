@@ -1,0 +1,66 @@
+--- a/bsd/kern/sweet_amfi.c
++++ b/bsd/kern/sweet_amfi.c
+@@ -272,10 +272,54 @@
+ 	return 0;
+ }
+ 
++/*
++ * Policy "Sandbox": libsystem_sandbox calls __mac_syscall("Sandbox", op,
++ * arg). Without a policy of that name every call fails with ENOPOLICY and
++ * launchd reports mach lookups as "error = 159: Sandbox restriction"
++ * (backboardd cannot reach mobilegestalt or iohideventsystem; tccd:
++ * "profile not found"). SWEET runs without a sandbox: operations succeed
++ * (checks allow, profile init is accepted); the few that must return
++ * data (container paths, extension tokens) fail with ENOENT. The first
++ * use of each operation number is logged.
++ */
++static uint64_t sweet_sandbox_seen;
++
++static int
++sweet_sandbox_syscall(struct proc *p, int call, __unused user_addr_t arg)
++{
++	if (call >= 0 && call < 64 && !(sweet_sandbox_seen & (1ULL << call))) {
++		sweet_sandbox_seen |= 1ULL << call;
++		char name[32];
++		proc_name(proc_pid(p), name, sizeof(name));
++		printf("SWEET Sandbox: %s op %d\n", name, call);
++	}
++	switch (call) {
++	case 4:         /* container path (audit token / pid) */
++	case 5:         /* extension issue */
++	case 6:         /* extension consume */
++	case 0x43:      /* container expected */
++		return ENOENT;
++	default:
++		return 0;
++	}
++}
++
+ static const struct mac_policy_ops sweet_amfi_mac_ops = {
+ 	.mpo_vnode_check_signature = sweet_amfi_vnode_check_signature,
+ };
+ 
++static const struct mac_policy_ops sweet_sandbox_mac_ops = {
++	.mpo_policy_syscall = sweet_sandbox_syscall,
++};
++
++static struct mac_policy_conf sweet_sandbox_mac_conf = {
++	.mpc_name = "Sandbox",
++	.mpc_fullname = "SWEET permissive sandbox stand-in",
++	.mpc_ops = &sweet_sandbox_mac_ops,
++};
++
++static mac_policy_handle_t sweet_sandbox_mac_handle;
++
+ static struct mac_policy_conf sweet_amfi_mac_conf = {
+ 	.mpc_name = "SWEET AMFI",
+ 	.mpc_fullname = "SWEET built-in Mobile File Integrity",
+@@ -293,5 +337,8 @@
+ 	int error = mac_policy_register(&sweet_amfi_mac_conf, &sweet_amfi_mac_handle, NULL);
+ 	printf("SWEET AMFI: platform binary policy %s (%d)\n",
+ 	    error ? "NOT registered" : "registered", error);
++	error = mac_policy_register(&sweet_sandbox_mac_conf, &sweet_sandbox_mac_handle, NULL);
++	printf("SWEET Sandbox: permissive policy %s (%d)\n",
++	    error ? "NOT registered" : "registered", error);
+ }
+ #endif /* ARM64_BOARD_CONFIG_SWEET */

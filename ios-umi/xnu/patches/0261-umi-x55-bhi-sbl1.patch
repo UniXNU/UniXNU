@@ -1,0 +1,232 @@
+From 581f83f10c81fac58f18a5b6cf039bc4d8c458ba Mon Sep 17 00:00:00 2001
+From: qualcomm-toolbox <169756160+qcom-toolbox@users.noreply.github.com>
+Date: Mon, 9 Nov 2026 21:18:01 +0100
+Subject: [PATCH] umi: X55 BHI - sdx55m/sbl1.mbn from the FAT modem partition
+ into a low-RAM DMA pool, SMMU 0x1d00/0x1d01, MSI; the modem runs its SBL
+ (sweetmdm=5) (0261)
+
+sweet_fat_read_file walks a directory path (image/sdx55m).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ bsd/dev/sweet_mdm.c  | 141 ++++++++++++++++++++++++++++++++++++++++++-
+ bsd/dev/sweet_wlan.c |  16 ++++-
+ 2 files changed, 153 insertions(+), 4 deletions(-)
+
+diff --git a/bsd/dev/sweet_mdm.c b/bsd/dev/sweet_mdm.c
+index 694d1f6..f3d5132 100644
+--- a/bsd/dev/sweet_mdm.c
++++ b/bsd/dev/sweet_mdm.c
+@@ -13,6 +13,10 @@
+  *   sweetmdm=2  + AP2MDM pins, PCIe2 GDSC / clocks / PHY
+  *   sweetmdm=3  + warm reset (unless sweetmdmreset=0), AP2MDM_STATUS, PERST, link, endpoint ID
+  *   sweetmdm=4  + BAR0 and the MHI / BHI registers
++ *   sweetmdm=5  + BHI: sdx55m/sbl1.mbn (FAT modem partition image/sdx55m, read-only) from a DMA pool in low
++ *               RAM (sweetmdmpool, default 0xd8000000, 8 MiB, outside XNU's highmem RAM), SMMU streams
++ *               0x1d00 / 0x1d01 routed to bypass, MSI into the pool (polled); then watch the execution
++ *               environment (Linux pci_generic mhi_qcom_sdx55_info: fw sbl1.mbn by BHI, no fbc download)
+  * PCIe sequence as sweet_pcie.c (PCIe0, QCA6390) with the PCIe2 registers (Linux gcc-sm8250.c).
+  * Built inside sweet_spmi.c (the local build cannot add source files).
+  */
+@@ -30,6 +34,10 @@ extern kern_return_t thread_terminate(thread_t);
+ extern bool sweet_board_is_umi(void);
+ extern int sweet_pmic_read(uint16_t ppid, uint8_t reg, uint8_t *val);
+ extern int sweet_pmic_write(uint16_t ppid, uint8_t reg, uint8_t val);
++extern vm_offset_t ml_io_map_unmappable(vm_offset_t, vm_size_t, unsigned int);
++extern bool sweet_smmu_route_sid(uint32_t sid);
++extern int sweet_fat_read_file(const char *part, const char *dir, const char *name, void *dst, uint32_t max,
++    uint32_t *size);
+ void sweet_mdm_start(void);
+ 
+ #define MDM_GCC_PA        0x00100000u
+@@ -81,6 +89,25 @@ void sweet_mdm_start(void);
+ #define WAKE2_PIN            87u
+ #define PMX55_PON            0x808u      /* SID 8, peripheral 0x08 */
+ 
++#define MDM_POOL_PA          0xd8000000u /* low RAM no pool uses (sweetfb 0xc0.., Wi-Fi / DSP 0xd0..-0xd4d..) */
++#define MDM_POOL_SIZE        0x00800000u
++#define MDM_FW_OFF           0x000000u   /* sbl1.mbn (548056 bytes in the umi build) */
++#define MDM_FW_MAX           0x200000u
++#define MDM_MSI_OFF          0x7ff000u   /* MSI writes land here (polled) */
++#define BHI_IMGADDR_LOW      0x08u
++#define BHI_IMGADDR_HIGH     0x0cu
++#define BHI_IMGSIZE          0x10u
++#define BHI_IMGTXDB          0x18u
++#define BHI_INTVEC           0x20u
++#define BHI_EXECENV          0x28u
++#define BHI_STATUS           0x2cu
++#define BHI_ERRCODE          0x30u
++#define BHI_ERRDBG1          0x34u
++#define BHI_ERRDBG2          0x38u
++#define BHI_ERRDBG3          0x3cu
++#define MHI_CTRL             0x38u
++#define MHI_STATUS           0x48u
++
+ struct mdm_phy_step {
+ 	uint16_t off;
+ 	uint8_t val;
+@@ -228,7 +255,8 @@ static const struct mdm_phy_step mdm_phy_seq[] = {
+ };
+ 
+ static struct {
+-	vm_offset_t gcc, tlmm, parf, phy, dbi, iatu, conf, bar0;
++	vm_offset_t gcc, tlmm, parf, phy, dbi, iatu, conf, bar0, pool;
++	uint32_t pool_pa;
+ 	unsigned stage;
+ 	int chan;
+ } md;
+@@ -409,6 +437,114 @@ md_bar0(void)
+ 	return 0;
+ }
+ 
++
++static void
++md_state(vm_offset_t bhi, const char *when)
++{
++	printf("SWEET MDM: %s: execenv %u bhi status %#x errcode %#x dbg %#x %#x %#x mhictrl %#x mhistatus %#x msi %#x"
++	    " mdm2ap status %u errfatal %u\n", when,
++	    md_rd(bhi, BHI_EXECENV), md_rd(bhi, BHI_STATUS), md_rd(bhi, BHI_ERRCODE), md_rd(bhi, BHI_ERRDBG1),
++	    md_rd(bhi, BHI_ERRDBG2), md_rd(bhi, BHI_ERRDBG3), md_rd(md.bar0, MHI_CTRL), md_rd(md.bar0, MHI_STATUS),
++	    *(volatile uint32_t *)(md.pool + MDM_MSI_OFF), md_gpio_in(MDM2AP_STATUS), md_gpio_in(MDM2AP_ERRFATAL));
++}
++
++/* Point the endpoint's MSI at addr (as sweet_pcie_msi, on PCIe2's config window). */
++static void
++md_msi(uint32_t addr, uint32_t data)
++{
++	uint32_t ptr = md_rd(md.conf, 0x34) & 0xfcu;
++	for (unsigned guard = 0; ptr >= 0x40u && guard < 48; ++guard) {
++		uint32_t hdr = md_rd(md.conf, ptr);
++		if ((hdr & 0xffu) == 0x05u) {
++			uint32_t ctl = hdr >> 16;
++			bool is64 = (ctl & (1u << 7)) != 0;
++			unsigned mmc = (ctl >> 1) & 7u;
++			md_wr(md.conf, ptr + 4, addr);
++			if (is64) {
++				md_wr(md.conf, ptr + 8, 0);
++				md_wr(md.conf, ptr + 12, data);
++			} else {
++				md_wr(md.conf, ptr + 8, data);
++			}
++			ctl = (ctl & ~(7u << 4)) | (mmc << 4) | 1u;
++			md_wr(md.conf, ptr, (hdr & 0xffffu) | (ctl << 16));
++			printf("SWEET MDM: MSI cap at %#x: %u vectors, %s, address %#x, ctl %#x\n", ptr, 1u << mmc,
++			    is64 ? "64-bit" : "32-bit", addr, md_rd(md.conf, ptr) >> 16);
++			return;
++		}
++		ptr = (hdr >> 8) & 0xfcu;
++	}
++	printf("SWEET MDM: no MSI capability\n");
++}
++
++static int
++md_sbl1(void)
++{
++	uint32_t bhi_off = md_rd(md.bar0, 0x28);
++	if (bhi_off == 0 || bhi_off >= 0x1000u) {
++		return 10;
++	}
++	vm_offset_t bhi = md.bar0 + bhi_off;
++	bool a = sweet_smmu_route_sid(0x1d00), b = sweet_smmu_route_sid(0x1d01);
++	printf("SWEET MDM: SMMU streams 0x1d00 %d 0x1d01 %d\n", a, b);
++	if (!a || !b) {
++		return 11;
++	}
++	md.pool_pa = MDM_POOL_PA;
++	(void)PE_parse_boot_argn("sweetmdmpool", &md.pool_pa, sizeof(md.pool_pa));
++	md.pool = ml_io_map_unmappable(md.pool_pa, MDM_POOL_SIZE, 0x6u);    /* VM_WIMG_WCOMB */
++	if (md.pool == 0) {
++		return 12;
++	}
++	uint32_t size = 0;
++	int err = sweet_fat_read_file("modem", "image/sdx55m", "sbl1.mbn", (void *)(md.pool + MDM_FW_OFF), MDM_FW_MAX, &size);
++	if (err) {
++		/* the FAT reader may not take a path: image, then sdx55m, as two steps is what sweet_wlan.c does */
++		printf("SWEET MDM: image/sdx55m/sbl1.mbn: error %d\n", err);
++		return 13;
++	}
++	__asm__ volatile ("dsb sy" ::: "memory");
++	printf("SWEET MDM: sbl1.mbn %u bytes at %#x, head %08x %08x\n", size, md.pool_pa + MDM_FW_OFF,
++	    *(volatile uint32_t *)(md.pool + MDM_FW_OFF), *(volatile uint32_t *)(md.pool + MDM_FW_OFF + 4));
++	*(volatile uint32_t *)(md.pool + MDM_MSI_OFF) = 0xffffffffu;
++	md_msi(md.pool_pa + MDM_MSI_OFF, 0);
++	md_state(bhi, "before BHI");
++	if (md_rd(bhi, BHI_EXECENV) != 0) {
++		return 14;
++	}
++	md_wr(bhi, BHI_INTVEC, 0);
++	md_wr(bhi, BHI_STATUS, 0);
++	md_wr(bhi, BHI_IMGADDR_HIGH, 0);
++	md_wr(bhi, BHI_IMGADDR_LOW, md.pool_pa + MDM_FW_OFF);
++	md_wr(bhi, BHI_IMGSIZE, size);
++	md_wr(bhi, BHI_IMGTXDB, 0x2468u);
++	uint32_t st = 0;
++	for (unsigned i = 0; i < 50000 && (st >> 30) == 0; ++i) {       /* up to 5 s */
++		st = md_rd(bhi, BHI_STATUS);
++		delay(100);
++	}
++	md_state(bhi, "after BHI");
++	if ((st >> 30) != 2) {
++		printf("SWEET MDM: BHI %s (status %#x)\n", (st >> 30) == 3 ? "ERROR" : "timeout", st);
++		return 15;
++	}
++	/* watch the modem leave the PBL: execenv / MHI state / MDM2AP_STATUS, 10 s */
++	uint32_t ee = 0, last_ee = ~0u, last_ms = ~0u;
++	for (unsigned t = 0; t < 100; ++t) {
++		ee = md_rd(bhi, BHI_EXECENV);
++		uint32_t ms = md_rd(md.bar0, MHI_STATUS);
++		if (ee != last_ee || ms != last_ms) {
++			printf("SWEET MDM: at %u00 ms: execenv %u mhistatus %#x (state %u) mdm2ap status %u\n", t, ee, ms,
++			    (ms >> 8) & 0xff, md_gpio_in(MDM2AP_STATUS));
++			last_ee = ee;
++			last_ms = ms;
++		}
++		md_wait(100);
++	}
++	md_state(bhi, "10 s after BHI");
++	return 0;
++}
++
+ static int
+ md_run(void)
+ {
+@@ -523,7 +659,8 @@ md_run(void)
+ 	if ((id & 0xffffu) != 0x17cbu) {
+ 		return 4;
+ 	}
+-	return md.stage >= 4 ? md_bar0() : 0;
++	int r = md.stage >= 4 ? md_bar0() : 0;
++	return r == 0 && md.stage >= 5 ? md_sbl1() : r;
+ }
+ 
+ static void
+diff --git a/bsd/dev/sweet_wlan.c b/bsd/dev/sweet_wlan.c
+index 985c84a..3975f7c 100644
+--- a/bsd/dev/sweet_wlan.c
++++ b/bsd/dev/sweet_wlan.c
+@@ -368,8 +368,20 @@ sweet_fat_read_file(const char *part, const char *dir, const char *name, void *d
+ 		return ENOMEM;
+ 	}
+ 	err = fat_mount(v);
+-	if (!err && dir != NULL) {
+-		err = fat_find(v, 0, dir, &c, &sz);
++	/* dir may be a path ("image/sdx55m"): one component at a time */
++	for (const char *d = dir; !err && d != NULL && *d != '\0';) {
++		char comp[32];
++		size_t n = 0;
++		while (d[n] != '\0' && d[n] != '/' && n < sizeof(comp) - 1) {
++			comp[n] = d[n];
++			n++;
++		}
++		comp[n] = '\0';
++		err = fat_find(v, c, comp, &c, &sz);
++		d += n;
++		while (*d == '/') {
++			d++;
++		}
+ 	}
+ 	if (!err) {
+ 		err = fat_find(v, c, name, &f, &sz);
+-- 
+2.54.0 (Apple Git-157)
+

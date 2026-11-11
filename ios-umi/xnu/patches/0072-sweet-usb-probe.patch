@@ -1,0 +1,139 @@
+--- a/bsd/conf/files
++++ b/bsd/conf/files
+@@ -110,6 +110,7 @@
+ bsd/dev/sweet_touch.c			standard
+ bsd/dev/sweet_rpmh.c			standard
+ bsd/dev/sweet_spmi.c			standard
++bsd/dev/sweet_usb.c			standard
+ bsd/dev/mem.c				standard
+ bsd/dev/munge.c 			optional config_requires_u32_munging
+ bsd/dev/unix_startup.c			standard
+--- a/bsd/dev/sweet_ufs.c
++++ b/bsd/dev/sweet_ufs.c
+@@ -52,6 +52,7 @@
+ extern void sweet_sample_start(void);
+ extern void sweet_keys_init(void);
+ extern void sweet_touch_init(void);
++extern void sweet_usb_probe(void);
+ 
+ #define REG_CAP         0x00
+ #define REG_IS          0x20
+@@ -658,6 +659,7 @@
+ 	/* Input drivers (HID services in iokit/Kernel/arm/hid/SweetHID.cpp). */
+ 	sweet_keys_init();
+ 	sweet_touch_init();
++	sweet_usb_probe();
+ 	return 0;
+ }
+ 
+--- /dev/null
++++ b/bsd/dev/sweet_usb.c
+@@ -0,0 +1,108 @@
++/*
++ * SWEET: USB bring-up, step 1 - read-only state probe.
++ *
++ * The phone's USB is a Synopsys DWC3 (USB 2.0 only, maximum-speed
++ * high-speed) at 0x0a600000 behind Qualcomm's dwc-usb3-msm wrapper, with a
++ * QUSB2 PHY at 0x088e2000; its power domain is the USB30_PRIM GDSC and its
++ * clocks come from GCC (offsets from Linux gcc-sdmmagpie.c). ABL uses this
++ * controller for fastboot; this probe only reports what state it is left
++ * in after `fastboot boot`. It never writes a register, and it touches the
++ * DWC3 / PHY register blocks only when the GCC status registers say their
++ * power domain and clocks are on (an access to a gated block would hang).
++ */
++#if defined(ARM64_BOARD_CONFIG_SWEET)
++#include <sys/param.h>
++#include <sys/systm.h>
++#include <pexpert/pexpert.h>
++
++extern vm_offset_t ml_io_map(vm_offset_t, vm_size_t);
++void sweet_usb_probe(void);
++
++#define GCC_PA                  0x00100000
++#define GCC_SIZE                0x00090000
++#define GCC_USB30_PRIM_GDSCR    0x0f004         /* bit 31: power on */
++#define CBCR_CLK_OFF            (1u << 31)
++
++static const struct {
++	const char *name;
++	uint32_t    off;
++} usb_cbcr[] = {
++	{ "master", 0x0f010 },
++	{ "sleep", 0x0f014 },
++	{ "utmi", 0x0f018 },
++	{ "cfg-noc-axi", 0x0502c },
++	{ "aggre-axi", 0x8201c },
++	{ "ahb2phy", 0x6a004 },
++	{ "clkref", 0x8c010 },
++};
++
++#define DWC3_PA                 0x0a600000
++#define DWC3_SIZE               0x0000d000
++#define QUSB2_PA                0x088e2000
++#define QUSB2_SIZE              0x00000400
++
++static uint32_t
++usb_rd(vm_offset_t base, uint32_t off)
++{
++	uint32_t v = *(volatile uint32_t *)(base + off);
++	__asm__ volatile ("dmb oshld" ::: "memory");
++	return v;
++}
++
++void
++sweet_usb_probe(void)
++{
++	int enabled = 1;
++	uint32_t gdscr, cbcr[sizeof(usb_cbcr) / sizeof(usb_cbcr[0])];
++	bool clocks_on = true;
++
++	PE_parse_boot_argn("sweetusb", &enabled, sizeof(enabled));
++	if (!enabled) {
++		return;
++	}
++	vm_offset_t gcc = ml_io_map(GCC_PA, GCC_SIZE);
++	if (gcc == 0) {
++		printf("SWEET USB: GCC map failed\n");
++		return;
++	}
++	gdscr = usb_rd(gcc, GCC_USB30_PRIM_GDSCR);
++	printf("SWEET USB: GDSC usb30_prim 0x%08x (%s)\n", gdscr, (gdscr & (1u << 31)) ? "on" : "off");
++	for (unsigned i = 0; i < sizeof(usb_cbcr) / sizeof(usb_cbcr[0]); i++) {
++		cbcr[i] = usb_rd(gcc, usb_cbcr[i].off);
++		printf("SWEET USB: clk %-12s CBCR 0x%08x (%s)\n", usb_cbcr[i].name, cbcr[i],
++		    (cbcr[i] & CBCR_CLK_OFF) ? "off" : "on");
++	}
++	/* DWC3 registers need the GDSC, the master clock and the config-NoC path. */
++	clocks_on = (gdscr & (1u << 31)) && !(cbcr[0] & CBCR_CLK_OFF) && !(cbcr[3] & CBCR_CLK_OFF);
++	if (!clocks_on) {
++		printf("SWEET USB: controller unpowered or unclocked; DWC3 not read\n");
++		return;
++	}
++	vm_offset_t dwc = ml_io_map(DWC3_PA, DWC3_SIZE);
++	if (dwc == 0) {
++		printf("SWEET USB: DWC3 map failed\n");
++		return;
++	}
++	printf("SWEET USB: DWC3 GSNPSID 0x%08x GCTL 0x%08x GSTS 0x%08x GUSB2PHYCFG 0x%08x\n",
++	    usb_rd(dwc, 0xc120), usb_rd(dwc, 0xc110), usb_rd(dwc, 0xc118), usb_rd(dwc, 0xc200));
++	printf("SWEET USB: DWC3 DCFG 0x%08x DCTL 0x%08x DEVTEN 0x%08x DSTS 0x%08x DALEPENA 0x%08x\n",
++	    usb_rd(dwc, 0xc700), usb_rd(dwc, 0xc704), usb_rd(dwc, 0xc708), usb_rd(dwc, 0xc70c),
++	    usb_rd(dwc, 0xc720));
++	printf("SWEET USB: DWC3 GEVNTADR 0x%08x%08x GEVNTSIZ 0x%08x GEVNTCOUNT 0x%08x GHWPARAMS0 0x%08x\n",
++	    usb_rd(dwc, 0xc404), usb_rd(dwc, 0xc400), usb_rd(dwc, 0xc408), usb_rd(dwc, 0xc40c),
++	    usb_rd(dwc, 0xc140));
++	if (cbcr[5] & CBCR_CLK_OFF) {
++		printf("SWEET USB: ahb2phy clock off; QUSB2 PHY not read\n");
++		return;
++	}
++	vm_offset_t phy = ml_io_map(QUSB2_PA, QUSB2_SIZE);
++	if (phy == 0) {
++		return;
++	}
++	/* DT qcom,qusb-phy-reg-offset order (Linux phy-msm-qusb-v2.c): PORT_TUNE1 0x240,
++	 * PLL_COMMON_STATUS_ONE 0x1a0, PWR_CTRL1 0x210, INTR_CTRL 0x230,
++	 * PLL_CORE_INPUT_OVERRIDE 0x0a8, TEST1 0x254. */
++	printf("SWEET USB: QUSB2 PLL_STATUS 0x%08x PWR_CTRL1 0x%08x PORT_TUNE1 0x%08x TEST1 0x%08x\n",
++	    usb_rd(phy, 0x1a0), usb_rd(phy, 0x210), usb_rd(phy, 0x240), usb_rd(phy, 0x254));
++}
++#endif /* ARM64_BOARD_CONFIG_SWEET */
