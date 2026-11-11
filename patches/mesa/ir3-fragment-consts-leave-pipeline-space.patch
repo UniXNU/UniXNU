@@ -1,0 +1,21 @@
+diff --git a/src/freedreno/ir3/ir3_shader.h b/src/freedreno/ir3/ir3_shader.h
+--- a/src/freedreno/ir3/ir3_shader.h
++++ b/src/freedreno/ir3/ir3_shader.h
+@@ -1161,7 +1161,16 @@
+    } else if (safe_constlen) {
+       return compiler->max_const_safe - safe_shared_consts_size;
+    } else if (v->type == MESA_SHADER_FRAGMENT) {
+-      return compiler->max_const_frag - shared_consts_size;
++      /* Where a fragment shader may fill the whole pipeline's const space
++       * (max_const_frag == max_const_pipeline), a large one does, with pushed
++       * UBO ranges and its preamble: any const of another stage then makes
++       * ir3_trim_constlen swap it for its safe_constlen variant, which reads
++       * its uniforms from memory. Leave the other stages the share a safe
++       * variant would leave them.
++       */
++      uint32_t others = compiler->max_const_frag == compiler->max_const_pipeline ?
++         compiler->max_const_safe - safe_shared_consts_size : 0;
++      return compiler->max_const_frag - shared_consts_size - others;
+    } else {
+       return compiler->max_const_geom - shared_consts_size_geom;
+    }

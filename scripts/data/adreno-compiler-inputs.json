@@ -63,7 +63,8 @@
     "patches/mesa/turnip-thread-render-mode.patch",
     "patches/mesa/turnip-gmem-memory-side-swap.patch",
     "patches/mesa/turnip-darwin-submit-cuts.patch",
-    "patches/mesa/turnip-render-mode-turns.patch"
+    "patches/mesa/turnip-render-mode-turns.patch",
+    "patches/mesa/ir3-fragment-consts-leave-pipeline-space.patch"
   ],
   "integer_fma_reference": {
     "repository": "https://github.com/ucb-bar/berkeley-softfloat-3",
