@@ -1,0 +1,34 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -1664,6 +1664,15 @@
+    else
+       *suspend_count = reply.suspends;
+    return 0;
++}
++
++/* Submissions of this process's devices the kernel ended at a hang or a fault (darwin_device_check_status). */
++static uint32_t darwin_restarts;
++extern "C" __attribute__((visibility("default"))) uint32_t tu_darwin_restarts(void);
++extern "C" __attribute__((visibility("default"))) uint32_t
++tu_darwin_restarts(void)
++{
++   return p_atomic_read(&darwin_restarts);
+ }
+ 
+ static VkResult
+@@ -1676,8 +1685,13 @@
+    if (kr != KERN_SUCCESS)
+       return vk_device_set_lost(&device->vk, "error getting GPU status: 0x%x", kr);
+    if (reply.faults != device->fault_count) {
++      /* The kernel ended a submission of this device (a hang or a fault): it retired that submission, restarted the GPU and
++       * replayed every other one. The device's memory, pipelines and queues are as they were, so the device is not lost: a
++       * Metal device keeps its resources across a GPU restart and only the command buffer in flight ends with an error, and a
++       * render server cannot make its resources again. The count is kept for the frontend's telemetry (tu_darwin_restarts).
++       */
++      p_atomic_add(&darwin_restarts, (uint32_t)(reply.faults - device->fault_count));
+       device->fault_count = reply.faults;
+-      return vk_device_set_lost(&device->vk, "GPU faulted or hung");
+    }
+    return VK_SUCCESS;
+ }
