@@ -6,7 +6,7 @@
 
 Xiaomi Pad 8 Pro \(piano, SM8750\) boots iPadOS 17.7.11 from RAM through a Mu-Silicium based UEFI, using the SM8750 support and the board-owned storage, PMGR and firmware integration. Not booted on the device yet.
 
-Source record: [porting.toml](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/porting.toml), `167776dc0cbee63c190abbbf0a556981ac8aaba1`.
+Source record: [porting.toml](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/porting.toml), `f37b9f3866df66105c93483df2551e528b61836a`.
 
 This page is generated from the device record.
 
@@ -70,9 +70,9 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [candidate pass, ShengPlatformPower.cpp staging and the fixed kernelcache path for the PMGR audit; the prep step also applies patches/uefi/piano-dsc-unixnulib.patch and patches/uefi/piano-start-unixnu.patch, patches/uefi/bootshim-image-size.patch and patches/uefi/mu-sec-entry-arg.patch \(the last two against uefi/deps/Mu-Silicium, because that checkout and its BootShim and SEC sources only exist after tools/setup-deps.sh\), and patches/unixnu-bootimg-text-offset.patch against the pinned UniXNU checkout, applies patches/uefi/piano-usb-diagnostics.patch for the USB bring-up trace, and runs scripts/prepare-unixnu-diagnostics.py on its UniXNULib/Config.c](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/.github/workflows/package-bare-metal.yml)
-- `source`: [bootstrap selection: identical to piano\_defconfig except CONFIG\_XNU\_SHENG\_PMGR](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/configs/piano_bootstrap_defconfig)
-- `source`: [board identity, component selection, \[kernel\].archives and \[package\].unixnu the packaging workflow consumes](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/board.toml)
+- `source`: [candidate pass, ShengPlatformPower.cpp staging and the fixed kernelcache path for the PMGR audit; the prep step also applies patches/uefi/piano-dsc-unixnulib.patch and patches/uefi/piano-fastboot-payload.patch, patches/uefi/bootshim-image-size.patch and patches/uefi/mu-sec-entry-arg.patch \(the last two against uefi/deps/Mu-Silicium, because that checkout and its BootShim and SEC sources only exist after tools/setup-deps.sh\), and patches/unixnu-bootimg-text-offset.patch against the pinned UniXNU checkout \(the last one also carries the USB bring-up trace and the payload channel\), and runs scripts/prepare-unixnu-diagnostics.py on its UniXNULib/Config.c](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/.github/workflows/package-bare-metal.yml)
+- `source`: [bootstrap selection: identical to piano\_defconfig except CONFIG\_XNU\_SHENG\_PMGR](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/configs/piano_bootstrap_defconfig)
+- `source`: [board identity, component selection, \[kernel\].archives and \[package\].unixnu the packaging workflow consumes](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -99,7 +99,7 @@ This page is generated from the device record.
 - The firmware volume failed with error 4000 \('Instance of library class \[UniXNULib\] is not found for module ... UniXNU.inf'\) because pianoPkg/piano.dsc had no LibraryClasses mapping for UniXNULib; the patch adds it.
 - ENABLE\_SECUREBOOT defined empty made '\#if ENABLE\_SECUREBOOT == 1' an invalid token; the DSC now defines it as 0.
 - The firmware packages list needs drivers/DarwinBoot rather than the older PaganiDarwinBoot path.
-- PianoFastbootStart prints only one line per outcome and the boot manager clears the screen when it draws, so the 'piano-uefi' fastboot interface was never observable: OTG showed nothing but the two root hubs. The patch prints the UsbDevice protocol and StartEx results and holds each line for two seconds, and it retries both the protocol lookup \(10 x 200 ms\) and StartEx \(5 x 300 ms\) instead of losing the race against the asynchronous controller bring-up. PmicDxe stays disabled: its SPMI channel 690 access faults because ABL no longer grants that channel to the apps execution environment, and the fault is what the vendor comment records. UFS still enumerates, so the protocols the storage path needs are provided by the unconditionally loaded charger and platform drivers; a StartEx failure would point at the rails rather than at a missing protocol.
+- The payload cannot travel in the boot image: a vendor ABL refuses the 160 MiB ramdisk \(oem debuglog shows UNIXNURAMDISK publishing the stale 38.9 MB Android initrd the device tree still names\), and vendor\_boot is only 96 MiB, so neither field fits a 125 MB kernel. The fastboot path carries it instead: FB\_MAX\_DOWNLOAD rises to 256 MiB, 'oem ramdisk' publishes the staged bytes as a read-only BlockIo volume for the FAT driver, and DeviceBootManagerAfterConsole waits up to 20 s for that volume before UniXNU scans the volumes once. The patch also keeps the fastboot bring-up trace: the UsbDevice protocol and StartEx results are printed and held, and both are retried \(10 x 200 ms and 5 x 300 ms\). PmicDxe stays disabled: its SPMI channel 690 access faults because ABL no longer grants that channel to the apps execution environment, and the fault is what the vendor comment records. UFS still enumerates, so the protocols the storage path needs are provided by the unconditionally loaded charger and platform drivers; a StartEx failure would point at the rails rather than at a missing protocol.
 - The stock boot manager never started UniXNU.efi: DeviceBootManagerAfterConsole ran PianoDtbInstall, PianoFastbootStart, StartEspLoader and StartFvApp\(AndroidBoot\), so the menu built into the firmware volume was unreachable. The first patch added a StartFvApp call with UniXNU's FILE\_GUID; the board then booted UEFI all the way to the console and dropped into the UEFI Shell instead of the menu, because StartFvApp built its device path from DevicePathFromHandle\(LoadedImage-&gt;DeviceHandle\), which inside BDS does not carry a usable firmware volume path, so EfiBootManagerBoot failed silently. StartFvApp now reads the PE32 section with GetSectionFromAnyFv and calls LoadImage/StartImage itself, and prints each outcome on the console so the next boot states whether the image is in a volume, failed to load, or returned.
 
 ### Completion criteria
@@ -116,9 +116,9 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [reports the USB device protocol lookup and StartEx result on the console, each held for two seconds, so the piano-uefi fastboot bring-up can be diagnosed without a serial port](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/piano-usb-diagnostics.patch)
-- `source`: [starts UniXNU.efi from the firmware volume before the ESP loader and AndroidBoot fallbacks, and loads it with GetSectionFromAnyFv plus LoadImage/StartImage instead of a device path built from the BDS loaded image, printing each outcome on the console; the patch names uefi/uefi/pianoPkg/Library/DeviceBootManagerLib/DeviceBootManager.c because the UEFI repository carries its own uefi/ directory and prep applies it from the workspace root](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/piano-start-unixnu.patch)
-- `source`: [adds the UniXNULib LibraryClasses mapping that fixes the error 4000 firmware build failure](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/piano-dsc-unixnulib.patch)
+- `source`: [reports the USB device protocol lookup and StartEx result on the console, each held for two seconds, so the piano-uefi fastboot bring-up can be diagnosed without a serial port](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/piano-fastboot-payload.patch)
+- `source`: [starts UniXNU.efi from the firmware volume before the ESP loader and AndroidBoot fallbacks \(loading it with GetSectionFromAnyFv plus LoadImage/StartImage rather than a device path built from the BDS loaded image\), and carries the payload over USB instead of the boot image ramdisk: FB\_MAX\_DOWNLOAD rises to 256 MiB, oem ramdisk publishes the staged bytes as a read-only BlockIo volume, and the boot manager waits up to 20 s for it before UniXNU scans the volumes](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/piano-fastboot-payload.patch)
+- `source`: [adds the UniXNULib LibraryClasses mapping that fixes the error 4000 firmware build failure](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/piano-dsc-unixnulib.patch)
 
 ## CPU and interrupts {#cpu}
 
@@ -159,7 +159,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [ArmCpu, ArmDTPlatform, native arch timer and DT panic region selections](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/configs/piano_defconfig)
+- `source`: [ArmCpu, ArmDTPlatform, native arch timer and DT panic region selections](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/configs/piano_defconfig)
 
 ## Memory and DMA {#memory}
 
@@ -242,8 +242,8 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [extracts and signs the verified-root policies from the two iPadOS DMG inputs](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/scripts/prepare-ufs-policies.py)
-- `source`: [storage selections and archive paths the kernel links](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/configs/piano_defconfig)
+- `source`: [extracts and signs the verified-root policies from the two iPadOS DMG inputs](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/scripts/prepare-ufs-policies.py)
+- `source`: [storage selections and archive paths the kernel links](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/configs/piano_defconfig)
 
 ## Display {#display}
 
@@ -284,7 +284,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [GOP selection, display scale and rotation, and the offline-legacy-gop=1 argument](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/board.toml)
+- `source`: [GOP selection, display scale and rotation, and the offline-legacy-gop=1 argument](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/board.toml)
 
 ## Input {#input}
 
@@ -472,8 +472,8 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [guarded PMGR provider that inherits only the original AON slots](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/package/ShengPlatformPower.cpp)
-- `source`: [candidate-backed audit, original bindings and late registration of the PMGR archive](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/scripts/build-sheng-platform-power.py)
+- `source`: [guarded PMGR provider that inherits only the original AON slots](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/package/ShengPlatformPower.cpp)
+- `source`: [candidate-backed audit, original bindings and late registration of the PMGR archive](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/scripts/build-sheng-platform-power.py)
 
 ## Image assembly {#packaging}
 
@@ -517,13 +517,13 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [prelink tool, kernel path, slide, roots and the boot image partition geometry](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/board.toml)
-- `source`: [kernel, package, firmware and payload steps pass on run 42812944686 \(head 0c76f70\); the payload step emits payload/payload.img at 160 MiB and the hardware device tree at device-tree/hardware.dtb, and the boot image step takes both --uefi and --dtb because it compiles BootShim, runs the Mu-Silicium mkbootimg.py and embeds the device tree in the image header](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/.github/workflows/package-bare-metal.yml)
-- `source`: [bootimg rejected run 42816650617 with 'the ARM64 image header does not describe the shim plus the firmware volume': the pinned Mu-Silicium writes FD\_SIZE alone into the image\_size field \(0x300000\), while bootimg requires len\(shim\) + FD\_SIZE \(0x300070\). The patch sets the field to 'FD\_SIZE + \_Payload - \_Head'. It also writes 0 into the text\_offset field instead of FD\_BASE, because piano's ABL reads text\_offset as a displacement from the load address: the absolute 0xA7100000 made it place the image outside its reservation and the tablet returned to fastboot with a black screen after 'Booting OKAY'. The stock piano kernel reports text\_offset 0x0; an aarch64-none-elf build of the patched shim gives 112 shim bytes with \_Payload at 0x70, text\_offset 0x0 and image\_size 0x300070](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/bootshim-image-size.patch)
-- `source`: [piano's DeviceBootManagerAfterConsole starts the ESP loader and AndroidBoot and never starts UniXNU.efi, so the menu the board builds into its own firmware volume is unreachable even when UEFI runs. The patch calls StartFvApp with UniXNU.efi's FILE\_GUID \(9B665204-A133-47A2-9396-9E2B370A4E25\) before the ESP and Android fallbacks](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/piano-start-unixnu.patch)
-- `source`: [Mu-Silicium SEC overwrites x0 before it reads it, so the device tree pointer the Android bootloader passes is lost; UniXNURamDiskDxe then reports 'no entry argument HOB' and never publishes the payload volume, which leaves the boot menu without an entry. The patch keeps x0 in x19 across the platform initialisation, passes it to SecEntry and builds the DAEE82E6-8090-4E72-BFB9-78C13CD4E359 HOB once the HOB list exists \(the same fix the marble port needed\)](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/uefi/mu-sec-entry-arg.patch)
-- `source`: [bootimg.py required text\_offset to equal FD\_BASE, which is the Mu-Silicium convention, while the ARM64 specification defines the field as a displacement from the load address and piano's ABL reads it that way \(its stock kernel reports 0\). The shim now writes 0, so the patch accepts 0 or the firmware base and keeps the image-size check strict](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/unixnu-bootimg-text-offset.patch)
-- `source`: [\[bootimg.image\] kernel\_compression = none follows uefi/piano.toml \[boot\_image\_kernel\] kernel\_compression = none; without it bootimg falls back to its gzip default for a board that asks for an uncompressed kernel field](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/board.toml)
+- `source`: [prelink tool, kernel path, slide, roots and the boot image partition geometry](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/board.toml)
+- `source`: [kernel, package, firmware and payload steps pass on run 42812944686 \(head 0c76f70\); the payload step emits payload/payload.img at 160 MiB and the hardware device tree at device-tree/hardware.dtb, and the boot image step takes both --uefi and --dtb because it compiles BootShim, runs the Mu-Silicium mkbootimg.py and embeds the device tree in the image header](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/.github/workflows/package-bare-metal.yml)
+- `source`: [bootimg rejected run 42816650617 with 'the ARM64 image header does not describe the shim plus the firmware volume': the pinned Mu-Silicium writes FD\_SIZE alone into the image\_size field \(0x300000\), while bootimg requires len\(shim\) + FD\_SIZE \(0x300070\). The patch sets the field to 'FD\_SIZE + \_Payload - \_Head'. It also writes 0 into the text\_offset field instead of FD\_BASE, because piano's ABL reads text\_offset as a displacement from the load address: the absolute 0xA7100000 made it place the image outside its reservation and the tablet returned to fastboot with a black screen after 'Booting OKAY'. The stock piano kernel reports text\_offset 0x0; an aarch64-none-elf build of the patched shim gives 112 shim bytes with \_Payload at 0x70, text\_offset 0x0 and image\_size 0x300070](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/bootshim-image-size.patch)
+- `source`: [piano's DeviceBootManagerAfterConsole starts the ESP loader and AndroidBoot and never started UniXNU.efi, so the menu the board builds into its own firmware volume was unreachable; the patch calls StartFvApp with UniXNU.efi's FILE\_GUID \(9B665204-A133-47A2-9396-9E2B370A4E25\) before the ESP and Android fallbacks](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/piano-fastboot-payload.patch)
+- `source`: [Mu-Silicium SEC overwrites x0 before it reads it, so the device tree pointer the Android bootloader passes is lost; UniXNURamDiskDxe then reports 'no entry argument HOB' and never publishes the payload volume, which leaves the boot menu without an entry. The patch keeps x0 in x19 across the platform initialisation, passes it to SecEntry and builds the DAEE82E6-8090-4E72-BFB9-78C13CD4E359 HOB once the HOB list exists \(the same fix the marble port needed\)](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/uefi/mu-sec-entry-arg.patch)
+- `source`: [bootimg.py required text\_offset to equal FD\_BASE, which is the Mu-Silicium convention, while the ARM64 specification defines the field as a displacement from the load address and piano's ABL reads it that way \(its stock kernel reports 0\). The shim now writes 0, so the patch accepts 0 or the firmware base and keeps the image-size check strict](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/unixnu-bootimg-text-offset.patch)
+- `source`: [\[bootimg.image\] kernel\_compression = none follows uefi/piano.toml \[boot\_image\_kernel\] kernel\_compression = none; without it bootimg falls back to its gzip default for a board that asks for an uncompressed kernel field](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/board.toml)
 
 ## Diagnostics {#diagnostics}
 
@@ -565,7 +565,7 @@ Components: `VerifiedRoot`, `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [makes the built-in fallback message report whether the payload volume is reachable, so a board without a serial console can be diagnosed from the menu alone](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/scripts/prepare-unixnu-diagnostics.py)
-- `source`: [early boot progress and panic output patches applied to the XNU tree](https://github.com/donyanchen/UniXNU-piano/blob/167776dc0cbee63c190abbbf0a556981ac8aaba1/patches/xnu/series)
+- `source`: [makes the built-in fallback message report whether the payload volume is reachable, so a board without a serial console can be diagnosed from the menu alone](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/scripts/prepare-unixnu-diagnostics.py)
+- `source`: [early boot progress and panic output patches applied to the XNU tree](https://github.com/donyanchen/UniXNU-piano/blob/f37b9f3866df66105c93483df2551e528b61836a/patches/xnu/series)
 
 </div>

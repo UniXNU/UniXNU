@@ -6,7 +6,7 @@
 
 Xiaomi 14 Pro \(23116PN5BC\)。UEFI 菜单稳定（v6）；iPadOS 17.7.11 供体上 XNU 走到 vfs\_mountroot、UFS/SMMU/GPT/SHNGROOT 根卷已真机验证。当前供体 iPhone17,1 iOS 27.0.1（arm64e，XNU 12377.121.6）卡在开 MMU 之前的 trampoline 窗口，持久日志与实机镜像重建见 docs/agent-progress.md。
 
-Source record: [porting.toml](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/porting.toml), `d1e65d37e586b744578444e0a3b318606d9019f9`.
+Source record: [porting.toml](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/porting.toml), `06e6620154860cf388f302e76d41718dfade1489`.
 
 This page is generated from the device record.
 
@@ -70,7 +70,7 @@ Components: `ArmDTPlatform`, `XnuPrelink`.
 
 ### Evidence
 
-- `host`: [CI 解析 board.toml、选入全部组件并产出 kernel.macho 与 payload.img](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `host`: [CI 解析 board.toml、选入全部组件并产出 kernel.macho 与 payload.img](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>Actions kernel run 42003983808</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Firmware and boot {#firmware}
@@ -112,7 +112,7 @@ Components: `ArmDTPlatform`, `XnuPrelink`.
 
 ### Evidence
 
-- `device`: [UEFI v6 菜单稳定显示 10 秒，logo 清晰](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/bringup.md)
+- `device`: [UEFI v6 菜单稳定显示 10 秒，logo 清晰](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/bringup.md)
   Command: <code>fastboot boot Mu-shennong-6-pmgr2.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## CPU and interrupts {#cpu}
@@ -155,7 +155,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [换板级 ADT 后 XNU 越过 AppleARMCPU 并停在 vfs\_mountroot](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/STAGE-C-2026-11-04.md)
+- `device`: [换板级 ADT 后 XNU 越过 AppleARMCPU 并停在 vfs\_mountroot](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/STAGE-C-2026-11-04.md)
   Command: <code>fastboot boot Mu-plain.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Memory and DMA {#memory}
@@ -196,7 +196,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `device`: [接管 SMMU bank 后 UFS 能读出根卷；panic 屏内存计数正常](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [接管 SMMU bank 后 UFS 能读出根卷；panic 屏内存计数正常](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-ufsr12b.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Storage and root {#storage}
@@ -245,9 +245,9 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `device`: [根卷可读：magic=474e4853 544f4f52、manifest status=0 windows=2](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [根卷可读：magic=474e4853 544f4f52、manifest status=0 windows=2](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-ufsr12b.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
-- `device`: [两个根窗口发布为 IOMedia：published=2 reads=142 failures=0 media=7，UUID 与策略一致](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [两个根窗口发布为 IOMedia：published=2 reads=142 failures=0 media=7，UUID 与策略一致](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-policy12.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Display {#display}
@@ -286,7 +286,7 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `device`: [诊断屏可读：stage、HC/SMMU/GPT 字段与 frames 均正常显示](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [诊断屏可读：stage、HC/SMMU/GPT 字段与 frames 均正常显示](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-ufsr12.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Input {#input}
@@ -507,9 +507,9 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `host`: [CI 构建成功：kernel 与 payload 产物 41,973,584 字节](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `host`: [CI 构建成功：kernel 与 payload 产物 41,973,584 字节](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>Actions kernel run 42003983808</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
-- `device`: [重打包的 boot image 被 bootloader 接受并启动](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [重打包的 boot image 被 bootloader 接受并启动](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-policy12.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 ## Diagnostics {#diagnostics}
@@ -550,7 +550,7 @@ Components: `BootProgress`.
 
 ### Evidence
 
-- `device`: [probe=12 报告 stage、HC/SMMU/GPT/WINDOWS 字段与 pubPhase](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/d1e65d37e586b744578444e0a3b318606d9019f9/docs/handoff/UFS-E3-2026-11-05.md)
+- `device`: [probe=12 报告 stage、HC/SMMU/GPT/WINDOWS 字段与 pubPhase](https://github.com/YX2748198202-lab/UniXNU-shennong/blob/06e6620154860cf388f302e76d41718dfade1489/docs/handoff/UFS-E3-2026-11-05.md)
   Command: <code>fastboot boot Mu-ufsr12.img</code>. Revision: `14eaf555283f05334555ca596c56d32069156f3e`.
 
 </div>

@@ -42,7 +42,7 @@
 | [Redmi 9A](/zh/devices/models/dandelion) | dandelion | MT6765 | 1 |
 | [Huawei MatePad 11](/zh/devices/models/dby-w09) | dby-w09 | SM8250 | 1 |
 | [小米 8](/zh/devices/models/dipper) | dipper | SDM845 | 1 |
-| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/zh/devices/models/diting) | diting | SM8475 | 1 |
+| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/zh/devices/models/diting) | diting | SM8475 | 2 |
 | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/zh/devices/models/dizi) | dizi | SM7435 | 1 |
 | [DroidVM 客户机（Gunyah 上的 crosvm）](/zh/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
 | [OnePlus 5T](/zh/devices/models/dumpling) | dumpling | MSM8998 | 1 |
@@ -137,12 +137,12 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 39 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 41 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
 | [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\), single-core platform bootstrap](/zh/devices/models/sm-t970) | sm-t970 | SM8250 | 1 |
-| [REDMI K100 Pro Max \(songyuan, SM8850 Canoe\)](/zh/devices/models/songyuan) | songyuan | SM8850 | 3 |
+| [REDMI K100 Pro Max \(songyuan, SM8850 Canoe\)](/zh/devices/models/songyuan) | songyuan | SM8850 | 4 |
 | [Samsung Galaxy S9 \(starlte, SM-G960F, Exynos 9810\): HakiOS, iOS 16.5 on XNU; not built on the UniXNU tree](/zh/devices/models/starlte) | starlte | Exynos 9810 | 1 |
 | [Redmi Note 10 Pro](/zh/devices/models/sweet) | sweet | SM7150 | 2 |
 | [Unisoc UMS512 / T610YP](/zh/devices/models/t610yp) | t610yp | unisoc-ums512-sharkl5pro-t610yp | 1 |

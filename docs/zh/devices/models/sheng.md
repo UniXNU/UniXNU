@@ -11,6 +11,7 @@
 | [ad1095445/UniXNU-sheng_bk](https://github.com/ad1095445/UniXNU-sheng_bk) | [Xiaomi Pad 6S Pro \(ad1095445\)](/zh/devices/sheng-ad1095445) | 适配记录 | SM8550 |
 | [airalex002/UniXNU-sheng](https://github.com/airalex002/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(airalex002\)](/zh/devices/sheng-airalex002) | 适配记录 | SM8550 |
 | [alghiffaryfa19/UniXNU-sheng](https://github.com/alghiffaryfa19/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(alghiffaryfa19\)](/zh/devices/sheng-alghiffaryfa19) | 适配记录 | SM8550 |
+| [Ason-74/UniXNU-sheng](https://github.com/Ason-74/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Ason-74\)](/zh/devices/sheng-ason-74) | 适配记录 | SM8550 |
 | [bai805/UniXNU-sheng](https://github.com/bai805/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(bai805\)](/zh/devices/sheng-bai805) | 适配记录 | SM8550 |
 | [chenjin1494/UniXNU-sheng](https://github.com/chenjin1494/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(chenjin1494\)](/zh/devices/sheng-chenjin1494) | 适配记录 | SM8550 |
 | [dlc16/UniXNU-sheng](https://github.com/dlc16/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(dlc16\)](/zh/devices/sheng-dlc16) | 适配记录 | SM8550 |
@@ -21,6 +22,7 @@
 | [gkxqh/UniXNU-sheng](https://github.com/gkxqh/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(gkxqh\)](/zh/devices/sheng-gkxqh) | 适配记录 | SM8550 |
 | [ht94911/UniXNU-sheng](https://github.com/ht94911/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(ht94911\)](/zh/devices/sheng-ht94911) | 适配记录 | SM8550 |
 | [hxzbaka/UniXNU-sheng](https://github.com/hxzbaka/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(hxzbaka\)](/zh/devices/sheng-hxzbaka) | 适配记录 | SM8550 |
+| [HYL0924/UniXNU-sheng](https://github.com/HYL0924/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(HYL0924\)](/zh/devices/sheng-hyl0924) | 适配记录 | SM8550 |
 | [jn7163/UniXNU-sheng](https://github.com/jn7163/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(jn7163\)](/zh/devices/sheng-jn7163) | 仓库链接 | SM8550 |
 | [jsongmax/UniXNU-sheng](https://github.com/jsongmax/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(jsongmax\)](/zh/devices/sheng-jsongmax) | 适配记录 | SM8550 |
 | [kkkpc/UniXNU-fuxi-xiaomi13-forked-bypass-sheng](https://github.com/kkkpc/UniXNU-fuxi-xiaomi13-forked-bypass-sheng) | [Xiaomi Pad 6S Pro \(kkkpc\)](/zh/devices/sheng-kkkpc) | 仓库链接 | SM8550 |
