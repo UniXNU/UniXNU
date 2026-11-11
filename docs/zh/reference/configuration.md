@@ -184,6 +184,8 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 | `owned_memory_size` | 字符串 | 连续窗口请求 |
 | `owned_memory_excluded_ranges` | 整数 | 排除区间表的大小；窗口可以跨越多段空闲内存。仅用于内核会读取该表的 OS 配置 |
 | `loader_inputs` | 布尔 | 预留记录，DarwinBoot 在其中报告载荷内存盘和 initrd 缓冲所在的位置 |
+| `owned_memory_outside_ranges` | 整数 | DarwinBoot 列出窗口之外空闲内存的表的大小。带有 `window-outside-memory-adoption.patch` 的内核会逐页试读后把它接管为普通 VM 内存；`memory-outside=0` 不接管 |
+| `owned_memory_outside_reserved` | 字符串数组 | 这部分内存中内核不得接管的 `"BASE:SIZE"` 区间：板级驱动在固定地址使用的内存 |
 | `root_match_volume_uuid` | 字符串 | 根卷 UUID |
 | `cpu_regs` | 字符串 | CPU MPIDR 值，逗号分隔 |
 | `psci_method` | 字符串 | `smc` 或 `hvc` |
