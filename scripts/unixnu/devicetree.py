@@ -335,12 +335,23 @@ def generate(dtb, config, *, unique_chip_id=None, data=False, trust=False, addon
     if options.get('loader_inputs'):
         chosen.append(('darwinboot-loader-inputs', bytes(64)))
     # A table DarwinBoot fills with the largest runs of free memory outside the window (a DRAM bank too far from it for the
-    # kernel's page array), for a driver that manages memory of its own.
+    # kernel's page array), for a kernel that adopts it as VM memory or a driver that manages memory of its own.
     if options.get('owned_memory_outside_ranges'):
         slots = int(str(options['owned_memory_outside_ranges']), 0)
         if not 1 <= slots <= 64:
             raise Error('Owned memory outside ranges: a table size of 1 to 64 ranges')
         chosen.append(('darwinboot-memory-outside', bytes(16 * slots)))
+        # Parts of those runs the kernel must leave alone although the firmware's map calls them free: memory a board driver
+        # uses at a fixed address. "BASE:SIZE" strings, whole 4 KiB pages.
+        reserved = b''
+        for item in options.get('owned_memory_outside_reserved', []):
+            base, _, size = str(item).partition(':')
+            base, size = int(base, 0), int(size, 0)
+            if base % 0x1000 or size % 0x1000 or not size:
+                raise Error(f'Owned memory outside reserved: {item} is not whole 4 KiB pages')
+            reserved += struct.pack('<QQ', base, size)
+        if reserved:
+            chosen.append(('darwinboot-memory-outside-kept', reserved))
     if options.get('root_match_volume_uuid'):
         volume = str(uuid.UUID(options['root_match_volume_uuid'])).upper()
         chosen.append(('root-matching', ('<dict><key>IOProviderClass</key><string>IOMedia</string>'
