@@ -1,0 +1,27 @@
+diff --git a/src/freedreno/vulkan/tu_frame_diagnostic.h b/src/freedreno/vulkan/tu_frame_diagnostic.h
+--- a/src/freedreno/vulkan/tu_frame_diagnostic.h
++++ b/src/freedreno/vulkan/tu_frame_diagnostic.h
+@@ -18,16 +18,21 @@
+    (void)tu_darwin_frame_diagnostic(0x7102,&rec,sizeof(rec));
+ }
+ /* Boot-arg tum=g renders every pass that can in GMEM, tum=s every pass in system memory (transient attachments too):
+- * the colour runs of the GMEM swap check, set by the boot so their command lines stay short. 0 when absent. */
++ * the colour runs of the GMEM swap check, set by the boot so their command lines stay short. 0 when absent. tum=a takes turns of
++ * eight seconds: Turnip's own choice, then GMEM wherever the pass can, so one boot's pass records (their mode and GPU times) hold
++ * both ways of rendering the same passes. */
+ #include <sys/sysctl.h>
++#include <time.h>
+ static inline char tu_sheng_render_mode() {
+    static char mode = 1;
+    if (mode == 1) {
+       char args[1100] = {};
+       size_t size = sizeof args - 1;
+       const char *at = sysctlbyname("kern.bootargs", args, &size, nullptr, 0) == 0 ? args : nullptr;
+-      while (at && (at = strstr(at, "tum=")) && at != args && at[-1] != ' ') at += 4; mode = at && (at[4] == 'g' || at[4] == 's') ? at[4] : 0;
++      while (at && (at = strstr(at, "tum=")) && at != args && at[-1] != ' ') at += 4; mode = at && (at[4] == 'g' || at[4] == 's' || at[4] == 'a') ? at[4] : 0;
+    }
++   if (mode == 'a')
++      return (clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 8000000000ull) & 1 ? 'g' : 0;
+    return mode;
+ }
+ #else
