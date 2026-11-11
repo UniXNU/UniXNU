@@ -274,7 +274,7 @@ new file mode 100644
 index 0000000..b03c6ee
 --- /dev/null
 +++ b/src/freedreno/vulkan/tu_knl_darwin.cc
-@@ -0,0 +1,1609 @@
+@@ -0,0 +1,1622 @@
 +/*
 + * Native Darwin kernel backend for Turnip: talks to the NativeAdreno IOKit user client (NativeAdrenoABI.h, version 1).
 + * Modelled on tu_knl_kgsl.cc (no libdrm) and tu_knl_drm_msm.cc (the client chooses GPU addresses).
@@ -377,6 +377,22 @@ index 0000000..b03c6ee
 +   uint64_t used;   /* bytes handed out */
 +};
 +
++/* One allocator for the process: every device of the process maps through the one kernel connection (dw.conn), whose
++ * window of GPU addresses they share. A device of its own allocator handed out the window's first addresses again while
++ * another device's mappings lay there: the kernel refused the map, and the cleanup lost the device. A range a destroyed
++ * device never freed stays taken. */
++static struct darwin_va darwin_process_va;
++static pthread_mutex_t darwin_process_va_lock = PTHREAD_MUTEX_INITIALIZER;
++
++static uint64_t
++darwin_va_holes(void)
++{
++   pthread_mutex_lock(&darwin_process_va_lock);
++   const uint64_t holes = darwin_process_va.holes;
++   pthread_mutex_unlock(&darwin_process_va_lock);
++   return holes;
++}
++
 +struct darwin_retire_state {
 +   pthread_mutex_t lock;
 +   struct darwin_retired_bo *entries;   /* a ring of `capacity` records, grown when full */
@@ -388,7 +404,6 @@ index 0000000..b03c6ee
 +   uint64_t cache_bytes, cache_stamp, cache_cleaned_s;
 +   uint32_t pressure_seen;
 +   struct darwin_bo_cache_stats cache_stats;
-+   struct darwin_va va;
 +};
 +static struct darwin_retire_state *darwin_stats_state;   /* for tu_darwin_bo_cache_stats */
 +
@@ -408,7 +423,7 @@ index 0000000..b03c6ee
 +   out[4] = retire->cache_stats.flushes;
 +   out[5] = retire->cache_bytes;
 +   out[6] = retire->cache_stats.bytes_peak;
-+   out[7] = retire->va.holes;
++   out[7] = darwin_va_holes();
 +   pthread_mutex_unlock(&retire->lock);
 +}
 +
@@ -731,11 +746,11 @@ index 0000000..b03c6ee
 +darwin_allocate_iova(struct tu_device *dev, uint64_t size, uint64_t client_iova,
 +                     enum tu_bo_alloc_flags flags, uint64_t *iova)
 +{
-+   struct darwin_va *va = &((struct darwin_retire_state *)dev->darwin_retire)->va;
++   struct darwin_va *va = &darwin_process_va;
 +   *iova = 0;
-+   mtx_lock(&dev->vma_mutex);
++   pthread_mutex_lock(&darwin_process_va_lock);
 +   if (!va->seeded) {
-+      /* Nothing else allocates from the heap the device made: the whole range is free. */
++      /* The first device of the process: the whole range is free. */
 +      va->seeded = true;
 +      darwin_va_add(va, dev->physical_device->va_start, dev->physical_device->va_size);
 +   }
@@ -744,7 +759,7 @@ index 0000000..b03c6ee
 +         if (darwin_va_alloc_at(va, client_iova, size))
 +            *iova = client_iova;
 +         else {
-+            mtx_unlock(&dev->vma_mutex);
++            pthread_mutex_unlock(&darwin_process_va_lock);
 +            return VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS;
 +         }
 +      } else {
@@ -753,17 +768,17 @@ index 0000000..b03c6ee
 +   } else {
 +      *iova = darwin_va_alloc(va, size, os_page_size, false);
 +   }
-+   mtx_unlock(&dev->vma_mutex);
++   pthread_mutex_unlock(&darwin_process_va_lock);
 +   return *iova ? VK_SUCCESS : VK_ERROR_OUT_OF_DEVICE_MEMORY;
 +}
 +
 +static void
 +darwin_free_iova(struct tu_device *dev, uint64_t iova, uint64_t size)
 +{
-+   struct darwin_va *va = &((struct darwin_retire_state *)dev->darwin_retire)->va;
-+   mtx_lock(&dev->vma_mutex);
-+   darwin_va_free(va, iova, size);
-+   mtx_unlock(&dev->vma_mutex);
++   (void)dev;
++   pthread_mutex_lock(&darwin_process_va_lock);
++   darwin_va_free(&darwin_process_va, iova, size);
++   pthread_mutex_unlock(&darwin_process_va_lock);
 +}
 +
 +/* Hands the CPU lease, the kernel allocation and the GPU range of a BO back. VK_NOT_READY: the kernel still holds it (retry later);
@@ -814,7 +829,7 @@ index 0000000..b03c6ee
 +           (unsigned long long)st->lookups, (unsigned long long)st->hits, (unsigned long long)(st->hits * 100 / st->lookups),
 +           (unsigned long long)(st->hits * 1000 / st->lookups % 10), (unsigned long long)retire->cache_count,
 +           (unsigned long long)(retire->cache_bytes >> 20), (unsigned long long)st->evictions, (unsigned long long)st->flushes,
-+           (unsigned long long)retire->va.holes);
++           (unsigned long long)darwin_va_holes());
 +}
 +
 +/* Drops the cache entry at the index for real. VK_NOT_READY keeps it. */
@@ -1693,8 +1708,6 @@ index 0000000..b03c6ee
 +      if (retire->cache_stats.lookups)
 +         darwin_cache_log(retire);
 +      darwin_stats_state = NULL;
-+      rb_tree_foreach_safe(struct darwin_va_hole, hole, &retire->va.address, by_address)
-+         free(hole);
 +      pthread_mutex_destroy(&retire->lock);
 +      free(retire->entries);
 +      free(retire->cache);
