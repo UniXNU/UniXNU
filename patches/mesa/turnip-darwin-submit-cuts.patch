@@ -1,0 +1,167 @@
+diff --git a/src/freedreno/vulkan/tu_knl.cc b/src/freedreno/vulkan/tu_knl.cc
+--- a/src/freedreno/vulkan/tu_knl.cc
++++ b/src/freedreno/vulkan/tu_knl.cc
+@@ -319,6 +319,13 @@
+ }
+ 
+ void
++tu_submit_begin_command_buffer(struct tu_device *dev, void *submit)
++{
++   if (dev->instance->knl->submit_begin_command_buffer)
++      dev->instance->knl->submit_begin_command_buffer(dev, submit);
++}
++
++void
+ tu_submit_add_bind(struct tu_device *dev,
+                    void *_submit,
+                    struct tu_sparse_vma *vma, uint64_t vma_offset,
+diff --git a/src/freedreno/vulkan/tu_knl.h b/src/freedreno/vulkan/tu_knl.h
+--- a/src/freedreno/vulkan/tu_knl.h
++++ b/src/freedreno/vulkan/tu_knl.h
+@@ -167,6 +167,11 @@
+    void (*submit_add_entries)(struct tu_device *device, void *_submit,
+                               struct tu_cs_entry *entries,
+                               unsigned num_entries);
++   /* Optional: the entries added next open a command buffer that sets up its
++    * own command processor state (tu_init_hw), so a backend that has to cut a
++    * submission into several kernel submissions may cut before them.
++    */
++   void (*submit_begin_command_buffer)(struct tu_device *device, void *_submit);
+    void (*submit_add_bind)(struct tu_device *device,
+                            void *_submit,
+                            struct tu_sparse_vma *vma, uint64_t vma_offset,
+@@ -333,6 +338,9 @@
+                       unsigned num_entries);
+ 
+ void
++tu_submit_begin_command_buffer(struct tu_device *dev, void *submit);
++
++void
+ tu_submit_add_bind(struct tu_device *device,
+                    void *_submit,
+                    struct tu_sparse_vma *vma, uint64_t vma_offset,
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -1168,7 +1168,20 @@
+ 
+ struct tu_darwin_queue_submit {
+    struct util_dynarray commands; /* NativeAdrenoAbiSubmitBuffer */
++   struct util_dynarray starts;   /* uint32_t: the index in commands where a command buffer that sets up its own state begins */
+ };
++
++/* Submissions that took more than one kernel submission: [0] such submissions, [1] cuts made where a command buffer begins, [2] cuts
++ * made inside a command stream (no command buffer began within reach), [3] the most indirect buffers one submission had.
++ */
++static uint64_t darwin_split_counts[4];
++extern "C" __attribute__((visibility("default"))) void tu_darwin_split_stats(uint64_t out[4]);
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_split_stats(uint64_t out[4])
++{
++   for (unsigned i = 0; i < 4; i++)
++      out[i] = p_atomic_read(&darwin_split_counts[i]);
++}
+ 
+ static void *
+ darwin_submit_create(struct tu_device *device)
+@@ -1182,7 +1195,16 @@
+ {
+    struct tu_darwin_queue_submit *submit = (struct tu_darwin_queue_submit *)_submit;
+    util_dynarray_fini(&submit->commands);
++   util_dynarray_fini(&submit->starts);
+    vk_free(&device->vk.alloc, submit);
++}
++
++static void
++darwin_submit_begin_command_buffer(struct tu_device *device, void *_submit)
++{
++   struct tu_darwin_queue_submit *submit = (struct tu_darwin_queue_submit *)_submit;
++   const uint32_t at = util_dynarray_num_elements(&submit->commands, NativeAdrenoAbiSubmitBuffer);
++   util_dynarray_append(&submit->starts, at);
+ }
+ 
+ static void
+@@ -1397,7 +1419,7 @@
+    uint32_t call_us;       /* the kernel calls, ring-space waits included */
+    uint32_t space_wait_us; /* of call_us, waiting for ring space */
+    uint16_t busy;          /* kIOReturnBusy answers */
+-   uint8_t chunks;
++   uint8_t chunks;         /* kernel submissions; bit 7: one of the cuts fell inside a command stream */
+    uint8_t buffers;        /* indirect buffers in all chunks, 255 at most */
+ };
+ static_assert(sizeof(struct tu_darwin_submit_rec) == 32, "submit record");
+@@ -1502,8 +1524,34 @@
+    if (total) {
+       const NativeAdrenoAbiSubmitBuffer *all =
+          util_dynarray_element(&submit->commands, NativeAdrenoAbiSubmitBuffer, 0);
+-      for (unsigned at = 0; at < total; at += NativeAdrenoAbiMaxBuffers) {
+-         unsigned count = MIN2(total - at, (unsigned)NativeAdrenoAbiMaxBuffers);
++      bool inside = false;
++      if (total > darwin_split_counts[3])
++         p_atomic_set(&darwin_split_counts[3], total);
++      if (total > NativeAdrenoAbiMaxBuffers)
++         p_atomic_inc(&darwin_split_counts[0]);
++      for (unsigned at = 0, count = 0; at < total; at += count) {
++         count = MIN2(total - at, (unsigned)NativeAdrenoAbiMaxBuffers);
++         if (at + count < total) {
++            /* The kernel ends every submission with both threads selected and concurrent binning on, and starts the next one with a
++             * thread synchronization (NativeAdrenoRing's a7xx_submit framing). A command stream cut in two would run its second
++             * half in that state instead of the one its first half set (BR alone with concurrent binning off, or BV in a visibility
++             * pass): both threads would execute the rest of a pass. So the cut is made where a command buffer begins, the last such
++             * place within reach: tu_init_hw selects the threads again there, as at the start of any submission.
++             */
++            unsigned cut = 0;
++            util_dynarray_foreach (&submit->starts, uint32_t, start) {
++               if (*start > at && *start <= at + count)
++                  cut = *start;
++            }
++            if (cut) {
++               count = cut - at;
++               p_atomic_inc(&darwin_split_counts[1]);
++            } else {
++               /* One command buffer of more indirect buffers than a kernel submission takes: cut as before, and counted. */
++               inside = true;
++               p_atomic_inc(&darwin_split_counts[2]);
++            }
++         }
+          uint32_t chunk_fence = 0;
+          VkResult result = darwin_submit_chunk(queue, all + at, count, &chunk_fence, &rec);
+          if (result != VK_SUCCESS)
+@@ -1517,6 +1565,8 @@
+       }
+       p_atomic_set(&queue->fence, fence);
+       rec.buffers = MIN2(total, 255u);
++      if (inside)
++         rec.chunks |= 0x80;   /* a cut inside a command stream */
+    } else {
+       /* Nothing to run: the signals resolve with the last earlier submission. */
+       fence = p_atomic_read(&queue->fence) > 0 ? (uint32_t)p_atomic_read(&queue->fence) : 0;
+@@ -1687,6 +1737,7 @@
+    .submit_create = darwin_submit_create,
+    .submit_finish = darwin_submit_finish,
+    .submit_add_entries = darwin_submit_add_entries,
++   .submit_begin_command_buffer = darwin_submit_begin_command_buffer,
+    .submit_add_bind = darwin_submit_add_bind,
+    .queue_submit = darwin_queue_submit,
+    .queue_wait_fence = darwin_queue_wait_fence,
+diff --git a/src/freedreno/vulkan/tu_queue.cc b/src/freedreno/vulkan/tu_queue.cc
+--- a/src/freedreno/vulkan/tu_queue.cc
++++ b/src/freedreno/vulkan/tu_queue.cc
+@@ -480,6 +480,17 @@
+       tu_frame_event(42,(uintptr_t)submit,(uintptr_t)cmd_buffer,i,cmdbuf_count);
+       struct tu_cs *cs = &cmd_buffer->cs;
+ 
++      /* A primary command buffer the application began opens with tu_init_hw,
++       * which selects the threads and sets every register it relies on. The
++       * ones tu_insert_dynamic_cmdbufs adds for a suspended render pass
++       * continue the state of the command buffer before them.
++       */
++      if (cmd_buffer->vk.level == VK_COMMAND_BUFFER_LEVEL_PRIMARY &&
++          cmd_buffer->queue_family_index == TU_QUEUE_GENERAL &&
++          cmd_buffer->vk.pool !=
++             vk_command_pool_from_handle(device->dynamic_rendering_pool))
++         tu_submit_begin_command_buffer(device, submit);
++
+       if (perf_pass_index != ~0) {
+          struct tu_cs_entry *perf_cs_entry =
+             &cmd_buffer->device->perfcntrs_pass_cs_entries[perf_pass_index];

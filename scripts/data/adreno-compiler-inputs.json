@@ -61,7 +61,8 @@
     "patches/mesa/turnip-transient-attachments-in-gmem.patch",
     "patches/mesa/turnip-gmem-swap-trace.patch",
     "patches/mesa/turnip-thread-render-mode.patch",
-    "patches/mesa/turnip-gmem-memory-side-swap.patch"
+    "patches/mesa/turnip-gmem-memory-side-swap.patch",
+    "patches/mesa/turnip-darwin-submit-cuts.patch"
   ],
   "integer_fma_reference": {
     "repository": "https://github.com/ucb-bar/berkeley-softfloat-3",
