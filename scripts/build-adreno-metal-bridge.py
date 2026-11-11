@@ -25,70 +25,29 @@ if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     # Each stacks on the source the ones before it leave.
-    '0002-resource-wait-storage-dependencies.patch',
-    '0003-cache-device-entry-point-priming.patch', '0004-fold-constant-global-field-loads.patch',
+    '0002-resource-wait-storage-dependencies.patch', '0004-fold-constant-global-field-loads.patch',
     # A draw whose pipeline the driver refused binds nothing (int-170: tu_CmdBindPipeline in the render server).
     '0005-skip-draws-without-a-pipeline.patch',
-    # A batch's barrier globals on the stack, and the neutral resources' maps by the runtime's key hash.
-    '0006-batch-barriers-and-key-hash-neutral-maps.patch',
-    # From the DroidVM board's translator patches: a cache directory a sandboxed process may not write, and a patch function with no
-    # control points.
+    # A cache directory a sandboxed process may not write, and a patch function with no control points.
     '0007-optional-shader-cache-directory.patch', '0009-patch-with-no-control-points.patch',
-    # A two-plane surface's shadow starts as its memory lies; pooled blocks start at 4 MiB and grow (the render server alone held 1 GiB
-    # of wired memory).
-    '0011-two-plane-shadow-as-memory-lies.patch', '0013-growing-memory-blocks.patch',
-    # HostPageTexturePolicy::InPlaceWrites: textures over surfaces and padded buffers are images over their bytes, rendered and written
-    # too, where their tile stores stay within their rows, instead of shadows copied in and out every pass.
-    '0014-in-place-written-textures.patch', '0015-in-place-written-host-page-textures.patch',
+    # A two-plane surface's shadow starts as its memory lies.
+    '0011-two-plane-shadow-as-memory-lies.patch',
     # Device::refuse_rebinds: no call logs or per-command holds of no-copy buffers, which only a rebind or a detach reads.
     '0016-refuse-rebinds.patch',
-    # A heap texture's own-device answer rounded up to a multiple of its alignment, as Metal's answers are: a heap sized as the sum of
-    # its textures' answers then holds them (iconservicesagent's Core Image heaps ran out: OutOfMemory(Heap)).
+    # A heap texture's own-device answer rounded up to a multiple of its alignment, as Metal's answers are.
     '0017-heap-texture-size-a-multiple-of-its-alignment.patch',
-    # The runtime's live device memory in bytes by kind (pooled, placed, empty kept, dedicated, imported), for the frontend's MEM row.
-    '0018-memory-census-bytes.patch',
-    # The call stacks that allocated device memory of 4 MiB or more, by bytes, for the frontend's MA rows.
-    '0019-allocation-sites.patch',
-    # A written texture over host pages stays in place at any size: Turnip loads and stores a linear host image of partial tile blocks
-    # over its texels alone (patches/mesa/turnip-render-mode-for-attachment-memory.patch); its shadow merged every pass back through 94 MB.
-    '0020-written-host-page-textures-in-place-at-any-size.patch',
-    # A dedicated block of images whose image went stays spare for the next one of its pool (Core Animation's memoryless attachments,
-    # backed at their first pass, were each a new 40-112 MiB allocation), freed after 10 s, when a block cannot be made, or under memory
-    # pressure; room in the pools is kept by a thread of the device's, not in the creation call that asked for it.
-    '0021-spare-image-blocks-and-room-keeper.patch',
-    # stage_trace.rs: each command buffer's stages from its commit to its completion (commit, lowering, recording, the scheduler's
-    # holds, each submission, the completion waiter) and the scheduler's sleeps and wakes, read by the frontend (nmb_stage_ring_read).
-    '0022-command-buffer-stage-trace.patch',
-    # The threads that bring command buffers to their handlers run at the user-interactive class and the compile threads at least at
-    # the user-initiated class on iOS too, not on macOS alone: on the iPad they ran at the default class and woke up to 50 ms late.
+    # The completion and compile threads' quality-of-service classes on iOS too.
     '0023-quality-of-service-on-ios.patch',
-    # The host's diagnostics switch (SHENG_DIAG, from the boot argument diag=1): without it the stage ring and the allocation sites
-    # keep nothing. The stage ring also marks the steps inside a batch's submission (SubmitStep: placed, gathered, vkQueueSubmit, changes).
-    '0024-diagnostics-switch-and-submit-steps.patch',
-    # Share large indexed constants, read constant GEP offsets, expose Vulkan allocation sizes and name a made function.
-    '0025-specialized-links-shared-constants-and-allocation-size.patch',
-    '0026-frame-diagnostic-links.patch',
-    # Pooled and room-keeper image blocks become spares and serve later placements; the room worker ages them. Frees are upstream's
-    # free thread.
-    '0027-bounded-image-reuse.patch',
-    '0029-latency-stage-selection.patch',
-    # Spare image blocks have no byte limit (they age, go when a block cannot be made and on memory pressure), and the room keeper takes
-    # a spare block before it makes a new one: the limit freed spares the render server made again within seconds, each a fresh wiring.
-    '0030-spare-image-blocks-give-room.patch',
-    # Live blocks by kind and size class and the driver's commitment of lazily allocated ones, for the MK and ML rows.
-    '0031-memory-kinds-by-size.patch',
     # A cache hit stops refreshing access times after the platform refuses it once.
     '0032-shader-cache-touch-refused-once.patch',
-    # The room thread's timed spare aging runs inside an exit-guard section.
-    '0033-room-thread-ages-spares-in-a-section.patch',
-    # Parked objects and kept empty blocks go by time, so a discarded volatile resource's block is returned without a later submission.
-    '0034-parked-objects-and-kept-blocks-age-by-time.patch',
-    # A two-plane YCbCr surface texture that is only sampled is made over the surface's planes alone, its converted image only at a
-    # binding that needs one.
-    '0035-ycbcr-surface-textures-over-their-planes.patch',
-    # A read-only system cache layer a device asks for what its own cache directory lacks, read only where every level is owned by a
-    # trusted user and not writable by group or others; and a cache directory whose entries everyone may read, for the process that fills it.
-    '0036-system-shader-cache-layer.patch']]
+    # The rest of the board's runtime over this pin, in one patch: the priming cache of device entry points and the system shader cache
+    # layer; a batch's barrier globals on the stack; pooled blocks that start at 4 MiB and grow, which the runtime's blocks made ahead
+    # follow, and every dedicated block kept within the heap's budget; HostPageTexturePolicy::InPlaceWrites (textures over surfaces and
+    # padded buffers rendered and written in place where their tile stores stay within their rows); the room thread, which runs the
+    # runtime's keep_room and frees kept empty blocks and parked objects by time; memory census bytes, kinds by size and allocation
+    # sites; the stage trace with its diagnostics switch and latency stages; specialized links, shared constants and allocation sizes;
+    # YCbCr surface textures over their planes alone.
+    '0040-unixnu-runtime-on-development-555b13d5.patch']]
 
 
 def git_tree(*steps):
