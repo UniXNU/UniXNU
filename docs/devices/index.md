@@ -42,7 +42,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Redmi 9A](/devices/models/dandelion) | dandelion | MT6765 | 1 |
 | [Huawei MatePad 11](/devices/models/dby-w09) | dby-w09 | SM8250 | 1 |
 | [Xiaomi Mi 8](/devices/models/dipper) | dipper | SDM845 | 1 |
-| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/devices/models/diting) | diting | SM8475 | 1 |
+| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/devices/models/diting) | diting | SM8475 | 2 |
 | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/devices/models/dizi) | dizi | SM7435 | 1 |
 | [DroidVM guest \(crosvm on Gunyah\)](/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
 | [OnePlus 5T](/devices/models/dumpling) | dumpling | MSM8998 | 1 |
@@ -137,12 +137,12 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 39 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 41 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |
 | [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\), single-core platform bootstrap](/devices/models/sm-t970) | sm-t970 | SM8250 | 1 |
-| [REDMI K100 Pro Max \(songyuan, SM8850 Canoe\)](/devices/models/songyuan) | songyuan | SM8850 | 3 |
+| [REDMI K100 Pro Max \(songyuan, SM8850 Canoe\)](/devices/models/songyuan) | songyuan | SM8850 | 4 |
 | [Samsung Galaxy S9 \(starlte, SM-G960F, Exynos 9810\): HakiOS, iOS 16.5 on XNU; not built on the UniXNU tree](/devices/models/starlte) | starlte | Exynos 9810 | 1 |
 | [Redmi Note 10 Pro](/devices/models/sweet) | sweet | SM7150 | 2 |
 | [Unisoc UMS512 / T610YP](/devices/models/t610yp) | t610yp | unisoc-ums512-sharkl5pro-t610yp | 1 |

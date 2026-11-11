@@ -4,4 +4,4 @@
 
 Complete and validate [porting.toml](/porting/records) in the device repository to publish its subsystem record.
 
-xiaomi-pad-8-pro-development/android\_device\_xiaomi\_piano-unixnu: components without an area: \['BootProgress', 'NativeAES', 'NativeKeyStoreEvents', 'NativeMobileDisplay', 'NativePrelink', 'NativeRamBlock', 'NativeUfs', 'NativeVirtioBlock', 'PaganiArmCpu', 'PaganiArmDTPlatform', 'PaganiDarwinBoot', 'PaganiVerifiedRoot', 'ShengPlatformPower', 'Sm8750Platform', 'Stage7Probe'\]
+xiaomi-pad-8-pro-development/android\_device\_xiaomi\_piano-unixnu: components without an area: \['BootProgress', 'GopFramebuffer', 'NativeKeyStoreEvents', 'NativeMobileDisplay', 'NativeRamBlock', 'NativeUfs', 'NativeVirtioBlock', 'PaganiInput', 'PaganiPanel', 'PaganiVerifiedRoot', 'ShengPlatformPower', 'Sm8750Platform', 'Stage7Probe'\]

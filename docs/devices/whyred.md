@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Note 5 \(whyred\), SDM636 / Kryo 260 / ARMv8.0. Format 2 device repository targeting the unmodified iPhone X \(iPhone10,3\) iOS 16.7.16 image; firmware, storage, display and input are the open bring-up areas.
 
-Source record: [porting.toml](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/porting.toml), `fd19408c55d48901659263751b31681ca23af44f`.
+Source record: [porting.toml](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/porting.toml), `290269c326223c57b1703df8764431e09a91d5c6`.
 
 This page is generated from the device record.
 
@@ -56,6 +56,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Development findings
 
+- The package workflow runs scripts/check-patches.py as a patch integrity step before the package step: a hunk header whose count is short makes git apply ignore the extra lines silently, which left kpc\_pc\_capture undefined while osfmk/arm64/kpc.c was present and compiled. The script resolves its default patches/ root from its own path, so it works from the workspace root.
 - The vendor DT puts qcom,msm-id = &lt;345 0x0&gt; in sdm636.dtsi, which separates whyred from the SDM660 clover port \(msm-id 317\).
 - The previous whyred XNU work used a contiguous splash buffer at 0x9d400000 + 36 MiB; the board DTS keeps the same reservation.
 - The shared directory is a local SoC feed, not a copied core checkout: moving it later changes only feeds.toml and the pin.
@@ -68,6 +69,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - The package workflow selects the full profile name \(ios-16.7.16-20H392\) instead of the major version, checks out UniXNU without recursive submodules \(the deps step initializes them\) and copies the vendored profile before packaging.
 - The platform seed check accepts 1 to 16 hex digits and rejects zero, matching the u64 unique-chip-id that make-adt.py writes.
 - The package step tees its output to package.log and republishes the failing lines as check-run annotations, because the job log endpoint needs repository admin rights.
+- The package step exports CCACHE=&lt;workspace&gt;/device/scripts/compile-records.py, the per-object record generator the archive builders replay; kernel.build\(\) passes dict\(os.environ\) to make, so no framework change is needed.
 - The package workflow pins UniXNU to b936519575e532872ad86456657bcb9cef9915df: upstream main now points drivers/AppleKeyStoreState at 6ff4f11, which its remote no longer advertises, so the deps submodule update fails before any build step. The pin is the revision status, tree and the 58-patch series were verified against.
 - The failure step reads the kernel-bootstrap.log named by package.log and annotates anchored compiler diagnostics, make/link errors and the undefined-symbol block with its object files, then uploads package.log plus the kernel logs as the build-logs artifact, because the job log endpoint needs repository admin rights and the parallel build interleaves warnings with the failure.
 - A push to main also runs the package workflow during bring-up, so the annotations appear without a manual dispatch; the trigger is removed after the first green build.
@@ -93,14 +95,14 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Format 2 board with whyred identity, userdata geometry, kernel, payload and package settings.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/board.toml)
-- `source`: [Local sdm660 SoC feed plus the pinned whyred vendor device-tree provenance source.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/feeds.toml)
-- `source`: [Resolved pins for xnu, edk2, corecrypto-2023, libdispatch, libplatform, libpthread, IOStorageFamily, AvailabilityVersions and whyred-android-dt.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/unixnu.lock)
-- `source`: [SDM660/SDM636 SoC profile with the vendor revision and shared component set.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/soc/sdm660/soc.toml)
-- `source`: [Board defconfig with CONFIG\_XNU\_NATIVE\_PAN=n and the eMMC/no-GPU switch set.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/configs/whyred_defconfig)
-- `source`: [Reusable UniXNU porting-record check on every push and pull request.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/.github/workflows/porting-record.yml)
-- `source`: [Manual macOS packaging workflow using N1709/uefi-whyred and the UNIXNU\_UNIQUE\_CHIP\_ID seed.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/.github/workflows/package.yml)
-- `source`: [Vendored iPhone X iOS 16.7.16 profile: IPSW pins, prelink roots and identity properties installed into the UniXNU checkout.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/profiles/os/ios-16.7.16-20H392/profile.toml)
+- `source`: [Format 2 board with whyred identity, userdata geometry, kernel, payload and package settings.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/board.toml)
+- `source`: [Local sdm660 SoC feed plus the pinned whyred vendor device-tree provenance source.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/feeds.toml)
+- `source`: [Resolved pins for xnu, edk2, corecrypto-2023, libdispatch, libplatform, libpthread, IOStorageFamily, AvailabilityVersions and whyred-android-dt.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/unixnu.lock)
+- `source`: [SDM660/SDM636 SoC profile with the vendor revision and shared component set.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/soc/sdm660/soc.toml)
+- `source`: [Board defconfig with CONFIG\_XNU\_NATIVE\_PAN=n and the eMMC/no-GPU switch set.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/configs/whyred_defconfig)
+- `source`: [Reusable UniXNU porting-record check on every push and pull request.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/.github/workflows/porting-record.yml)
+- `source`: [Manual macOS packaging workflow using N1709/uefi-whyred and the UNIXNU\_UNIQUE\_CHIP\_ID seed.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/.github/workflows/package.yml)
+- `source`: [Vendored iPhone X iOS 16.7.16 profile: IPSW pins, prelink roots and identity properties installed into the UniXNU checkout.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/profiles/os/ios-16.7.16-20H392/profile.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -128,6 +130,8 @@ Components: `DarwinBoot`.
 
 ### Development findings
 
+- scripts/check-patches.py verifies every hunk count in patches/, so a short header cannot drop lines from a patched source again; its default root is resolved from the script location, because the workflow calls it from the workspace root where a relative patches/ does not exist.
+- scripts/compile-records.py is a host-side build hook for the XNU CCACHE slot, not a packaged input; package.sh, make-adt.py and the firmware checks are unchanged.
 - N1709/uefi-whyred builds the whyred SDM636 platform without Binaries/&lt;device&gt; DXEs: GOP over the ABL framebuffer, FDT memory expansion, UniXNU RamDisk and DarwinBoot. The last local build produced a 0x300000-byte SILICIUM\_UEFI.fd and it has not run on the phone yet.
 - The closest upstream platform is lavenderPkg \(SDM660\): its memory map already matches whyred, including the 0x9D400000 + 36 MiB display window.
 - Lavender's USE\_CUSTOM\_DISPLAY\_DRIVER points at a closed vendor DisplayDxe for its panel; whyred uses GOP over the ABL framebuffer until its own vendor DXE exists.
@@ -150,8 +154,8 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Base commit, DSC values, UniXNU module list, vendor display blocker and verification order.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/HANDOFF.md)
-- `source`: [Host checks that compile the firmware DTB and the storage, display, input and GPU models.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/scripts/check-whyred.sh)
+- `source`: [Base commit, DSC values, UniXNU module list, vendor display blocker and verification order.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/HANDOFF.md)
+- `source`: [Host checks that compile the firmware DTB and the storage, display, input and GPU models.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/scripts/check-whyred.sh)
 
 ## CPU and interrupts {#cpu}
 
@@ -197,8 +201,8 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `source`: [8 CPUs, PSCI, GICv3 and the 19.2 MHz generic timer described from the vendor DT.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/soc/sdm660/dts/sdm660.dtsi)
-- `source`: [SDM660 ArmCpu override imported from clover; not selected in components.toml.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredArmCpu/native/ArmCpu.cpp)
+- `source`: [8 CPUs, PSCI, GICv3 and the 19.2 MHz generic timer described from the vendor DT.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/soc/sdm660/dts/sdm660.dtsi)
+- `source`: [SDM660 ArmCpu override imported from clover; not selected in components.toml.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredArmCpu/native/ArmCpu.cpp)
 
 ## Memory and DMA {#memory}
 
@@ -243,9 +247,9 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Single 2 GiB low DRAM range and the 0x9d400000 splash reservation.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/dts/whyred.dts)
-- `source`: [Staged whyred SDHCI driver from the earlier XNU port; read, GPT and HFSX mount verified on the phone.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredSdhci/WhyredSdhci.c)
-- `source`: [Native UniXNU SDHCI reference for the same 0xc0c4000 controller.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredSdhci/native/WhyredSdhci.cpp)
+- `source`: [Single 2 GiB low DRAM range and the 0x9d400000 splash reservation.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/dts/whyred.dts)
+- `source`: [Staged whyred SDHCI driver from the earlier XNU port; read, GPT and HFSX mount verified on the phone.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredSdhci/WhyredSdhci.c)
+- `source`: [Native UniXNU SDHCI reference for the same 0xc0c4000 controller.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredSdhci/native/WhyredSdhci.cpp)
 
 ## Storage and root {#storage}
 
@@ -292,11 +296,11 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Bounds arithmetic, partition-to-LBA mapping and request clamping.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredBlock/native/BlockCore.h)
-- `source`: [IOBlockStorageDevice wrapper with 0x2b8c00..0x1d7d6ff userdata window.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredBlock/native/WhyredBlock.cpp)
-- `source`: [Host model for BlockCore manifest parsing, bounds arithmetic and request clamping.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredBlock/native/tests/whyred_block_host.cpp)
-- `source`: [SDHCI eMMC host controller driver for 0xc0c4000.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredSdhci/native/WhyredSdhci.cpp)
-- `source`: [Host unit model for SDCC1 controller handshake, UEFI 2.8 GPT CRC32 and userdata write fence.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredSdhci/native/tests/whyred_sdhci_host.cpp)
+- `source`: [Bounds arithmetic, partition-to-LBA mapping and request clamping.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredBlock/native/BlockCore.h)
+- `source`: [IOBlockStorageDevice wrapper with 0x2b8c00..0x1d7d6ff userdata window.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredBlock/native/WhyredBlock.cpp)
+- `source`: [Host model for BlockCore manifest parsing, bounds arithmetic and request clamping.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredBlock/native/tests/whyred_block_host.cpp)
+- `source`: [SDHCI eMMC host controller driver for 0xc0c4000.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredSdhci/native/WhyredSdhci.cpp)
+- `source`: [Host unit model for SDCC1 controller handshake, UEFI 2.8 GPT CRC32 and userdata write fence.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredSdhci/native/tests/whyred_sdhci_host.cpp)
 
 ## Display {#display}
 
@@ -340,9 +344,9 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Native UniXNU display source adapted from clover; not a build input yet.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredDisplay/native/NativeGOPPresenter.cpp)
-- `source`: [IOMobileFramebuffer ABI and single/blank layer swap emulation.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredDisplay/native/NativeLegacyDisplay.cpp)
-- `source`: [Host unit model for GOP wire ABI, 1080x2160 framebuffer bounds and test pattern rendering.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredDisplay/native/tests/whyred_display_host.cpp)
+- `source`: [Native UniXNU display source adapted from clover; not a build input yet.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredDisplay/native/NativeGOPPresenter.cpp)
+- `source`: [IOMobileFramebuffer ABI and single/blank layer swap emulation.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredDisplay/native/NativeLegacyDisplay.cpp)
+- `source`: [Host unit model for GOP wire ABI, 1080x2160 framebuffer bounds and test pattern rendering.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredDisplay/native/tests/whyred_display_host.cpp)
 
 ## Input {#input}
 
@@ -388,10 +392,10 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Native UniXNU input transport on BLSP1 QUP1 \(0xc175000\), GPIO 2/3, IRQ 127 with unified Synaptics and Novatek candidate probing.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredInput/native/WhyredInput.cpp)
-- `source`: [Unified touch device model, Synaptics RMI4 PDT parsing, F12 coordinate mapping to 1080x2160, and Novatek chip ID verification.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredInput/native/InputCore.h)
-- `source`: [Touch controller addresses \(0x20, 0x62, 0x01\), PDT layout, F12 data base, and reset timings.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredInput/native/InputRegs.h)
-- `source`: [Host unit model verifying candidate detection, PDT parsing, F12 multi-touch decoding, and QUP tags.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredInput/native/tests/whyred_input_host.cpp)
+- `source`: [Native UniXNU input transport on BLSP1 QUP1 \(0xc175000\), GPIO 2/3, IRQ 127 with unified Synaptics and Novatek candidate probing.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredInput/native/WhyredInput.cpp)
+- `source`: [Unified touch device model, Synaptics RMI4 PDT parsing, F12 coordinate mapping to 1080x2160, and Novatek chip ID verification.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredInput/native/InputCore.h)
+- `source`: [Touch controller addresses \(0x20, 0x62, 0x01\), PDT layout, F12 data base, and reset timings.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredInput/native/InputRegs.h)
+- `source`: [Host unit model verifying candidate detection, PDT parsing, F12 multi-touch decoding, and QUP tags.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredInput/native/tests/whyred_input_host.cpp)
 
 ## GPU {#gpu}
 
@@ -429,9 +433,9 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [kGpuChipidValue = 0x05000900 \(Adreno 509\); GPUCC base unchanged.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredGpu/native/GpuRegs.h)
-- `source`: [Native UniXNU Adreno 509 clock and chip ID probe driver adapted to whyred.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredGpu/native/WhyredGpu.cpp)
-- `source`: [Host unit model verifying Adreno 509 chip ID \(0x05000900\), GPUCC clock/branch gates, and GDSC power domains.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredGpu/native/tests/whyred_gpu_host.cpp)
+- `source`: [kGpuChipidValue = 0x05000900 \(Adreno 509\); GPUCC base unchanged.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredGpu/native/GpuRegs.h)
+- `source`: [Native UniXNU Adreno 509 clock and chip ID probe driver adapted to whyred.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredGpu/native/WhyredGpu.cpp)
+- `source`: [Host unit model verifying Adreno 509 chip ID \(0x05000900\), GPUCC clock/branch gates, and GDSC power domains.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredGpu/native/tests/whyred_gpu_host.cpp)
 
 ## Network {#network}
 
@@ -505,7 +509,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [SMEM 0x86000000 + 2 MiB and SMP2P doorbell 0x17911008 match whyred's tree.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/drivers/WhyredDsp/native/DspRegs.h)
+- `source`: [SMEM 0x86000000 + 2 MiB and SMP2P doorbell 0x17911008 match whyred's tree.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/drivers/WhyredDsp/native/DspRegs.h)
 
 ## Power {#power}
 
@@ -571,6 +575,8 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Development findings
 
+- patches/xnu/arm64-nonapple-kpc-stub.patch declared +1,183 for a 189-line body, so git apply dropped the trailing int kpc\_pc\_capture and the final link reported that symbol undefined; the header is corrected to +1,189 and every patch is checked by scripts/check-patches.py, whose default root is the repository patches/ directory.
+- patches/libpthread/ shadows the framework directory and carries explicit-kernel-address.patch plus xnu-8796-no-jit-entitlement.patch: the pinned libpthread is the iOS 17 drop and bsdthread\_register calls proc\_get\_jit\_entitled, which xnu-8796 does not have, so the component failed with 1 error generated in run 42922819047.
 - The template packaging action points at N1709/uefi-whyred; the previous REPLACE/uefi-whyred placeholder is gone.
 - unixnu.lock pins AvailabilityVersions, IOStorageFamily, corecrypto-2023, edk2, libdispatch, libplatform, libpthread, xnu and whyred-android-dt; component revisions come from components.toml.
 - The package workflow builds only ios-16.7.16-20H392, passes the full profile name and publishes the artifact as Mu-whyred.
@@ -581,6 +587,7 @@ Components: `XnuPrelink`, `DarwinBoot`.
 - patches/xnu/iig-kernel-content.patch adds IORPC.kernelContent and fills it in IOUserServer entry paths, because iig DriverKit-440 generates kernel dispatch code that reads that field, which 8796 predates.
 - patches/xnu/arm64-nonapple-kpc-stub.patch adds the non-Apple arm64 kpc.c stub, because osfmk/conf/files.arm64 lists that file under kpc nos\_arm\_asm and 8796 predates it; with the group active make stopped at No rule to make target kpc.c. The stub also defines kpc\_pc\_capture, which kern\_kpc.c exports through pc\_capture\_supported and the Apple PMU would otherwise provide.
 - patches/xnu/arm64-nonapple-pmap-stub.patch defines pmap\_pending\_preemption in osfmk/arm/pmap/pmap\_misc.c when SCHED\_HYGIENE\_DEBUG and DEVELOPMENT are on: pmap.h declares it out of line for that configuration, but 8796 only ships the definition in Apple's closed per-SoC pmap.
+- scripts/compile-records.py is the per-object record generator XNU's KCC = $\(CCACHE\) $\(CC\) hook expects: the workflow exports CCACHE so every C compile writes &lt;object&gt;.json before execv, which is what build-mockfs-fixture.py and build-libpthread-kernel.py replay. Without it the pinned UniXNU b936519 never leaves startup.o.json, unixnu build always takes its bootstrap pass, and the mockfs fixture archive is never compiled.
 - patches/xnu/source-machine-layer.patch also adds nos\_arm\_asm nos\_arm\_pmap to the KERNEL\_BASE group in config/MASTER.arm64.bcm2837: doconf only activates an option when its tag is in the kernel group, so the raw options lines alone left the arm64 assembly and pmap sources out of the link. apple\_amcc stays inactive because xnu-8796 has no amcc\_rorgn\_\*.c sources.
 
 ### Completion criteria
@@ -590,17 +597,17 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Current limits
 
-- The package workflow reaches the kernel link but has not linked a boot image yet; the last run stopped on undefined kpc\_pc\_capture, mockfs\_\* and pmap\_pending\_preemption symbols. kpc\_pc\_capture and pmap\_pending\_preemption now come from the two non-Apple stubs; mockfs is selected by CONFIG\_XNU\_SOURCE\_MOCKFS and linked from the mockfs fixture archive.
+- The package workflow has not linked a boot image yet. Run 42787794966 stopped at the link on kpc\_pc\_capture, mockfs\_\* and pmap\_pending\_preemption; the two non-Apple stubs cover the first and last, and mockfs is selected by CONFIG\_XNU\_SOURCE\_MOCKFS, but the bootstrap pass that builds the compile records never reached the fixture archive. The CCACHE wrapper and the libpthread adaptation are proven: run 42925053394 built the mockfs fixture and every archive, and the final link then failed on kpc\_pc\_capture alone, which a short patch hunk header had silently dropped. The header is fixed and checked, but no run has linked the kernel yet.
 
 ### Next action
 
-- Rerun the package workflow with the two non-Apple stubs and check that the undefined-symbol block is empty, then download Mu-whyred.img from the artifacts.
+- Rerun the package workflow; require every archive log to end without a python3 failure and the final kernel link to have no undefined-symbol block, then download Mu-whyred.img from the artifacts.
 
 ### Evidence
 
-- `source`: [Unmodified device packaging script; reads \[package\] unixnu from board.toml.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/scripts/package.sh)
-- `source`: [Full profile name, non-recursive UniXNU checkout, vendored profile install and Mu-whyred.img artifact.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/.github/workflows/package.yml)
-- `source`: [Package, payload and defconfig mapping used by the packaging script.](https://github.com/N1709/UniXNU-whyred/blob/fd19408c55d48901659263751b31681ca23af44f/board.toml)
+- `source`: [Unmodified device packaging script; reads \[package\] unixnu from board.toml.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/scripts/package.sh)
+- `source`: [Full profile name, non-recursive UniXNU checkout, vendored profile install and Mu-whyred.img artifact.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/.github/workflows/package.yml)
+- `source`: [Package, payload and defconfig mapping used by the packaging script.](https://github.com/N1709/UniXNU-whyred/blob/290269c326223c57b1703df8764431e09a91d5c6/board.toml)
 
 ## Diagnostics {#diagnostics}
 
@@ -621,6 +628,8 @@ Components: `XnuPrelink`, `DarwinBoot`.
 
 ### Development findings
 
+- scripts/check-patches.py reports the file and hunk whose declared counts differ from its body, turning a silent git apply truncation into a fail-fast step, and finds its own patches/ root so the workflow can run it from any directory.
+- scripts/compile-records.py writes the per-object .o.json records that the kernel archive builders replay, so a bootstrap pass no longer stops before the mockfs fixture is compiled.
 - The previous port proved the userdata GPT values and recovery touch but never reached a stable UniXNU boot.
 - Host-side checks in check-whyred.sh verify the iOS 16 profile resolution, ADT generation, and the storage \(WhyredBlock + WhyredSdhci\), display \(WhyredDisplay\), input \(WhyredInput\) and GPU \(WhyredGpu\) host models.
 - The diagnostics path resolves only the iOS 16 profile and the 58-patch 8796 series; the iPadOS profile is not installed or selected.
