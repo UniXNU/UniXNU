@@ -36,3 +36,5 @@ The host scheduling check runs the real ring, preemption and submit code over so
 See [AdrenoMetal](/drivers/adreno-metal) for Metal interfaces, caches and plugin staging.
 
 Frame diagnostics retain allocation, command, completion and GPU/display timing. Pixel capture is disabled. See [GPU frame diagnostics](/porting/gpu-diagnostics).
+
+The hang check captures CP state before recovery and retains it until the next hang. `native_adreno_stall_hang` identifies the snapshot. For faults whose upper address word is zero, `native_adreno_stall_fault` searches the job's IB1s and up to 512 referenced IB2s for the low word and nearby bases followed by zero. These are candidates for inspection, not decoded address operands. A new snapshot clears the previous search.
