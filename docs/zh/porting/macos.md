@@ -127,19 +127,41 @@ macOS 补丁序列增加的内核参数：
 ./unixnu build kernel payload --os macos-27
 ```
 
-没有 seed 时，命令在编译前停止并打印：
+没有 seed 时，命令在编译前停止，打印创建 seed 的命令，其中包含 OS 镜像、输出路径和
+`data_gib`。
+
+### 创建账户并跳过 Setup {#account}
+
+在 UniXNU 仓库中执行。使用构建命令打印的路径和大小，将 `unixnu:YOUR_PASSWORD` 替换为
+账户名和密码：
 
 ```sh
-sudo python3 <tree>/scripts/make-macos-data-seed.py <OS image> <output>/runtime/data.dbr --gib <data_gib>
+sudo python3 scripts/make-macos-data-seed.py \
+  "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
+  --skip-setup --user 'unixnu:YOUR_PASSWORD'
 ```
 
-执行该命令后重新构建。脚本复制系统卷的 `/System/Library/Templates/Data`，并保留文件属主。
-可选参数：
+脚本创建本地管理员及其主目录，保留模板文件属主，并跳过首次开机和首次登录时的设置助理。
+输出文件必须是新 seed。
+
+使用该 seed 构建并打包：
+
+```sh
+./unixnu build kernel payload --os macos-27 \
+  --data-ramdisk "<output>/runtime/data.dbr"
+./unixnu bootimg --os macos-27 \
+  --data-ramdisk "<output>/runtime/data.dbr"
+```
+
+启动后用该账户登录即可进入桌面。`--skip-setup` 在制作 seed 时传入。
+
+制作 seed 的参数：
 
 | 参数 | 作用 |
 | --- | --- |
 | `--skip-setup` | 把设置助理标记为已完成 |
 | `--user NAME:PASSWORD` | 添加本地管理员及其主目录 |
+| `--auto-login` | 开机自动登录 `--user` 指定的账户。供无人值守测试使用，需要 `--user` |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | 记录键盘布局类型，键盘设置助理不再询问 |
 | `--volume-uuid UUID` | 为 Data 卷指定固定 UUID，新 seed 可以替换旧 seed 而无需重新构建内核 |
 

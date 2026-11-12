@@ -1,5 +1,8 @@
 # Skip Setup
 
+For macOS, follow [Create an account and skip Setup](/porting/macos#account).
+The procedure below applies to iPadOS.
+
 Requires macOS image tools, a matching packed Data seed and the board's `skip_setup_tool`. Prepare them through [Building](/building). After the payload command below, run `./unixnu bootimg` and boot the newly packed image.
 
 A fresh Data seed starts the Setup app on first boot. The payload can mark Setup as done before the image is written, so the device boots to SpringBoard.
