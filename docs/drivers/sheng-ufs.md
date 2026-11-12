@@ -23,6 +23,14 @@ profile enables `CONFIG_XNU_NATIVE_UFS` and supplies the board inputs.
 ./unixnu build kernel -D /path/to/device
 ```
 
+## APFS container storage
+
+`native-ufs-root=2` validates the userdata GPT and a version 3 SHNGROOT header
+with `count=0` and `image_bytes=4096`. ShengUfs records the persistent store and
+log geometry; [RamBlock](/drivers/ram-block#apfs-root-container) publishes the
+APFS disk. This mode publishes no root windows. `native-ufs-root=1` publishes
+verified root windows.
+
 ## Porting and records
 
 The device repository supplies ShengUfs as a submodule. Follow the
