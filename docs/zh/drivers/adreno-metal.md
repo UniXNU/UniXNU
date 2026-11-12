@@ -1,5 +1,7 @@
 # AdrenoMetal
 
+启用 `diag=1` 时，编码批次结束记录（类型 14、阶段 3）的 `d` 字段保存编码线程使用的 CPU 微秒数。将它与配对开始、结束记录的实际耗时比较，可区分计算与等待。`TUC` 行记录 Turnip BO 缓存的查询、命中、插入、淘汰和完整清空次数。
+
 AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻译为 SPIR-V，Turnip 完成编译，并向 [Adreno740](/zh/drivers/adreno740) 提交任务。固件、电源投票和显示集成由设备仓库提供。
 
 ## 渲染和接口

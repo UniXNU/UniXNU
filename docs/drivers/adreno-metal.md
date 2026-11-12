@@ -58,3 +58,5 @@ With `gpu-trace=1`, kernel event 65 identifies the Metal device and command queu
 `wallpaper-freeze=1` isolates wallpaper rendering. A Poster renderer retains its first successfully drawn and stored IOSurface output of at least two million pixels, then parks later command buffers before runtime submission. Parked buffers remain committed and unscheduled; their owners and queue leases stay retained. Previously submitted work completes normally. PosterBoard, backboardd and other clients continue submitting. The mode defaults to off.
 
 Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel sampling of the render, encode and completion threads correlates upstream waits.
+
+With `diag=1`, encoding batch end records (type 14, phase 3) store encoding-thread CPU microseconds in field `d`. Compare this with paired start/end wall time to distinguish work from waits. `TUC` reports Turnip BO cache lookups, hits, inserts, evictions and full flushes.
