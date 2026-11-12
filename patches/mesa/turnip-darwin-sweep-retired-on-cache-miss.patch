@@ -1,0 +1,87 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -355,15 +355,17 @@
+    }
+ }
+ 
+-static VkResult darwin_collect_retired(struct tu_device *dev);
++static VkResult darwin_collect_retired(struct tu_device *dev, bool opportunistic = false);
+ 
+ static VkResult
+ dw_wait_fence_locked_free(struct tu_device *dev, uint32_t fence, uint64_t abs_timeout_ns)
+ {
+    VkResult result = dw_wait_fence_raw(dev, fence, abs_timeout_ns);
+    /* Fence observation is also a retirement opportunity, so a quiet application
+-    * need not allocate another BO to release completed deferred storage. */
+-   return result == VK_SUCCESS ? darwin_collect_retired(dev) : result;
++    * need not allocate another BO to release completed deferred storage. A sweep
++    * another thread is running is that opportunity taken: this one does not wait
++    * behind its kernel calls. */
++   return result == VK_SUCCESS ? darwin_collect_retired(dev, true) : result;
+ }
+ 
+ static VkResult
+@@ -802,10 +804,15 @@
+ }
+ 
+ static VkResult
+-darwin_collect_retired(struct tu_device *dev)
++darwin_collect_retired(struct tu_device *dev, bool opportunistic)
+ {
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+-   pthread_mutex_lock(&retire->lock);
++   if (opportunistic) {
++      if (pthread_mutex_trylock(&retire->lock))
++         return VK_SUCCESS;
++   } else {
++      pthread_mutex_lock(&retire->lock);
++   }
+    VkResult result = darwin_reap_locked(dev, retire);
+    if (result == VK_SUCCESS)
+       darwin_cache_trim(dev, retire);
+@@ -844,10 +851,6 @@
+                const char *name)
+ {
+    MESA_TRACE_FUNC();
+-   VkResult collected = darwin_collect_retired(dev);
+-   if (collected != VK_SUCCESS)
+-      return collected;
+-
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+    /* TU_DARWIN_BO_CACHE=0 turns the cache off (the host checks of the release paths need every free to reach the kernel). */
+    static const bool cache_enabled = debug_get_bool_option("TU_DARWIN_BO_CACHE", true);
+@@ -860,11 +863,31 @@
+    void *cached_mapping = NULL;
+    uint32_t cached_token = 0;
+    bool reused = false;
+-   if (cacheable) {
++   if (!cacheable) {
++      VkResult collected = darwin_collect_retired(dev);
++      if (collected != VK_SUCCESS)
++         return collected;
++   } else {
+       struct darwin_cached_bo hit;
++      /* The retired BOs are swept (a kernel call for each fence and each release, under the lock every allocating thread
++       * takes) only when the cache has nothing for this allocation: an allocation the cache serves costs no kernel call.
++       * Sweeping before every allocation made each command stream chunk of a render pass wait for the lock behind another
++       * thread's sweep (most of the encoding thread's time in frames of 30 passes and more).
++       */
+       pthread_mutex_lock(&retire->lock);
+-      reused = darwin_cache_get(retire, alloc_size, read_only, !!(flags & TU_BO_ALLOC_INTERNAL_RESOURCE), &hit);
++      VkResult swept = retire->failure;
++      reused = swept == VK_SUCCESS &&
++               darwin_cache_get(retire, alloc_size, read_only, !!(flags & TU_BO_ALLOC_INTERNAL_RESOURCE), &hit);
++      if (swept == VK_SUCCESS && !reused && retire->count) {
++         swept = darwin_reap_locked(dev, retire);
++         if (swept == VK_SUCCESS) {
++            darwin_cache_trim(dev, retire);
++            reused = darwin_cache_get(retire, alloc_size, read_only, !!(flags & TU_BO_ALLOC_INTERNAL_RESOURCE), &hit);
++         }
++      }
+       pthread_mutex_unlock(&retire->lock);
++      if (swept != VK_SUCCESS)
++         return swept;
+       if (reused) {
+          handle = hit.handle;
+          alloc_size = hit.size;

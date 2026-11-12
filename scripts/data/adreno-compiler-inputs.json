@@ -66,7 +66,8 @@
     "patches/mesa/turnip-render-mode-turns.patch",
     "patches/mesa/turnip-darwin-keep-device-after-restart.patch",
   "patches/mesa/ir3-fragment-consts-leave-pipeline-space.patch",
-  "patches/mesa/turnip-shaders-shared-across-pipeline-caches.patch"
+  "patches/mesa/turnip-shaders-shared-across-pipeline-caches.patch",
+  "patches/mesa/turnip-darwin-sweep-retired-on-cache-miss.patch"
   ],
   "integer_fma_reference": {
     "repository": "https://github.com/ucb-bar/berkeley-softfloat-3",
