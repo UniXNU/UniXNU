@@ -197,27 +197,31 @@ inputs = [
 configuration = [
     "SweetFramebuffer publishes AppleCLCD 1080x2400 stride 4320 at 0x9d000000 (presented as 1125x2436 BGRA8888) and registers qcom_usb_debug_register_framebuffer(&qud_fb) for live USB PNG capture.",
     "AppleCLCD::present() bilinearly downscales the logical 1125x2436 frame to 1080x2400 via a cached horizontal LUT and L1 rowbuf[2048] + memcpy Write-Combine bursts (preventing WC bus stalls and 22/23px edge clipping, with sweetfb_crop=1 opt-in), composites multi-layer SrcOver alpha, clears uncovered background, and drains stores with dsb sy.",
+    "AppleARMBacklight (sweetbacklight=1, sweetbl_dcs=1) verifies DISP_CC (0x0af00000) + DSI0 (0x0ae94000) active state, publishes CoreBrightness IODisplayParameters/calibration properties, and writes 10-bit MIPI DCS 0x51 brightness packets via DSI0 TPG FIFO.",
     "SweetFramebuffer RequestPowerChange (selector 12) handles display on/off transitions from backboardd.",
 ]
 procedure = [
-    "Boot XNU with sweetfb_noconsole=1 sweetfb_hz=15 qcom-usb-debug=1 qcom-usb-ctl=1 and capture CRC-verified PNG frames via scripts/screenshot-xnu-usb.py across Lock Screen, Home Screen, Settings, and App Library transitions.",
+    "Boot XNU with sweetfb_noconsole=1 sweetfb_hz=15 sweetbacklight=1 sweetbl_dcs=1 qcom-usb-debug=1 qcom-usb-ctl=1, capture CRC-verified PNG frames via scripts/screenshot-xnu-usb.py, and sweep Control Center brightness slider via pclm10-autoswipe=100.",
 ]
 findings = [
     "Replaced upstream 1125x2436->1080x2400 center-crop (top=33, bot=12, dock_L=8, dock_R=7) and direct volatile WC writes with L1-buffered bilinear scaling + memcpy bursts, eliminating edge clipping (top=50, bot=23..29, dock_L=28, dock_R=28) and sustained-animation WC disconnects.",
     "Device-verified 1080x2400 iOS 16.7.16 UI across Lock Screen, Home Screen, Settings (initial and scrolled), App Library, and Control Center via CRC32-verified live USB screenshot capture.",
+    "iOS 16.7.16 CoreBrightness _DisplayCreateWithID requires AppleARMBacklight class conformance plus all 9 backlight-calibration-parameters keys (including current-for-max/mid-backlight and hardware-max-current-limit) before starting libEDR and delivering brightness-nits updates.",
+    "Device-verified Control Center slider ramp (20 steps lvl=537..984, dcs_ok=1) and display-on brightness restoration (lvl=984, dcs_ok=1) over DSI0 TPG FIFO MIPI DCS 0x51 on 34d5cb55.",
 ]
 completion = [
     "A known frame appears with correct geometry and colors, then userland presentation and display power controls work.",
 ]
 limits = [
-    "DCS backlight brightness slider and native DPU TE (GPIO 8) refresh modulation are not wired yet; display off fades AMOLED pixels to black.",
+    "Native DPU TE (GPIO 8) refresh modulation is not wired yet; display off fades AMOLED pixels to black and RequestPowerChange runs at software vsync.",
 ]
 next_action = [
-    "Optionally expose DCS backlight level over DSI0 command mode if brightness control beyond AMOLED fade is desired.",
+    "Optional: wire native MDSS TE IRQ (GPIO 8) and RequestPowerChange DCS 0x28/0x29 power gating if hardware DPU composition is enabled later.",
 ]
 evidence = [
     { kind = "source", reference = "dts/pclm10.dts", result = "Documents framebuffer0@9d000000 (1080x2400, stride 4320) and cont_splash_region@9d000000." },
     { kind = "device", reference = "scripts/screenshot-xnu-usb.py", result = "Captured CRC32-verified 1080x2400 PNGs across Lock Screen (e32d2895), Home Screen (3fad9be9), Settings (c5378c71), scrolled Settings (8eeca332), and App Library (732b19ef) with unclipped margins on 34d5cb55.", command = "python3 sweet_work/auto_qud_multishot.py --boot-img sweet_work/out_ios_20H392_rowbuf/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_rowbuf --capture-seconds 280", revision = "094c73534157a8e09bd111ffbbd91250cd5ad114" },
+    { kind = "device", reference = "scripts/apply-pclm10-sweet-overlay.py", result = "Verified AppleARMBacklight CoreBrightness ramp (lvl=537..984, 20 steps dcs_ok=1) across Control Center slider drag and wake restore (lvl=984 dcs_ok=1) on 34d5cb55 (ios_20H392_bl_v4 & ios_20H392_final_v3).", command = "python3 sweet_work/auto_qud_multishot.py --boot-img sweet_work/out_ios_20H392_bl_v4/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_bl_v4 --capture-seconds 370", revision = "1088bedc09493f4d8627a57e393b0a66f24e6372" },
 ]
 
 [[area]]
@@ -371,6 +375,7 @@ procedure = [
 findings = [
     "dtbo.img fragment@65 confirmed BQ27541 @ 0x55 is wired to qupv3_se15_i2c (TLMM EAST 0x03500000 GPIO 27/28), not qupv3_se1_i2c (GPIO 114/115).",
     "Device-verified dual-cell BQ27541 readout (raw 8633 mV -> 4316 mV/cell, SOC 100%, 0 mA) and PM8150B SID 2 SMB5 telemetry (usb=0x10, path=0x95, chg=0x47), reflected by the live Lock Screen charging indicator.",
+    "Device-verified BQ27541 bq_recover() 9-clock SCL recovery yielding mv_ok=1(8623) soc_ok=1(100) on poll 0 and AW8697 LRA haptic probe (err=0 id=0x97) + BY_DRV_TIME boot tap (glb=0->0) on 34d5cb55.",
 ]
 completion = [
     "Declared power controls and battery readings match observations; RPMh rail voting completes cleanly.",
@@ -379,11 +384,12 @@ limits = [
     "Sleep/resume S2R and 65W SuperVOOC protocol negotiation with STM8S (0x26) remain unimplemented; I2C bitbang uses polled GPIO 27/28.",
 ]
 next_action = [
-    "Optionally add an initial I2C bus recovery/retry on poll 0 of BQ27541 so mv_ok=1 on the very first sample every boot.",
+    "Optional: expose AW8697 IOKit haptic trigger service once CoreBrightness display backlight verification completes.",
 ]
 evidence = [
     { kind = "source", reference = "dts/pclm10.dts", result = "Reserves AOP Command DB at 0x85f20000 and RPMh RSC at 0x18220000." },
     { kind = "device", reference = "scripts/apply-pclm10-sweet-overlay.py", result = "Verified BQ27541 (8633 mV -> 4316 mV, 100%, 0 mA), PM8150B SID 2 SMB5 (usb=0x10 path=0x95 chg=0x47), and RPMh L11C vote on 34d5cb55.", command = "python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_m4_shot/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_m4_shot", revision = "f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6" },
+    { kind = "device", reference = "scripts/apply-pclm10-sweet-overlay.py", result = "Verified BQ27541 bq_recover() mv_ok=1(8623) soc_ok=1(100) on poll 0 and AW8697 probe (err=0 id=0x97) + BY_DRV_TIME boot tap (glb=0->0) on 34d5cb55.", command = "python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_final_v3/boot-sweet.img --capture-dir /tmp/qud_final_v3 --settle-seconds 130 --capture-seconds 160 --no-reboot", revision = "1088bedc09493f4d8627a57e393b0a66f24e6372" },
 ]
 
 [[area]]
@@ -405,6 +411,7 @@ procedure = [
 findings = [
     "Switching sweet-16k.yml xnu job to macos-15-intel resolves arm64 runner capacity stalls (~12-13 min kernel build).",
     "Raising PANIC_LOG_BASE to 0x17E000000 in scripts/mkadt-sweet-pclm10.py clears DDR Bank 1+2 for 2816 MiB XNU DRAM without overlapping PStore.",
+    "scripts/apply-pclm10-sweet-overlay.py populates all 9 mandatory iOS 16 CoreBrightness calibration keys in AppleARMBacklight and adds Control Center brightness slider autoswipe gestures (6/7) for automated backlight verification.",
 ]
 completion = [
     "Kernel and boot-sweet.img build cleanly, fit the 100 MiB Android boot partition, and boot on PCLM10 hardware.",
@@ -413,11 +420,12 @@ limits = [
     "Local Linux/macOS python3.9 lacks stdlib tomllib required by UniXNU/scripts/porting-record.py; CI porting-record.yml runs validation on Ubuntu 26.04 Python 3.12+.",
 ]
 next_action = [
-    "Build and flash the final interactive boot-sweet.img without pclm10-autoreset.",
+    "Keep final interactive boot-sweet.img (CI 43144689220, sha256 06b2daf5927137b231a68293e989ed894ae008bcedcff98be1e576ed40e9e404) synced with any future GPU/Wi-Fi/audio milestones.",
 ]
 evidence = [
     { kind = "source", reference = "board.toml", result = "Defines [package], [firmware], [bootimg], [payload], and [payload.adt] sections." },
     { kind = "device", reference = "scripts/build-sweet-boot.py", result = "Built 80257024-byte boot-sweet.img from CI run 43038210536 and booted PCLM10 34d5cb55 to SpringBoard Lock Screen.", command = "python3 scripts/build-sweet-boot.py --uefi-bootimg sweet_work/uefi-32m-896m/boot-uefi-32m.img --kernel sweet_work/ci_xnu_43038210536/kernel.development.sweet --owned-memory-size 0x30000000 --out-dir sweet_work/out_ios_20H392_m4_shot", revision = "f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6" },
+    { kind = "device", reference = "scripts/build-sweet-boot.py", result = "Built final interactive 80257024-byte boot-sweet.img from CI run 43144689220 and verified live interactive Lock Screen (crc32 b2503975), AppleARMBacklight (lvl=984 dcs_ok=1), AW8697 boot tap (glb=0->0), and BQ27541 poll 0 (mv_ok=1) on 34d5cb55.", command = "python3 scripts/build-sweet-boot.py --uefi-bootimg sweet_work/uefi-32m-896m/boot-uefi-32m.img --kernel sweet_work/ci_xnu_43144689220/kernel.development.sweet --owned-memory-size 0x30000000 --out-dir sweet_work/out_ios_20H392_final_v3", revision = "1088bedc09493f4d8627a57e393b0a66f24e6372" },
 ]
 
 [[area]]
