@@ -1,0 +1,49 @@
+diff --git a/src/freedreno/vulkan/tu_pipeline.cc b/src/freedreno/vulkan/tu_pipeline.cc
+--- a/src/freedreno/vulkan/tu_pipeline.cc
++++ b/src/freedreno/vulkan/tu_pipeline.cc
+@@ -1615,8 +1615,26 @@
+                                       &tu_shader_ops, application_cache_hit);
+    if (object)
+       return container_of(object, struct tu_shader, base);
+-   else
+-      return NULL;
++
++   /* A shader another pipeline cache of the device already holds (every
++    * shader made is kept in the device's own cache too, see
++    * tu_pipeline_cache_insert): an application that makes the same stages
++    * under several pipeline caches compiles them once. It was not found in
++    * the application's cache, which now takes it.
++    */
++   struct tu_device *dev = container_of(cache->base.device, struct tu_device, vk);
++   if (cache != dev->mem_cache) {
++      bool unused;
++      object = vk_pipeline_cache_lookup_object(dev->mem_cache, key_data, key_size,
++                                               &tu_shader_ops, &unused);
++      if (object) {
++         if (application_cache_hit)
++            *application_cache_hit = false;
++         object = vk_pipeline_cache_add_object(cache, object);
++         return container_of(object, struct tu_shader, base);
++      }
++   }
++   return NULL;
+ }
+ 
+ static struct tu_shader *
+@@ -1625,6 +1643,16 @@
+ {
+    struct vk_pipeline_cache_object *object =
+       vk_pipeline_cache_add_object(cache, &shader->base);
++   struct tu_device *dev = container_of(cache->base.device, struct tu_device, vk);
++   if (cache != dev->mem_cache) {
++      /* Kept in the device's cache as well, for the other pipeline caches
++       * (tu_pipeline_cache_lookup).
++       */
++      struct vk_pipeline_cache_object *shared =
++         vk_pipeline_cache_add_object(dev->mem_cache,
++                                      vk_pipeline_cache_object_ref(object));
++      vk_pipeline_cache_object_unref(&dev->vk, shared);
++   }
+    return container_of(object, struct tu_shader, base);
+ }
+ 
