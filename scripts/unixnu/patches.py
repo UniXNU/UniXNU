@@ -1,10 +1,35 @@
 """Ordered XNU patch series and target-local source preparation."""
 import hashlib
 import json
+import os
 import shutil
 
 from .profiles import resolve_path
 from .util import Error, git, log, run
+
+
+def keep_unchanged_times(old, new):
+    """Give each file of `new` that is byte-identical to its counterpart in `old` the old times.
+
+    A fresh clone stamps every file with the clone time, which makes the next make rebuild all of
+    XNU. Files a patch changed keep the new time, so their dependents still rebuild.
+    """
+    kept = 0
+    for path in new.rglob('*'):
+        relative = path.relative_to(new)
+        if relative.parts[0] == '.git' or path.is_symlink() or not path.is_file():
+            continue
+        before = old / relative
+        try:
+            status = before.stat()
+        except FileNotFoundError:
+            continue
+        if before.is_symlink() or status.st_size != path.stat().st_size:
+            continue
+        if before.read_bytes() == path.read_bytes():
+            os.utime(path, ns=(status.st_atime_ns, status.st_mtime_ns))
+            kept += 1
+    return kept
 
 
 def plan(ctx, modules):
@@ -48,8 +73,13 @@ def prepare(ctx, modules):
     if previous != signature or not (work / '.git').is_dir():
         log(f'kernel: prepare XNU {revision[:12]}')
         stamp.unlink(missing_ok=True)
+        # Keep the old tree until the new one is ready, so files whose bytes did not change keep their
+        # modification times and make rebuilds only what a patch touched instead of the whole kernel.
+        previous_tree = work.with_name(work.name + '.previous')
+        if previous_tree.exists():
+            shutil.rmtree(previous_tree)
         if work.exists():
-            shutil.rmtree(work)
+            work.rename(previous_tree)
         work.parent.mkdir(parents=True, exist_ok=True)
         run(['git', 'clone', '--quiet', '--shared', '--no-checkout', module.path, work])
         git(work, 'checkout', '--quiet', '--detach', revision)
@@ -62,6 +92,10 @@ def prepare(ctx, modules):
                 raise Error(f'XNU patch {path}: {error}') from error
         # A fresh clone lacks the public headers newer xnu omits (TrustCache among them); archives compile against it before the kernel build.
         run(['python3', ctx.tree / 'scripts/prepare-xnu-source.py'], cwd=ctx.tree)
+        if previous_tree.exists():
+            kept = keep_unchanged_times(previous_tree, work)
+            log(f'kernel: {kept} unchanged XNU files keep their times')
+            shutil.rmtree(previous_tree)
         stamp.write_text(json.dumps(signature, indent=2) + '\n')
     patch_list = ctx.work / 'xnu-patches.list'
     patch_list.write_text(''.join(str(path) + '\n' for path in selected))
