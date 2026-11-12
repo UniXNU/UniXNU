@@ -48,10 +48,10 @@ jobs:
       - name: Commit generated documentation
         id: commit
         env:
-          GIT_AUTHOR_NAME: UniXNU Docs
-          GIT_AUTHOR_EMAIL: docs@unixnu.com
-          GIT_COMMITTER_NAME: UniXNU Docs
-          GIT_COMMITTER_EMAIL: docs@unixnu.com
+          GIT_AUTHOR_NAME: rponeawa
+          GIT_AUTHOR_EMAIL: 65097782+rponeawa@users.noreply.github.com
+          GIT_COMMITTER_NAME: rponeawa
+          GIT_COMMITTER_EMAIL: 65097782+rponeawa@users.noreply.github.com
         run: |
           git add devices.toml docs/devices docs/zh/devices \
             docs/.vitepress/device-records docs/.vitepress/device-catalog.json
