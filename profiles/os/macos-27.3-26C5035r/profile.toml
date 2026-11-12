@@ -74,10 +74,7 @@
 "crypto-hash-method" = "sha2-384"
 "cryptex1-certificate-format" = "x509"
 # The boot volume, as iBoot names it: kern.bootuuid and kern.apfsprebootuuid read these (kern_sysctl.c), and launchd, logd,
-# tzlinkd and dyld ask for them to find /System/Volumes/Preboot/<uuid>. The booted System volume here is the OS image
-# (os_volume_uuid below) in no volume group, so both carry its UUID, as efiboot sets both to one UUID on Intel Macs.
-"boot-uuid" = "84581E99-85BE-4957-AC53-2947E887B3E4"
-"apfs-preboot-uuid" = "84581E99-85BE-4957-AC53-2947E887B3E4"
+# tzlinkd and dyld use them to find Preboot state for the System volume.
 
 
 ["adt"."chosen"."u32"]
@@ -94,7 +91,7 @@
 
 # The local boot policy csr_bootstrap reads (kern_csr.c): lp-sip0 keeps every SIP protection on, lp-sip1 adds
 # CSR_ALLOW_UNAUTHENTICATED_ROOT, as `csrutil authenticated-root disable` does. The system volume carries no Apple seal
-# manifest here; the owner-signed root policies verify every block of it instead.
+# manifest. This development container requires an explicitly unsealed root.
 ["adt"."chosen"."asmb"."u64"]
 "lp-sip0" = 0
 
@@ -192,21 +189,7 @@ commit = "1f4f5265b319111142f1bf3a27d4484ef5a98314"
 
 
 [userdata]
-# Disk images of this OS, in window order; the device sets the partition geometry.
-# The macOS system is one APFS container: the OS window is the whole System volume
-# (Sealed: No, no snapshot), SystemOS carries the cryptex and App the application cryptex.
-windows = [{ name = "OS", component = "OS" }, { name = "SystemOS", component = "Cryptex1,SystemOS", optional = true }, { name = "App", component = "Cryptex1,AppOS", optional = true }]
-
-
-[root]
-# The OS and Cryptex1,SystemOS disk images: APFS volume UUIDs and image digests the root policies sign.
-os_volume_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"
-os_image_sha256 = "40d8282eb8650da9b4d7437a981764c48d47ee4bdc5b8b362248f25ecbce0e70"
-systemos_volume_uuid = "6678E466-2F88-4C56-9408-DC7361BAA0BA"
-systemos_image_sha256 = "14330ed990fe7022114b10718f4defe3049d49b6e5d52fd3ac71a487541cd1f3"
-app_volume_uuid = "F2AEA010-C8EB-4AF8-92A9-4B90781CD668"
-app_image_sha256 = "797bb1e07e354e80e75d3be2658d8f586b343dbdc05cb93cb880e772ab0d23d1"
-
-
-[payload.adt]
-root_match_volume_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"
+layout = "apfs-container"
+log_reserve_mib = 1024
+# The IPSW input identity; the restored System UUID is read from disk.json.
+source_system_uuid = "84581E99-85BE-4957-AC53-2947E887B3E4"

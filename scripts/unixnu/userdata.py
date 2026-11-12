@@ -1,5 +1,9 @@
 """Userdata payload: the raw image for the device's `userdata` partition.
 
+The apfs-container layout uses a version 3 SHNGROOT prefix with no windows,
+followed by a SHNGDATA store below the fixed log reserve. Older profiles use
+the verified-window layouts below.
+
 It holds the unchanged OS and SystemOS disk images of the IPSW, byte for byte, behind a small manifest
 (the SHNGROOT layout the native UFS root driver reads):
 
@@ -87,6 +91,8 @@ def build(ctx, dry_run=False):
     spec = ctx.board.get('userdata')
     if not spec:
         raise Error('board.toml has no [userdata]')
+    if spec.get('layout') == 'apfs-container':
+        return build_container(ctx, spec, dry_run)
     if platform.system() == 'Darwin':
         tool('hdiutil', 'the disk images are attached with macOS hdiutil')
     source = Ipsw(ctx)
@@ -182,4 +188,55 @@ def build(ctx, dry_run=False):
     report.write_text(json.dumps(data, indent=2) + '\n')
     log(f'userdata: {image}')
     log(f'flash it yourself with: {data["flash_command"]}')
+    return image
+
+
+def build_container(ctx, spec, dry_run=False):
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from macos_container import copy_sparse, read_layout
+    directory = getattr(ctx.args, 'apfs_container', None)
+    if not directory:
+        raise Error('APFS userdata requires --apfs-container DIR from scripts/make-macos-disk.py')
+    directory = Path(directory).expanduser().resolve()
+    runtime = ctx.board['payload']['runtime']
+    try:
+        layout = read_layout(directory, expected_gib=runtime['data_gib'],
+                             expected_source_uuid=spec.get('source_system_uuid'))
+    except (ValueError, KeyError, OSError) as error:
+        raise Error(f'container: {error}') from error
+    if getattr(ctx.args, 'object', None):
+        raise Error('APFS container userdata accepts no legacy root objects')
+    capacity = (spec['last_lba'] - spec['first_lba'] + 1) * spec.get('lba_bytes', 4096)
+    reserve = spec.get('log_reserve_mib', 1024) << 20
+    store = directory / 'data-store.img'
+    source_offset = layout.get('store_offset', 0)
+    offset = capacity - reserve - (store.stat().st_size - source_offset)
+    if offset < 4096 + (1024 * 4096) or offset % 4096:
+        raise Error('container store overlaps the reserved userdata prefix')
+    log(f'userdata: APFS container at {offset:#x}, {layout["bytes"] >> 30} GiB, log reserve {reserve >> 20} MiB')
+    if dry_run:
+        return None
+    out, image, report = paths(ctx)
+    out.mkdir(parents=True, exist_ok=True)
+    header = bytearray(4096)
+    header[:8] = b'SHNGROOT'
+    struct.pack_into('<IIQ', header, 8, 3, 0, 4096)
+    header[4064:] = hashlib.sha256(header[:4064]).digest()
+    if source_offset:
+        if source_offset != offset:
+            raise Error('container store offset differs from the board userdata geometry')
+        image.unlink(missing_ok=True)
+        subprocess.run(['/bin/cp', '-c', store, image], check=True)
+        with image.open('r+b') as target:
+            target.write(header)
+    else:
+        with image.open('wb') as target:
+            target.truncate(capacity - reserve)
+            target.write(header)
+            copy_sparse(store, target, offset)
+    report.write_text(json.dumps(dict(layout='apfs-container', container=layout, store_offset=offset,
+        userdata_bytes=capacity, log_reserve_bytes=reserve, image_bytes=image.stat().st_size,
+        flash_command=f'fastboot flash userdata {image}', hardware_tested=False), indent=2) + '\n')
+    log(f'userdata: {image}')
     return image
