@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in 4+3+1 clusters and DVFS, native UFS root and Data, GPU-composited UI \(Adreno 650\), touch, brightness, USB debug console and battery; Wi-Fi at PCIe stage 4.
 
-源记录: [porting.toml](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/porting.toml), `b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d`.
+源记录: [porting.toml](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/porting.toml), `88b34f97100a01aab4ea6b86dc9c748b2114c382`.
 
 本页按设备记录自动生成。
 
@@ -21,9 +21,9 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 | [输入](#input) | `device-verified` |
 | [GPU](#gpu) | `device-verified` |
 | [网络](#network) | `implemented` |
-| [音频](#audio) | `implemented` |
-| [bluetooth](#bluetooth) | `planned` |
-| [sensors](#sensors) | `planned` |
+| [音频](#audio) | `device-verified` |
+| [bluetooth](#bluetooth) | `device-verified` |
+| [sensors](#sensors) | `implemented` |
 | [电源](#power) | `implemented` |
 | [haptics](#haptics) | `implemented` |
 | [camera](#camera) | `implemented` |
@@ -56,6 +56,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - README.md describes the state as of the combo7 test build \(audio, haptics and shutdown working; Wi-Fi, Bluetooth, sensors and camera in progress\).
 - board.toml lists the trust-cache hashes of the addon variants that carry the Wi-Fi supplicant, the Bluetooth BlueTool service and the Turnip buffer fix.
 - board.toml lists the trust-cache hashes of the later addon variants \(audio ABI v3 with the microphone, and the bluetoothd patch sets\); README.md describes the state as of the combo26 test build \(Wi-Fi with Safari, microphone, keychain working; Bluetooth power-on and the S Pen in progress\).
+- The port now builds on upstream UniXNU main \(62be7bc\) with the core carries in docs/host-patches/unixnu-main, adreno-metal-main and gop-framebuffer-main; boot arguments use upstream's names without the sheng- prefix, and board.description lists the working functions \(6.7 GB RAM, S Pen, Wi-Fi, Bluetooth, audio, USB\).
 
 ### 完成条件
 
@@ -71,7 +72,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [Board configuration with component selection, patch order and payload ADT strings.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/board.toml)
+- `source`: [Board configuration with component selection, patch order and payload ADT strings.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -93,6 +94,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 - The A650 GMU/SQE/ZAP images are compiled in; scripts/gen-gpu-firmware-a650.py rebuilds the source from the tablet files, reassembling the ZAP ELF from its .b0N segments.
 - proprietary-files.txt lists the Wi-Fi board files and regdb and the ADSP image \(squashed from the split mdt by scripts/squash-mdt.py\); all stay in the ignored .cache directory.
+- docs/menu/unixnu.toml is the main-base menu: renamed boot arguments, a 1023-byte command line, and the memory-outside entry. The boot partition \(candidates/menu-twrp-v1\) boots UniXNU main payloads unchanged; Skyward recovery \(separate project\) replaces TWRP for staging.
 
 ### 完成条件
 
@@ -108,7 +110,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [Firmware inputs with sources and SHA-256.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/proprietary-files.txt)
+- `source`: [Firmware inputs with sources and SHA-256.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/proprietary-files.txt)
 
 ## CPU 与中断 {#cpu}
 
@@ -122,7 +124,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 配置
 
-- armcpu-spi-ipi=1 armcpu-spi-ipi-base=544; DTS unixnu,cluster-type and unixnu,die-cluster-id 0/1/2; sheng-cpufreq=4 sheng-cpufreq-cap=2000.
+- armcpu-spi-ipi=1 armcpu-spi-ipi-base=544; DTS unixnu,cluster-type and unixnu,die-cluster-id 0/1/2; cpufreq=4 cpufreq-cap=2000.
 
 ### 操作步骤
 
@@ -133,6 +135,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - SGI/SPI 1008..1015 are group-0 secure on this firmware, so IPIs use software-pended SPIs from 544. MPIDR AFF1 numbers single cores in one DynamIQ cluster, so the scheduling cluster comes from die-cluster-id \(t970-three-clusters.patch, with the SM-T733 boot-cluster fallback\). DVFS: perfcontrol class and 200 ms load per EPSS domain, 10 ms worker \(after SM-T733 T733CpuPower\).
 - The device tree gained a wlan node \(compatible qcom,qca6390\) for wifid's launchd condition; CPU nodes are unchanged.
 - The device tree gained a bluetooth node \(/arm-io/bluetooth\) so MobileGestalt reports Bluetooth; CPU nodes are unchanged.
+- ArmCpu follows the boot-argument rename \(smp=1\).
 
 ### 完成条件
 
@@ -148,7 +151,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [SMP c1..c7=step7; CPUFREQ d0 1804 MHz, d1 1958 MHz, d2 844 MHz idle with 601 level changes.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [SMP c1..c7=step7; CPUFREQ d0 1804 MHz, d1 1958 MHz, d2 844 MHz idle with 601 level changes.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 内存与 DMA {#memory}
@@ -172,6 +175,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - XNU manages DRAM beyond the first window once the holes are skipped.
 - The device tree gained a wlan node only; the memory map is unchanged.
 - The device tree gained a bluetooth node only; the memory map is unchanged.
+- Upstream's outside-window adoption is ported to xnu-10063 \(t970-memory-outside.patch\): six Android-RAM runs below the window are adopted page by page after the VM starts \(memory-outside=1\); with the 0xd0000000 run MEM totalMiB is 6733 with 0 refused pages.
 
 ### 完成条件
 
@@ -187,7 +191,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [MEM totalMiB=5969.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [MEM totalMiB=5969.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 存储与根卷 {#storage}
@@ -212,6 +216,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 - Root reads are verified per 4 KiB block; Data persists across boots.
 - Boot hangs after the addon install were the polled UFS wait: IODelay\(2\) is a timer sleep on this board \(cpu\_idle\_latency 0\) taken under gHost.lock; the poll now spins on the counter for 20 ms before sleeping, with a \[ufs poll\] diagnostic row. The addon install now ends with F\_FULLFSYNC so a hard reset no longer loses its writes.
+- ShengUfs follows the boot-argument rename.
 
 ### 完成条件
 
@@ -227,7 +232,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [UFS requests=321101 verified4K=1136628 failures=0 integrity=0.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [UFS requests=321101 verified4K=1136628 failures=0 integrity=0.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 显示 {#display}
@@ -242,7 +247,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 配置
 
-- sheng-dpu-scanout=2; ADT artwork-display-gamut = sRGB; 12 text\_fixups \(SM-T733 21H461 sRGB/BGRA8 policy\).
+- dpu-scanout=2; ADT artwork-display-gamut = sRGB; 12 text\_fixups \(SM-T733 21H461 sRGB/BGRA8 policy\).
 
 ### 操作步骤
 
@@ -253,6 +258,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - CoreAnimation XR10/b3a8 composition striped on A650 although every single format-550 operation probed exact; forcing sRGB BGRA8 \(text\_fixups + gamut\) removed the stripes. text repage keeps the fixups after a code page is evicted.
 - LegacyDisplayProbe starts the haptics, camera, ADSP, audio, sensors and Bluetooth threads after the display is up; the display path itself is unchanged.
 - LegacyDisplayProbe also starts the S Pen thread \(weak t970\_pen\_start\) after the display is up; the display path is unchanged.
+- LegacyDisplayProbe and GopFramebuffer changes follow the boot-argument rename.
 
 ### 完成条件
 
@@ -268,7 +274,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [DISPLAY stage=10; SWAP retired=1438 with 2 copies; \[text fixup\] applied=12.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [DISPLAY stage=10; SWAP retired=1438 with 2 copies; \[text fixup\] applied=12.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 输入 {#input}
@@ -283,7 +289,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 配置
 
-- native-touch=1 sheng-touch-hid=1 t970-touch-xform=5 offline-hid-input=1.
+- native-touch=1 touch-hid=1 t970-touch-xform=5 offline-hid-input=1.
 
 ### 操作步骤
 
@@ -295,6 +301,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - NativeHidInput also publishes accelerometer, gyro and orientation HID devices for the sensor service, with the 0xff00 usages backboardd and locationd look for.
 - Motion HID devices set Built-In before IOHIDDevice::start so locationd's matching sees it at registration.
 - The S Pen is a Wacom W9020-class digitizer on I2C \(package/T970Pen.cpp\): position 26712x16714, 4096 pressure levels, tilt, side button and the garage switch all decode on device. iPadOS ignores it so far: backboardd drops any touch path index of 31 or more \(the first contact id 0xfe was thrown away\), takes a Pencil only from its own 0x0D/0x20 digitizer service, and the separate pen service is not yet opened by the HID event system. Notes in docs/spen-notes.md.
+- The S Pen works as an Apple Pencil: backboardd only opens a digitizer service shaped like the touch device \(keyboard collection first\), files it as the pencil from usage 0x0D/0x20, drops touch path indices of 31 or more, and needs AccurateMaxDigitizerPressureValue for UIKit to report force; pressure is scaled to UIKit's 0..1000 range by a dispatch wrapper.
 
 ### 完成条件
 
@@ -310,7 +317,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [TOUCHSTAT frames and HID submissions on the live console.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/usb-console.txt)
+- `device`: [TOUCHSTAT frames and HID submissions on the live console.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/usb-console.txt)
   Command: <code>macOS: read /dev/cu.usbmodem* while the periph15 payload runs</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## GPU {#gpu}
@@ -323,7 +330,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 配置
 
-- pipa-gpu=12 sheng-gpu-addon=1 sheng-fb-gpu=1; NativeSandboxGrantEntitlement = opengl-or-metal, posterkit.provider.
+- pipa-gpu=12 gpu-addon=1 fb-gpu=1; NativeSandboxGrantEntitlement = opengl-or-metal, posterkit.provider.
 
 ### 操作步骤
 
@@ -333,6 +340,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 - Wallpaper posters crash-looped on a nil MTLBuffer because MACF denied AGXDeviceUserClient; granting by entitlement \(SM-T733\) fixed them. A GPU read at 0x1\_086de2c0 past the 32-bit window poisoned a VM once \(diagnostics \[gpu far\]/\[gpu vmfail\] armed\).
 - GPU page faults no longer freeze the system: hangcheck ends a latched SMMU fault and restarts the CP \(gpufault1-4\), replays avoid draining queued jobs, and a Turnip patch \(t970-bo-safe\) stops command buffers being recycled while a submission still uses them.
+- Adopted DRAM below gPhysBase must get CPU cache maintenance like kernel DRAM \(NativeAdrenoCpu\); otherwise the CP read zeroed command buffers and the UI stuttered. The stall handler no longer halts GBIF on a busy GPU; a UI rotation re-layout still resets the SoC and is being bisected. MobileNotes is granted the GPU so PencilKit gets a Metal device.
 
 ### 完成条件
 
@@ -348,7 +356,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [gpu clients backboardd 1353M, SpringBoard 609M, CollectionsPoster 512M; BoAlloc/BoMap/Submit 0 failures.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [gpu clients backboardd 1353M, SpringBoard 609M, CollectionsPoster 512M; BoAlloc/BoMap/Submit 0 failures.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 网络 {#network}
@@ -373,7 +381,8 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - A private apps-SMMU stage-1 bank for stream 0x1c01 \(IOVA 0xa0000000, 4 MiB page-mapped arena\) contains the endpoint DMA: BHI fetched the SBL with FSR staying at FORMAT 0x400 and no reset. Choosing the bank top-down and writing FSR hung a CPU at the first access; bottom-up like QcomUsbDmaDomain with 32-bit accesses works. FSR 0x400 is the AArch64 FORMAT bit, not a fault.
 - Stage 6 runs Linux ath11k for QCA6390 hw2.0 with MHI, QRTR and QMI \(package/T970WifiStack.cpp, scripts/build-t970-wifi.py\): the firmware reaches mission mode, cache maintenance fixed the ef128100 PBL error, the QRTR name service now answers the firmware's HELLO, and WLFW is announced. The board-file download then stops with an MHI BAD\_TRE completion on the IPCR uplink channel.
 - The Wi-Fi supplicant \(unixnu-wpa\_supplicant, built by scripts/build-t970-wifi-service.py\) runs from the addon on Data with a launchd cache union-mounted over /System/Library/xpc \(t970-wifi-svc=1\). Scanning \(41 networks\), the 856-byte 21H461 join request, WPA2 join, DHCP, DNS and TCP all work; wifid does not yet mark the link usable, so there is no status-bar icon and no Safari traffic.
-- The Wi-Fi link is usable end to end: IPConfiguration's router check reads replies through BPF, so the driver now taps every frame from a separate thread \(tapping in the receive thread hung the tablet, t970-wifi-bpf=0 turns it off\), and the repeated link-changed events after a join are suppressed so wifid stops treating each one as a roam. The status-bar icon appears and Apple News loads; Safari also needs sheng-no-lc=1 because launch constraints killed its web content process. The icon still shows no signal bars.
+- The Wi-Fi link is usable end to end: IPConfiguration's router check reads replies through BPF, so the driver now taps every frame from a separate thread \(tapping in the receive thread hung the tablet, t970-wifi-bpf=0 turns it off\), and the repeated link-changed events after a join are suppressed so wifid stops treating each one as a roam. The status-bar icon appears and Apple News loads; Safari also needs no-lc=1 because launch constraints killed its web content process. The icon still shows no signal bars.
+- The coordinator config adds the signal-bar RSSI event and BPF tap thread verified on combo25/26; status stays implemented until a sanitized device row is recorded.
 
 ### 完成条件
 
@@ -389,14 +398,14 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [\[t970 wifi dom\] rc 1 bank 6 SMR 7 ASID 0xfc00, FSR 0x400; \[t970 wifi mhi\] BHI from IOVA 0xa0000000, failed in WaitReady after 3000 ms.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph17-wifi.txt)
+- `device`: [\[t970 wifi dom\] rc 1 bank 6 SMR 7 ASID 0xfc00, FSR 0x400; \[t970 wifi mhi\] BHI from IOVA 0xa0000000, failed in WaitReady after 3000 ms.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph17-wifi.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; (periph17 payload, t970-wifi=5)</code>. Revision: `cf6ed1702d3ddc2ace4cc988b982117e77f32c0b`.
-- `device`: [\[t970 wifi\] link in 13 ms, endpoint 17cb:1101 class 0x0280, BAR0 at 0x60300000.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [\[t970 wifi\] link in 13 ms, endpoint 17cb:1101 class 0x0280, BAR0 at 0x60300000.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## 音频 {#audio}
 
-`implemented`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -415,6 +424,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - The iOS output was distorted for two reasons: startOutput cleared the whole shared ring after the path came up, erasing the samples the plug-in had already written \(found with a plug-in/kernel waveform capture\); and the amps sampled on the wrong bit-clock edge. Samsung's machine driver uses DSP\_A with IB\_NF, so SP\_FORMAT SCLK\_INV must be 1. The fsync errata write ASP\_CONTROL4 and Android's noise gate NG\_CFG were also added.
 - Android runs Cirrus speaker protection firmware on the amplifier DSPs with a higher PCM gain behind it; without it the gain is kept lower.
 - The built-in microphone works as an iOS input device: DMIC3 through the LPASS TX macro, decimator 0 at 48 kHz, AFE TX\_CODEC\_DMA\_TX\_3 \(0xB037\), ADM and an ASM read session, with the PM8150A L5 mic supply voted while capturing \(defaults copied from Android with scripts/t970-android-mic-dump.sh\). The shared page ABI is version 3; the microphone is on by default and t970-audio bit 8388608 turns it off.
+- The microphone is on by default \(t970-audio bit 8388608 turns it off\).
 
 ### 完成条件
 
@@ -430,11 +440,13 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [AFE/ADM/ASM bring-up, CS35L41 setup \(SCLK\_INV, fsync errata, noise gate, VPBR\) and the shared output ring.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/package/T970Audio.cpp)
+- `device`: [\[audio mic\] st=11/0 reads=1847/1847/0 frames=878880 peak=6941 ldo=0: microphone capture through the TX macro, recorded and played back in Voice Memos.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/main7-bootlog.txt)
+  Command: <code>recovery root shell: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (main7b payload, docs/menu/unixnu.toml)</code>. Revision: `b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d`.
+- `source`: [AFE/ADM/ASM bring-up, CS35L41 setup \(SCLK\_INV, fsync errata, noise gate, VPBR\) and the shared output ring.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/package/T970Audio.cpp)
 
 ## bluetooth {#bluetooth}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -454,6 +466,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - The wrap-0 AHB branches run under hardware clock gating and read off while idle.
 - The controller answers HCI, takes htbtfw20.tlv/htnv20.bin at 3 Mbaud \(QUP 2.5 needs 16x UART oversampling\) and serves com.apple.uart.sk.bluetooth; a replacement BlueTool runs as its own launchd job. bluetoothd still exits at start because the keychain cannot store its root keys.
 - With software key wrapping in AppleKeyStoreState the keychain stores bluetoothd's root keys. The stock bluetoothd then stopped at HCI commands this QCA6390 does not support; build-t970-bluetool.py patches it to skip 0x0c5b, to treat refused unsupported commands \(status 628\) as skipped, and to stay on legacy LE \(no 0x204a, which locks the chip out of legacy scan\). The driver keeps the last HCI commands and replies per session \(\[t970 bt hci\]\). bluetoothd now stays up but Settings cannot turn Bluetooth on yet.
+- bluetoothd patches \(skip 0x0c5b, unsupported commands as skipped, legacy LE only\) plus the scan random-address and power-off race fixes let Settings turn Bluetooth on.
 
 ### 完成条件
 
@@ -469,11 +482,13 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [Power, clock, SMMU and GENI UART bring-up with a secure-pin guard.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/package/T970Bluetooth.cpp)
+- `device`: [\[t970 bt sk\] st 2 res 0 act 2/1/1/1: bluetoothd connected once and stayed up; Settings turned Bluetooth on.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/main7-bootlog.txt)
+  Command: <code>recovery root shell: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (main7b payload, docs/menu/unixnu.toml)</code>. Revision: `b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d`.
+- `source`: [Power, clock, SMMU and GENI UART bring-up with a secure-pin guard.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/package/T970Bluetooth.cpp)
 
 ## sensors {#sensors}
 
-`planned`
+`implemented`
 
 ### 硬件与依赖
 
@@ -492,6 +507,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - backboardd follows CoreMotion, which locationd computes from accelerometer &\#123;0xff00,3&\#125; and gyro &\#123;0xff00,9&\#125; services; the HID devices are stamped with those usages.
 - locationd uses the Device Orientation service &\#123;0x20,0x8a&\#125; on this model; with Built-In stamped and debug logging \(t970-sensors bit 128\) the service is still reported not ready, so rotation is not working yet.
 - The pen changes in NativeHidInput and HidInputProbe add a separate digitizer device only with t970-pen; the motion HID devices are unchanged.
+- Motion HID devices need the keyboard-first descriptor to be opened and a mach\_absolute\_time child event \(0xff15/2\) or locationd drops orientation as stale; with both, a fake gravity source rotates the UI. The SLPI boots over PAS 12 and announces sensor service 400 without FastRPC \(st 14\); real accelerometer streaming is next.
 
 ### 完成条件
 
@@ -507,7 +523,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [Fake accelerometer, gyro and orientation reports through NativeHidInput.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/package/T970Sensors.cpp)
+- `source`: [Fake accelerometer, gyro and orientation reports through NativeHidInput.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/package/T970Sensors.cpp)
 
 ## 电源 {#power}
 
@@ -519,7 +535,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 配置
 
-- t970-battery=1 sheng-pmgr=2.
+- t970-battery=1 pmgr=2.
 
 ### 操作步骤
 
@@ -531,6 +547,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - Shutdown works: after the writable volumes are unmounted the kernel waited forever on the sealed OS volume, so a 10 s failsafe \(patches/xnu/t970-shutdown-failsafe.patch\) makes the PSCI call; the speaker amplifiers are muted first so there is no pop.
 - Charging: input limit and charge current are set from the Type-C Rp/BC1.2 source with the AICL threshold at 4.5 V; PD source capabilities are read and 9 V PD/AFC is available behind t970-hv. The Apple USB stack port \(QcomDwc3\) is planned in docs/usb-plan.md with 21H461 class layouts.
 - docs/usb-plan.md gains the SuperSpeed console plan and the combo24c/25 diagnosis \(missing clock resume\).
+- docs/usb-plan.md records the QcomDwc3 device-mode result and the cable/port finding for SuperSpeed.
 
 ### 完成条件
 
@@ -546,7 +563,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [\[t970 battery\] 100.0 %, 4306 mV, +66 mA, charging, 48 watchdog kicks.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [\[t970 battery\] 100.0 %, 4306 mV, +66 mA, charging, 48 watchdog kicks.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 ## haptics {#haptics}
@@ -583,7 +600,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [LDO7C vote sequence and the T970Haptics service.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/package/T970Haptics.cpp)
+- `source`: [LDO7C vote sequence and the T970Haptics service.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/package/T970Haptics.cpp)
 
 ## camera {#camera}
 
@@ -609,6 +626,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - C3a on device: front S5K4HA defaults = 3280x2464 RAW10, 4 lanes at 700 Mbit/s; CSIPHY 3 + CSID-lite0 received 17852 packets in 300 ms with 0 ECC and 0 CRC errors, long packet DT 0x2b WC 4100.
 - C4 on device \(combo9, t970-camera=65\): one full 3280x2464 RAW10 frame through CSID-lite0 RDI0 and IFE-lite0 WM0 into pil\_cdsp 0x8e300000 in 65 ms, SMMU SMRs 0x800/0x840 mask 0x400 on the shared bypass bank \(0x801/0x841 refused\); thumbnail shows the scene, mean MSB 18 \(underexposed on defaults\).
 - C4b on device \(combo10, t970-camera=193\): auto exposure converged in one step, coarse 1264 -&gt; 2526 lines, gain 1x -&gt; 3.5x, mean 24 -&gt; 77; recognisable room thumbnail.
+- A CoreMediaIO camera extension \(tools/t970camerad\) is discovered by mediaserverd as an external camera; built-in cameras come only from the H9 ISP path, so apps do not use it yet.
 
 ### 完成条件
 
@@ -620,11 +638,11 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 下一步
 
-- C5 result \(t970-camera=961: stream 5 s at boot, then publish the T970Camera service\); then stage tools/t970cam \(scripts/build-t970cam.py\) and take a colour frame; then a viewer app \(docs/camera-notes.md section 5\).
+- C6: boot main with t970-camera=513 and the t970camerad addon \(scripts/build-t970camerad.py after the BlueTool script\); \[t970 camera c5\] d0/d1 show whether mediaserverd discovered the CMIO extension; then open FaceTime and pick T970 Front Camera \(docs/camera-notes.md section 5\).
 
 ### 证据
 
-- `source`: [camcc GDSC/XO roots, CCI polled transfer, sensor power and chip-ID read.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/package/T970Camera.cpp)
+- `source`: [camcc GDSC/XO roots, CCI polled transfer, sensor power and chip-ID read.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/package/T970Camera.cpp)
 
 ## 镜像组装 {#packaging}
 
@@ -648,6 +666,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 - New patches mount the audio HAL plug-in addon and add the shutdown failsafe; build scripts produce the audio plug-in and the Wi-Fi archive.
 - New scripts build the Wi-Fi supplicant service, BlueTool, the camera viewer and Turnip addon variants; patches/xnu/t970-wifi-service-mount.patch mounts the service cache, exempts the two service executables by exact path from the Sandbox exec hook and launch constraints, defers the mount on a boot that rewrote it, and full-syncs the addon install.
 - KeyStoreProbe provides native\_aks\_device\_id from /chosen/unique-chip-id for AppleKeyStoreState software key wrapping. t970-union-ro-create.patch lets a create on the read-only SystemOS union layer fall through to the layer below, so mkdir -p walks from / \(dhcpclient leases, SCPreferences\) no longer fail with EROFS. The Wi-Fi service mount patch also exempts bt-bin/bluetoothd, and the display build script lists the T970Pen service.
+- Core carries are exported as git am patches; build-qcom-dwc3.py and build-t970camerad.py extend the addon chain; t970-union-statfs-fsid.patch accompanies the union patches.
 
 ### 完成条件
 
@@ -663,7 +682,7 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `source`: [Board patch order.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/patches/xnu/series)
+- `source`: [Board patch order.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -684,9 +703,10 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 ### 开发经验
 
 - The USB-C D+/D- reach the SoC only through the MAX77705 analog switch, which iPadOS found open \(CONTROL1 0x3f\); writing COM\_USB \(0x09\) over the opcode mailbox brought up the console. The HS PHY needs QSCRATCH utmi-as-pipe and VBUS override.
-- The boot log gained rows for audio \(\[audio ...\]\), Wi-Fi \(\[wifi-msg\]/\[wifi-log\]\), Bluetooth \(\[t970 bt\]\), sensors \(\[sensors hid\]\), camera \(\[t970 camera\], thumbnails via tools/camera-thumb.py\) and haptics; sheng-diag-export exports the persisted system log for offline reading.
-- sheng-diag-export exports the persisted unified log plus bluetoothd/BlueTool log files; rows were added for UFS polling, Wi-Fi service mounts, Bluetooth serve counters and camera C5 streaming.
+- The boot log gained rows for audio \(\[audio ...\]\), Wi-Fi \(\[wifi-msg\]/\[wifi-log\]\), Bluetooth \(\[t970 bt\]\), sensors \(\[sensors hid\]\), camera \(\[t970 camera\], thumbnails via tools/camera-thumb.py\) and haptics; diag-export exports the persisted system log for offline reading.
+- diag-export exports the persisted unified log plus bluetoothd/BlueTool log files; rows were added for UFS polling, Wi-Fi service mounts, Bluetooth serve counters and camera C5 streaming.
 - The QcomXnuUsbDebug CDC console enumerates on the Mac \(qcom-usb-debug=1 t970-qud-retry=1\); the late retry now resumes the gated branch clocks itself. t970-ss=1 brings up the QMP USB3 PHY \(table from scripts/gen-qmp-sm8250-usb3.py, orientation from the MAX77705\) to step 104, but the link has trained at high speed so far; \[qud ss\] records the link state.
+- QcomDwc3 device mode with Apple's USB device stack enumerates as an iPad: the Mac's usbmuxd and lockdownd answer and Finder lists it \(t970-usb=5\); the CDC console stays the fallback.
 
 ### 完成条件
 
@@ -702,11 +722,11 @@ Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970\). iPadOS 17.7.11 desktop with 8 cores in
 
 ### 证据
 
-- `device`: [Wi-Fi checkpoint row \[t970 wifi dom\] is composed live by the boot-log slot writer, so it survives a stalled monitor.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph17-wifi.txt)
+- `device`: [Wi-Fi checkpoint row \[t970 wifi dom\] is composed live by the boot-log slot writer, so it survives a stalled monitor.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph17-wifi.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; (periph17 payload)</code>. Revision: `cf6ed1702d3ddc2ace4cc988b982117e77f32c0b`.
-- `device`: [QCOM XNU USB CDC ACM v1 and live rows on /dev/cu.usbmodem1101.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/usb-console.txt)
+- `device`: [QCOM XNU USB CDC ACM v1 and live rows on /dev/cu.usbmodem1101.](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/usb-console.txt)
   Command: <code>macOS: read /dev/cu.usbmodem* while the periph15 payload runs</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
-- `device`: [\[t970 muic\] CONTROL1 0x3f -&gt; 0x09; QCOM USB ACTIVE \(CDC-ACM up\).](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/b2cdb153b4f46a3bdaeb2326f326ce5c78adc58d/docs/evidence/periph15-bootlog.txt)
+- `device`: [\[t970 muic\] CONTROL1 0x3f -&gt; 0x09; QCOM USB ACTIVE \(CDC-ACM up\).](https://github.com/rui12366B/UniXNU-gts7xlwifi/blob/88b34f97100a01aab4ea6b86dc9c748b2114c382/docs/evidence/periph15-bootlog.txt)
   Command: <code>TWRP: python3 tools/read-boot-log.py --port &lt;adb serial&gt; --out logs (after booting the periph15 payload, docs/menu/unixnu.toml)</code>. Revision: `781e3528e2d5e0dc0c9c6fa1e409f5a4bc1cf0e2`.
 
 </div>

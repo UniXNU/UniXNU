@@ -6,7 +6,7 @@
 
 Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 855 Plus / SM8150-AC\) with verified SM8150 memory map, Samsung SOFEF03F-M 1080x2400@90Hz GOP framebuffer, Synaptics S3706 touch on QUPv3 SE17 I2C, UFS 3.0, and Adreno 640 v2.
 
-源记录: [porting.toml](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/porting.toml), `9993eb6e6664abf1f3be704ab8729cade16e8971`.
+源记录: [porting.toml](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/porting.toml), `4e9214d6571c670d73e73478fbfb4cf58624d0e8`.
 
 本页按设备记录自动生成。
 
@@ -68,9 +68,9 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Format 2 board manifest configures pclm10, SM8150 SoC source, ipados-17.7.11-21H461 profile, and 11 canonical components.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/board.toml)
-- `source`: [Pins UniXNU-sm8150-common at commit f363dcda920101a99e440ce3e8b68849122a3c0a.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/feeds.toml)
-- `source`: [Defines CONFIG\_BOARD\_PCLM10=y and CONFIG\_SOC\_SM8150=y.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/configs/pclm10_defconfig)
+- `source`: [Format 2 board manifest configures pclm10, SM8150 SoC source, ipados-17.7.11-21H461 profile, and 11 canonical components.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/board.toml)
+- `source`: [Pins UniXNU-sm8150-common at commit f363dcda920101a99e440ce3e8b68849122a3c0a.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/feeds.toml)
+- `source`: [Defines CONFIG\_BOARD\_PCLM10=y and CONFIG\_SOC\_SM8150=y.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/configs/pclm10_defconfig)
 
 ## 固件与启动 {#firmware}
 
@@ -113,9 +113,9 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Firmware build recipe, preflight script, and bootimg DTB path configured.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/board.toml)
-- `source`: [Generates Resources/Configs/pclm10.toml and Platforms/OPPO/pclm10Pkg/ and stages build/pclm10/pclm10.dtb.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/prepare-pclm10-uefi.py)
-- `device`: [Booted SIZE\_32MB UEFI + DarwinBoot + xnu-8796 on PCLM10 \(34d5cb55\) to SpringBoard Lock Screen and returned cleanly to fastboot.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/build-sweet-boot.py)
+- `source`: [Firmware build recipe, preflight script, and bootimg DTB path configured.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/board.toml)
+- `source`: [Generates Resources/Configs/pclm10.toml and Platforms/OPPO/pclm10Pkg/ and stages build/pclm10/pclm10.dtb.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/prepare-pclm10-uefi.py)
+- `device`: [Booted SIZE\_32MB UEFI + DarwinBoot + xnu-8796 on PCLM10 \(34d5cb55\) to SpringBoard Lock Screen and returned cleanly to fastboot.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/build-sweet-boot.py)
   Command: <code>python3 scripts/build-sweet-boot.py --uefi-bootimg sweet_work/uefi-32m-896m/boot-uefi-32m.img --kernel sweet_work/ci_xnu_43038210536/kernel.development.sweet --owned-memory-size 0x30000000 --out-dir sweet_work/out_ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
 
 ## CPU 与中断 {#cpu}
@@ -156,8 +156,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Declares 8 CPU MPIDR affinities, PSCI smc method, and armcpu-self-ipi=1 boot argument.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/board.toml)
-- `device`: [Logged SWEET GIC: virtual timer INTID 19, PSCI CPU\_ON rc=0 for cpu 1..7, and SWEET CPU: 8/8 CPUs initialized, SGI1 verified on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/apply-pclm10-sweet-overlay.py)
+- `source`: [Declares 8 CPU MPIDR affinities, PSCI smc method, and armcpu-self-ipi=1 boot argument.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/board.toml)
+- `device`: [Logged SWEET GIC: virtual timer INTID 19, PSCI CPU\_ON rc=0 for cpu 1..7, and SWEET CPU: 8/8 CPUs initialized, SGI1 verified on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
   Command: <code>python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_m4_shot/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
 
 ## 内存与 DMA {#memory}
@@ -198,8 +198,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Defines memory@c0000000 and all OPPO project 19081 reserved-memory carveouts.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `device`: [Verified vm\_page\_bootstrap: 176859 free pages, 3365 wired pages \(2816 MiB at 16K\) and Apps SMMU stream 0x300/0x140 DMA on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/apply-pclm10-sweet-overlay.py)
+- `source`: [Defines memory@c0000000 and all OPPO project 19081 reserved-memory carveouts.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `device`: [Verified vm\_page\_bootstrap: 176859 free pages, 3365 wired pages \(2816 MiB at 16K\) and Apps SMMU stream 0x300/0x140 DMA on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
   Command: <code>python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_m4_shot/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
 
 ## 存储与根卷 {#storage}
@@ -242,8 +242,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Enables &amp;ufs \(0x01d84000\) and &amp;ufs\_smmu \(0x15000000, stream 0x300\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `device`: [Mounted 'ios' on LUN 0 \(20480 MiB, block 0x359cf00\) read-write and booted iOS 16.7.16 \(20H392\) to SpringBoard on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/mkiosroot-mac.sh)
+- `source`: [Enables &amp;ufs \(0x01d84000\) and &amp;ufs\_smmu \(0x15000000, stream 0x300\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `device`: [Mounted 'ios' on LUN 0 \(20480 MiB, block 0x359cf00\) read-write and booted iOS 16.7.16 \(20H392\) to SpringBoard on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/mkiosroot-mac.sh)
   Command: <code>python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_m4_shot/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
 
 ## 显示 {#display}
@@ -262,16 +262,19 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 - SweetFramebuffer publishes AppleCLCD 1080x2400 stride 4320 at 0x9d000000 \(presented as 1125x2436 BGRA8888\) and registers qcom\_usb\_debug\_register\_framebuffer\(&amp;qud\_fb\) for live USB PNG capture.
 - AppleCLCD::present\(\) bilinearly downscales the logical 1125x2436 frame to 1080x2400 via a cached horizontal LUT and L1 rowbuf\[2048\] + memcpy Write-Combine bursts \(preventing WC bus stalls and 22/23px edge clipping, with sweetfb\_crop=1 opt-in\), composites multi-layer SrcOver alpha, clears uncovered background, and drains stores with dsb sy.
+- AppleARMBacklight \(sweetbacklight=1, sweetbl\_dcs=1\) verifies DISP\_CC \(0x0af00000\) + DSI0 \(0x0ae94000\) active state, publishes CoreBrightness IODisplayParameters/calibration properties, and writes 10-bit MIPI DCS 0x51 brightness packets via DSI0 TPG FIFO.
 - SweetFramebuffer RequestPowerChange \(selector 12\) handles display on/off transitions from backboardd.
 
 ### 操作步骤
 
-- Boot XNU with sweetfb\_noconsole=1 sweetfb\_hz=15 qcom-usb-debug=1 qcom-usb-ctl=1 and capture CRC-verified PNG frames via scripts/screenshot-xnu-usb.py across Lock Screen, Home Screen, Settings, and App Library transitions.
+- Boot XNU with sweetfb\_noconsole=1 sweetfb\_hz=15 sweetbacklight=1 sweetbl\_dcs=1 qcom-usb-debug=1 qcom-usb-ctl=1, capture CRC-verified PNG frames via scripts/screenshot-xnu-usb.py, and sweep Control Center brightness slider via pclm10-autoswipe=100.
 
 ### 开发经验
 
 - Replaced upstream 1125x2436-&gt;1080x2400 center-crop \(top=33, bot=12, dock\_L=8, dock\_R=7\) and direct volatile WC writes with L1-buffered bilinear scaling + memcpy bursts, eliminating edge clipping \(top=50, bot=23..29, dock\_L=28, dock\_R=28\) and sustained-animation WC disconnects.
 - Device-verified 1080x2400 iOS 16.7.16 UI across Lock Screen, Home Screen, Settings \(initial and scrolled\), App Library, and Control Center via CRC32-verified live USB screenshot capture.
+- iOS 16.7.16 CoreBrightness \_DisplayCreateWithID requires AppleARMBacklight class conformance plus all 9 backlight-calibration-parameters keys \(including current-for-max/mid-backlight and hardware-max-current-limit\) before starting libEDR and delivering brightness-nits updates.
+- Device-verified Control Center slider ramp \(20 steps lvl=537..984, dcs\_ok=1\) and display-on brightness restoration \(lvl=984, dcs\_ok=1\) over DSI0 TPG FIFO MIPI DCS 0x51 on 34d5cb55.
 
 ### 完成条件
 
@@ -279,17 +282,19 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 当前范围
 
-- DCS backlight brightness slider and native DPU TE \(GPIO 8\) refresh modulation are not wired yet; display off fades AMOLED pixels to black.
+- Native DPU TE \(GPIO 8\) refresh modulation is not wired yet; display off fades AMOLED pixels to black and RequestPowerChange runs at software vsync.
 
 ### 下一步
 
-- Optionally expose DCS backlight level over DSI0 command mode if brightness control beyond AMOLED fade is desired.
+- Optional: wire native MDSS TE IRQ \(GPIO 8\) and RequestPowerChange DCS 0x28/0x29 power gating if hardware DPU composition is enabled later.
 
 ### 证据
 
-- `source`: [Documents framebuffer0@9d000000 \(1080x2400, stride 4320\) and cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `device`: [Captured CRC32-verified 1080x2400 PNGs across Lock Screen \(e32d2895\), Home Screen \(3fad9be9\), Settings \(c5378c71\), scrolled Settings \(8eeca332\), and App Library \(732b19ef\) with unclipped margins on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/screenshot-xnu-usb.py)
+- `source`: [Documents framebuffer0@9d000000 \(1080x2400, stride 4320\) and cont\_splash\_region@9d000000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `device`: [Captured CRC32-verified 1080x2400 PNGs across Lock Screen \(e32d2895\), Home Screen \(3fad9be9\), Settings \(c5378c71\), scrolled Settings \(8eeca332\), and App Library \(732b19ef\) with unclipped margins on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/screenshot-xnu-usb.py)
   Command: <code>python3 sweet_work/auto_qud_multishot.py --boot-img sweet_work/out_ios_20H392_rowbuf/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_rowbuf --capture-seconds 280</code>. Revision: `094c73534157a8e09bd111ffbbd91250cd5ad114`.
+- `device`: [Verified AppleARMBacklight CoreBrightness ramp \(lvl=537..984, 20 steps dcs\_ok=1\) across Control Center slider drag and wake restore \(lvl=984 dcs\_ok=1\) on 34d5cb55 \(ios\_20H392\_bl\_v4 &amp; ios\_20H392\_final\_v3\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
+  Command: <code>python3 sweet_work/auto_qud_multishot.py --boot-img sweet_work/out_ios_20H392_bl_v4/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_bl_v4 --capture-seconds 370</code>. Revision: `1088bedc09493f4d8627a57e393b0a66f24e6372`.
 
 ## 输入 {#input}
 
@@ -329,8 +334,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Documents qupv3\_se17\_i2c \(0x00c80000\) and touchscreen@20 \(synaptics,s3706\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `device`: [Verified S3706A probe \(pid=S3706A f01=0x6 f12=0x8 d1\_off=0 n=10\), 1:1 scaled UI touch navigation \(Lock-&gt;Home-&gt;Settings-&gt;Scroll-&gt;App Library\), and PM8150 keys on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/apply-pclm10-sweet-overlay.py)
+- `source`: [Documents qupv3\_se17\_i2c \(0x00c80000\) and touchscreen@20 \(synaptics,s3706\).](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `device`: [Verified S3706A probe \(pid=S3706A f01=0x6 f12=0x8 d1\_off=0 n=10\), 1:1 scaled UI touch navigation \(Lock-&gt;Home-&gt;Settings-&gt;Scroll-&gt;App Library\), and PM8150 keys on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
   Command: <code>python3 sweet_work/auto_qud_multishot.py --boot-img sweet_work/out_ios_20H392_rowbuf/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_rowbuf --capture-seconds 280</code>. Revision: `094c73534157a8e09bd111ffbbd91250cd5ad114`.
 
 ## GPU {#gpu}
@@ -371,8 +376,8 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `source`: [Enables &amp;gpu, &amp;gmu, &amp;gpu\_smmu, &amp;gpucc, &amp;gcc and documents the 0x99515000 GPU ZAP PIL offset.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `source`: [Records Adreno 640 SQE, GMU, and ZAP firmware paths.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/proprietary-files.txt)
+- `source`: [Enables &amp;gpu, &amp;gmu, &amp;gpu\_smmu, &amp;gpucc, &amp;gcc and documents the 0x99515000 GPU ZAP PIL offset.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `source`: [Records Adreno 640 SQE, GMU, and ZAP firmware paths.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/proprietary-files.txt)
 
 ## 网络 {#network}
 
@@ -411,7 +416,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `device`: [Enumerated Sweet iOS \(USB Ethernet\) VID 0x1209/PID 0x0001 \(en2 active\) and delivered UDP 5141 REBOOT to XNU on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/apply-pclm10-sweet-overlay.py)
+- `device`: [Enumerated Sweet iOS \(USB Ethernet\) VID 0x1209/PID 0x0001 \(en2 active\) and delivered UDP 5141 REBOOT to XNU on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
   Command: <code>fastboot -s 34d5cb55 flash boot sweet_work/out_ios_20H392_ecm/boot-sweet.img &amp;&amp; fastboot -s 34d5cb55 reboot</code>. Revision: `76421c000a3de564d0dbdd48dc0d25424537e86a`.
 
 ## 音频 {#audio}
@@ -473,6 +478,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 - dtbo.img fragment@65 confirmed BQ27541 @ 0x55 is wired to qupv3\_se15\_i2c \(TLMM EAST 0x03500000 GPIO 27/28\), not qupv3\_se1\_i2c \(GPIO 114/115\).
 - Device-verified dual-cell BQ27541 readout \(raw 8633 mV -&gt; 4316 mV/cell, SOC 100%, 0 mA\) and PM8150B SID 2 SMB5 telemetry \(usb=0x10, path=0x95, chg=0x47\), reflected by the live Lock Screen charging indicator.
+- Device-verified BQ27541 bq\_recover\(\) 9-clock SCL recovery yielding mv\_ok=1\(8623\) soc\_ok=1\(100\) on poll 0 and AW8697 LRA haptic probe \(err=0 id=0x97\) + BY\_DRV\_TIME boot tap \(glb=0-&gt;0\) on 34d5cb55.
 
 ### 完成条件
 
@@ -484,13 +490,15 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 下一步
 
-- Optionally add an initial I2C bus recovery/retry on poll 0 of BQ27541 so mv\_ok=1 on the very first sample every boot.
+- Optional: expose AW8697 IOKit haptic trigger service once CoreBrightness display backlight verification completes.
 
 ### 证据
 
-- `source`: [Reserves AOP Command DB at 0x85f20000 and RPMh RSC at 0x18220000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/dts/pclm10.dts)
-- `device`: [Verified BQ27541 \(8633 mV -&gt; 4316 mV, 100%, 0 mA\), PM8150B SID 2 SMB5 \(usb=0x10 path=0x95 chg=0x47\), and RPMh L11C vote on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/apply-pclm10-sweet-overlay.py)
+- `source`: [Reserves AOP Command DB at 0x85f20000 and RPMh RSC at 0x18220000.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/dts/pclm10.dts)
+- `device`: [Verified BQ27541 \(8633 mV -&gt; 4316 mV, 100%, 0 mA\), PM8150B SID 2 SMB5 \(usb=0x10 path=0x95 chg=0x47\), and RPMh L11C vote on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
   Command: <code>python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_m4_shot/boot-sweet.img --capture-dir sweet_work/usb_captures/ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
+- `device`: [Verified BQ27541 bq\_recover\(\) mv\_ok=1\(8623\) soc\_ok=1\(100\) on poll 0 and AW8697 probe \(err=0 id=0x97\) + BY\_DRV\_TIME boot tap \(glb=0-&gt;0\) on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/apply-pclm10-sweet-overlay.py)
+  Command: <code>python3 sweet_work/auto_qud_shot.py --serial 34d5cb55 --qud-serial QcomXnuUsbDebug --boot-img sweet_work/out_ios_20H392_final_v3/boot-sweet.img --capture-dir /tmp/qud_final_v3 --settle-seconds 130 --capture-seconds 160 --no-reboot</code>. Revision: `1088bedc09493f4d8627a57e393b0a66f24e6372`.
 
 ## 镜像组装 {#packaging}
 
@@ -516,6 +524,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 - Switching sweet-16k.yml xnu job to macos-15-intel resolves arm64 runner capacity stalls \(\~12-13 min kernel build\).
 - Raising PANIC\_LOG\_BASE to 0x17E000000 in scripts/mkadt-sweet-pclm10.py clears DDR Bank 1+2 for 2816 MiB XNU DRAM without overlapping PStore.
+- scripts/apply-pclm10-sweet-overlay.py populates all 9 mandatory iOS 16 CoreBrightness calibration keys in AppleARMBacklight and adds Control Center brightness slider autoswipe gestures \(6/7\) for automated backlight verification.
 
 ### 完成条件
 
@@ -527,13 +536,15 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 下一步
 
-- Build and flash the final interactive boot-sweet.img without pclm10-autoreset.
+- Keep final interactive boot-sweet.img \(CI 43144689220, sha256 06b2daf5927137b231a68293e989ed894ae008bcedcff98be1e576ed40e9e404\) synced with any future GPU/Wi-Fi/audio milestones.
 
 ### 证据
 
-- `source`: [Defines \[package\], \[firmware\], \[bootimg\], \[payload\], and \[payload.adt\] sections.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/board.toml)
-- `device`: [Built 80257024-byte boot-sweet.img from CI run 43038210536 and booted PCLM10 34d5cb55 to SpringBoard Lock Screen.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/build-sweet-boot.py)
+- `source`: [Defines \[package\], \[firmware\], \[bootimg\], \[payload\], and \[payload.adt\] sections.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/board.toml)
+- `device`: [Built 80257024-byte boot-sweet.img from CI run 43038210536 and booted PCLM10 34d5cb55 to SpringBoard Lock Screen.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/build-sweet-boot.py)
   Command: <code>python3 scripts/build-sweet-boot.py --uefi-bootimg sweet_work/uefi-32m-896m/boot-uefi-32m.img --kernel sweet_work/ci_xnu_43038210536/kernel.development.sweet --owned-memory-size 0x30000000 --out-dir sweet_work/out_ios_20H392_m4_shot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
+- `device`: [Built final interactive 80257024-byte boot-sweet.img from CI run 43144689220 and verified live interactive Lock Screen \(crc32 b2503975\), AppleARMBacklight \(lvl=984 dcs\_ok=1\), AW8697 boot tap \(glb=0-&gt;0\), and BQ27541 poll 0 \(mv\_ok=1\) on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/build-sweet-boot.py)
+  Command: <code>python3 scripts/build-sweet-boot.py --uefi-bootimg sweet_work/uefi-32m-896m/boot-uefi-32m.img --kernel sweet_work/ci_xnu_43144689220/kernel.development.sweet --owned-memory-size 0x30000000 --out-dir sweet_work/out_ios_20H392_final_v3</code>. Revision: `1088bedc09493f4d8627a57e393b0a66f24e6372`.
 
 ## 诊断 {#diagnostics}
 
@@ -572,7 +583,7 @@ Format 2 UniXNU port for OPPO Reno Ace \(PCLM10, OPPO project 19081, Snapdragon 
 
 ### 证据
 
-- `device`: [Delivered 129/129 control frames \(0 timeouts\), verified CRC32 PNG screenshot, and executed CTL REBOOT back to fastboot on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/9993eb6e6664abf1f3be704ab8729cade16e8971/scripts/xnu_usb_control.py)
+- `device`: [Delivered 129/129 control frames \(0 timeouts\), verified CRC32 PNG screenshot, and executed CTL REBOOT back to fastboot on 34d5cb55.](https://github.com/shmilylee409-a11y/UniXNU-pclm10/blob/4e9214d6571c670d73e73478fbfb4cf58624d0e8/scripts/xnu_usb_control.py)
   Command: <code>python3 scripts/xnu_usb_control.py --socket sweet_work/usb_captures/ios_20H392_m4_shot/usb-control.sock reboot</code>. Revision: `f437b9a8a811c9b3edf99f097e34e1ef4e76b9e6`.
 
 </div>

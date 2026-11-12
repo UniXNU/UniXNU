@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-OnePlus 13 CPH2653: iPhone iOS source preparation; host evidence only, no phone operations.
+OnePlus 13 CPH2653: native A830 iPhone development payload, local builds and a separate QEMU fixture reaching original launchd main through the SystemOS union and shared cache.
 
-Source record: [porting.toml](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/porting.toml), `814bd4943b279d91ae61ada33d4968cf749a48e7`.
+Source record: [porting.toml](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/porting.toml), `c789270726a971264b2095fdc5c9190290b19611`.
 
 This page is generated from the device record.
 
@@ -50,7 +50,8 @@ Components: `XnuPrelink`.
 
 - 61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.
 - Public reports use separate original and publication hashes. Builds inherit host memory settings and use four jobs.
-- Reviewed the current porting workflow at UniXNU 75f35420137371d10b5c66399a39619991cde077 and both 13T records. Architecture/SoC/OS/board layers and existing source revisions remain selected. The unchanged standard package.sh template resolves the iPhone profile and 61 patches.
+- Reviewed the porting guide and both 13T ports through UniXNU 13d0779e2ccd30d3caa1f8c9a15202730feace67 on 2026-11-11. The native route backports calling-thread compilation and Vulkan device retention after recovery. The latest core change updates Adreno740 address-space fault isolation. Source revisions and the iPhone profile remain pinned; the standard package check resolves 61 patches.
+- The native prelink derives normal and explicit security startup from the original iPhone module records. Sandbox uses its existing module start; AMFI keeps its explicit early initializer. The shared source profile and original component code remain pinned.
 
 ### Completion criteria
 
@@ -66,7 +67,7 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `host`: [61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-rebased-patches.json)
+- `host`: [61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-rebased-patches.json)
   Command: <code>python3 scripts/check_ios16_patches.py</code>. Revision: `3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7`.
 
 ## Firmware and boot {#firmware}
@@ -86,14 +87,14 @@ Components: `DarwinBoot`.
 
 ### Procedure
 
-- Run python3 scripts/build\_uefi.py --with-unixnu-menu and scripts/validate\_uefi\_artifacts.py with four jobs and the host's inherited resource settings.
-- Run .venv-uefi/bin/python scripts/build\_boot\_entropy.py, .venv-gpu/bin/python scripts/check\_boot\_entropy\_kernel.py and .venv-gpu/bin/python scripts/build\_entropy\_payload.py; each supports --check-only. All outputs use isolated source/build paths.
+- Run .venv-uefi/bin/python scripts/build\_native\_a830\_firmware.py after preparing the pinned sources and entropy loader; --check-only validates completed files.
+- The native payload builder model-tests this exact EFI before assembling the Android container.
 
 ### Development findings
 
-- 53 EFI images pass build validation; Android v4 container readback matches. Production SimpleFb passes 32 sanitized failure/bounds cases. Of 54 selected donor binaries, 5 match stock, 41 differ and 8 are patched variants.
-- The isolated loader refreshes the final ADT seed from a 256-byte RAW EFI RNG request per attempt and refuses errors without an old-seed fallback. Fourteen provider/order, 408 malformed/truncation and three parameter sanitizer cases pass. The full FD structurally reads back 53 generated EFI and 100 embedded images, including the exact changed loader and unchanged donor RNG; that embedded loader passes actual Boot C/native seed-to-original-POST model checks.
-- The logger variant builds a 3 MiB FD with 54 validated EFI images. Firmware-volume readback finds the QR exporter; generated DXE Core inputs contain the producer constructor and 2 MiB buffer setting. SEC retains its existing debug output.
+- The current native firmware builds 54 EFI images into a 3 MiB FD with the original memory patch. Readback finds the exact fresh-entropy DarwinBoot, unchanged donor RNG and QR log exporter.
+- The DXE producer has a 2 MiB buffer. Tools &gt; Advanced Logger exports it through OneSend; SEC retains the existing debug output.
+- The loader obtains a fresh 256-byte RAW EFI RNG seed per attempt. Its actual Boot C code passes two success and six failure model paths, then the native kernel consumes the seed and runs the original 18-test crypto POST.
 
 ### Completion criteria
 
@@ -109,12 +110,10 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `host`: [53 EFI images pass build validation; Android v4 container, shim, FD, DTB and ramdisk readback match.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/uefi-build.json)
-  Command: <code>python3 scripts/validate_uefi_artifacts.py</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
-- `host`: [Isolated full firmware and Android v4 readback; exact embedded EFI Boot C paths 2 success/6 failure plus controls and native seed-to-original-POST chain; firmware/RNG/exit peers explicit](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-entropy-payload.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_entropy_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
-- `host`: [Logger firmware variant: 3 MiB FD, 54 EFI validation results, exporter GUID and AArch64 image readback, DXE producer constructor and 2 MiB setting.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/uefi-logs.json)
-  Command: <code>.venv-uefi/bin/python scripts/validate_uefi_artifacts.py --output build/cph2653-uefi-logs --report reports/uefi-logs.json</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
+- `host`: [54 EFI images with the exact entropy loader and DXE exporter read back from the 3 MiB firmware.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-firmware.json)
+  Command: <code>.venv-uefi/bin/python scripts/build_native_a830_firmware.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
+- `host`: [Actual EFI success/failure paths, addon/trust memory handoff, native seed consumption and original 18-test crypto POST pass with explicit firmware peers.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-payload.json)
+  Command: <code>.venv-gpu/bin/python scripts/build_native_a830_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
 
 ## CPU and interrupts {#cpu}
 
@@ -152,7 +151,7 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `host`: [ArmCpu and ArmDTPlatform compile/link against Darwin 22; native timer and PAN definitions are present in actual compiler records. SM8750 topology excludes Apple CPU\_OVRD.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/native-kernel.json)
+- `host`: [ArmCpu and ArmDTPlatform compile/link against Darwin 22; native timer and PAN definitions are present in actual compiler records. SM8750 topology excludes Apple CPU\_OVRD.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-kernel.json)
   Command: <code>.venv-uefi/bin/python scripts/validate_kernel_artifacts.py</code>. Revision: `3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7`.
 
 ## Memory and DMA {#memory}
@@ -189,12 +188,14 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `host`: [Static descriptor checks pass; the host-executed source page policy retains native 4 KiB at RAM boundaries.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/memory-after.json)
+- `host`: [Static descriptor checks pass; the host-executed source page policy retains native 4 KiB at RAM boundaries.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/memory-after.json)
   Command: <code>python3 scripts/check_uefi_memory.py --map uefi/Mu-Silicium/Platforms/OnePlus/dodgePkg/Library/MemoryMapLib/MemoryMapLib.c --dtb &lt;captured-dtb&gt; --expected-sha256 f961f2596c31c51b8db5be7b9e680aa35c86b71694820a7b5844f9829a3e7d11</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
 
 ## Storage and root {#storage}
 
 `implemented`
+
+Components: `VirtioMmioBlock`.
 
 ### Hardware and dependencies
 
@@ -209,6 +210,7 @@ Components: `ArmCpu`.
 - Run scripts/build\_storage\_stack.py with the local .venv-uefi Python; it selects .venv-gpu for linked CPU checks. Use --check-only to verify all five current stages without rebuilding.
 - Run scripts/build\_data\_stack.py for both APFS seeds, real source lifecycle/helpers, the 83-object strict original prelink and CPU paths; --check-only verifies current reports/artifacts.
 - Run .venv-gpu/bin/python scripts/check\_ramblock\_start\_kernel.py for the actual startup/live chain; --check-only validates its current evidence.
+- Build the separate QEMU candidate with scripts/build\_qemu\_storage.py, then run scripts/check\_qemu\_storage.py with the GPU Python environment and local OS/SystemOS files. --check-only validates the recorded run.
 
 ### Development findings
 
@@ -216,6 +218,13 @@ Components: `ArmCpu`.
 - A separate 84-object/85-entry startup candidate now queues system/Data/input in actual IOBSD. Thirty scheduler sanitizer and 43 CPU paths plus 24 rejection controls pass; the exact 721024-byte packed 2 GiB seed and preserved iPhone ADT pass actual DarwinBoot C handoff parsers and FAT/Android v4 container readback. Data remains default-off; the original mount is unqualified.
 - Seven additional init/Data stages pass: exact 336-byte user/324-byte APFS request ABI, 19 original-program and 80 native/original-prefix CPU paths, 16 new request sanitizer cases and 32 rejection controls. An 87-object/91-entry candidate wires actual PID 1 scratch/Data/init ordering, uses exact seed identity and post-mount checks, and passes independent container readback. Apple option/VFS/mount/VM/IOKit/init peers remain explicit; original mount and root authentication are unqualified.
 - The unchanged RamBlock start now executes against exact 2/3 GiB seeds in the 87-object candidate: 28 start paths, full 524288-page 2 GiB hashing, then 26 live I/O and 68 selector paths on the actual started objects, plus four rejection controls. Native metadata getters execute; platform/registry/type/hash/descriptor peers remain explicit. Original media publication, full APFS and persistence remain unqualified.
+- The native A830 integration preserves the existing storage/input/startup objects and their original bindings. Its 111-object strict link and prelink repeat the UFS, RamBlock and iPhone storage-table readbacks.
+- QEMU now reaches bsd\_init and then the genuine Failed to mount root device panic. This fixture has no root block transport; the prepared iPhone OS/SystemOS files remain local.
+- A separate 113-object candidate connects the pinned read-only VirtioMmioBlock to the measured iPhone storage ABI. It waits for completed platform registration, snapshots all 32 actual VirtIO nubs and starts the two block devices after original IOStorageFamily loads. Actual DMA first-sector hashes and capacities match OS/SystemOS. Original APFS mounts the UUID-selected root, then XNU refuses its failed root-authentication ioctl. Disabled startup and writable-backend controls perform no disk reads.
+- The owner-root fixture verifies all 2,045,449 original input blocks with C/OpenSSL and calls the exact original iPhone RSA make/verify callbacks twice each in QEMU. Every completed guest read is checked against immutable owner-signed policy. The mounted root is read-only, its signed UUID and actual BSD device match, and load\_init\_program is reached. The Apple ioctl still returns EAUTH. Damaged signatures, changed DMA and a genuinely signed wrong UUID are refused.
+- Adding the original iPhone AppleFSCompressionTypeZlib extends the separate VM candidate to 29 components and 64,635 checked pointer sites. PID 1 is launchd with the original executable UUID. Its first EL0 instruction and 64 entry bytes match the original dyld extracted from OS. The missing-decompressor control fails exec with ENOTSUP before EL0.
+- SoftwareAES binds to the original 288-byte iPhone AES class and 181 dispatch slots. Its actual CBC/interface self-tests pass, and original Image4 completes nonce requests using the separate public VM development identity. Original dyld returns from its ignition query, enters prepare and reaches the missing shared-cache/libSystem error. Wrong-answer and absent-identity controls are refused.
+- The SystemOS fixture enables the existing Darwin 22 native union with the observed iPhone UUID. Its mounted device and signed read-only policy match, and the original OS root passes a second check. Original dyld maps the original shared cache and its live header matches all 512 bytes. Execution reaches launchd main with 16 matching original instruction bytes after the initial demand-page fault. A different SystemOS UUID is refused before mounting. Ignition remains enabled.
 
 ### Completion criteria
 
@@ -228,20 +237,29 @@ Components: `ArmCpu`.
 ### Next action
 
 - Qualify the implemented full read-only transport, original storage matching/completion and root publication; qualify authenticated-root, the implemented PID 1 Data mount route, original media matching, full parent/registry and crypto/power lifecycle. The default-off init route is wired and modeled; physical qualification remains outstanding.
+- Continue beyond launchd main into Data and system-service startup; retain the separate Apple authentication result and physical-storage work.
 
 ### Evidence
 
-- `host`: [The iOS 16 source probe compiles, 212 public native imports match by name, and the real local UBSAN runtime dependency is recorded for static linking. Eight existing read-only host suites pass ASan/UBSan.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ufs-source-probe.json)
+- `host`: [The iOS 16 source probe compiles, 212 public native imports match by name, and the real local UBSAN runtime dependency is recorded for static linking. Eight existing read-only host suites pass ASan/UBSan.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ufs-source-probe.json)
   Command: <code>.venv-uefi/bin/python scripts/build_ufs_probe.py --partition unixnu</code>. Revision: `f5017376415268fd39dcf0b3fd68a94661cee078`.
-- `host`: [Complete read-only root publisher, original iPhone ABI, 32 lifecycle and 25 combined startup host cases; strict 68-object/208-alias source and original-component prelink, no runtime activation](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-ufs-root.json)
+- `host`: [Original storage, two read-only DMA disk reads and the UUID-selected APFS root mount execute in QEMU. XNU preserves its root-authentication refusal. Two transport refusal controls and 27 coordinator sanitizer cases pass.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-qemu-storage-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_qemu_storage.py --check-only</code>. Revision: `4e1013eb8c45077b57f8d38d61b389fe899ea1c3`.
+- `host`: [Original iPhone launchd PID 1 executes the first dyld instruction in EL0; process UUID, 64 entry bytes and original decompressor callback instructions match. The missing-component control fails before EL0.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-qemu-exec-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_qemu_exec.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
+- `host`: [SoftwareAES passes actual CBC/interface tests, original Image4 serves its ignition query, and original iPhone dyld enters prepare and its cache loader. Two refusal controls pass. SystemOS cache attachment is next.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-qemu-aes-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_qemu_aes.py --check-only</code>. Revision: `da07dd5c7d62bbe960f5bd4fe7789574d3a49d8c`.
+- `host`: [Read-only owner-verified SystemOS union, original shared-cache mapping and launchd main entry execute in QEMU. The cache header and init entry bytes match the originals; a wrong volume UUID is refused before mounting.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-qemu-systemos-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_qemu_systemos.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
+- `host`: [Complete read-only root publisher, original iPhone ABI, 32 lifecycle and 25 combined startup host cases; strict 68-object/208-alias source and original-component prelink, no runtime activation](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-ufs-root.json)
   Command: <code>.venv-uefi/bin/python scripts/build_ufs_root.py</code>. Revision: `f5017376415268fd39dcf0b3fd68a94661cee078`.
-- `host`: [Six Data stages pass: two exact original-content APFS seeds, 77 sanitizer cases, 30 ARM64 paths, 43 rejection controls and an 83-object/28-component strict prelink. Original Data matching/mount and writable runtime remain unqualified.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/data-stack.json)
+- `host`: [Six Data stages pass: two exact original-content APFS seeds, 77 sanitizer cases, 30 ARM64 paths, 43 rejection controls and an 83-object/28-component strict prelink. Original Data matching/mount and writable runtime remain unqualified.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/data-stack.json)
   Command: <code>.venv-uefi/bin/python scripts/build_data_stack.py --check-only</code>. Revision: `4be2d7eb05ef5a98126c91e0302c149140c0e3e1`.
-- `host`: [Four startup stages, 84 objects, 30 scheduler sanitizer cases, 43 CPU paths and 24 rejection controls pass. Packed Data/ADT/FAT/Android readback passes; no phone or original Data mount qualification.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/data-startup-stack.json)
+- `host`: [Four startup stages, 84 objects, 30 scheduler sanitizer cases, 43 CPU paths and 24 rejection controls pass. Packed Data/ADT/FAT/Android readback passes; no phone or original Data mount qualification.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/data-startup-stack.json)
   Command: <code>.venv-uefi/bin/python scripts/build_data_startup_stack.py --check-only</code>. Revision: `4be2d7eb05ef5a98126c91e0302c149140c0e3e1`.
-- `host`: [Exact iPhone ordinary Data requests, 87-object/91-entry init hook, 19 original-program and 80 source/original-prefix CPU paths, 32 rejection controls and container readback pass; no real APFS mount/root authentication.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/data-mount-stack.json)
+- `host`: [Exact iPhone ordinary Data requests, 87-object/91-entry init hook, 19 original-program and 80 source/original-prefix CPU paths, 32 rejection controls and container readback pass; no real APFS mount/root authentication.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/data-mount-stack.json)
   Command: <code>.venv-uefi/bin/python scripts/build_data_mount_stack.py --check-only</code>. Revision: `244c76b2610adc6bbfceceea7028665be6df560e`.
-- `host`: [28 actual start, 26 subsequent I/O and 68 selector ARM64 paths; four rejection controls, no state reconstruction or original APFS/runtime qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-ramblock-start-kernel.json)
+- `host`: [28 actual start, 26 subsequent I/O and 68 selector ARM64 paths; four rejection controls, no state reconstruction or original APFS/runtime qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-ramblock-start-kernel.json)
   Command: <code>.venv-gpu/bin/python scripts/check_ramblock_start_kernel.py --check-only</code>. Revision: `4be2d7eb05ef5a98126c91e0302c149140c0e3e1`.
 
 ## Display {#display}
@@ -263,6 +281,7 @@ Components: `ArmCpu`.
 ### Development findings
 
 - Exact original iPhone class hierarchy and table extents pass static audit. Legacy is 5728 bytes/338 entries; fourteen typed virtual dispatch probes pass across 45 CPU cases; eight raw backend call shapes are qualified while slot 243 arguments and all operation/status semantics remain open. The partial base retains nine abstract slots; a separate concrete GOP subclass now supplies bounded error/no-op entries, a raw stock-equivalent slot 243 leaf, and service coordination. This archive passes 60 coordinator, ten actual frontend/bridge/refresh integration and 69 native CPU cases. A separate 64-object kernel includes the class and explicit original-module prepare/attach entry points; 33 sanitized orchestration peer cases pass, including original software-root presence/class and provider checks. Another 32 CPU cases execute full original Legacy init/start/post-hardware/stop/free together with the concrete source class from the real prelink; IOKit/coordinator/matching/scheduler are explicit peers. Three original dispatcher cases cover late provider use, and the source now retains provider until free. Real original parent lifecycle and physical power remain unqualified. The bounded frontend waits original producers plus a captured Adreno timeline, defaults to CPU scanout copy, and connects optional disabled software refresh. Its startup factory retains inputs while entering the original work-loop gate and rechecks identity/mode/queue state before creating the frontend. 121 sanitized frontend cases cover queue reconciliation, reentrant release, waits, cancellation, mode matching, empty startup queues and stop. Another 29 CPU cases check original init/queue blocks; registration occurs before original start returns. The 23 original-userland cases connect three unchanged kernel size functions to CGSize conversion. Sixteen additional completion body/guard CPU cases execute thirteen unchanged full-body paths and twelve release/current-clear/wakeup tails with explicit lifetime peers. A separate native derived fixture verifies all 338 vtable slots, 170 original inherited-method/C2/D2 aliases plus one parent-metaclass alias and seven bounded lifetime cases comparing actual original/source-kernel parent C2/D2 without parent peers; no real provider or metaclass is registered. The real-class GOP factory now allocates the exact 216-byte original AppleARMIODevice, uses inherited public init, reads back actual PE memory resources, and pins the published nub/metaclass. Sixty sanitizer cases and eighteen linked CPU paths cover ownership, original allocation/native constructors, early unwind and the actual IOBSD hook. An isolated native object schedules a bounded worker only with dodge-graphics=1; twenty-four scheduling sanitizer cases pass. Real registry, loader, generic init, allocation and scheduling remain explicit peers; kernel runtime and Apple bus/clock methods remain unqualified.
+- The native A830 candidate retains eleven display support objects and original-family startup order, recompiling the frontend with per-surface recovery checks. An abandoned writer blocks its surface until a later successful writer retires; captured old epochs stay invalid. The 111-object kernel and 136 frontend cases cover this path alongside deferred producer completion and backing changes.
 
 ### Completion criteria
 
@@ -278,8 +297,10 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `host`: [Concrete exact Legacy/GOP source class and coordinator compile for Darwin 22. Strict link reads all 338 slots, 172 original aliases and 191 native/GPU imports. 60 coordinator sanitizer cases, ten actual frontend/bridge/refresh integration cases and 69 native CPU cases pass with explicit peers. Publication waits until parent start returns; gated client admission and deferred detach preserve resources through drain and parent stop. Failed Legacy start retains partial resources; source cleanup now runs once after start returns and frontend drain. Eleven bounded no-surface paths execute unchanged full original stop with explicit IOKit peers. Explicit OSKext preparation, Kernel pre/postModLoad and attachment compile into a separate strict 64-object kernel and original-graphics prelink. An additional 32 full linked lifecycle CPU cases execute actual original init/start/post-hardware/stop/free and source class instructions with primitive IOKit/core peers; two corruption/boundary controls are rejected. A provider lifetime pin protects the late original dispatcher after detach. A unified explicit boot coordinator holds provider/root and orders modules, atomic one-shot A830 startup and display attach; 24 sanitizer cases plus six direct board entry cases with 16-way calls pass with API peers. A separate FAT/Android v4 development container passes complete readback; original userspace/root remain absent and opt-in startup is disabled by default.  The real-class GOP factory now allocates the exact 216-byte original AppleARMIODevice, uses inherited public init, reads back actual PE memory resources, and pins the published nub/metaclass. Sixty sanitizer cases and eighteen linked CPU paths cover ownership, original allocation/native constructors, early unwind and the actual IOBSD hook. An isolated native object schedules a bounded worker only with dodge-graphics=1; twenty-four scheduling sanitizer cases pass. Real registry, loader, generic init, allocation and scheduling remain explicit peers; kernel runtime and Apple bus/clock methods remain unqualified. Real original loader/start/stop, service matching, power and runtime remain unqualified; defaults are unchanged.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-display-service.json)
+- `host`: [Concrete exact Legacy/GOP source class and coordinator compile for Darwin 22. Strict link reads all 338 slots, 172 original aliases and 191 native/GPU imports. 60 coordinator sanitizer cases, ten actual frontend/bridge/refresh integration cases and 69 native CPU cases pass with explicit peers. Publication waits until parent start returns; gated client admission and deferred detach preserve resources through drain and parent stop. Failed Legacy start retains partial resources; source cleanup now runs once after start returns and frontend drain. Eleven bounded no-surface paths execute unchanged full original stop with explicit IOKit peers. Explicit OSKext preparation, Kernel pre/postModLoad and attachment compile into a separate strict 64-object kernel and original-graphics prelink. An additional 32 full linked lifecycle CPU cases execute actual original init/start/post-hardware/stop/free and source class instructions with primitive IOKit/core peers; two corruption/boundary controls are rejected. A provider lifetime pin protects the late original dispatcher after detach. A unified explicit boot coordinator holds provider/root and orders modules, atomic one-shot A830 startup and display attach; 24 sanitizer cases plus six direct board entry cases with 16-way calls pass with API peers. A separate FAT/Android v4 development container passes complete readback; original userspace/root remain absent and opt-in startup is disabled by default.  The real-class GOP factory now allocates the exact 216-byte original AppleARMIODevice, uses inherited public init, reads back actual PE memory resources, and pins the published nub/metaclass. Sixty sanitizer cases and eighteen linked CPU paths cover ownership, original allocation/native constructors, early unwind and the actual IOBSD hook. An isolated native object schedules a bounded worker only with dodge-graphics=1; twenty-four scheduling sanitizer cases pass. Real registry, loader, generic init, allocation and scheduling remain explicit peers; kernel runtime and Apple bus/clock methods remain unqualified. Real original loader/start/stop, service matching, power and runtime remain unqualified; defaults are unchanged.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-display-service.json)
   Command: <code>.venv-gpu/bin/python scripts/build_display_service.py</code>. Revision: `3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7`.
+- `host`: [136 native frontend cases and 1,124 packet mutations pass with explicit timeline, transport and IOKit peers.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-recovery-host.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_native_a830_recovery.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
 
 ## Input {#input}
 
@@ -316,9 +337,9 @@ Components: `ArmCpu`.
 
 ### Evidence
 
-- `host`: [Twenty-two current offline stages, 3556 sanitized source cases, 201 CPU paths plus 52 report checks and independent 81-object/332-alias/77-entry/28-original-component local container; exact stock SPI SEFW embedded, no runtime/hardware/full-iOS qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/input-stack.json)
+- `host`: [Twenty-two current offline stages, 3556 sanitized source cases, 201 CPU paths plus 52 report checks and independent 81-object/332-alias/77-entry/28-original-component local container; exact stock SPI SEFW embedded, no runtime/hardware/full-iOS qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/input-stack.json)
   Command: <code>.venv-uefi/bin/python scripts/build_input_stack.py --check-only</code>. Revision: `f5017376415268fd39dcf0b3fd68a94661cee078`.
-- `host`: [Original 208-byte/207-slot IOHIDDevice vs public 205-slot reference; original/public facts stay distinct from bounded callable source interface](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-hid-abi.json)
+- `host`: [Original 208-byte/207-slot IOHIDDevice vs public 205-slot reference; original/public facts stay distinct from bounded callable source interface](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-hid-abi.json)
   Command: <code>.venv-uefi/bin/python scripts/prepare_hid_abi.py</code>. Revision: `f9edab5e6cc6b2cf01ec8dfc6f2a41fd60e3a0bc`.
 
 ## GPU {#gpu}
@@ -329,64 +350,53 @@ Components: `Adreno740`, `AdrenoMetal`.
 
 ### Hardware and dependencies
 
-- Captured Adreno830v2 0x44050001, six target power policies, exact CPH2653 16.0.1.304 stock microcodes, pinned A830/Metal/HFI/Mesa/translator sources and exact iPhone KC.
+- Native Adreno830 1a132105 and matching SMMU 3ba92451; CPH2653 Adreno830v2 0x44050001, six power/ACD bins, eight temperature sensors and four stock microcodes.
+- iPhone10,3 / 20H392 original components and Darwin 22 source; pinned Mesa, AdrenoMetal and metal2vulkan inputs.
 
 ### Configuration
 
-- Independent 54-object GPU and 64-object concrete-display/module-lifecycle kernels, strict original-graphics prelinks, and ordinary ARM64/iOS 16 Rust/Turnip/Metal userspace. Original-parent accelerator initialization is deferred. Default kernel and prelink closure leave GPU disabled.
+- Separate native A830 kernel and userspace build directories. The 57-object GPU archive joins the shared storage/input/display source to form a 111-object kernel.
+- Surface-ID import uses selector 19. Optional selectors 17/18 validate their record sizes and return Unsupported; submission retains the native FIFO policy.
 
 ### Procedure
 
-- Run scripts/build\_gpu\_stack.py for the offline build chain, or --check-only to verify current artifacts and matching stage identities.
-- Run .venv-gpu/bin/python scripts/build\_fresh\_gpu\_stack.py for the separate original-IOSurface/fresh-health route; --check-only verifies completed stages and --record-existing validates and records existing outputs.
-- Run .venv-gpu/bin/python scripts/build\_mapped\_lease\_stack.py for isolated all-mapping leases and bounded lock-free map waiting; --check-only verifies completed stages.
-- Run .venv-gpu/bin/python scripts/build\_surface\_identity\_stack.py for isolated current-task identity resolution, native binding, strict full prelink and source-to-original permission/reference checks; --check-only preserves completed outputs.
-- Run .venv-gpu/bin/python scripts/build\_surface\_pages\_stack.py for the kernel-only owned-descriptor/import page association; --check-only preserves all completed outputs. The caller must already own the exact original descriptor through original-component serialization.
-- Run .venv-uefi/bin/python scripts/build\_native\_a830.py after source preparation for the standalone Shad0w23333 native Gen8 archive.
-- Run python3 scripts/check\_native\_a830\_host.py for fifteen native A830 software-controller suites on Linux.
+- Prepare GPU tools, stock firmware and the shared 97-object iPhone source baseline as described in docs/bring-up.md.
+- Run .venv-gpu/bin/python scripts/build\_native\_a830\_stack.py to build the native route; --check-only validates completed stages and --record-existing records them without rebuilding.
 
 ### Development findings
 
-- Actual full backend, target microcode/policy/board/presenter, Rust bridge, Turnip and Metal bundle builds pass. Board metal registration releases failed init/attach instances and refuses failed property writes; 15 sanitizer cases compile its actual staged function with loader/IOKit peers. Existing ASan/UBSan tests and target/4 KiB code-page readback pass. Target vendor\_boot matches the captured A-slot manifest. Exact iPhone Legacy is 5728 bytes/338 slots, rejecting the iPadOS17 reference layout.
-- A separate 90-object/97-entry/341-alias kernel rechecks native GPU health after a historical fence pass, after backing and before copy/retirement. Original IOSurface writer errors do not automatically reach waiting readers. Exact notification bindings, 17 original notification-chain cases, 132 frontend sanitizer cases, 84 actual-kernel paths and strict 63889 pointer readbacks pass; two unsafe source variants fail.
-- Each submit conservatively holds all current VM mappings; late mapping waits outside the publisher lock, bounded by one second and 16384 attempts. Cache failure/uncertain zero-fence publication retains the whole lease. 28 new sanitizer cases, three existing suites, five source controls, 112 actual-kernel paths and strict prelink/container readback pass.
-- A kernel-callable current-task resolver uses the exact original IOSurfaceRoot entry. Actual original task/client cache, membership and policy plus the custom CAS reference counter at +1000 execute; +12 is the surface ID. Thirteen sanitizer cases, three source controls, 20 original identity and 17 source-to-original paths pass. The separate 92-object/99-entry/342-alias candidate repeats 112 existing ARM64 regressions and strict prelink.
-- Kernel-only association checks original descriptor identity, allocation rounding, direction, length and every imported physical page. It independently prepares/holds descriptor, surface and real native memory. Complete failure quarantines ownership; VM/job holds defer release. Thirty-five ASan/UBSan cases, four source controls, 25 new actual-linked ownership/VM paths and five instruction controls pass. A 94-object/102-entry/343-alias candidate reruns 149 earlier ARM64 regressions and strict prelink.
-- The standalone Shad0w23333 Adreno830 snapshot 1a1321056ffc5428ae925f4680093718b46ca7c2 builds 51 iOS 16 objects with its matching SMMU library and exact iPhone accelerator binding. Its Darwin 22 adapter spells out data-free operations around a dependent-template compiler failure. Linux host tests account for Clang 18 aggregate-zero initialization warnings. The existing Metal frontend adds selectors 17/18 to the shared v2 base and needs a deliberate protocol merge.
+- Native startup reads the SoC from SMEM before power writes, accepts 618/639 and checks any explicit dodge-gpu-soc request. The captured ACTLR value remains 0x32b. The 181 board checks include the actual stock firmware parsers and concurrent startup ownership.
+- Surface imports resolve the calling task and retain exact original backing pages. A single active batch obtains original writer grants outside GPU locks. Whole-VM leases retain indirect resources; the deferred worker signals original completion after fence/cache retirement. Pending cancellation retains callback owners until a grant arrives. Backing changes invalidate active work and display health.
+- Fifteen backend sanitizer suites, 24 native runtime cases, 12 map-wait cases and the VM concurrency suite pass. The strict prelink contains 28 original executables and seven interfaces; 63,889 pointer readbacks, four surface hooks and 17 original sync ARM64 cases pass. Prelink rebuilds validate a temporary candidate before replacing the current output.
+- Turnip, Rust and Metal compile for ordinary arm64 iOS 16. Surface-ID hints reach the native import selector, with unconsumed or mismatched imports refused. The latest official calling-thread compilation policy is backported with its 2 MiB stack guard.
+- GetStatus returns Busy during recovery and NotResponding after permanent loss. Turnip retains its Vulkan device after counter changes and exposes the restart count. Failed writers block only their surfaces after recovery drains; successful later writers restore visibility. Unconfirmed original completion retains tickets and callback context. Eleven actual Turnip status calls and two rejected old behaviors pass host tests.
+- The official-format addon contains five files. Its trust bundle holds three local executable hashes and both unchanged iPhone 20H392 trust modules. Actual EFI addon/trust handoff, fresh seed consumption, original 18-test crypto POST and FAT/Android v4 readback pass in local models.
 
 ### Completion criteria
 
-- GPU power, SMMU, firmware, queues and known shader outputs operate through the original iPhone graphics clients.
+- The original iPhone graphics clients render known outputs through the target GPU with correct producer fences, reset and cache visibility.
 
 ### Current limits
 
-- Source display imports resolve to real console/completion/software timer implementations. 93 bridge, 121 bounded frontend and 46 timer sanitized cases use software peers. CPU scanout is the default; experimental presenter mode requires failed/abandoned GPU work to be quiescent before callback. Isolated static linking treats nine unselected optional diagnostics as absent weak addresses; no dummy providers are present. Concrete provider/registration/power hooks, request retirement, actual producer fences/cache visibility, GPU failure quiescence, original graphics initialization and physical rendering remain unqualified. No owner trust or hardware access.
-- Fresh health snapshots do not qualify GPU/presenter quiescence or cache/DMA visibility. Two new IOSurface aliases are compiled into the isolated candidate; producer registration is not wired into the Adreno client by those aliases. Actual original surface allocation and the display +5056 surface lifecycle remain unexecuted.
-- Resource leases provide lifetime accounting. A kernel-only owned-descriptor/import page association exists, but source descriptor acquisition and original backing-mutation/check-to-submit serialization remain unqualified. GPU user-client import does not yet use the association. Producer registration, pending callback/cancel/exit ordering, physical GPU/cache/reset and final descriptor/surface destruction remain incomplete or unqualified.
-- The standalone Gen8 archive has no CPH2653 startup or embedded firmware. It is a separate source candidate; full prelink, frontend protocol and runtime lifecycle integration are pending.
+- Local builds and software controllers leave GPU power, physical DMA/cache visibility, reset quiescence, Metal discovery and rendering for hardware bring-up. Actual QEMU startup reaches bsd\_init with AppleImage4, AMFI and Sandbox registered once, then stops at the absent root device. iOS userspace is not started.
+- The native candidate is separate from the default kernel. Its development container has no original userspace/root image and retains opt-in graphics/Data startup.
 
 ### Next action
 
-- Qualify the linked original-module prepare/attach and complete parent start/stop/user-client lifecycle; qualify the linked unified module/GPU/display boot coordinator through the implemented real-class GOP factory, opt-in IOBSD worker and original-service matching in the isolated candidate.
-- Acquire an owned exact original surface descriptor through qualified original-component serialization, wire the checked association into GPU user-client imports, and connect per-job producer registration, asynchronous grants, completion signalling, cancellation and client exit.
-- Build the standalone Adreno830Board inputs from the captured CPH2653 GPU/GMU/thermal resources and pinned firmware. Merge the iPhone Metal selector extensions and existing surface/lease ownership before selecting this backend.
+- After the source-only preparation phase, validate original-family startup, the first native fence, surface ownership across reset and known shader outputs using device logs.
 
 ### Evidence
 
-- `host`: [Forty-six source/build/test stages pass: independent 54-object GPU and 64-object concrete-display/module kernels, 93 bridge, 121 frontend and 46 timer sanitized cases, 60 coordinator, ten actual frontend integration and 33 original-module orchestration sanitizer cases, plus 69 concrete-class ARM64 checks and 32 full linked original/source lifecycle CPU paths. Three original dispatcher cases check provider survival through detach; two negative controls reject a lost pin and an unreviewed native call. Fifteen board Metal registration sanitizer cases cover publication and allocation/init/property/attach cleanup with explicit loader/IOKit peers. Five full original newUserClient method paths and three admission refusals use explicit client lifetime peers. Unified boot ordering passes 24 peer cases and the actual atomic board entry passes six, including 16 concurrent callers. A separate local FAT/Android v4 development container is verified; it excludes original userspace/root and does not auto-invoke graphics. The real-class GOP publisher passes sixty host and eighteen linked CPU cases, including actual original allocation/native constructors and four real IOBSD scheduling paths. An isolated opt-in IOBSD worker passes twenty-four sanitizer cases. Existing original dispatch/lifecycle/userland/refresh CPU checks pass. The full-display strict prelink contains 27 original executable components/7 interfaces with 58962 pointer, 196 alias, 338 owned/340 base and 178 provider/14 metadata vtable, 53 constructor/53 finalizer, POST and loader readbacks plus ten corruption controls. Linked iOS16 userspace, six SPIR-V modules and four A830 code/reassembly cases pass. Default artifacts remain unchanged; original graphics initialization and runtime qualification remain incomplete.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/gpu-stack.json)
-  Command: <code>.venv-uefi/bin/python scripts/build_gpu_stack.py --check-only</code>. Revision: `1baf6d3a1d0f133d284f8b8844cc98bf5aff1bbe`.
-- `host`: [Five isolated stages: exact original IOSurface notification chain, fresh-health frontend, strict full prelink, 84 ARM64 paths and separate FAT/Android v4 with unchanged fresh-entropy firmware. Explicit primitive/fence/IOKit peers; no hardware or complete-port qualification.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/fresh-gpu-stack.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_fresh_gpu_stack.py --check-only</code>. Revision: `1baf6d3a1d0f133d284f8b8844cc98bf5aff1bbe`.
-- `host`: [Mapped resource lifetime and bounded map-wait route: 28 new sanitizer cases, three existing suites, 112 ARM64 paths, strict 90-object prelink and separate entropy-EFI/FAT/Android v4 container. Explicit peers; IOSurface producer and physical cache/reset remain unqualified.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/mapped-lease-stack.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_mapped_lease_stack.py --check-only</code>. Revision: `1baf6d3a1d0f133d284f8b8844cc98bf5aff1bbe`.
-- `host`: [Kernel-callable current-task identity resolution: 13 sanitizer cases, three source controls, 20 original and 17 source-to-original identity ARM64 paths, seven instruction and five original invariant controls. Complete 92-object strict prelink and 112 preserved GPU/surface/display regressions. Explicit primitive peers; GPU backing association and producer remain incomplete.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/surface-identity-stack.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_surface_identity_stack.py --check-only</code>. Revision: `1baf6d3a1d0f133d284f8b8844cc98bf5aff1bbe`.
-- `host`: [Kernel-only already-owned surface descriptor/import page association: 35 sanitizer cases, four source controls, 25 actual-linked native/original ownership and VM-job cases, five instruction controls; 149 retained regressions and complete 94-object strict prelink. Descriptor acquisition, user-client and producer wiring remain incomplete; primitive prepare/physical/cache peers explicit.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/surface-pages-stack.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_surface_pages_stack.py --check-only</code>. Revision: `1baf6d3a1d0f133d284f8b8844cc98bf5aff1bbe`.
-- `host`: [Standalone native A830 archive: 51 arm64 iOS 16 objects and original iPhone accelerator binding. Board startup and frontend integration remain separate.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/native-a830.json)
-  Command: <code>.venv-uefi/bin/python scripts/build_native_a830.py</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
-- `host`: [Fifteen ASan/UBSan suites over software controllers: startup, SMMU, GMU/HFI, CP, fences, interrupts, power/recovery, DCVS, VM and user clients. ARM barriers and allocator calls have explicit host peers.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/native-a830-host.json)
-  Command: <code>python3 scripts/check_native_a830_host.py</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [Fifteen native build/test stages form one development payload with matching kernel, firmware and userspace identities, including actual QEMU entry.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-stack.json)
+  Command: <code>.venv-gpu/bin/python scripts/build_native_a830_stack.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [Three ASan/UBSan suites: 24 runtime cases, 12 map-wait cases and production VM tests including 600 concurrent transactions.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-runtime-host.json)
+  Command: <code>python3 scripts/check_native_a830_host.py --runtime</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [11 actual Turnip status calls, two rejected old recovery behaviors and 136 native display cases pass under sanitizers.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-recovery-host.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_native_a830_recovery.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [181 stock-firmware board checks, six real level selections and a 16-way startup-entry test.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-board-host.json)
+  Command: <code>.venv-uefi/bin/python scripts/check_native_a830_board.py --firmware-dir build/cph2653-gpu-firmware</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [111 source/binding objects, 28 original executable components, seven interfaces, 63,889 pointer readbacks, four lifecycle hooks and 17 original sync model cases.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-prelink.json)
+  Command: <code>.venv-gpu/bin/python scripts/build_native_a830_prelink.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
 
 ## Network {#network}
 
@@ -495,9 +505,9 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `host`: [Exact iPhone classes, slots and real T8015 register path; three altered-input controls](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-pmgr-contract.json)
+- `host`: [Exact iPhone classes, slots and real T8015 register path; three altered-input controls](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-pmgr-contract.json)
   Command: <code>.venv-uefi/bin/python scripts/prepare_ios16_pmgr.py</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
-- `host`: [12 original ARM64 subpaths and four instruction-corruption controls; synthetic resources and explicit IOKit peers, no Qualcomm provider or hardware qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-pmgr-kernel.json)
+- `host`: [12 original ARM64 subpaths and four instruction-corruption controls; synthetic resources and explicit IOKit peers, no Qualcomm provider or hardware qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-pmgr-kernel.json)
   Command: <code>.venv-gpu/bin/python scripts/check_ios16_pmgr_kernel.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
 
 ## security {#security}
@@ -523,6 +533,10 @@ Collect evidence using the next action.
 - Seven original inputs and 196-byte packing/48-byte PRNG callbacks are measured. Actual early/OSKext calls share one initialization result and reject conflicting or incomplete ownership. Eighteen sanitizer and 33 ARM64 ownership/startup paths pass with explicit original-initializer/POST/private-PRNG peers. Strict prelink preserves 339 aliases, 28 original components and 63889 pointer sites; independent source provider entry/POST field is absent. Loader/packed seed/FAT/Android v4 readback and 25 rejection controls pass.
 - A separate ARM64 model executes the actual original initializer, all 18 full default POST tests, native PRNG/table registration, all six original callbacks and real readiness/context checks. Eighteen native SHA vectors, four fully written native PRNG transfers and one cached loader span pass; four damaged-code/answer/skipped-POST/missing-ready controls are rejected. Platform services and entropy collection remain explicit peers; no positive entropy estimate is supplied.
 - Sixteen native memory-random cases and the actual 14-class EARLY\_BOOT kmem callback also pass with explicit CPU0/per-CPU allocation and post-VM page constants. Actual firmware Boot C emits an ADT that native SecureDT/PE/early PRNG consume: the first 64 bytes are cleared and hashed to the bootseed, original 18-test POST and PRNG registration then pass, and registration clears that bootseed. Two zero/short native seed inputs panic before registration. The actual embedded full-firmware EFI repeats this chain.
+- The native A830 payload runs fresh EFI seed consumption and all 18 original iPhone crypto POST tests in the ARM64 model. Its addon trust bundle preserves both pinned 20H392 modules and adds only the three locally built executable hashes; runtime trust remains untested.
+- The original Image4 getter and security start wrappers are measured from the pinned iPhone kernelcache. The owner development boot set provides strict no-mixing policy, BNCH and a SHA-384 manifest bound to the selected kernel, trust cache, addon, Data seed and normalized ADT. Its nonce is generated per payload build; hardware fuse state, Apple personalization and the persistent nonce lifecycle remain separate work.
+- Sandbox's original module start already forwards to its policy initializer. Omitting the duplicate early hook fixes its EEXIST panic while preserving the original wrapper, slot and initializer bytes. Actual QEMU execution reaches bsd\_init with AppleImage4, AMFI and Sandbox each registered once. Missing policy, nonce and manifest inputs still fail in original Image4; missing entropy is refused by the EFI loader. Twelve owner boot-policy host cases pass.
+- The separate owner-root VM kernel retains the original Apple EAUTH result and authorizes the matching read-only mounted root through signed block policy. Native Darwin 22 RSA layout is compiled, the two original callback registrations are derived from the pinned kernelcache, and actual QEMU execution reaches the init loader. Three runtime refusal controls preserve signature, DMA and UUID boundaries; the original component instructions remain unchanged.
 
 ### Completion criteria
 
@@ -530,7 +544,7 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- The frozen five-stage CPU evidence retains initializer/POST/private-PRNG peers. The separate real-original execution report removes those peers within a CPU0 ARM64 model with private host boot seed and explicit platform services. Full provider/448-byte table/appended APIs, full OSKext/C++ loading, target entropy quality, policy registration, PMGR, root/Data and hardware remain unqualified. No cryptographic result or source fallback is installed in production.
+- The frozen five-stage CPU evidence retains initializer/POST/private-PRNG peers. The separate real-original execution report removes those peers within a CPU0 ARM64 model with private host boot seed and explicit platform services. Full provider/448-byte table/appended APIs, full OSKext/C++ loading, target entropy quality, hardware policy behavior, PMGR, root/Data and hardware remain unqualified. No cryptographic result or source fallback is installed in production.
 
 ### Next action
 
@@ -538,12 +552,14 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `host`: [Five isolated original-owner stages, 89 objects, 97 entries, 18 sanitizer paths, 33 ARM64 paths and 25 rejection controls; initializer/POST peers explicit](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/crypto-stack.json)
+- `host`: [Five isolated original-owner stages, 89 objects, 97 entries, 18 sanitizer paths, 33 ARM64 paths and 25 rejection controls; initializer/POST peers explicit](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/crypto-stack.json)
   Command: <code>.venv-uefi/bin/python scripts/build_crypto_stack.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
-- `host`: [Actual original initializer/full 18-test POST/native PRNG/table registration in ARM64 model; 18 SHA vectors, four native PRNG transfers, one cached loader span and four rejection controls; explicit platform/entropy peers, no hardware qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-original-crypto-kernel.json)
+- `host`: [Actual original initializer/full 18-test POST/native PRNG/table registration in ARM64 model; 18 SHA vectors, four native PRNG transfers, one cached loader span and four rejection controls; explicit platform/entropy peers, no hardware qualification](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-original-crypto-kernel.json)
   Command: <code>.venv-gpu/bin/python scripts/check_original_crypto_kernel.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
-- `host`: [Actual EFI Boot C/parser/entropy/cleanup instructions, two successful and six refused paths, two instruction controls; actual native DT/PE/early DRBG consumption followed by original 18-test POST and native registration; two missing/short seed refusals](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-boot-entropy-kernel.json)
+- `host`: [Actual EFI Boot C/parser/entropy/cleanup instructions, two successful and six refused paths, two instruction controls; actual native DT/PE/early DRBG consumption followed by original 18-test POST and native registration; two missing/short seed refusals](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/ios16-boot-entropy-kernel.json)
   Command: <code>.venv-gpu/bin/python scripts/check_boot_entropy_kernel.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
+- `host`: [Original AppleImage4, AMFI and Sandbox register once before bsd\_init in QEMU. Three Image4 missing-input controls and one EFI entropy refusal pass.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_native_a830_entry.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
 
 ## Image assembly {#packaging}
 
@@ -551,46 +567,41 @@ Collect evidence using the next action.
 
 ### Hardware and dependencies
 
-- Locally built firmware, compiled hardware DTS and generated iPhone ADT.
+- The native A830 iPhone prelink, entropy/logger firmware, Metal addon, original iPhone trust inputs and preserved packed Data seed.
 
 ### Configuration
 
-- Payload selects the firmware DarwinBoot loader and separate kernel; four GiB owned-memory request.
+- A separate 160 MiB FAT carries the iPhone ADT with a four GiB initial memory request. TrustCache and GpuAddon have explicit EFI memory-map handoff records.
 
 ### Procedure
 
-- Validate container fields and embedded module GUIDs; generate and read back the ADT.
+- Run .venv-gpu/bin/python scripts/build\_native\_a830\_payload.py after the prelink, firmware and addon stages; --check-only validates completed files.
 - PATH="$PWD/.venv-uefi/bin:$PATH" scripts/package.sh --check --no-deps --os 16 --out build/unixnu -j 4
 
 ### Development findings
 
-- The native ARM64 kernel, iPhone ADT, 160 MiB FAT and Android v4 container build and pass binary readback. DarwinBoot accepts the actual native kernel.
-- A separate full entropy firmware and Android v4 development container now embed the exact tested new loader and byte-identical preserved 160 MiB crypto FAT/packed Data. Full shim/gzip/FD/DTB/FAT/header readback passes; old images are unchanged.
-- The isolated fresh-GPU container replaces only the new FAT kernel and menu title, preserving all other file bytes and boot arguments. The exact prior entropy FD/EFI runs its model paths against the new kernel and feeds actual native seed consumption, original 18-test POST and native consumers.
-- The standard package script matches the official template. Its check resolves 61 iPhone patches. The isolated logger payload contains the Tools action, and BootShim/FD/DTB/FAT pass Android v4 readback.
+- The native 170569728-byte Android v4 container passes shim, FD, DTB and FAT readback. All files are extracted and hashed; the original iPhone identity, packed 2 GiB Data seed and boot arguments are retained.
+- The actual EFI loader installs the addon and trust bundle at the final ADT memory-map addresses in an ARM64 model. The standard packaging template still resolves the 61-patch iPhone profile.
+- The native FAT includes the owner development Image4 boot-set inputs. Twelve host cases and the actual EFI handoff check the selected component hashes, normalized ADT, nonce binding and unchanged static properties. The boot-set nonce changes on rebuild; kernel entropy is still refreshed on every handoff.
 
 ### Completion criteria
 
-- Local firmware/payload pairing carries exact component identities and correct sizes and hashes.
+- Firmware, kernel and payload identities agree and every handoff extent and container component reads back correctly.
 
 ### Current limits
 
-- No release or bootable iOS image is claimed. No phone operation is authorized in this phase.
+- The development payload excludes original userspace and root images. Complete kernel startup, root authentication and iOS boot remain untested.
 
 ### Next action
 
-- Retain the source-only development payload; complete original-component, authenticated-root and peripheral code before an iOS payload.
+- Keep original system inputs local and qualify whole-kernel startup and root/Data integration before assembling a system payload.
 
 ### Evidence
 
-- `host`: [The native ARM64 kernel, iPhone ADT, 160 MiB FAT and Android v4 container build and pass binary readback. DarwinBoot accepts the actual native kernel.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/native-payload.json)
-  Command: <code>.venv-uefi/bin/python scripts/build_local_payload.py</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
-- `host`: [Exact fresh-entropy EFI read back from the new FD, model-tested and packaged into a separate Android v4 container with the preserved FAT; no phone or full userspace/root boot](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-entropy-payload.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_entropy_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
-- `host`: [Separate 170557440-byte Android v4 container, 90-object kernel, unchanged entropy FD/EFI and full FAT/container readback; actual EFI/native seed/original 18-test POST chain. No full kernel/userspace or phone boot.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-fresh-gpu-payload.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_fresh_gpu_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
-- `host`: [Separate mapped-resource/wait kernel and container, preserved entropy FD/EFI, actual EFI/native-seed/original 18-test POST chain and full FAT/Android v4 readback. No full kernel/userspace or phone boot.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/ios16-mapped-lease-payload.json)
-  Command: <code>.venv-gpu/bin/python scripts/build_mapped_lease_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
+- `host`: [Native kernel, entropy/logger firmware, addon/trust handoff and every FAT/container component pass local readback and ARM64 loader models.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-payload.json)
+  Command: <code>.venv-gpu/bin/python scripts/build_native_a830_payload.py --check-only</code>. Revision: `6b3d90b79e191e08171bfedd3980234a7e49d340`.
+- `host`: [Five addon files decompress to the built binaries; three owner hashes and both pinned iPhone trust modules read back unchanged.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-addon.json)
+  Command: <code>.venv-uefi/bin/python scripts/build_native_a830_addon.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
 
 ## Diagnostics {#diagnostics}
 
@@ -613,8 +624,9 @@ Components: `ArmDTPlatform`.
 
 ### Development findings
 
-- The source kernel and selected archives compile/link, actual DarwinBoot parsing and POST field checks pass; IIG default outputs pass 213 regressions. Strict static prelink, all 28,197 pointer readbacks and two exact AMFI/sandbox entry/code readbacks pass; ABI/loadability/runtime flags remain false.
-- The exporter and log producer compile and are present in firmware; the Tools action is read back from a separate FAT payload. A device capture remains the next firmware checkpoint.
+- The native full kernel and strict iPhone prelink pass local link and pointer checks. Its boot model executes the actual EFI loader, native seed consumption and original 18-test crypto POST. QEMU TCG separately executes the packaged kernel through arm\_init, kernel\_bootstrap, InitIOKit and bsd\_init with EL1, MMU and 4 KiB tables. Its compiler-bound live MAC list contains AppleImage4, AMFI and Sandbox registered once. Missing policy, nonce, manifest and entropy controls preserve the original refusals. The next genuine panic is the absent root device.
+- The QR exporter and 2 MiB DXE producer are present in the same firmware used by the native payload. Native GPU status rows feed the existing bounded boot console.
+- The separate QEMU storage fixture performs real DMA from both local original disks, publishes the original storage stack and mounts the APFS root. It retains the post-mount authentication panic and rejects disabled/writable transport inputs before any disk read.
 
 ### Completion criteria
 
@@ -622,16 +634,18 @@ Components: `ArmDTPlatform`.
 
 ### Current limits
 
-- No device logs or runtime observations have been collected in this task.
+- No OnePlus hardware logs or runtime observations have been collected in this task.
 
 ### Next action
 
-- Complete original-component ABI, register-dataflow, crypto lifecycle and runtime security-initialization audits.
+- Continue from load\_init\_program into the original iPhone user process and Data paths. Keep hardware security-state and persistent nonce policy as separate target work.
 
 ### Evidence
 
-- `host`: [The source kernel and selected archives compile/link, actual DarwinBoot parsing and POST field checks pass; IIG default outputs pass 213 regressions. Strict static prelink, all 28,197 pointer readbacks and two exact AMFI/sandbox entry/code readbacks pass; ABI/loadability/runtime flags remain false.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/814bd4943b279d91ae61ada33d4968cf749a48e7/reports/public/native-kernel.json)
-  Command: <code>.venv-uefi/bin/python scripts/validate_kernel_artifacts.py</code>. Revision: `3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7`.
+- `host`: [The native route records each build/test stage and verifies the exact combined kernel, Metal userspace and firmware inputs.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-stack.json)
+  Command: <code>.venv-gpu/bin/python scripts/build_native_a830_stack.py --check-only</code>. Revision: `1a1321056ffc5428ae925f4680093718b46ca7c2`.
+- `host`: [Actual TCG execution reaches bsd\_init at EL1 with 4 KiB tables and three original MAC policies registered once; root mounting is the next stop. Three Image4 input refusals and one pre-entry EFI entropy refusal pass.](https://github.com/lihenggui/UniXNU_dodge_SM8750/blob/c789270726a971264b2095fdc5c9190290b19611/reports/public/native-a830-entry.json)
+  Command: <code>.venv-gpu/bin/python scripts/check_native_a830_entry.py --check-only</code>. Revision: `1b191cb58250d0705d8a51287127505aa4bc0789`.
 
 ## cellular {#cellular}
 

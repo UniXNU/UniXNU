@@ -1,0 +1,427 @@
+schema_version = 1
+
+[device]
+name = "raphael"
+soc = "SM8150"
+os_profile = "ipados-18.7.12-22H390"
+summary = "Redmi K20 Pro / Mi 9T Pro (raphael, SM8150) arm64 UniXNU port. Target build is ipados-18.7.12-22H390 (Darwin 24.6.0): the root image comes from the iOS 18.7.12 restore of iPhone11,2, the arm64 kernelcache from the iPadOS 18.7.12 restore of iPad7,11. Configuration and image-assembly tooling are in place; kernel, firmware and every hardware area still need device verification."
+
+# ---------------------------------------------------------------- configuration
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["board.toml", "feeds.toml", "configs/raphael_defconfig", "dts/raphael.dts", "patches/xnu/series"]
+inputs = [
+  "SM8150 device identity and partition plan from the raphael board configuration",
+  "OS profile ipados-18.7.12-22H390 (arm64) carried by this repository and installed into the UniXNU checkout",
+  "iOS 18.7.12 payload IPSW and the staged iPadOS 18.7.12 arm64 kernelcache, both build 22H390",
+  "Shared SM8150 support pinned in feeds.toml",
+]
+configuration = [
+  "format 2 board: soc_source=sm8150, kit=raphael, os_profile=ipados-18.7.12-22H390",
+  "upstream UniXNU has no 18.x profile, so os-profiles/ipados-18.7.12-22H390/ is copied in by scripts/install-device-profile.py",
+  "the arm64 kernelcache is staged by scripts/stage-arm64-kernelcache.py into the path [kernel.prelink] kernelcache names",
+  "kernel fragments arch:configs/common.config and soc:configs/sm8150.config",
+  "arm64e-only profiles are intentionally not mapped: SM8150 has no FEAT_PAuth",
+]
+procedure = [
+  "From the UniXNU checkout: python3 ../UniXNU-raphael/scripts/install-device-profile.py --unixnu .",
+  "python3 ../UniXNU-raphael/scripts/stage-arm64-kernelcache.py --unixnu .",
+  "./unixnu defconfig raphael_defconfig -D ../UniXNU-raphael, ./unixnu fetch -D ../UniXNU-raphael, then ./unixnu status --json -D ../UniXNU-raphael",
+]
+findings = [
+  "arm64e-only Apple OS profiles (iPadOS 26/27) cannot run on this SoC (no FEAT_PAuth); iPadOS 18 still ships an arm64 kernelcache because the no-PAC A10 iPad 7 runs it",
+  "UniXNU reads exactly one IPSW per run, so the iOS payload is [ipsw] and the arm64 kernelcache is passed to prelink by path instead",
+  "iPadOS and iOS share the 22H390 build ID, so the staged kernelcache needs its own output path or the two would overwrite each other in out/ipsw/22H390/",
+  "both 22H390 dmgs are AEA encrypted, so building the root image needs macOS /usr/bin/aea",
+  "status resolves arch=arm64, soc=sm8150, os=ipados-18.7.12-22H390 and the device board.toml",
+]
+completion = [
+  "Every profile root, source pin, component closure and patch order resolves without error",
+]
+limits = [
+  "Resolution success is not a boot result; nothing here has run on raphael hardware",
+]
+next_action = [
+  "Record the resolved status output as host evidence once the CI build produces it",
+]
+
+[[area.evidence]]
+kind = "source"
+reference = "board.toml"
+result = "Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile (iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink) and raphael_defconfig mapping."
+
+[[area.evidence]]
+kind = "source"
+reference = "feeds.toml"
+result = "Pinned shared SM8150 source used as the soc profile."
+
+# --------------------------------------------------------------------- firmware
+[[area]]
+id = "firmware"
+status = "planned"
+components = ["DarwinBoot"]
+paths = ["package/firmware/README.md"]
+inputs = [
+  "Mu-Silicium platform support for SM8150",
+  "Device memory map and reserved regions for the firmware volume",
+]
+configuration = [
+  "package/firmware is a placeholder: no DSC, FDF or platform code exists yet",
+]
+procedure = [
+  "Add UniXNU, UniXNUDxe, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and FatPkg to the DSC and FDF, then run ./unixnu build firmware --uefi ../uefi-raphael",
+]
+findings = [
+  "Firmware integration is documented upstream but no raphael platform port exists in this repository",
+]
+completion = [
+  "A firmware volume builds and UniXNU draws its boot menu on raphael",
+]
+limits = [
+  "Without a firmware volume only kernel, EFI package and boot image can be produced",
+]
+next_action = [
+  "Create the uefi-raphael Mu-Silicium platform with the required DSC and FDF modules",
+]
+
+# -------------------------------------------------------------------------- cpu
+evidence = []
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = ["XnuPrelink"]
+paths = ["configs/raphael_defconfig"]
+inputs = [
+  "CPU topology for SM8150 (four Cortex-A76 plus four Cortex-A55) from the vendor DTS",
+]
+configuration = [
+  "raphael_defconfig carries the kernel options; CPU enablement is not yet wired to a device tree",
+]
+procedure = [
+  "Build the kernel, boot it and capture the CPU bring-up log",
+]
+findings = [
+  "SM8150 Cortex-A76 and A55 do not implement ARMv8.3 FEAT_PAuth, which is why arm64e is excluded",
+]
+completion = [
+  "All eight CPUs come up and the interrupt controller delivers timer interrupts",
+]
+limits = [
+  "No device log exists yet; the CPU area is unverified on hardware",
+]
+next_action = [
+  "Boot the arm64 kernel and record the per-CPU startup log",
+]
+
+# ----------------------------------------------------------------------- memory
+evidence = []
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["dts/raphael.dts"]
+inputs = [
+  "RAM size and reserved region plan for raphael",
+]
+configuration = [
+  "dts/raphael.dts declares a 4 GiB memory node; reservations are not yet described",
+]
+procedure = [
+  "Extend the device tree with the reserved-memory nodes and boot the kernel",
+]
+findings = [
+  "Boot page table capacity for the native 4 KiB granule is handled by the arch profile patches, not by this device",
+]
+completion = [
+  "XNU maps the full RAM range and the reserved regions stay out of the kernel map",
+]
+limits = [
+  "The current device tree is a skeleton and has not been used for a boot",
+]
+next_action = [
+  "Add reserved-memory nodes for firmware, display and modem regions",
+]
+
+# ---------------------------------------------------------------------- storage
+evidence = []
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["scripts/build-root.sh", "docs/root-partition.md"]
+inputs = [
+  "GPT entry for the root partition, from the device partition table",
+  "Shared SM8150 UFS operations from the pinned SoC repository",
+]
+configuration = [
+  "Root image is built with ./unixnu build userdata from the board partition geometry and the OS profile's IPSW",
+  "scripts/build-root.sh prefers a unixnu partition label and falls back to userdata at flash time",
+]
+procedure = [
+  "scripts/build-root.sh --ipsw restore.ipsw --dry-run, then --flash",
+]
+findings = [
+  "UniXNU selects root by APFS volume UUID written into the ADT, so a boot-time partition search is not available",
+  "Kernel and root image must be the same build (22H390 here); the root is the iOS 18.7.12 payload and the kernelcache the same-build iPadOS 18.7.12 arm64 one, and builds must never be mixed across Darwin versions",
+  "the payload dmgs are AEA encrypted, so the root image can only be assembled on macOS",
+]
+completion = [
+  "XNU mounts the root volume read-only and starts launchd",
+]
+limits = [
+  "No root image has been built or flashed for this device yet",
+]
+next_action = [
+  "Decrypt the iOS 18.7.12 OS dmg on macOS and fill [root] os_volume_uuid and systemos_volume_uuid in the board's OS profile",
+  "Download the payload IPSW once and fill the [ipsw.sha256] member pins",
+]
+
+# ---------------------------------------------------------------------- display
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["dts/raphael.dts"]
+inputs = [
+  "Panel timing and DSI configuration for the raphael panel",
+]
+configuration = [
+  "No display nodes are described in the device tree yet",
+]
+procedure = [
+  "Boot the kernel and capture the framebuffer handoff log",
+]
+findings = [
+  "GopFramebuffer is not selected for this board, so there is no handoff path yet",
+]
+completion = [
+  "The kernel console and SpringBoard both render on the panel",
+]
+limits = [
+  "Display is unverified; no panel timing has been collected",
+]
+next_action = [
+  "Collect panel timings and add a display node plus the framebuffer component",
+]
+
+# ------------------------------------------------------------------------ input
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["configs/raphael_defconfig"]
+inputs = [
+  "GT9889 touch controller wiring and I2C address",
+]
+configuration = [
+  "No input driver is selected or declared",
+]
+procedure = [
+  "Integrate a HID provider and verify touch events in userspace",
+]
+findings = [
+  "Touch bring-up has not started; the upstream raphael port has an independent GT9889 note",
+]
+completion = [
+  "Touch events reach userspace and SpringBoard responds",
+]
+limits = [
+  "No input hardware work exists in this repository",
+]
+next_action = [
+  "Select a HID input component and record its required inputs",
+]
+
+# -------------------------------------------------------------------------- gpu
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["porting.toml"]
+inputs = [
+  "Adreno 640 firmware and command stream interface",
+]
+configuration = [
+  "No GPU component is selected",
+]
+procedure = [
+  "Add the Adreno component chain and verify a userspace Metal or Vulkan probe",
+]
+findings = [
+  "The Adreno driver family exists upstream but no raphael GPU work has been done here",
+]
+completion = [
+  "A GPU client allocates a buffer and completes a queue submission",
+]
+limits = [
+  "GPU is unverified and unstarted",
+]
+next_action = [
+  "Review the Adreno component catalog entries for SM8150 compatibility",
+]
+
+# ---------------------------------------------------------------------- network
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["porting.toml"]
+inputs = [
+  "WCN3990 Wi-Fi and Bluetooth firmware plus calibration data",
+]
+configuration = [
+  "No network driver is selected",
+]
+procedure = [
+  "Add the wireless component chain and verify an association and a Bluetooth HCI open",
+]
+findings = [
+  "Network bring-up has not started",
+]
+completion = [
+  "The device associates with an access point and reports an interface to userspace",
+]
+limits = [
+  "No network hardware work exists in this repository",
+]
+next_action = [
+  "Identify the WCN3990 firmware and calibration inputs for raphael",
+]
+
+# ------------------------------------------------------------------------ audio
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["porting.toml"]
+inputs = [
+  "Audio DSP firmware and codec wiring for raphael",
+]
+configuration = [
+  "No audio component is selected",
+]
+procedure = [
+  "Add audio components and verify playback from userspace",
+]
+findings = [
+  "Audio bring-up has not started",
+]
+completion = [
+  "A userspace client plays audio through the device speaker",
+]
+limits = [
+  "No audio hardware work exists in this repository",
+]
+next_action = [
+  "Collect the DSP firmware inputs from the vendor partition",
+]
+
+# ------------------------------------------------------------------------ power
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["porting.toml"]
+inputs = [
+  "PMIC and regulator topology for raphael",
+]
+configuration = [
+  "No power component is selected",
+]
+procedure = [
+  "Add the power component chain and verify rail state across a suspend and resume",
+]
+findings = [
+  "Power management has not started",
+]
+completion = [
+  "The device suspends and resumes without losing the framebuffer",
+]
+limits = [
+  "No power hardware work exists in this repository",
+]
+next_action = [
+  "Record the PMIC topology from the vendor device tree",
+]
+
+# -------------------------------------------------------------------- packaging
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["scripts/build.sh", "scripts/ipsw_to_sparse.py", "scripts/build-root.sh"]
+inputs = [
+  "Kernel, payload and device tree produced by the build steps",
+  "IPSW disk image or a raw root image to convert",
+]
+configuration = [
+  "scripts/build.sh runs defconfig, fetch, status, kernel, package, firmware and bootimg in order",
+  "scripts/ipsw_to_sparse.py converts a raw image to libsparse chunks and self-verifies the result",
+]
+procedure = [
+  "python3 scripts/ipsw_to_sparse.py --raw-image userdata-root.img --output unixnu.sparse",
+  "scripts/build.sh for the full artifact chain",
+]
+findings = [
+  "Sparse output is produced only from a raw image; AEA-encrypted IPSW payloads need macOS tooling and the script reports that instead of emitting a bad image",
+]
+completion = [
+  "boot.img and UniXNU.efi are produced and published as separate artifacts",
+]
+limits = [
+  "No boot.img or UniXNU.efi has been built from this device configuration on hardware",
+]
+next_action = [
+  "Produce both artifacts in CI and attach the resulting log as host evidence",
+]
+
+# ------------------------------------------------------------------ diagnostics
+evidence = []
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["porting.toml"]
+inputs = [
+  "Serial or UART access path for raphael, or a framebuffer console fallback",
+]
+configuration = [
+  "No log transport is configured for this device",
+]
+procedure = [
+  "Capture firmware and kernel output during a boot attempt and attach it as device evidence",
+]
+findings = [
+  "Log capture is required before any hardware area can move past planned",
+]
+completion = [
+  "A boot attempt produces a readable log that is committed as evidence",
+]
+limits = [
+  "No log has been captured for this port",
+]
+next_action = [
+  "Configure a log transport and record the first boot attempt output",
+]
+evidence = []
+

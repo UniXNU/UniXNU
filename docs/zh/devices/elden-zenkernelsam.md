@@ -6,7 +6,7 @@
 
 v91 reached populated Settings via software input. Physical input/performance/basic peripherals remain incomplete. Source migration and clean reproduction are in progress; device restored stock.
 
-源记录: [porting.toml](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/porting.toml), `901349f0d3d4df504bd386c760be2428b4506636`.
+源记录: [porting.toml](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/porting.toml), `bf431764497b1f1d85d920a415050d998a0ba0de`.
 
 本页按设备记录自动生成。
 
@@ -67,7 +67,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [Frozen v91 source profile imported and verified. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/REPRODUCIBILITY.md)
+- `host`: [Frozen v91 source profile imported and verified. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/REPRODUCIBILITY.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 固件与启动 {#firmware}
@@ -110,7 +110,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `device`: [Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `device`: [Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## CPU 与中断 {#cpu}
@@ -153,7 +153,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 内存与 DMA {#memory}
@@ -196,7 +196,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [v91 retains the validated high-address RAM configuration. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [v91 retains the validated high-address RAM configuration. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 存储与根卷 {#storage}
@@ -241,7 +241,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [UFS-backed iPadOS root, RAM Data, launchd and Settings have run. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [UFS-backed iPadOS root, RAM Data, launchd and Settings have run. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 显示 {#display}
@@ -283,7 +283,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [v91 renders a populated Settings page with the owned CPU graphic-variant helper. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [v91 renders a populated Settings page with the owned CPU graphic-variant helper. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 输入 {#input}
@@ -325,7 +325,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [One software swipe and one short Settings tap reached the real Settings UI in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [One software swipe and one short Settings tap reached the real Settings UI in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## GPU {#gpu}
@@ -364,7 +364,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [Reference sources and inactive experimental components are preserved. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [Reference sources and inactive experimental components are preserved. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 网络 {#network}
@@ -401,7 +401,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 音频 {#audio}
@@ -438,7 +438,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [Reference work retained; no new speaker enablement. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [Reference work retained; no new speaker enablement. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 电源 {#power}
@@ -477,7 +477,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `host`: [Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `host`: [Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 镜像组装 {#packaging}
@@ -518,7 +518,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `device`: [v91 boot image ran; rollback floor and full-image identity are recorded. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `device`: [v91 boot image ran; rollback floor and full-image identity are recorded. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 诊断 {#diagnostics}
@@ -558,7 +558,7 @@ v91 reached populated Settings via software input. Physical input/performance/ba
 
 ### 证据
 
-- `device`: [USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/901349f0d3d4df504bd386c760be2428b4506636/docs/CURRENT-STATUS.md)
+- `device`: [USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/bf431764497b1f1d85d920a415050d998a0ba0de/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 </div>

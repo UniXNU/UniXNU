@@ -1,0 +1,764 @@
+# Orange Pi 5 Plus \(RK3588, 8 GB, SD only, HDMI only\)
+
+[Hange777/UniXNU-opi5plus](https://github.com/Hange777/UniXNU-opi5plus)
+
+<div v-pre>
+
+Orange Pi 5 Plus \(RK3588, 8 GiB, SD only, HDMI only\). The iPadOS 17.7.11 userland boots from this repository's payload and 250+ processes run; at 2560x1440 the compositor's frames reach the panel through the firmware's GOP frame buffer and a forked IOMobileFramebufferLegacy, and the board shows its lock screen. Input does not reach the userland yet: no USB device enumerates, and the two names earlier rounds cited as evidence are retired - IOHIDSystem is not a class of this kernel, and the XHCI start lines are the firmware's, not XNU's - so the UI is visible and cannot be driven. The three places where this board differs from the RK3588 EVB10 reference port \(SD instead of eMMC, HDMI through GOP instead of a DSI panel and VOP2, three RAM banks instead of one\) are all implemented; the picture still carries a banding defect inside large glyphs.
+
+源记录: [porting.toml](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/porting.toml), `a72f3c4dcea069e574a57030c7b3b7d7300c96b8`.
+
+本页按设备记录自动生成。
+
+| 部分 | 状态 |
+| --- | --- |
+| [配置](#configuration) | `planned` |
+| [固件与启动](#firmware) | `implemented` |
+| [CPU 与中断](#cpu) | `implemented` |
+| [内存与 DMA](#memory) | `implemented` |
+| [存储与根卷](#storage) | `implemented` |
+| [显示](#display) | `implemented` |
+| [输入](#input) | `device-verified` |
+| [GPU](#gpu) | `implemented` |
+| [网络](#network) | `planned` |
+| [音频](#audio) | `not-applicable` |
+| [电源](#power) | `not-applicable` |
+| [镜像组装](#packaging) | `planned` |
+| [诊断](#diagnostics) | `planned` |
+| [software-aes](#software-aes) | `planned` |
+
+## 配置 {#configuration}
+
+`planned`
+
+组件: `XnuPrelink`, `ArmDTPlatform`.
+
+### 硬件与依赖
+
+- UniXNU checkout \(Python 3.11 or newer\) with its module submodules initialised \(kits/XnuPrelink and drivers/\* are submodules and are empty after a plain clone\).
+- UniXNU-rk3588-common pinned at bff921845d3e72151e6b6cda528cd80eb652b70a in feeds.toml; the pin was verified to exist upstream with git ls-remote/git fetch of that exact object before it was written here.
+- The OS profile profiles/os/ipados-17.7.11-21H461 \(iPad7,1 / j120ap / build 21H461 / chip 0x8011\) from the UniXNU checkout; it supplies the IPSW identity, the prelink inputs and the Apple device-tree identity, so no \[ipsw\], \[kernel.prelink\] or \[adt.root\] table is repeated here.
+- A platform seed for --unique-chip-id that is not stored in any repository, and the trust caches of the IPSW.
+- board/current-opi5plus.dts \(the board's own decompiled device tree, 348 KB\) as the fact source for memory, CPUs and peripheral addresses.
+
+### 配置
+
+- schema\_version = 2; \[board\] name/soc/soc\_source/os\_profile/kit; \[components\] include lists all six canonical components explicitly, XnuPrelink included, because the include array replaces rather than merges the arch and SoC layers.
+- \[kernel\] config\_fragments names all three fragments \(arch, soc, os\) and \[kernel\] patch\_series all four series files \(arch, soc, os, device\) for the same reason: an array in board.toml replaces the inherited one, it does not extend it.
+- \[kernel\] archives lists a component: entry for exactly ArmCpu, ArmDTPlatform and AppleKeyStoreState —the three catalog components whose build\_stage is kernel —and does not name GopFramebuffer \(embedded\), DarwinBoot \(firmware\) or XnuPrelink \(prelink\).
+- \[payload\] dram\_size is in \[payload\], not \[payload.adt\]; \[payload.adt\] carries chip\_id, unique\_chip\_id, owned\_memory\_size and packed\_data\_ramdisk, and deliberately omits root\_match\_volume\_uuid and the format 1 keys cpu\_regs / psci\_method \(both are ignored in format 2 and the values come from the DTS\).
+- \[payload\] kernel\_args enables only arguments that something in the resolved build parses; each group names its reader. Arguments for absent hardware are commented out with the step that will switch them on.
+
+### 操作步骤
+
+- From the UniXNU checkout, in WSL: ./unixnu defconfig opi5plus\_defconfig -D ../UniXNU-opi5plus; ./unixnu fetch -D ../UniXNU-opi5plus; ./unixnu status --json -D ../UniXNU-opi5plus; ./unixnu tree -D ../UniXNU-opi5plus; python3 scripts/porting-record.py check --device ../UniXNU-opi5plus.
+- Device tree alone: dtc -I dts -O dtb -o /tmp/opi5plus.dtb dts/opi5plus.dts -i ../UniXNU-rk3588-common/dts.
+- Every command has to run on Linux or macOS. The Windows host of this project drives a WSL distribution \(wsl -d unixnu -u root -e bash -lc ...\) because scripts/unixnu/cli.py only has Linux and Darwin branches.
+
+### 开发经验
+
+- The five commands pass. defconfig writes out/opi5plus/ipados-17.7.11-21H461/opi5plus/.config by concatenating arch:configs/common.config, soc:configs/rk3588.config, os:configs/ipados.config and configs/opi5plus\_defconfig in that order; status --json reports six components, the four configuration\_sources and the resolved patch order; tree assembles the build tree; the porting record validates.
+- dram\_size belongs to \[payload\] and is compared with the single memory range of the device tree \(scripts/unixnu/devicetree.py generate\(\): payload.get\('dram\_size'\)\). Written into \[payload.adt\] it is silently ignored, and the DTS would then never be checked against the hardware. UniXNU-evb10 also keeps it in \[payload\].
+- In format 2, \[payload.adt\] cpu\_regs and psci\_method do nothing: the ADT's /cpus children come from the DTS CPU nodes' reg \(the MPIDR affinity\) and /psci comes from the DTS /psci node's method. Only scripts/unixnu/payload.py's format 1 branch passes them to an external ADT tool.
+- The include / config\_fragments / patch\_series / archives arrays replace the inherited value. Merging is by dictionary key only \(scripts/unixnu/profiles.py merge\(\)\), so an omitted entry is an omitted feature, not a default.
+- The SoC repository's soc.toml has no \[kernel\] table: it contributes \[soc\] and \[components\] include = \[ArmCpu, ArmDTPlatform\] only. Every fragment, series and archive this board needs is therefore named in this repository.
+- unique\_chip\_id = "required" makes the payload step refuse to run without --unique-chip-id; devicetree.py also rejects a zero seed \('Platform identity requires a nonzero u64 seed and u32 chip ID'\). A zero seed in unixnu.local.toml, like the local example file this project started from, fails at the payload step, not at defconfig.
+- The console arguments carry over from the EVB10 unchanged because serial@feb50000 is the same Synopsys DesignWare 16550-compatible UART at the same 1.5 Mbaud: the SoC patch rk3588-pe-serial-16550.patch and the node in rk3588.dtsi are shared, not copied.
+
+### 完成条件
+
+- Status planned. Reached: the repository materialises, resolves, assembles a tree and validates its record on a Linux host, and the device tree compiles without a warning.
+- Remaining for host-verified: a kernel build and a payload build from this configuration on the build host, which needs the Linux toolchain \(scripts/linux/setup-toolchain.py\), the external Apple inputs and a platform seed.
+- Remaining for device-verified: a payload that boots on the board.
+
+### 当前范围
+
+- This area's own status is still the skeleton's: the repository materialises, resolves, assembles a tree and validates, and nothing here is claimed beyond that.
+- The 1000-byte command-line limit is enforced by payload.py before the volume is written; the two packed payloads measure 946 bytes / 52 arguments \(round 1\) and 993 bytes / 54 arguments \(round 2\), the second read back from the running kernel's own boot-args line.
+
+### 下一步
+
+- M3: fill patches/xnu/series, build the kernel and the payload, and turn this area host-verified with the build command and its revision.
+- When the repository is published, add its entry to UniXNU's devices.toml \(the RK3588 section has only evb10 today\) and commit unixnu.lock.
+
+### 证据
+
+- `source`: [The format 2 configuration: eight sections, the six canonical components, the four patch series entries, the boot-argument rationale](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `source`: [One kernel configuration: profiles' Adreno/mockfs/UFS/VirtIO switched off, CS hash cache and trust-cache runtime on, no board archive linked yet](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/configs/opi5plus_defconfig)
+- `source`: [SoC source pinned to bff921845d3e72151e6b6cda528cd80eb652b70a](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/feeds.toml)
+
+## 固件与启动 {#firmware}
+
+`implemented`
+
+组件: `DarwinBoot`, `GopFramebuffer`.
+
+### 硬件与依赖
+
+- A uefi-opi5plus checkout: an edk2-rk3588 derived Mu-Silicium tree with UniXNUPkg, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and Fat in its DSC/FDF. It does not exist yet \(plan.md M1\).
+- orangepi-5plus\_UEFI\_Release\_v1.1.img \(6,915,584 bytes\) from the edk2-rk3588 v1.1 release, as the prebuilt baseline that proves HDMI, USB and the serial port before anything self-built is flashed.
+- 16 MiB SPI NOR, currently holding the vendor loader \(BL31/OP-TEE/U-Boot FIT\). board/spi-backup-16MB.bin, sha256 1571be2188fe764eaaa3f0e8154719e651b7d124f9e92a3b7a5bee20cf9d74c4, is the rollback.
+- The 3-pin debug UART \(GND/RXD/TXD, 3.3 V\) on the board's left edge and a USB-TTL module that supports 1 500 000 baud \(CH343, CP2102N or FT232RL\). The two Type-C ports are not serial: one is power only, the other is OTG/data.
+
+### 配置
+
+- \[board\] kit = "opi5plus" names the device package mount point \(kits/opi5plus in the build tree\); there is no package/ directory yet, and unixnu tree supplies the UniXNU UniXNUPkg, so the tree still assembles.
+- \[payload\] volume = "OPI5PLUSESP" \(11 characters is the FAT limit; the name is exactly 11\), size\_mib = 128, loader = "firmware", title.
+- \[payload\] kernel\_args console group: -v, serial=1, debug=0x10014e. serial=1 keeps the console on the UART and clears the INPUT bit, so the receive FIFO has a single reader \(the reset hook in package/NativeSd\); debug=0x10014e lifts the serial-output lock and restarts after a panic instead of parking in KDP.
+- ROM boot order and the SPI layout are the firmware repository's business; this repository only assumes the firmware loads the payload volume and prints to UART2.
+
+### 操作步骤
+
+- M1 on the board: flash orangepi-5plus\_UEFI\_Release\_v1.1.img to /dev/mtd0 with flash\_erase + flashcp, or through the data Type-C port in MaskROM with RKDevTool; then check the HDMI menu, USB keyboards and the serial log at 1 500 000 baud.
+- Rollback: flashcp board/spi-backup-16MB.bin /dev/mtd0, or MaskROM plus RKDevTool if nothing boots.
+
+### 开发经验
+
+- The console facts match the EVB10 exactly: rk3588.dtsi declares serial@feb50000 as a Synopsys DesignWare APB UART \(16550 compatible\) with reg-shift 2 and reg-io-width 4, and the SoC series carries rk3588-pe-serial-16550.patch to bind it. Only the \[userdata\] geometry and the display path differ, so the console half of the EVB10 bring-up applies unchanged.
+- The board has no eMMC and no NVMe, so the only way to reach a root volume from the firmware today is a USB or SD mass-storage device that this XNU does not drive. That is why \[userdata\] is a placeholder and why this area stays planned even though the firmware itself is the same code base as the EVB10's.
+- The board's own device tree leaves uart2 disabled and the boot firmware enables it \(its bootargs carry console=ttyS2,1500000\). The device tree here therefore enables &amp;uart2 explicitly; without it the ADT would have no uart16550 node and the kernel console would fall back to nothing.
+
+### 完成条件
+
+- Done, and verified on the board: the firmware shows its menu on HDMI, USB input works through the opi5-hid arguments, UART2 logs at 1 500 000 baud, the OPI5PLUSESP payload volume this repository writes is listed by the firmware and handed to DarwinBoot, and the DarwinBoot hand-off log prints the kernel base, entry and frame buffer.
+
+### 当前范围
+
+- No firmware repository exists for this board, so \[firmware\] is absent from board.toml and unixnu bootimg cannot work: the SPI NOR keeps the vendor loader and every self-built image goes in as a payload volume on the SD card. Writing SPI is refused by policy \(plan.md section 9\).
+
+### 下一步
+
+- None while the payload-volume route works; revisit only if a self-built UEFI image is needed to change the memory map.
+
+### 证据
+
+- `source`: [Console node enabled on the shared rk3588.dtsi; eMMC left disabled with the reason written next to it](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/dts/opi5plus.dts)
+
+## CPU 与中断 {#cpu}
+
+`implemented`
+
+组件: `ArmCpu`, `ArmDTPlatform`.
+
+### 硬件与依赖
+
+- Eight cores: 4x Cortex-A76 at up to 2.304 GHz and 4x Cortex-A55 at 1.8 GHz \(docs/hardware.md, MemTotal and cpuinfo from the running board\).
+- GIC-600 \(GICv3\) at 0xfe600000 with redistributors at 0xfe680000, 128 KiB per core; 24 MHz generic timer, both from the shared rk3588.dtsi and programmed by the firmware.
+- PSCI 1.0 over SMC: TF-A BL31 runs at EL3 and cores started by CPU\_ON arrive at EL2, which is what rk3588-smp-el2.patch handles.
+
+### 配置
+
+- dts/opi5plus.dts inherits /cpus and /psci from rk3588.dtsi unchanged. The SoC file lists the four Cortex-A76 cores first \(reg 0x400..0x700\) and the four Cortex-A55 cores after \(reg 0x000..0x300\), because XNU numbers logical CPUs in node order and this kernel's scheduler takes the lowest-numbered idle core; rk3588-boot-cpu-mpidr.patch makes XNU pick its boot CPU by MPIDR instead of by node order, so the boot A55 can be the fifth node.
+- \[payload\] kernel\_args cpu group: sheng-smp=1 \(ArmCpu.cpp: secondary startup is opt-in\), armcpu-self-ipi=1 and armcpu-mmio-sgi=0 \(the IPI path\), cpumask=31 and sched-slowcpus=240.
+- cpumask counts logical CPUs: 31 = 0x1f keeps logical 0..4, i.e. the four A76 cores plus the boot A55, and parks the other three A55s. sched-slowcpus=240 \(0xf0\) marks logical 4..7 as slow.
+- No unixnu,cluster-type on the CPU nodes. The generator supports it \(devicetree.py emits cluster-type 'E' or 'P'\), but the RK3588 SoC repository's own guide says the working kernel runs without it, and adding it would be an untested claim; the SoC facts stay in the SoC repository.
+
+### 操作步骤
+
+- Build the kernel and check XNU's own CPU enumeration in the serial log, then run the payload on the board: the ARM64 and SoC series must apply to a fresh XNU clone first.
+
+### 开发经验
+
+- The DTS needs no CPU or PSCI work of its own: the whole topology, the MPIDR numbering and the PSCI method come from the shared rk3588.dtsi, which is exactly the split the SoC repository is for. devicetree.py then reads /cpus/\*/reg for the ADT's cpuN reg values and /psci/method for the ADT's psci node, so \[payload.adt\] cpu\_regs and psci\_method are redundant in format 2 and are not written.
+- Listing the A76 cores first is a scheduler workaround, not a hardware fact: the nodes are numbered cpu4..cpu7 then cpu0..cpu3 in rk3588.dtsi, and the firmware still starts an A55. Both patches that make this consistent \(rk3588-boot-cpu-mpidr and the ArmCpu boot-core slot patch applied by the SoC's apply-armcpu-patches.py\) are in the SoC layer and are named in \[kernel\] archives ahead of component:ArmCpu.
+- apply-armcpu-patches.py must run before component:ArmCpu in \[kernel\] archives: ArmCpu has no patch channel of its own, so the SoC script patches the checkout first. Getting that order wrong silently builds an unpatched ArmCpu.
+
+### 完成条件
+
+- Done: eight cores are discovered, sheng-smp=1 brings the secondaries up under the EL2 entry path, and cpumask=31 leaves five logical CPUs running \(the four A76 cores plus the boot A55\).
+
+### 当前范围
+
+- Frequency scaling, thermal behaviour and the A76/A55 split under load are unmeasured; sched-slowcpus=240 marks logical 4..7 slow on the SoC repository's recommendation rather than on a measurement from this board.
+
+### 下一步
+
+- Measure the split only if the display or GPU work turns out to be CPU-bound.
+
+### 证据
+
+- `source`: [Board DTS inherits /cpus and /psci from rk3588.dtsi and adds no cluster-type](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/dts/opi5plus.dts)
+
+## 内存与 DMA {#memory}
+
+`implemented`
+
+### 硬件与依赖
+
+- 8 GiB fitted, but not contiguous. The board's own device tree \(board/current-opi5plus.dts, decompiled\) describes three banks: &lt;0x0 0x00200000 0x0 0xefe00000&gt;, &lt;0x1 0x00000000 0x1 0x00000000&gt; and &lt;0x2 0xf0000000 0x0 0x10000000&gt;, with the rest of the property padded with zeros.
+- Resulting split: low bank 0x0000\_0000-0xefff\_ffff minus the 2 MiB the firmware keeps, high bank 0x1\_0000\_0000-0x1\_ffff\_ffff, and a 256 MiB bank at 0x2\_f000\_0000. The gap 0x0f00\_0000-0x0fff\_ffff and everything between 0x2\_0000\_0000 and 0x2\_f000\_0000 is not described as RAM.
+- A 0x1000\_0000 CMA reservation at 0x1000\_0000 in the vendor tree's reserved-memory, plus ramoops at 0x110000 and disabled minidump regions.
+- The UEFI memory map of the firmware, which has not been read on this board yet; it is the real input for owned\_memory\_size.
+
+### 配置
+
+- One enabled memory node with exactly one reg range: memory@100000000 &\#123; reg = &lt;1 0x00000000 1 0x00000000&gt; &\#125; = 4 GiB at 0x1\_0000\_0000, the largest single bank. devicetree.py refuses more than one range \('ADT handoff requires one contiguous DRAM range'\) and refuses a memory node with several ranges, so 8 GiB cannot be declared as the board really is.
+- \[payload\] dram\_size = "0x100000000" \(4 GiB\) matches that range byte for byte. A mismatch fails with 'payload.dram\_size differs from the hardware DTS'.
+- \[payload.adt\] owned\_memory\_size = "0xF8000000" \(3.875 GiB; raised from 0x80000000 on 2026-11-09\). This is the window DarwinBoot claims from the UEFI memory map: the first run of conventional memory long enough to hold it, taken from that run's first 2 MiB boundary.
+- Why the high bank and not the low one: the high 4 GiB range has no TF-A, OP-TEE, firmware-volume or Rockchip carve-out in it, and it lies entirely above 4 GiB, so a 32-bit DMA engine cannot reach it by accident. The low bank is 3.83 GiB and carries the firmware's own reservations.
+
+### 操作步骤
+
+- Compare three things on the board: the firmware memory map \(UEFI shell memmap or the DarwinBoot log\), the memory node in dts/opi5plus.dts, and the dram-base/dram-size/darwinboot-memory-size the generated ADT carries. The ADT sidecar can be read out of the payload image with mcopy -i payload/payload.img ::/EFI/UniXNU/Payloads/kernel.macho.adt.
+
+### 开发经验
+
+- plan.md's M2 table assumes dram\_size 0x200000000 \(8 GiB\) for this board. That is not expressible: the board's RAM is three ranges, and the ADT handoff takes one contiguous range whose size \[payload\] dram\_size must equal. Declaring 8 GiB would describe memory the board does not have between 0x0f00\_0000 and 0x1\_0000\_0000 and between 0x2\_0000\_0000 and 0x2\_f000\_0000.
+- The vendor tree pads the memory reg property with zeros to a fixed length \(the property carries 46 cells for three ranges\). This is why reading it needs care: the trailing zeros are padding, not a fourth range starting at 0.
+- The 2 MiB at the bottom \(0x0-0x1f\_ffff\) is not RAM in the vendor description; the low bank starts at 0x0020\_0000. Any future decision to declare the low bank instead of the high one starts from 0x0020\_0000, not from 0.
+- The 2 GiB starting value was justified with 'the kernel's DMA reaching only the low 4 GiB is a constraint of the board's controllers'. That does not hold for the only block device this board has: package/SdHost is PIO only \(SdHost.h:19-22 'IDMAC is left out on purpose', :529 'DMA off'\), so nothing on the storage path needs a 32-bit-reachable window.
+- Measured on the board 2026-11-09 with the firmware carrying gEfiMdeModulePkgTokenSpaceGuid.PcdImageLargeAddressLoad=FALSE \(logs/boot-r2a-3.log\): owned\_memory\_size 0xF8000000 makes DarwinBoot take the window from the high bank, 'DARWINBOOT: ARM64 ... pa=0x10007C000 ... owned=0xF8000000' and 'window 0xF8000000 bytes', and XNU reports vm\_page\_bootstrap: 967425 free pages \(3.69 GiB\) and 84 processes by t+355 s. The same 128 MiB payload at 2 GiB took the low bank at pa=0x5807C000 with 483496 free pages, so the upper bank is one contiguous run once the firmware stops pinning the prebuilt Realtek UNDI driver at 0x180000000.
+- The high bank is contiguous only because of that firmware change: before it, DxeCore loaded RtkUndiDxe.efi at its linked address 0x180000000, which split 0x1\_0000\_0000-0x2\_0000\_0000 into two \~2 GiB runs and left no run long enough for 3.875 GiB.
+
+### 完成条件
+
+- Done: the ADT's dram-base/dram-size match the declared node, DarwinBoot reports the 3.875 GiB window it took at pa=0x10007C000 in the high bank, and XNU's live RAM counters agree with it \(967425 free pages, 84 processes by t+355 s\).
+
+### 当前范围
+
+- Round 2 \(2026-11-11\) ends at 6,180 free pages \(about 24 MB\) at t+3600, down from 568,193 at t+600, with vspec 236,942 and vcomp 0 for the whole run: 254 processes fit, but a client that asks for a large buffer at that point cannot be served, which is the state to watch before any frame-rate or GPU-pool work.
+- 8 GiB fitted but not contiguous: the ADT takes one contiguous range \(the high 4 GiB\), so the owned window is 3.875 GiB of it and the other banks stay outside.
+- The memory region that package/Opi5plusDisplay/NativeLegacyDisplay.cpp publishes at 0x1\_0000\_0000 for 256 MiB now overlaps the owned window, which starts at 0x1\_0000\_7C000. The node only carries properties and nothing maps it, but the placement was chosen on the assumption that the kernel does not own that bank and must not survive the vram retirement.
+
+### 下一步
+
+- Keep the unused banks out of the owned window; wanting them later is an ADT decision, not a driver change.
+- Align the three memory values: dts/opi5plus.dts memory@100000000 reg and \[payload\] dram\_size are 4 GiB while \[payload.adt\] owned\_memory\_size is 3.875 GiB. That is legal today because devicetree.py only compares dram\_size with the node, but the node still declares 4 GiB of DRAM the window does not take.
+
+### 证据
+
+- `source`: [The declared range, the three real banks and the arithmetic that reconciles them with the fitted 8 GiB](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/dts/opi5plus.dts)
+- `source`: [dram\_size in \[payload\] and owned\_memory\_size in \[payload.adt\] with their constraints](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `source`: [DarwinBoot takes pa=0x10007C000 with owned=0xF8000000 and XNU bootstraps 967425 free pages](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m2/M2-01-owned-window-3g875.md)
+- `source`: [The 2 GiB and 3.875 GiB runs side by side: pa, the free-page counts and what the window predicts](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m2/M2-01-owned-window-3g875.md)
+
+## 存储与根卷 {#storage}
+
+`implemented`
+
+组件: `AppleKeyStoreState`.
+
+### 硬件与依赖
+
+- The board's only block device: a 30 GB SD card behind mmc@fe2c0000 \(0xfe2c0000, 16 KiB of registers, SPI 203\), compatible rockchip,rk3588-dw-mshc / rockchip,rk3288-dw-mshc, 4-bit, up to 150 MHz, currently GPT with one 30 GB ext4 partition starting at LBA 32768 \(board/sd-snapshot.txt\).
+- No eMMC \(mmc@fe2e0000\) and no NVMe on this board \(docs/hardware.md: no mmcblk0, no NVMe in lspci\).
+- The IPSW's OS and Cryptex1,SystemOS images for the two windows, and the APFS volume UUID of the OS window for /chosen/root-matching \(both M4\).
+- An eMMC module for OPi5, 32 or 64 GB, as Plan A \(plan.md §3.2\).
+
+### 配置
+
+- \[userdata\] first\_lba = 32768, last\_lba = 62914559, lba\_bytes = 512, windows = OS and Cryptex1,SystemOS. The capacity is \(62914559 - 32768 + 1\) \* 512 = 32 212 992 KiB = 30.72 GiB, a placeholder sized for a 32 GiB card's largest partition; it is NOT the geometry of the card in the board today and no image has been built against it.
+- \[payload.adt\] root\_match\_volume\_uuid is deliberately absent, so the generator emits no /chosen/root-matching property and the kernel falls back to the boot volume. Writing a UUID that no volume actually has would be worse than writing none.
+- dts/opi5plus.dts leaves &amp;emmc disabled and declares mmc@fe2c0000 with status disabled; neither carries unixnu,adt-name, so neither reaches the Apple device tree and neither can be mistaken for a published block device.
+- No emmc=\* kernel arguments. Their parser is the Rk3588Emmc driver, which this board cannot use until the module exists.
+- sd-clock-div is parsed in package/NativeSd/NativeSd.cpp start\(\) \(default 0, the divider off\); sd-clock-div=1 was round 7's measurement and is not on the production command line. The read-back evidence is the one-time line 'opi5plus: sd clock: CLKDIV=%x CLKSRC=%x CLKENA=%x' that NativeSd prints after a clock update lands: at div=0 it reads CLKDIV=0 CLKSRC=0 CLKENA=1 \(logs/boot-round9.log:1700\), while the boot log's own 'CLKDIV=1' dump is the firmware's, taken before the driver took over, and describes nothing the driver ran.
+
+### 操作步骤
+
+- Plan A \(preferred\): fit the eMMC module, create a GPT with a userdata partition of at least 12 GiB in Linux, add the Rk3588Emmc submodule and the two EVB10 archive entries \(build-&lt;board&gt;-drivers.py Rk3588Emmc, bind-emmc-storage.py\) back into \[kernel\] archives, set the real first\_lba/last\_lba, and enable emmc=4 plus the emmc-data-\* group in kernel\_args.
+- Plan B \(fallback\): write an XNU host driver for mmc@fe2c0000 in SD mode —DesignWare MSHC with the SDHCI register set, 32-bit DMA, GPT parsing and the same window publication —then the same userdata layout and the same arguments, renamed to the new driver's arguments.
+- Plan B's binding half, once the driver source exists: python3 scripts/audit-sd-storage.py \(only when the kernelcache pin changes, and only against a kernel built without the archive\), python3 scripts/build-sd-driver.py NativeSd, python3 scripts/bind-sd-storage.py, then python3 scripts/bind-sd-storage.py --verify-kernel ../kernel/kernel.json. tools/wsl/176-test-bind-sd.sh runs the whole sequence and refuses with a message instead of a traceback when the object is absent.
+- Either way: ./unixnu build userdata --ipsw &lt;ipsw&gt; --dry-run first, to check capacity against the manifest before writing 8.8 GiB of image.
+
+### 开发经验
+
+- Round 2 \(2026-11-11\) found and fixed what the round-1 daemons were dying of, and it was not the mount. The mobile directories on the Data volume were owned by root: the seed's skeleton created /private/var/mobile, mobile/Library and mobile/tmp as root, opi5plus\_ensure\_dir\(\) skipped a directory that already existed, the seed returned early on a volume that already carried .opi5plus-seeded, and launchd's fixup-mobile-tmp job skips existing directories too - so the owner was never corrected, mobile \(501\) could not mkdir inside its own tmp, and the daemons that do this at startup exited 1 every 10 s. Patch 0002 \(commit ca0cef3af5d351624786ff1aad40d23957a73686\) now creates those directories with their final owner and applies the attributes on EEXIST, so the result no longer depends on which of the four steps runs first. The stat probe then reports 501:501 040755 for all three and 0:0 041777 for /private/var/tmp, and biomed, callservicesd and nsurlsessiond stop exiting; bluetoothd keeps its own loop because it is the one process that prints its TMPDIR failure and continues.
+- This is the largest difference from the EVB10 and the reason the area cannot be scaffolded beyond placeholders. The EVB10 reuses Rk3588Emmc \(rockchip,rk3588-dwcmshc at 0xfe2e0000\) and its evidence covers eMMC root and Data; this board has no card on that controller at all.
+- The SD controller is a different block: mmc@fe2c0000 is DesignWare MSHC driven in SD mode \(Linux bounds it as dw\_mmc, the vendor tree calls it rockchip,rk3588-dw-mshc\), 4-bit and up to 150 MHz, where the eMMC path uses the SDHCI-compatible dwcmshc in 8-bit HS400 at 200 MHz. Sharing one driver would be a rewrite, not a parameter.
+- Plan A needs no device-tree change: mmc@fe2e0000 is part of the SoC and is described in rk3588.dtsi already, so fitting the module is a hardware and \[userdata\] change plus two archive entries. That is why the skeleton keeps the node with status = "disabled" and a comment saying exactly this.
+- AppleKeyStoreState is selected in \[components\] include and is listed as this area's component because the storage path is what publishes the volumes AppleKeyStore reads; it is a catalog component with build\_stage kernel, so it also appears in \[kernel\] archives.
+- \[userdata\] first\_lba/last\_lba were chosen as the largest partition of a 32 GiB card \(LBA 32768 to 62914559, the same start LBA the current card uses for its single partition\) so that a real layout is plausible in size, not because anything was measured on the current 30 GB card. The current card's last LBA is 62929886, and its single ext4 partition spans the whole card.
+- The binding half of Plan B now exists offline: scripts/audit-sd-storage.py records the original IOBlockStorageDevice ABI from the pinned kernelcache \(190 vtable slots, 176 kernel bindings, 14 pure virtual\) into scripts/data/opi5plus-storage-interface-audit.json, scripts/build-sd-driver.py compiles the submodule source to an object, and scripts/bind-sd-storage.py checks that object slot by slot against the record and emits build/native-sd/libNativeSd.a with the 18 non-exported addresses as absolute symbols. The record is a property of the pinned original kernelcache \(sha256 f18b4df865405f2a287b84977d7aca745e056d656d9fc9df1662970ce2969de7\), which is the same image the EVB10 port was audited against, so every recorded address matches that port.
+- Plan A no longer needs the EVB10's archive entries: this board has its own pair \(build-sd-driver.py NativeSd, bind-sd-storage.py\) at the end of \[kernel\] archives, and configs/opi5plus\_defconfig force-loads build/native-sd/libNativeSd.a after the link stubs. Adding Rk3588Emmc would still be the EVB10 pair.
+- The audit cannot be regenerated from a kernel that carries libNativeSd.a: .globl/.set makes the linker publish the bound names, so the candidate exports 183 of the 190 recorded names instead of the original image's 176, and the audit's 'unexpected original/native kernel binding count' check refuses. The EVB10 has the same property and simply never regenerates its committed JSON during a build; regenerate this one only after removing libNativeSd.a from CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES.
+- The Data volume's directory skeleton was incomplete, and that is a container failure, not a mount failure: 0002 mounts /private/var correctly \(device-verified display62/63\) but opi5plus\_ensure\_dirs only made the launchd-level directories \(/private/var/db, vm, mobile, tmp, keybags, preferences, root, run, log, protected\), so neither /private/var/containers nor /private/var/hardware existed. iPadOS keeps its persistent state in the container tree, and mobileactivationd's \_performMigration creates group\(systemgroup.com.apple.mobileactivationd\)/Library/ucrt before it serves anything: with the parent missing it reports 'Failed to create %@', takes the failure branch of main\(\), traps in \_main.cold.5 and never boots its XPC server, which is the daemon SpringBoard's main thread waits on without a deadline \(evidence/m7/M7-09, M7-10\).
+- The skeleton now lists that tree one level at a time -- containers, containers/Shared, containers/Shared/SystemGroup, the mobileactivationd system group container with Library/ucrt, Library/dcrt and Library/internal, containers/Data, containers/Data/System -- plus /private/var/hardware and /private/var/hardware/MobileActivation, and the parent directories of the activation files Apple delivers \(hardware/dcrt, hardware/sdcrt, hardware/factory, mobile/Library/mad\). The files themselves are still never created by this port. Every entry is a 0755 mkdir, root-owned because the kernel makes it, in table order \(opi5plus\_mkdir makes exactly one directory per call, so a parent has to precede its child\), and a repeat boot only reports EEXIST. Not yet run on the board: no boot has happened since 0002 gained these entries.
+- 0002 now seeds the Data volume the way UniXNU-evb10's evb10-userland-mounts.patch does, because a mount is not a first boot: the OS volume's /private/var tree is copied in from mount-&gt;mnt\_vnodecovered \(directories, regular files through the OS volume's decmpfs, symbolic links, the source's mode and owner, staged\_system\_apps left out\), the runtime directories /private/var/keybags, mobile, mobile/tmp, tmp and run are made, and five XML preference plists are written into /private/var/mobile/Library/Preferences \(com.apple.purplebuddy, .purplebuddy.notbackedup, .managedconfiguration.notbackedup, .springboard, .migration\) so that the Setup assistant is skipped and SpringBoard keeps the screen on; three MobileGestalt caches are unlinked on every boot rather than once, because a cached MainScreenScale=0 is what turns FBSDisplayMode into 1072x1904 scale 0. The marker /private/var/.opi5plus-seeded is written only on a persistent Data volume and only after a copy with no failures, so sd-data-seed=0 is the way back; on the 64 MiB RAM seed the marker cannot survive a reset and that boot seeds again. Nothing of it has run on the board yet.
+- sheng-aks=1 and offline-key-events=1 are enabled in kernel\_args, and they are what makes this kernel register an AppleKeyStore IOService at all: package/KeyStoreProbe.cpp native\_keyevents\_probe\(\) returns early without both \(offline-key-events at :78, then the ephemeral-storage-or-sheng-aks gate at :92\) and attaches the owned service only when no AppleKeyStore metaclass exists yet \(:93-117\). Without that service MKBEventsRegister\(\) answers NULL, SessionSyncEngine.Keybag's singleton initialiser takes the cbz and brk \#1s, and liveactivitiesd - the carrier of the com.apple.activitykit BSService domain and the mach name com.apple.sessionservices - dies in its own initialisation, which is why chronod's synchronous XPC to it never returns and SpringBoard waits there instead of drawing. The lock state it reports is an answer, not a state: no SEP, no passcode, sheng-aks-sls \(default 0 = unlocked\) selects the number, and every real keybag operation fails.
+- Rounds 4-10 \(2026-11-12\) priced the PIO read path with counters that ride the display beat line \(evidence/round4-6-result.md, evidence/sd-clock-investigation.md\): a 64 KiB chunk costs 5.67 ms at about 11.5 MB/s. Round 4's first sample read 12,484 STATUS polls per chunk; round 5's two-phase loop \(fill to a 128-word watermark, then drain\) cut that to 121, round 8's batch 32 raised it to 449, and the chunk time did not move in either case - so the poll count and the batch size are both falsified as the constraint. The fill/drain split \(round 9\) puts 81.6% of the chunk time in phase 1, waiting for the FIFO to fill against the card, and 8.8% in the CPU's drain; the CLKDIV/CLKSRC/CLKENA read-back \('opi5plus: sd clock: CLKDIV=0 CLKSRC=0 CLKENA=1', logs/boot-round9.log:1700\) shows the divider off at div=0. Round 7's sd-clock-div=1 doubled the chunk time \(5,671 -&gt; 10,957 us, 11.5 -&gt; 5.99 MB/s, logs/boot-round7.log:1967\), so the CIU divider is linearly effective. Round 10's fill-per-burst at batch 128 lands on 41.4 us - the \~26 MHz base-clock prediction \(39.4 us, +5% off\), with the 52 MHz prediction \(19.7 us\) excluded by 2.1x - i.e. the card clock is about 26 MHz from the CRU clock tree, PIO runs at 89% of the 13 MB/s it offers, and the next 2x is clock-tree work, not driver work.
+
+### 完成条件
+
+- Device-verified 2026-11-11 \(round 2\): kernel 45fbfab3cae0c66dcf73b85ba08a82ae7a580b0c4e6beabab1d81f76dc0a3893, payload 80e4f2965501789a851974bd8366fd686c56aacc6bc443ceb2f3c36fc527d2e1, command line 993 bytes / 54 arguments, patch 0002 at commit ca0cef3af5d351624786ff1aad40d23957a73686. The mobile directories carry uid 501 gid 501, the Data volume takes 61,272 blocks of writes \(dbavail 392,450 at t+5 -&gt; 331,178 at t+3600\) inside 286,338 requests with 0 failures, and four of the five sampled daemons stop exiting \(bluetoothd's loop is not this fix's\). Log: logs/boot-round2.log in the project working tree \(not committed\); the summarised record is evidence/round2-result.md.
+- Done: NativeSd publishes the OS and SystemOS windows read-only, XNU mounts the root from SystemOS with the dyld shared cache, /private/var is the writable Data volume with the kernel's directory skeleton, and launchd reaches 'Early boot complete. Continuing system boot.'
+- Device-verified 2026-11-08: with sd-data-persist=1 the Data volume is a 64 MiB card window at userdata lba 62796767..62929886 \(SDDATA01 header v1 state 2, gen 1\), formatted once and reused on later boots; kernel 03eb54fd \(bounce-cache fix\) + payload 152e1184 \(display63\): '/private/var is the Data volume now' on disk3s1 OwnerData, 0 ENOSPC lines through t+505 \(RAM baseline: 477\). Logs: logs/display61-uefi.log, logs/display62-uefi.log, logs/display63-uefi.log.
+
+### 当前范围
+
+- Round 2 wrote about 239 MiB into the Data volume \(dbavail 392,450 -&gt; 331,178, 61,272 blocks at 4 KiB\) and read 19.1 GiB \(40,139,008 blocks\) before t+2400, with 0 failures: the volume now carries a real userland's containers rather than a seed, and its size is still the 2048 MiB window, not yet measured against a full container.
+- SD sequential read is about 11 MiB/s \(sd-clock-div=0 removes the firmware divider\). The Data volume used to be a 64 MiB RAM seed that filled from about t+500 s \(free\_blocks 349 of 16384\), driving an ENOSPC storm; with sd-data-persist=1 it is a 64 MiB card window at the end of userdata instead \(display62: 0 ENOSPC lines through t+505 vs 477 on the RAM baseline\). The container size is inside the seed's superblock but the seed does not have to be the whole container: NativeSd accepts containerBytes &gt;= seed size and zeroes what the seed does not cover, so the 64 MiB window becomes a 2048 MiB one carrying 8.90 MiB of front \(evidence/m7/M7-04\).
+- The PIO read path is at its card's delivery rate and no software change will move it: \~11.5 MB/s measured against the \~13 MB/s a 26 MHz 4-bit card clock offers \(89% efficient, evidence/sd-clock-investigation.md\). The constraint is the CRU clock tree, not the driver - poll shape, batch size and phase split were all tried and all left the 5.67 ms chunk unchanged. Doubling throughput means moving the sdmmc source clock to 52 MHz in the CRU \(UniXNU-rk3588-common\) and re-measuring with the same counters.
+
+### 下一步
+
+- Match the card Data volume in launchd mount-phase \(-P 1 role lookup\); the kernel patch mount on /private/var already succeeds \(device-verified display62/63\).
+
+### 证据
+
+- `source`: [Round 2: the mobile directories' owner as the cause of the 10 s daemon exits and the fix in patch 0002, the 993-byte command line, and the stat probe that reads 501:501 for /private/var/mobile&\#123;,/Library,/tmp&\#125;](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round2-result.md)
+- `source`: [The placeholder \[userdata\] geometry, the comment recording both plans and why neither is verified, and the ordering comment for the two SD archive entries at the end of \[kernel\] archives](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `source`: [SD controller declared and disabled, eMMC node left disabled with the Plan A note](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/dts/opi5plus.dts)
+- `source`: [The original IOBlockStorageDevice ABI as it stands in the pinned kernelcache: 190 vtable slots, 176 kernel bindings \(162 inherited, 14 pure virtual\), vtable 0xfffffff005cb44c0, metaclass 0xfffffff006add1d0. Produced by scripts/audit-sd-storage.py; the addresses are a property of the image, not of the driver.](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/scripts/data/opi5plus-storage-interface-audit.json)
+- `source`: [Refuses to emit build/native-sd/libNativeSd.a unless the compiled object matches the record slot by slot, has no pure virtual slots, imports no unbound original symbol and does not import the abstract D1/D0; --verify-kernel re-checks the linked kernel's extents afterwards](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/scripts/bind-sd-storage.py)
+- `source`: [opi5plus\_ensure\_dirs\(\) now creates the container tree -- /private/var/containers, containers/Shared/SystemGroup/systemgroup.com.apple.mobileactivationd/Library/&\#123;ucrt,dcrt,internal&\#125;, containers/Data/System -- and /private/var/hardware/MobileActivation as ordered 0755 mkdirs, plus only the parent directories of the Apple-delivered activation files, which the kernel never writes](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/patches/xnu/0002-mount-data-volume.patch)
+- `source`: [opi5plus\_seed\_tree\(\) with opi5plus\_seed\_copy\_dir\(\)/opi5plus\_seed\_prefs\_write\(\): the first-boot seed of the Data volume, five XML preference plists and the marker /private/var/.opi5plus-seeded, plus opi5plus\_wipe\_mobilegestalt\(\) and its three cache paths on every boot. Generated by tools/wsl/331-patch-xnu-data-mount.py and emitted by tools/wsl/334-make-device-xnu-patch.sh; sd-data-seed=1 in \[payload\] kernel\_args](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/patches/xnu/0002-mount-data-volume.patch)
+- `device`: [Rounds 7-10 on the board, 2026-11-12: the SD PIO read path measured with its own counters. A 64 KiB chunk costs 5.67 ms at \~11.5 MB/s; sd-clock-div=1 doubles it \(11.5 -&gt; 5.99 MB/s, the CIU divider linearly effective\); batch 128 -&gt; 32 and the two-phase poll shape both left the chunk time unchanged \(two falsified models\); the fill/drain split reads 81.6% waiting for the card and 8.8% CPU; the CLKDIV/CLKSRC/CLKENA read-back shows CLKDIV=0 at div=0; and the fill per 128-word burst is 41.4 us, the \~26 MHz base-clock prediction \(+5%\), with 52 MHz excluded by 2.1x. Conclusion: the card clock is \~26 MHz from the CRU clock tree, PIO is 89% efficient, and doubling throughput means moving the sdmmc source clock to 52 MHz in the CRU, not a driver change. Logs: logs/boot-round&\#123;7,8,9,10&\#125;.log in the project working tree, not committed.](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/sd-clock-investigation.md)
+  Command: <code>py -3 tools/boot-uefi.py --port COM3 --baud 1500000 --log logs/boot-round10.log</code>. Revision: `818f9b64bbe0facfe3f6b982d4dccc6a822edd4f`.
+
+## 显示 {#display}
+
+`implemented`
+
+组件: `GopFramebuffer`.
+
+### 硬件与依赖
+
+- HDMI0 only: hdmi@fde80000 \(two 64 KiB register windows at 0xfde80000 and 0xfde90000, five SPIs 169-172 and 360, compatible rockchip,rk3588-dw-hdmi\), fed by VOP2 at vop@fdd90000.
+- No DSI panel and no touch screen; the board's own device tree has hdmi0 enabled and every dsi node disabled or absent.
+- The firmware's GOP frame buffer, at the native 2560x1440 the EDID selects: PE\_current\_console returns it directly \(video 0xe6760000 + 0xe10000\), so nothing has to be pinned in the firmware.
+- The display archive, which now exists: build/native-legacy-display/libNativeLegacyDisplay.late.a, built by scripts/build-native-legacy-display.py from package/Opi5plusDisplay \(backend, probe, KeyStore stub, GOP presenter and the 358-slot ABI for the original IOMobileFramebufferLegacy\).
+
+### 配置
+
+- \[components\] include carries GopFramebuffer \(its build\_stage is embedded, so it must NOT appear in \[kernel\] archives\) and the SoC repository's Rk3588VopDirect.
+- Two kernel passes: configs/opi5plus\_defconfig keeps CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=n, and configs/opi5plus\_display\_defconfig sets it to y, which is what force-loads the archive already built against the first pass.
+- kernel\_args carry the offline-legacy-\* group \(parsed in package/Opi5plusDisplay\) plus rk3588-vop-direct=1, rk3588-vop-esmart=2 and rk3588-vop-vp=2 \(parsed by Rk3588VopDirect\), each entry naming its parser in board.toml.
+- dts/opi5plus.dts keeps vop@fdd90000 and hdmi@fde80000 disabled and without unixnu,adt-name: Rk3588VopDirect drives both through its own rk3588-vop-\* arguments and finds the frame buffer itself, so no ADT node is involved.
+
+### 操作步骤
+
+- Build pass A, then pass B with the archive. Check logs/archive-15-build-opi5plus-display.log for error: and take the kernel sha256 from the build output: unixnu build kernel returns 0 even when the archive fails to compile and the payload step would pack the previous kernel.
+- Boot and read the serial log rather than the screen: the probe prints D1..DA, the beat line reports process count and stage, and the display's own line reports swap ok / copy / retired / frames plus the VOP direct flips.
+- The frame path to watch is compositor swap -&gt; backend copy \(14745600 B, status 0\) -&gt; VOP2 latch. When a frame does not appear, the family's default\_fb\_surface is the first thing to check.
+
+### 开发经验
+
+- Round 2 \(2026-11-11\) put a real UI on the panel. The compositor's surfaces are Apple's two-plane lossless 'b3a8' spelling, whose accessor reports the last plane's row \(width bytes\) while the pixels sit in plane 0; the backend now accepts that format and copies with width \* 4 as the source row \(commit 1ef2c87b29215d1b56cb851f207d3513066dbdeb\). The run then shows 54 swaps accepted and 0 refused, 54 GOP blits of 14,745,600 B \(88.6-95.7 ms a frame, 796,262,400 B in total\), up to 22 framebuffer clients and 273 calls, and the lock screen on the panel.
+- The display difference is not just "HDMI instead of DSI": the EVB10 composites and scans out through VOP2 with zero-copy and a GPU fence, which is where its 52 fps comes from. A GOP frame buffer is a linear buffer the firmware already scans out, so the kernel side is a CPU copy or a GPU blit into it. plan.md M5 already sequences it that way \(picture first, VOP2 only if the frame rate is not enough\).
+- GopFramebuffer is verified on a different device in the catalog \(verified\_devices = \[sheng\]\) and is the component the UniXNU docs describe for exactly this situation: a board whose firmware keeps the display. Selecting it here does not make this area verified; it makes the sources available.
+- The EVB10's second defconfig \(evb10\_display\_defconfig\) exists because its display archive is built from an earlier kernel pass. This port has one defconfig because there is no such archive to build yet; when there is, it will need the same two-pass arrangement, which is worth remembering before inventing a different one.
+- M5 state after the 2026-11-07 runs \(evidence/m5/M5-09\): the display archive, the GOP presenter and the SoC repository's Rk3588VopDirect component all build and are linked; userland opens IOMobileFramebuffer at about t+780 s \(IOMFB\_FDR\_Loader, then backboardd\) and VOP direct initialises on the board \(VOP IOMMU paging on, Esmart window e6760000\), but the compositor's first swap fails inside the original driver with 'IOMFB: default\_fb\_surface: No Default FB Surface found', the 5 s swap\_wait\_gated timeout follows, and the cancellation path reaches abstract slot 345, where this port's guard panics. The GOP CPU-copy path cannot complete a swap, which is why the VOP2 component was brought in.
+- Pinning Rk3588VopDirect also moved the SoC pin to b5f5d949, whose rk3588.config turns CONFIG\_XNU\_NATIVE\_AES on; the kernel link then requires build/software-aes/libSoftwareAES.a, so \[kernel\] archives and \[components\] include both gained SoftwareAES plus build-software-aes-bindings.py. Omitting the component from include fails with '\[kernel\] archives: component SoftwareAES is not selected'.
+- The model-transfer path in package/Opi5plusDisplay/NativeLegacyDisplay.cpp refuses a swap with kIOReturnNotReady for ten different reasons and used to say only that; native\_legacy\_transfer\_diagnosed\(\) now records the surface half \(width, height, format, planes, stride, allocation, descriptor length\) and the firmware console half \(PE\_Video base, width, height, depth, rotation, stride\) plus the display's own size, and the periodic report prints them once per distinct refusal. The abort that follows \(abstract slot 345 through the guard\) is a symptom of that refusal, not a separate fault.
+- M5 state after the 2026-11-08 runs \(evidence/m5/M5-15\): the swap completes. At 2560x1440 the compositor opens IOMobileFramebuffer, submits three swaps, the backend copies 14745600 bytes each with status 0, retires three generations and VOP2 latches three flips \(mean 9.3 ms, worst 16.5 ms\). The picture then stops because the original family refuses 'default\_fb\_surface: No Default FB Surface found' and the presentation selector 6 answers kIOReturnBusy \(0xe00002d5\) for surface id 0x80000000 while 1, 0x80000001 and 0x80000003 succeed. Supplying that surface through the original IOSurfaceRoot factory is the remaining piece; the reference implementation stops in the same place, so this is parity with it rather than a regression.
+- The exit report \(sd-exit=1, the kern\_exit.c hook plus a ring the beats flush\) exists because launchd only says 'Process\[x\] crashed: name. Too many corpses being created.' and a userland that dies on its first frame says nothing else. It separates exit\(code\) from signal death in one line and it found the open item on this board: about twenty daemons including backboardd receive SIGKILL in one beat window at t+690 with no memorystatus or shutdown message anywhere, and launchd restarts them. The sender of those SIGKILLs is the next thing to trace.
+- The default framebuffer surface turned out to be at original field +5656, not behind the 'create\_default\_fb\_surface\(\)' slot the documentation's wording suggests \(that slot, 316, is a 20-byte no-op on the swap-completion path\). The family's own creator is slot 299, it stores what it built at +5664, and it returns early unless the byte at +6016 is set - and nothing in the prelinked family writes that byte, because it belongs to the platform driver this port does not ship. The adapter now sets the byte before start\(\), retains what start\(\) created and publishes it at +5656; evidence/m5/M5-16 has the addresses and the four risks.
+- The 64 MiB Data seed cannot be grown by shipping a bigger seed: the APFS container size is inside the image \(mkapfs, tools/wsl/tmp-make-seed64.sh\), so extra payload bytes would be unused. The volume sits at 349-1000 free blocks of 16384 from about t+500 s, which is what every writing daemon runs into; the fixes are a Data window on the SD card or fewer guest writes, not a bigger ramdisk.
+- The default framebuffer surface needs a display memory REGION, not a slot and not a hand-made surface \(evidence/m5/M5-17\). Slot 299 asks IOSurface for a surface in the region named 'PurpleGfxMem', which in turn is the alias IOSurfaceRoot gives the region it builds from a /vram registry node; without that node the region count is zero, installMemoryRegions\(\) returns at once, and every surface the family lays out carries a null region. layout\_buffers\(\) dereferences that region as its fifth instruction \(0xfffffff00578d110\), so all four experiments that produced a region-less surface reset the board, including the one that never published it. Both adapter paths now read \[surface+0x28\] and refuse to publish without a region.
+- The ADT generator can only publish hardware nodes under /arm-io \(devicetree.py writes cpus, psci, arm-io and chosen\), while IORegistryEntry::fromPath\("/vram"\) wants a root child named vram. So the region has to come from a platform driver that publishes that service, or from a change to the ADT generator; a device-tree node alone cannot reach it. Until then the display keeps the M5-15 behaviour: three compositor frames, swap completed, default\_fb\_surface unanswered.
+- The display archive now publishes the /vram node itself \(an IOService named 'vram' carrying &\#123;0x1\_0000\_0000, 256 MiB&\#125;; owned\_memory\_size is 2 GiB inside the firmware's low bank, so that 4 GiB bank is DRAM the kernel does not own\). IOSurfaceRoot still reports a region count of zero: IORegistryEntry::fromPath\("/vram"\) answers 0 in both the service and the device-tree planes for all three placements tried \(attached to getServiceRoot\(\) = the platform expert J120AP, to its parent, and to getRegistryRoot\(\)\), and the service's own start\(\) returns success without filling the table. The image export for that node must therefore be replaced by writing the region table where the service's start\(\) would have written it \(+0x158 name, +0x168 alias, +0x178 cache word, count at +0x180\) and calling the installer it keeps at +0x188; evidence/m5/M5-18 has the placements and the offsets.
+- A build trap cost two runs: unixnu build kernel exits 0 even when the display archive fails to compile, and the payload step then packs the previous kernel. The checks that are trustworthy are the error count in logs/archive-15-build-opi5plus-display.log, the 'kernel: &lt;sha256&gt;' line of the build, and a string that only the new code contains in kernel.macho. Two compile rules of that file: the device-tree plane symbol is gIODTPlane \(IOKit/IODeviceTreeSupport.h is not in the archive's include set, so export it\), and an extern "C" declaration inside a function body is ill-formed - it belongs at file scope above the class.
+
+### 完成条件
+
+- Implemented and device-verified on the board 2026-11-11 \(round 2\): at 2560x1440 the compositor's swaps complete and their frames reach the panel, so the board shows its lock screen - 54 swaps accepted and copied, 54 GOP blits of 14,745,600 B with 0 refused, up to 22 framebuffer clients and 273 calls, kernel 45fbfab3cae0c66dcf73b85ba08a82ae7a580b0c4e6beabab1d81f76dc0a3893, commit 1ef2c87b29215d1b56cb851f207d3513066dbdeb, log logs/boot-round2.log, summarised in evidence/round2-result.md. What the picture still gets wrong is in the limits.
+
+### 当前范围
+
+- The picture is not clean: the lock-screen clock digits carry horizontal banding while the small text is clean, and the screen is static \(54 frames in 3,600 s\), so it is not tearing. The candidates in the same log are the metal2vulkan-degrade-shadowed-texture warnings - 'a 2D A8Unorm texture of 332x200 over a buffer at offset 64 with rows of 352 bytes ... the driver refuses a DRM\_FORMAT\_MOD\_LINEAR image for host allocations with rows 352 bytes apart \(ERROR\_INITIALIZATION\_FAILED\)' - while the GOP copy itself is byte-complete \(pitch 10240 = 2560 \* 4, 14,745,600 B a frame, 0 refused\). The one-shot 'biplanar surface accepted' line does not appear in the capture, so the accepted frames were not two-plane b3a8 surfaces at the moment of first acceptance, and which shape reaches the digits is unresolved.
+- The refresh path never runs: all 62 vsync lines from t+590 to t+3575 read 'vsync hz=60 sent=0 arms=0 idle=0 late=0 start=1 refresh=1' and no line in the log carries a non-zero sent, so 54 swaps complete without the userland ever arming a vsync.
+- The scanout path is verified end to end \(evidence/m7/M7-06\): a green fill written into the boot framebuffer and pointed at by the window appeared on the panel, so the VOP scans the address this port programs and CFG\_DONE latches it; the next compositor swap then replaced it with its own surface. What the panel shows is therefore the content of the compositor's frames.
+- Those frames are the boot screen's own picture, not a UI: after the third swap the window moved to another compositor surface \(slot 3, physical 0x1ccdf3000\) and the panel went back to the Apple logo, with the surface's corner pixels uniformly opaque black. SpringBoard is not producing a real frame yet.
+- The default surface is NOT what blocks the UI, and the region table is a dead end in this form \(evidence/m7/M7-07\): filling IOSurfaceRoot's region entry with the fields its own start\(\) writes makes the service report a region \(region count after installer 1\) and then stops userland surface allocation altogether - the Mali surface cache stays at n=0 bytes=0, the render server never submits a swap in 1590 s, and the panel keeps the boot logo, where the same payload with an empty table makes three frames at t+935. An entry with no memory behind it \(there is no /vram node to attach a range to\) is worse than no entry, so the fill is offline-legacy-vram-region, default 0. Surface id 0x80000000 still answers e00002d5 \(kIOReturnNoSpace\) and a region-less surface still faults in layout\_buffers at 0xfffffff00578d110, but the EVB10 port reaches its lock screen without either: it never calls create\_default\_fb\_surface\(\) and never touches +5656.
+- The fence is required and bounded: with rk3588-vop-fence=1, 2 of 2 swaps arrived with GPU work not done and both flips waited \(mean 7.6 ms, longest 8.3 ms, 0 gave up\). The 81% measurement in package/Mali/docs/notes.zh-CN.md reproduces on this board.
+- The activation XPC has to be answered, not failed \(evidence/m7/M7-10\): refusing the daemon's exec \(opi5plus-block-exec=mobileactivationd, patch 0006\) does make launchd's spawn fail, but SpringBoard's main thread stays in the same synchronous -\[MadGate getActivationState:\] wait - launchd keeps the request and neither answers nor drops it. Replacing the binary is the way: patch 0007 mounts a payload directory over /usr/libexec and the resolved path went from 2960496 bytes \(the sealed daemon\) to 70176 \(the stand-in\), with the rest of the boot unchanged.
+- The stand-in is killed by AMFI before it runs: 'Launch Constraint Violation \(enforcing\), \(Constraint not matched\) launching proc: /usr/libexec/mobileactivationd', SIGKILL 56 times between t+775 and t+1320, so it never checks in and never answers. The trust cache carries its cdhash \(all three modules load\); the missing piece is that an owner-trusted binary's constraint category is not the platform one. The base series already has the switch: mac\_proc\_check\_launch\_constraints\(\) returns 0 when sheng-no-lc=1 is on the command line, and that argument was not on this payload.
+- SpringBoard is the gate, not the render server \(evidence/m7/M7-08\): the sampler shows its main thread inside dyld and the Objective-C runtime from t+360 to t+1100 \(single threaded, four consecutive samples on the same realizeClassWithoutSwift pc\), then blocked from t+1140 to the end of the capture in a synchronous XPC with no timeout - -\[SBLockdownManager lockdownState\] -&gt; \_MAEGetActivationStateWithError -&gt; -\[MadGate getActivationState:\]. Two more SpringBoard threads wait the same way on biomed \(BiomeFoundation \_BMXPCFileManager\) and on the TCC permission service \(PowerLog\). The daemons being waited on are the ones that die: mobileactivation SIGTRAP 17 times in 1470 s, biomed exit 1 57 times, and 564 process exits in total.
+- gop X/Y in the beat line is the letterbox's presents/refusals, not a GOP-write count: opi5\_gop\_present\(\) increments Y when its null gate refuses \(evb10-fb-w/-h are not on this payload's command line, so opi5\_fb\_override never maps anything\), and it is called for every successful transfer \(LegacyDisplayProbe.cpp:58, :357, gate :802-804\). 'gop 0/4' therefore says the letterbox ran four times and refused four times; it does not say the GOP was never written. The frame-buffer writes of the direct path are counted as native\_legacy\_gop\_mirror. The output is HDMI1 \(DetectDisplays: HDMI0 Not Found, HDMI1 Success, VP2's only enabled plane is Esmart2\); docs/hardware.md and plan.md still say HDMI0 and are wrong, and this repository's AGENTS.md said so too until it was corrected with the evidence.
+- Since 2026-11-11 the direct path also writes the frame buffer \(boot-arg opi5-gop-mirror, default 1; NativeLegacyDisplay::gopMirrorPresent\): the frame the window just latched is copied into the firmware's GOP through bootMapping and the window is pointed back at it, so every successful swap ends with a real GOP write and the beat line prints 'gop blit N frames \(M refused\), last B us'. It also runs the content scan the CPU copy path used to own, which is why frames becomes non-zero on a direct-only boot. The cost is the CPU copy the M5 path always had \(tens of ms per frame\); opi5-gop-mirror=0 restores zero-copy scanout. Take the frame-buffer base from PE\_current\_console, never from a note: boot-stub-5 had it at 0xe6740000, not the 0xe6760000 the M5 records carry.
+
+### 下一步
+
+- Boot the stand-in again with sheng-no-lc=1 on the command line \(the base series' mac\_proc\_check\_launch\_constraints escape\): the stub should then check in to com.apple.mobileactivationd.lockdown and answer getActivationState: with Activated. Two witnesses: the sampler's SpringBoard chain moving off \_mach\_msg2\_trap, and the panel.
+- Finish mobileactivationd, which the UI is synchronously blocked on: its 16 SIGTRAPs are the brk \#1 at the end of \_main.cold.5 \(0x1001eeac0 unslid, pc == lr, per-launch slide, one brk at page offset 0xac0 in the image and the frame distance 0x198704 fixed across launches\). main\(\) takes its failure branch, the noreturn die call returns, and the compiler's unreachable trap becomes the signal. Resolve the two chained-fixup imports called just before the brk \(0x1001eeab4 and 0x1001eeabc\) to name the call that returns; the crash line already prints their target registers when they are called.
+- Find why the storage group cannot start \(evidence/m7/M7-09\): PerfPowerService aborts in PowerLog startStorage -&gt; \_err -&gt; abort, assistantd, dmd and ScreenTimeAgent abort in the same frames, biomed/biomesyncd/nsurlsessiond/bluetoothd/callservicesd exit 1 instead - on a Data volume with 96% free and 0 NativeSd failures. Sandbox, container layout and the APFS view are the three candidates; sd-trace-io=1 is the next instrument.
+
+### 证据
+
+- `source`: [Round 2: the lock screen renders \(54 accepted swaps, 54 GOP blits, 22 clients\) through the two-plane b3a8 surface the fix accepts, and the two defects that remain \(banding inside the large glyphs, vsync sent=0 arms=0\)](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round2-result.md)
+- `source`: [Both display switches off, with the reason the archive is what gates them](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/configs/opi5plus_defconfig)
+- `source`: [Three compositor swaps copied \(14745600 B, status 0\) and latched by VOP2 at 2560x1440; the picture then stops on the original family's missing default surface](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-15-native-resolution-compositor-frames.md)
+- `source`: [The default surface lives at original field +5656 and the family's creator \(slot 299\) is gated by an unset byte at +6016; the adapter sets the byte, retains the created surface and publishes it at +5656](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-16-default-surface-lookup.md)
+- `source`: [The surface the family needs must carry a display memory region from a /vram node this port does not publish; four runs that produced a region-less surface reset at 0xfffffff00578d110, so both adapter paths now refuse to publish one](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-17-display-memory-region-required.md)
+- `source`: [The archive publishes /vram \(IOService, 256 MiB at 0x1\_0000\_0000\) and fills the region table directly through the service's own installer; fromPath\("/vram"\) answers 0 in both planes for all three placements, so the table fill replaces the path lookup](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-18-vram-region-campaign.md)
+- `source`: [The scanout follows this port's window: the hand-painted green reached the panel and the third compositor swap put the boot picture back, so the frames reach the panel and their content is the boot screen](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-06-window-follows-green-then-snapshot.md)
+- `source`: [The region table fills exactly as IOSurfaceRoot::start\(\) would and the count reads 1, but the render server then creates no surface at all \(J surface cache n=0\) and submits no frame; the fill is now off by default](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-07-region-table-stops-surfaces.md)
+- `source`: [The thread sampler names what the UI is blocked on: SpringBoard's main thread is in a synchronous XPC from -\[SBLockdownManager lockdownState\] to -\[MadGate getActivationState:\], waiting on a mobileactivationd that traps 17 times in 1470 s, with two more threads waiting on biomed and the TCC permission service](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-08-springboard-waits-on-mobileactivation.md)
+- `source`: [The crash trace names the signal deaths: mobileactivationd's SIGTRAP is the brk \#1 ending \_main.cold.5 \(its main\(\) failure path\) \(its main\(\) failure path\); fitcored traps in SeymourServices Sandbox.bootstrap and liveactivitiesd in SessionSyncEngine \(Swift assertions\), while PerfPowerService, assistantd, dmd and ScreenTimeAgent abort out of a storage path \(startStorage -&gt; \_err -&gt; abort\); mobileactivationd's own site is still unresolved](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-09-crash-sites.md)
+- `source`: [Refusing the daemon's exec does not unblock SpringBoard \(launchd keeps the request\); the payload stand-in does reach /usr/libexec through patch 0007 \(2960496 -&gt; 70176 bytes\) but AMFI kills it for launch constraints 56 times, and the base series' sheng-no-lc=1 is the switch that clears that check](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-10-stub-launch-constraints.md)
+
+## 输入 {#input}
+
+`device-verified`
+
+### 硬件与依赖
+
+- No touch panel and no input controller on the board's own wiring: no ads7846, no focaltech or novatek node, no DSI connector.
+- USB: the SoC's xHCI/DWC3 controllers and the board's USB ports; USB keyboards, mice and standard HID touch screens are the intended input devices \(plan.md §3.2 lists a USB HID touch screen as a P2 purchase\).
+- A serial or scripted injection channel, which needs no hardware and is the first step in plan.md M6.
+
+### 配置
+
+- The HID device is configured outside board.toml: configs/opi5plus\_display\_defconfig force-loads build/opi5-hid/libOpi5plusHid.a \(package/Opi5plusHid/NativeHidInput.cpp plus package/Opi5plusHidProbe.cpp\), and the payload script passes the arguments it reads - opi5-hid=1 loads the original IOHIDFamily, opi5-hid-input=1\|2 selects device only or device plus injector, sheng-touch-hid adds the digitizer collection, offline-hid-auto-home=&lt;seconds&gt; the unattended Home presses. board.toml's kernel\_args lists none of them.
+- The EVB10's panel half \(evb10-touch\*, evb10-touch-xmax/ymax, evb10-vop\*\) has no counterpart here - no DSI panel, no touch controller and no VOP2 scan-out for it - so none of it is enabled. The EVB10's HID half is the half that applies, and package/Opi5plusHid is its port.
+
+### 操作步骤
+
+- M6 step 1: a scripted injection channel \(the counterpart of the EVB10's evb10-touch-demo\) to drive the UI and measure frame rate without hardware; opi5-hid-input=2 selects it in the round-3 payload.
+- M6 step 2: USB input over the SoC's DWC3 xHCI controllers. The host stack is not written here - 21H461 already carries IOUSBHostFamily, AppleUSBXHCI and IOUSBHostHIDDevice - so the step is getting those kexts into the prelink in front of this SoC's controllers rather than writing a HID driver; the limits size that work.
+
+### 开发经验
+
+- Measured on the board 2026-11-12 \(round 3, log \`logs/boot-round3.log\` in the project working tree, not committed; evidence/round3-result.md\): the synthetic injector's reports are accepted and they reach the userland. The injector armed with the digitizer collection \('inject: armed, mode 2, digitizer 1, 21 samples x 20 ms', line 1743\), the digitizer properties were published on the event service itself \('digitizer properties published on the event service 0xfffffff361568a40', line 1869 - the line round 2 never printed\), the injector saw the driver appear on it \(line 1870\) and IOHIDEventDriver had already opened the device \(line 1756\). 210 gestures produced 4,830 reports \(exactly 23 per gesture: two for the Home press/release plus 21 for the swipe\), fails 0 and last result 0x0 in every one of the 39 heartbeats from t+34 s to t+1171 s, open 1 throughout, and none of the three failure lines \('waiting: no event driver', 'waiting: not open', 'giving up on the open gate'\) appears anywhere in the capture.
+- The reports move the UI: 16 of the round's 20 \`gop blit\` frames are copied in the 40 s after the lock screen first appears \(4 frames held from t+900 to t+1560, then 5 at t+1575, 7 at t+1580, 11 at t+1595, 13 at t+1600, 16 at t+1605, 20 at t+1615, static to t+1800\), and the operator saw the panel go Apple logo \(about 00:05\) -&gt; lock screen \(about 00:20\) -&gt; home screen with nothing plugged in. Round 2, with no injector, held 4 frames at t+1500, crept to 54 by t+3575 and stayed on the lock screen for all 63 minutes. The only command-line difference between the two runs is opi5-hid-input=1 -&gt; =2, so the unlock is attributable to the injection and not to a display change.
+- Negative results of the same run: no 'ignoring digitizer event ... from unsupported service' and no 'unsupported service' anywhere, so the reports were not accepted by the kernel and then dropped by backboardd; \`vsync sent\` is still 0 in every line, so the unlock happens without a vsync ever being armed; and a wireless mouse hot-plugged during the run still changed nothing, which is the expected result while the kernel has no USB host stack.
+- Measured on the board 2026-11-11 \(round 2\): no USB device ever attaches \(a wireless mouse hot-plugged during the run changed nothing\) and no HID report reaches the userland, so the UI is visible and cannot be driven. Two readings of that run are retired as evidence and must not be used as gates again: the three 'XhcDriverBindingStart: XHCI started for controller @ ...' lines are UEFI output from the firmware's own XhciDxe.efi, printed before 'DARWINBOOT: hand-off' \(evidence/round2-result.md\), so they say the firmware has USB and nothing about XNU's kernel stack; and 'IOHIDSystem absent' - repeated in all 120 registry reports, one every 30 s from t+30 to t+3600 - asked for a class this kernel does not have. Both questions round 2 left open are now settled, and both are answered yes: IOHIDSystem is not a service this userland starts because the class does not exist anywhere in 21H461 \(evidence/m5/M5-08\), and the EVB10 touch code is the HID path this port has - its device is the one HID device in the build, and the same log shows 'NativeHidInput:0x... open by IOHIDEventDriver:0x...', so the original event driver does open it.
+- The absence is total, measured on the 21H461 binary in round 3: the kernelcache's 40 IOHID\* class names do not include IOHIDSystem, the 'site.' metaclass strings do not include site.IOHIDSystem, no C++ mangled name contains 11IOHIDSystem, and none of the 237 prelinked kexts has a personality with IOClass IOHIDSystem \(com.apple.iokit.IOHIDFamily itself has seven: IOHIDResource, IOHIDEventServiceUserClient, IOHIDLibUserClient, R1 Merge, HID Game Controller Pointing Driver, ShuttleExpress and StarkPorscheWheel\). The image carries the string exactly once, in \_\_TEXT.\_\_os\_log at file offset 0xabfeac, as the macOS stackshot log 'IOHIDSystem posted stackshot event 0x%08x'.
+- The event path that does exist, and the metric to use from now on: backboardd goes through the user-space IOHIDEventSystem/IOHIDEventSystemClient in BackBoardHIDEventFoundation, enumerates the kernel objects whose IOClass is IOHIDEventService, and IOServiceOpen creates IOHIDEventServiceUserClient or IOHIDEventServiceFastPathUserClient; nothing in that path goes through IOHIDSystem. backboardd's own 746 imports carry neither \_IOHIDEventSystemClientCreate nor the strings IOHIDSystem, IOHIDResource or IOHIDDevice. Count matched IOHIDEventService instances, not a macOS class name.
+- Round 2's 'input completely dead' was a command-line result, not a broken link. NativeHidInput sets touchEnabled only for sheng-touch-hid=1, and the round-2 line did not carry it, so the published report descriptor holds a keyboard collection and no digitizer collection: report ID 3 does not exist. native\_touch\_set\_sink\(\) is an empty function on this board \(package/Opi5plusHidProbe.cpp:43\), so touchSend\(\) is dead code, and the only report that fires on its own - the Home report - is refused by native\_hid\_input\_requested\(\) \(package/Opi5plusHidProbe.cpp:48-63\) unless offline-hid-auto-home=&lt;seconds&gt; is on the command line, which round 2 also lacked. No report could ever have arrived, by design; the device was healthy \(the same boot runs 'init 1 attach 1 start 1' and then IOHIDEventDriver opens it\). Round 3's fix reuses the opi5-hid-input value instead of adding an argument name: 1 is round 2's behaviour \(device only\), &gt;=2 builds the device, forces the digitizer collection on so report ID 3 exists, and starts the synthetic report injector, and a new name was not affordable because the line has 7 bytes left of its 1000.
+- Input is the area where copying the EVB10 would be most tempting and most wrong: the touch half \(Evb10Touch, its DSI panel and the evb10-touch-xmax/ymax coordinate arguments\) is a board-specific I2C controller that has no counterpart here. The HID half is different and was already ported as package/Opi5plusHid - it is the device round 2 saw start.
+- A USB HID touch screen is the cheapest way to get real touch events, because it speaks the standard HID report descriptor that IOHIDFamily already understands - the work then sits in the USB host path, not in a device-specific driver.
+- The GOP frame buffer gives the input work a fixed, known coordinate space \(the firmware's resolution\) instead of a panel's native one, which removes the scaling problem the EVB10 solved with evb10-touch-xmax/ymax.
+- USB is a prelink question, not a driver one: the 21H461 image carries the whole host stack \(IOUSBHostFamily, AppleUSBXHCI, AppleUSBOHCI, AppleUSBEHCI, AppleUSBHub, AppleUSBHostCompositeDevice and IOUSBHostHIDDevice with its 'Generic Keyboard' personality on provider IOUSBHostInterface\), and IOHIDFamily/IOHIDEventDriver are already in this port's prelink. The macOS names are all absent - AppleUSBHostFamily, AppleUSBXHCIPCI, AppleUSBTCKeyboard, IOUSBHIDDriver, AppleUSBHIDDriver - so a PCIe-matched route has no object. The RK3588's USB is SoC MMIO straight to three DWC3 xHCI controllers at 0xFC000000/0xFC400000/0xFCD00000 \(two ports each\) and two EHCI controllers \(one port each\), none of it on PCIe. The kernel side is not a symbol gap either: all-kpi.exp's 5,807 entries contain no USB symbol \(the kexts provide those\) and IOCreateReceivePort does not exist in XNU 10063.141.1 at all, so no stub for it. The real gap is 17 kexts that would have to enter the prelink \(dependency closure 29, of which the current 31 roots cover 12\); only com.apple.driver.watchdog and com.apple.iokit.IOACPIFamily are declared but have no binary in the image.
+- Round 4 closed bluetoothd at the exec gate with zero code: opi5plus-block-exec=bluetoothd \(patch 0006, the same patch the mobileactivationd work uses\) makes the kernel refuse the daemon's exec \('opi5plus: exec of /usr/sbin/bluetoothd blocked', logs/boot-round4.log:2439\) and the 'exit bluetoothd\[' corpse lines fell from 268 in round 3 to 0 in round 4 - the daemon never starts at all, so its 10 s restart loop is gone rather than silenced. The board still reached the desktop by itself that round, so the unlock path never needed bluetoothd.
+- Round 6's serial=1 \(INPUT bit clear\) closed the console's receive path for input purposes and gave its FIFO to NativeSd's reset hook \(the Ctrl-\] board reset, tools/wsl/serial-reset.py, verified on the board at about 19 s back to Linux; evidence/round4-6-result.md S4\). Serial input is therefore not a channel on this board until the hook and a future serial reader agree on arbitration.
+
+### 完成条件
+
+- Reached for the scripted-injection half of the condition, measured on the board 2026-11-12 \(round 3, evidence/round3-result.md\): the injected HID reports reach the userland - 4,830 reports, 0 fails, last result 0x0, the event service open 1 for the whole run - and they move the UI reproducibly: the same 5.4 s gesture cycle drove SpringBoard from the lock screen into the home screen, which round 2 did not do in 63 minutes. The pointer-and-keyboard half of the condition is still unmet, because no USB device enumerates.
+- Remaining for the condition as written \(\`pointer and keyboard events reach the userland\`\): a USB HID keyboard, mouse or touch screen over the SoC's xHCI controllers, which needs the host stack in the prelink; the injector stands in for it until then.
+
+### 当前范围
+
+- The injection is a scripted gesture stream, not a touch panel: one Home press/release plus one vertical swipe down the centre line every 5.4 s from t+20. It proves the HID event path end to end and says nothing about coordinates from a real digitiser, pressure, multi-touch or a second finger.
+- \`vsync sent\` is still 0 in every vsync line of round 3, exactly as in round 2: the injected gesture reaches the compositor without any vsync being armed, so this round says nothing about the refresh path and the counter stays an open question.
+- A wireless mouse hot-plugged during this run still changed nothing. That is the expected result, not a new symptom: \`configs/\` carries no USB configuration and IOUSBHostFamily / AppleUSBXHCI are not in the prelink, so there is no host stack for the device to attach to. The \`XHCI: Initialize DWC3\` / \`XhcDriverBindingStart\` lines in the same log are the firmware's XhciDxe.efi, printed before \`DARWINBOOT: hand-off\`.
+- USB is 6-15 working days \(1.5-3 weeks\) at best, far more than one round: 17 kexts into the prelink with a dependency closure of 29, platform glue for three DWC3 xHCI controllers that are not on PCIe, and two declared dependencies \(com.apple.driver.watchdog, com.apple.iokit.IOACPIFamily\) that the image does not carry. The recommendation is a prelink feasibility decision first, not a scheduled port.
+
+### 下一步
+
+- M6 round 4 candidate 1: keep the injector in the payload as the regression input for every later round - it is the only thing that has ever moved this UI - and make the gesture set reproducible \(a fixed Home press/release plus a swipe the log can name\) before the round that changes the display or the GPU underneath it.
+- M6 round 4 candidate 2: decide whether the USB host stack is feasible as a prelink exercise at all \(17 kexts, closure 29, 6-15 working days as the limits record\). This is a feasibility decision, not a port, and it is what stands between scripted injection and a real pointer or touch screen.
+- M6 round 4 candidate 3: \`vsync sent=0\`, still unexplained after two rounds, and the horizontal banding inside the large glyphs, which this round did not revisit. Neither is blocking input; both are carried in evidence/round3-result.md.
+- Keep counting matched IOHIDEventService / IOHIDEventDriver instances and never ask for IOHIDSystem again: 0 was a correct reading of a class that does not exist, and non-zero counts are what the round-3 probe prints.
+
+### 证据
+
+- `device`: [Round 3's board measurement, 2026-11-12: the injected HID reports are accepted \(649 gestures, 14,927 reports, 0 fails, last result 0x0, event service open 1\) and they drive SpringBoard from the lock screen into the home screen, which round 2 did not do in 63 minutes; 16 of the round's 26 \`gop blit\` frames fall in the 40 s after the lock screen appears. The capture itself is \`logs/boot-round3.log\` in the project working tree, not committed, and the page cites its line numbers. The revision named here is the commit that carries the three source changes this run measured and the evidence pages that describe it: verified on the board in commit add944299c5d4ce98a417aea53b678b6031fb387.](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round3-result.md)
+  Command: <code>py -3 tools/boot-uefi.py --port COM3 --baud 1500000 --log logs/boot-round3.log</code>. Revision: `add944299c5d4ce98a417aea53b678b6031fb387`.
+- `source`: [Round 2's input measurements, corrected in round 3: 0 USB devices after a hot-plug, no HID report observed, IOHIDSystem absent from every 30 s registry report \(a class that cannot exist\), and the EVB10 touch driver running on a board with no touch controller while IOHIDEventDriver opens its device](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round2-result.md)
+- `source`: [The early record that IOHIDSystem is a macOS name: no such class in the kernelcache, no personality creating one, and the iOS event path is IOHIDEventService](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-08-iohidsystem-does-not-exist-on-ipados.md)
+- `source`: [The superseded 'backboardd waits for IOHIDSystem' gate, kept as the record this area no longer builds on](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m5/M5-06-display-published-iohidsystem-missing.md)
+- `source`: [native\_touch\_set\_sink\(\) is empty \(line 43\) and native\_hid\_input\_requested\(\) \(lines 48-63\) refuses the Home report without offline-hid-auto-home, which is why round 2 received nothing](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/package/Opi5plusHidProbe.cpp)
+- `source`: [touchEnabled and the digitizer collection exist only for sheng-touch-hid=1 in round 2; opi5-hid-input=1 builds the device, &gt;=2 also forces the digitizer collection on and starts the synthetic report injector](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/package/Opi5plusHid/NativeHidInput.cpp)
+- `source`: [The round-3 build identity: kernel 0359b168..., payload 407ac58a..., command line 993 B / 54 arguments including opi5-hid-input=2, and the independent read-back of that line from the payload image](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round3-baseline/README.md)
+- `source`: [board.toml's kernel\_args enable no input argument; the payload script supplies the HID arguments, as the configuration entries say](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `device`: [Rounds 4 and 6 on the board, 2026-11-12: opi5plus-block-exec=bluetoothd \(patch 0006\) refuses the daemon's exec \('opi5plus: exec of /usr/sbin/bluetoothd blocked', logs/boot-round4.log:2439\) and the 'exit bluetoothd\[' corpse lines fall from 268 in round 3 to 0 - the daemon never starts, with zero driver code, and the board still reaches the desktop by itself. Round 6's serial reset hook \(Ctrl-\] 0x1d over the UART, tools/wsl/serial-reset.py\) ends a round without the power cable: about 19 s back to Linux, verified over SSH \(/proc/uptime 29.7 s, journalctl shows a fresh boot\); serial=1 gives the hook the receive FIFO and closes serial input until a future reader arbitrates with it. Logs: logs/boot-round&\#123;4,6&\#125;.log in the project working tree, not committed.](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round4-6-result.md)
+  Command: <code>py -3 tools/boot-uefi.py --port COM3 --baud 1500000 --log logs/boot-round4.log</code>. Revision: `818f9b64bbe0facfe3f6b982d4dccc6a822edd4f`.
+
+## GPU {#gpu}
+
+`implemented`
+
+### 硬件与依赖
+
+- Mali-G610 MP4 at gpu@fb000000 \(0xfb000000, 2 MiB, SPIs 92-94\), the same GPU as the EVB10 \(docs/hardware.md: /sys/class/misc/mali0, driven by panfrost under Linux\).
+- The Mali CSF firmware mali\_csffw.bin: Arm Valhall, arch 10.8, 274432 bytes. This board's copy comes from the Rockchip BSP image the board itself runs, /lib/firmware/mali\_csffw\_g15p0/mali\_csffw.bin, sha256 ad91511a77fa110af46a2a29cad9e225524d9cfa9fe35bdce96606d354e607de. It is NOT the EVB10's 8e7c821a build: same size and same CSF format, different content, and it reports header 0.2 with the entry list ending at 880 where the EVB10's build reports 0.3 ending at 960.
+- package/Mali, the driver submodule shared with the EVB10 \(Ken-u/Mali\), now initialised.
+- MaliMetal \(Ken-u/MaliMetal\) for the user-space stack \(PanVK plus metal2vulkan\): cloned, not built or packed yet.
+
+### 配置
+
+- package/Mali is initialised and builds: \[kernel\] archives runs build-mali-firmware.py \(package/Mali/tools/gen-fw-inc.py over .cache/firmware/mali\_csffw.bin\) and build-opi5plus-drivers.py Mali \(package/Mali/Mali.cpp -&gt; build/mali/libMali.a\), and configs/opi5plus\_display\_defconfig force-loads that archive next to libLinkStubs/libNativeSd/libRk3588VopDirect/libOpi5plusHid.
+- board.toml kernel\_args carry mali=8 \(power, GPU\_ID, firmware, MCU, several groups, the service\). mali-metal waits for MaliMetal and the payload's NativeMaliMetal.addon; the pll/div/ycbcr/aflush/epri tuning arguments stay commented out.
+- The five inert stubs that stood in for mali\_start, mali\_fence\_take/done/describe and mali\_clean\_caches are deleted from package/LegacyDisplayProbe.cpp; libMali.a defines all five \(llvm-nm reports them as T\), so the display archive and the VOP direct component link against the driver instead of against no-ops.
+- gpu@fb000000 is described in rk3588.dtsi with status disabled and no unixnu,adt-name, because the Mali driver addresses the GPU by its fixed physical base rather than through the device tree. That is a SoC-level fact and is inherited, not restated.
+
+### 操作步骤
+
+- M7: add the Mali driver submodule and its firmware include builder, enable the mali\* argument group, then verify in this order: context creation and command submission, readback, a composited frame, and only then the frame rate over a scripted 60 s scroll.
+
+### 开发经验
+
+- The GPU is the one subsystem where this board matches the EVB10 closely enough that the work was mostly reuse: same Mali-G610 MP4, same firmware architecture, same driver. What had to be done was packaging \(submodule, firmware digest, the archive wiring\), not hardware.
+- Refusing to copy the EVB10's firmware digest turned out to be right: this board's copy is a different Arm build \(ad91511a vs 8e7c821a\). An inherited digest would either have failed the extraction or, worse, accepted a file nobody had hashed -- and the difference is real, not cosmetic: this build reports CSF header 0.2 with entries ending at 880.
+- Measured on the board 2026-11-09 with mali=8 \(logs/boot-mali-1.log\): power domain 12 comes on, GPU\_ID 0xa8670005 \(arch 10.8.6 product 7\), L2/MCU/MMU described, clock probed at 198 MHz, CPU memory fill 52176 MB/s and copy 22500 MB/s, a 512 MiB pool of 2 MiB granules, the 274432-byte firmware mapped in 7 sections with 36864 bytes of page tables at 0x12de00000, AS0 enabled, the MCU booted and raised its interrupt, CSF interface v1.1.0 with 8 groups, the global interface config and ping acknowledged \(req 0x10e ack 0x10e\) and MaliService registered with a sandbox grant list that already names backboardd, SpringBoard, PosterBoard, WidgetRenderer\_D and the poster extensions.
+- The GOP display path changes what the GPU has to do: without a VOP2 scan-out there is no zero-copy flip, so the composition target is the firmware's frame buffer and every frame crosses the bus once more. plan.md's &gt;=30 fps target at 1080p is the thing to measure, not the EVB10's 52 fps to match.
+- The CoreAnimation preference that keeps the render server on 8-bit BGRA is written by patch 0003, and the Data seed of 0002 took it away again: the seed copies the OS volume's /private/var over the Data volume with O\_CREAT\|O\_TRUNC, so the stock .GlobalPreferences.plist landed on top of the one just written. Every earlier round logged pref bits 0xf \(deep 0, BGRA surfaces, swaps accepted\); the seed round logged 0xc, deep 1 and 'b3a8' 10-bit biplanar surfaces, which NativeLegacyDisplay::validateSwap\(\) refuses with reason 4. The GPU add-on call now runs below the seed block in kern\_exec.c, so the key is written last before launchd.
+
+### 完成条件
+
+- Half done. The driver brings the GPU up on this board and registers its service; what is still missing is everything above it: a context submitting and reading back, a GPU-composited UI at 1080p, and a recorded frame rate over a scripted interaction.
+
+### 当前范围
+
+- A live run now exists with the GPU stack visible and a Data volume that fits \(evidence/m7/M7-05\): 1505 s, 150 processes, the add-on mounted at stage 5, the render server loading the plug-in through the union, 26 Vulkan pipelines with 0 failures, and the compositor's five swaps completing \(5 x 14745600 B, status 0\) with five VOP2 flips latched.
+- The five flipped frames do not reach the panel: the screen still shows the firmware's boot logo. Either the composited surface is not what we think \(surface id 0x80000000 still answers e00002d5 while 0x80000001 and 0x80000003 succeed\), or the VOP window we program \(0xe6740000, from PE\_Video\) is not the window the panel scans \(the firmware set Esmart2 to 0xe6730000 at boot\).
+- Only five swaps ever arrive, because a static UI draws once; that is expected but it means the run says nothing about the frame rate yet.
+- The round before this one panicked at t+660 s inside Apple's storage stack, in its error path after this port's block device refused a zero-length request during a write burst \(evidence/m7/M7-05 has the disassembly\). The fix - complete zero-length requests, chunked writes through the bounce buffer, log and retry refusals - survived 242067 requests and 29034112 blocks with 0 failures.
+- The Data volume is 2048 MiB on the card \(lba 58735583 + 4194304 blocks\) and the payload carries only its 9330688-byte front; the first boot reformatted it, later boots keep it \(header v1 state 2\).
+- No frame-rate measurement on this board yet: five frames is not a rate.
+
+### 下一步
+
+- One boot, one change: fill the VOP window with a solid colour at initialisation and let it latch. If the panel changes colour the flips do reach the display and the composited content is the problem; if it stays on the logo, the window/base pair \(0xe6730000 versus 0xe6740000\) is.
+- Then the default surface \(0x80000000, M5-15/M5-16\) for the client calls that still answer e00002d5, and after that a scripted 60 s scroll for the frame rate.
+
+### 证据
+
+- `source`: [This board's firmware digest \(ad91511a...\) with its provenance, and why the EVB10's does not apply](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/proprietary-files.txt)
+- `source`: [The whole M0..M8 bring-up: GPU\_ID, 198 MHz, the 512 MiB pool, firmware in 7 sections, MCU boot, CSF v1.1.0 handshake, MaliService registered](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-02-mali-bringup-on-board.md)
+- `source`: [What each mali=&lt;milestone&gt; level covers and which arguments tune it](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/package/Mali/README.md)
+- `source`: [The user-space stack built: PanVK dylib, Rust bridge, plug-in bundle and the addon, with their cdhashes, the commands, and the two inputs that had to be substituted](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-01-mali-metal-stack-built.md)
+- `source`: [The add-on unpacked and mounted: 3 files written, stage 5 \(our bundle visible next to the sealed ones\), 3 trust modules loaded, AGXAccelerator registered with NativeMaliMetalDevice](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-03-gpu-addon-delivered.md)
+- `source`: [Userland reaches the compositor: 106 processes, SpringBoard/backboardd/IOMFB\_FDR\_Loader running, 5 framebuffer clients and 19 calls; swap ok 0 rej 0 \(no swap submitted\) because that run skipped the union mount; the 64 MiB Data volume is the seed's own size, and the front of a 2048 MiB container is 9330688 bytes](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-04-userland-reaches-compositor.md)
+- `source`: [The first run with the union mounted and a Data volume that fits: 1505 s, 150 processes, 26 Vulkan pipelines 0 failures, five swaps accepted and copied \(14745600 B, status 0\) and five VOP2 flips latched, while the panel still shows the boot logo; plus the zero-length-request panic the SD fixes removed](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-05-frames-flipped-screen-unchanged.md)
+- `source`: [The fence on this board: 2 of 2 swaps arrived with GPU work not done, both flips waited \(mean 7.6 ms, longest 8.3 ms, 0 gave up\); and the readback that shows the scanout following the window this port programs](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/m7/M7-06-window-follows-green-then-snapshot.md)
+
+## 网络 {#network}
+
+`planned`
+
+### 硬件与依赖
+
+- Intel AX210 \(Wi-Fi 6E\) on PCIe, and two Realtek RTL8125 2.5GbE controllers on PCIe \(docs/hardware.md: wlP2p33s0 up, enP3p49s0 and enP4p65s0 down with no cable\).
+- PCIe controllers fe150000/fe160000/fe170000/fe180000/fe190000 on the SoC; the RTL8125 and the AX210 are both PCIe endpoints.
+- No network driver exists for either device in the UniXNU catalog \(Ath12kWifi is Qualcomm PCIe, not Intel or Realtek\).
+
+### 配置
+
+- Nothing. The only kernel arguments that could apply \(network stack options\) are not in the payload, and no PCIe node is enabled in dts/opi5plus.dts.
+
+### 操作步骤
+
+- M8 optional work only. plan.md §1 lists the network as out of scope for this phase.
+
+### 开发经验
+
+- Network is out of scope for the whole phase \(plan.md §1: no App Store, no Apple ID, no iCloud, no network\), so this area records the hardware and stops. The AX210 works under the running Linux, which is how the board's evidence was collected, but that says nothing about XNU.
+- The board's PCIe is also where an NVMe drive would live, and it has none; if storage Plan A and Plan B both fail, a PCIe NVMe adapter is the third option, but it would be a new driver rather than reuse.
+
+### 完成条件
+
+- Out of scope for this phase. If it comes back in scope: an interface enumerates, associates and carries traffic.
+
+### 当前范围
+
+- Nothing implemented, nothing attempted, and the PCIe nodes are not described in the device tree.
+
+### 下一步
+
+- None in this phase. If M8 picks it up, start with the RTL8125 \(a simple PCIe Ethernet MAC\) rather than the AX210 \(full firmware download and 802.11 state machine\).
+
+### 证据
+
+按下一步操作收集证据。
+
+## 音频 {#audio}
+
+`not-applicable`
+
+### 硬件与依赖
+
+- No audio driver is part of this port, and no audio device is selected in the device tree.
+
+### 配置
+
+- None.
+
+### 操作步骤
+
+- None.
+
+### 开发经验
+
+- plan.md §1 puts audio out of scope, and the userland runs without an audio device. The board does have an HDMI audio path through hdmi@fde80000, but it is unused while the display goes through the firmware's GOP frame buffer.
+
+### 完成条件
+
+- Out of scope.
+
+### 当前范围
+
+- Audio is outside the current scope of the board.
+
+### 下一步
+
+- Choose a codec or the HDMI audio path when the scope extends.
+
+### 证据
+
+按下一步操作收集证据。
+
+## 电源 {#power}
+
+`not-applicable`
+
+### 硬件与依赖
+
+- The board is mains powered through its own Type-C power port \(5 V, no PD negotiation\).
+
+### 配置
+
+- \[adt.defaults.u32\] sleep-disabled = 1 through board.toml, and vmm-present = 1 so that watchdogd exits cleanly instead of trapping \(without the latter, launchd restarts it and the kernel panics when the third instance dies\).
+
+### 操作步骤
+
+- None.
+
+### 开发经验
+
+- Suspend and resume are out of scope \(plan.md §1\). The CPUs run at the firmware's clock and the GPU at a fixed clock, so there is no frequency management to describe.
+- The board has no battery and no fuel gauge, which is what the Apple power-management paths expect; sleep-disabled is therefore a statement of fact, not a workaround that will be removed.
+
+### 完成条件
+
+- Out of scope.
+
+### 当前范围
+
+- No regulator, clock or thermal management beyond what the drivers need to start.
+
+### 下一步
+
+- Add CPU and GPU frequency control if the frame-rate work needs it \(the EVB10 pins the GPU at 750 MHz for exactly that reason\).
+
+### 证据
+
+按下一步操作收集证据。
+
+## 镜像组装 {#packaging}
+
+`planned`
+
+组件: `XnuPrelink`, `DarwinBoot`.
+
+### 硬件与依赖
+
+- XNU at the OS profile's revision, the ARM64, SoC, OS and device patch series in that order, the Apple device tree generated from dts/opi5plus.dts, a 96 MiB payload volume, and the owner trust-cache digests.
+- A platform seed for --unique-chip-id and the trust-cache bundle, neither of which is in a repository.
+
+### 配置
+
+- \[payload\] volume = "OPI5PLUSESP" \(FAT labels are truncated at 11 characters\), size\_mib = 96, loader = "firmware", title = "UniXNU Orange Pi 5 Plus", panic\_screen = false.
+- \[payload\] trust\_cache\_sha256 repeats the OS profile's two digests explicitly: the first is the profile's own, the second covers the SystemOS cryptex of the owner image. An array here would replace the profile's, so both are written out.
+- \[payload.adt\] chip\_id = "0x1" and unique\_chip\_id = "required"; packed\_data\_ramdisk = false because the Data seed is a raw APFS container.
+- \[adt\] supplies defaults \(sleep-disabled, vmm-present\), product \(model "xunlong,orangepi-5-plus", thin-bezel\) and buttons \(hold/voldown/volup, home-button-type 2\). Root defaults, chosen-node strings and the Apple product identity come from the OS profile.
+
+### 操作步骤
+
+- From the UniXNU checkout: defconfig, fetch, status --json, tree, porting-record check. Then, at M3: ./unixnu build kernel, ./unixnu build package, ./unixnu build payload --unique-chip-id &lt;hex&gt; --trust-cache &lt;bundle&gt; --data-ramdisk &lt;seed&gt;, ./unixnu bootimg.
+- Note the step names: build takes kernel, package, firmware, payload, userdata plus all and prelink. There is no build uefi; firmware is built with ./unixnu build firmware --uefi &lt;Mu-Silicium checkout&gt;.
+
+### 开发经验
+
+- Round 2 \(2026-11-11\) packed and booted this configuration's payload: 993 bytes of command line with 54 arguments, read back from the running kernel's own boot-args line and 7 bytes under the 1000-byte ceiling payload.py enforces; kernel 45fbfab3cae0c66dcf73b85ba08a82ae7a580b0c4e6beabab1d81f76dc0a3893 \(51,695,616 B\), payload 80e4f2965501789a851974bd8366fd686c56aacc6bc443ceb2f3c36fc527d2e1 \(100,663,296 B\). The two sampler slots dropped to fit were opi5plus-bt7 and opi5plus-bt8 \(evidence/round2-baseline/README.md\).
+- The four arrays in board.toml \(components include, config\_fragments, patch\_series, archives\) are replacements, not merges, so each one is written in full. The six components are all six the RK3588 port needs, XnuPrelink included: the OS profile's \[kernel.prelink\] tool points at kits/XnuPrelink/emit\_prelink.py, and dropping it from include would drop the prelink tool.
+- The four patch series files are all named even though patches/xnu/series is empty: the arch, SoC and OS series are where the actual patches are, and an empty device series is a valid fourth segment. patches.plan\(\) skips comments and blank lines, so a series file with only a comment resolves to nothing and is accepted.
+- kernel\_args has a hard 1000-byte limit and a strict character class \(\[A-Za-z0-9\_.\\-\]+ with an optional =\[A-Za-z0-9\_.,/\\-\]+ value\), both enforced by payload.py before the volume is written. The enabled list is 158 bytes and every argument matches.
+- \[kernel\] archives names exactly the three catalog components whose build\_stage is kernel. Naming an embedded, firmware or prelink component there does not fail —archive\_plan\(\) silently skips those —which makes a wrong entry easy to miss; the comment in board.toml says which three are required and why the others must stay out.
+- The SoC's apply-armcpu-patches.py has to precede component:ArmCpu: ArmCpu has no patch channel of its own, so the SoC script applies the RK3588 fixes to the checkout first.
+
+### 完成条件
+
+- Planned. Done means: a kernel and a payload built from this configuration boot on the board through the firmware, with the DarwinBoot hand-off log and the kernel version printed on UART2.
+
+### 当前范围
+
+- No kernel build, no payload build and no boot has been attempted from this repository. The Apple inputs \(kernelcache, trust caches, Data seed\) and a platform seed are prerequisites for the last two steps and none is in a repository.
+
+### 下一步
+
+- M3: fill patches/xnu/series, build the two steps, and record the command, the revision and the kernel hash in this area.
+
+### 证据
+
+- `source`: [The kernel, payload and command line as they were booted on 2026-11-11: 45fbfab3..., 80e4f296..., 993 bytes / 54 arguments](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/evidence/round2-result.md)
+- `source`: [The payload and ADT tables, the archive order and the boot-argument rationale](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `source`: [The device series exists and is empty, with what it is expected to gain and when](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/patches/xnu/series)
+
+## 诊断 {#diagnostics}
+
+`planned`
+
+### 硬件与依赖
+
+- UART2 at serial@feb50000, 1 500 000 baud, 3.3 V TTL on the board's left edge \(GND/RXD/TXD\), which is the only channel that sees UEFI, DarwinBoot and early XNU output.
+- The two Type-C ports are not usable for logs: one is power only, the other is OTG/data and presents no serial device.
+
+### 配置
+
+- \[payload\] kernel\_args console group: -v, serial=1, debug=0x10014e. serial=1 keeps the console on the UART and clears the INPUT bit \(serial=3's 0x02\), so serial\_keyboard\_poll never starts and the receive FIFO belongs to NativeSd's reset hook; output is unaffected. debug=0x10014e lifts the serial-output lock and restarts after a panic instead of parking in KDP, which is what makes a bare board recoverable without a debugger.
+- panic\_screen = false: no panic text overlaid on the frame buffer, because there is no display yet.
+
+### 操作步骤
+
+- Capture from the host with a USB-TTL module and log to a file for the whole boot, then split the log at the bring-up stage boundaries \(firmware, UniXNU menu, payload, DarwinBoot, kernel entry, launchd\). On this bench the adapter is COM3 at 1 500 000 8N1 and only one reader may hold the port at a time.
+
+### 开发经验
+
+- Round 2 made the exit line name the image a frame belongs to: opi5plus\_text\_base\(\) takes the start of the lowest executable mapping of the task's map \(the main executable's \_\_TEXT on iOS\) and the sampler prints it as 'text 0x...' after the process name \(commit 1ef2c87b29215d1b56cb851f207d3513066dbdeb\), so a user frame at 0x100xxxxxx no longer needs the ASLR slide guessed before it means anything. The map's read lock is taken only if it is free, because this runs on the exit path; a held lock, a vanished map or a start off the 16 KB page prints 'text -'.
+- The console is the same UART at the same rate as the EVB10, so the EVB10's diagnostics arguments carry over unchanged. Its diagnostic patches did not, at first, because they instrument process bookkeeping and user stacks through EVB10 code paths; two pieces were then ported in reduced form and are now this port's own \(patches/xnu/0004-thread-sample.patch and 0005-crash-trace.patch - a named-process user-stack sampler called from the heartbeat, and a signal-death fault dump\). With the dyld shared cache extracted to /opt/uland and dsc.py --slide, every address they print becomes a function name, which is how SpringBoard's blocking synchronous XPC was found \(evidence/m7/M7-08\).
+- A board with no storage and no native display has exactly one diagnostic channel, and it is the serial port. That makes the UART wiring a P0 purchase in plan.md §3.2, and it means the first bring-up evidence has to be text, not a screenshot.
+- The stage marker set the port grew is the thing that made the display work readable: the probe prints D1..DA over the same UART, the display keeps beat counters \(swaps, copies, flips, latch time\), and the kernel patches add sd-exec, sd-ps, sd-exit, sd-syscall, sd-trace-io and sd-clock-div. sd-exit matters most: launchd only says 'Too many corpses being created', while the kern\_exit hook separates exit\(code\) from signal death in one line and found that about twenty daemons including backboardd were SIGKILLed in one window.
+- The board must be able to recover without a debugger. sd-watchdog=15 reprograms the firmware's DW watchdog and kicks it every 5 s, and sd-auto-reboot panics \(rather than returning through the watchdog path\) when its budget runs out, because a hang was observed where the watchdog line never printed 'armed' and the old path sat in XNU for thirty minutes. A panic resets the SoC over PSCI, which is the only reset available once the payload owner has the CPU.
+- A panic screen does not clear itself across a reset: the firmware leaves video memory alone, so the previous boot's panic banner stays on the HDMI output until something repaints the frame buffer. A live beat line in the capture, not the screen, is what says the current boot is healthy.
+
+### 完成条件
+
+- Done means: a boot log from power-on to launchd is captured, stored with its sha256, and each bring-up stage can be pointed at in it. That has been true since M3; what remains is the frame-buffer-side evidence, which the display area owns.
+
+### 当前范围
+
+- The UART capture stops at the end of its window rather than at a marker, so a run that is quiet for longer than the capture looks the same as a hang; the beat counters exist to tell those apart.
+- The board's clock is wrong after a reset, so durations are taken from /proc/uptime or from the kernel's own t+N s beats, never from wall-clock timestamps.
+
+### 下一步
+
+- Keep the beat line in every diagnostic payload; when the display path stabilises, add a frame counter to the same line so 'has a picture' is readable from the serial log alone.
+
+### 证据
+
+- `source`: [The console argument group and panic\_screen = false](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/board.toml)
+- `source`: [The named-process thread sampler: each thread's last-trap user registers and frame-pointer chain, from the heartbeat, off unless opi5plus-bt names a process. Eight name slots \(opi5plus-bt / -bt2 ... -bt8, 16 characters each\), added when SpringBoard turned out to wait on a fourth process](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/patches/xnu/0004-thread-sample.patch)
+- `source`: [The signal-death fault dump: saved user registers and user frame chain from exit\_with\_reason\(\), same symbolisation path](https://github.com/Hange777/UniXNU-opi5plus/blob/a72f3c4dcea069e574a57030c7b3b7d7300c96b8/patches/xnu/0005-crash-trace.patch)
+
+## software-aes {#software-aes}
+
+`planned`
+
+组件: `SoftwareAES`.
+
+### 硬件与依赖
+
+- Pinning Rk3588VopDirect moved the SoC pin to b5f5d949, whose rk3588.config turns CONFIG\_XNU\_NATIVE\_AES on; the kernel link then wants build/software-aes/libSoftwareAES.a.
+
+### 配置
+
+- \[kernel\] archives and \[components\] include both carry SoftwareAES, plus build-software-aes-bindings.py in \[components\] scripts.
+
+### 操作步骤
+
+- Build the kernel and confirm libSoftwareAES.a is produced and linked; the component is otherwise idle because this SoC has no AES engine the kernel drives.
+
+### 开发经验
+
+- SoftwareAES is a link-time consequence of the SoC pin, not a board feature: no device tree node, no driver and no boot path in this port exercises it. It was added because omitting it fails the kernel link with '\[kernel\] archives: component SoftwareAES is not selected', and the display area already records that history.
+
+### 完成条件
+
+- The kernel builds and links with the component selected, which the display-area builds have done since the pin moved.
+
+### 当前范围
+
+- Nothing has been encrypted or decrypted through this path on the board; the area exists so the component selection stays documented and the porting record stays complete.
+
+### 下一步
+
+- Leave as link-only; revisit only if a future component starts using the kernel's AES API.
+
+### 证据
+
+按下一步操作收集证据。
+
+</div>

@@ -25,7 +25,7 @@
 | [Xiaomi MIX Fold 3](/zh/devices/models/babylon) | babylon | SM8550 | 1 |
 | [BBK/EEBBK A2, X2 and X2P tablet \(ums512\_1h190, Unisoc T610 / UMS512 SharkL5Pro\)](/zh/devices/models/bbk-a2) | bbk-a2 | UMS512 | 1 |
 | [Brave Ark 平板](/zh/devices/models/braveark) | braveark | SM8635 | 1 |
-| [一加平板 Pro](/zh/devices/models/caihong) | caihong | SM8650 | 2 |
+| [一加平板 Pro](/zh/devices/models/caihong) | caihong | SM8650 | 3 |
 | [Redmi Note 10 5G](/zh/devices/models/camellia) | camellia | MT6833 | 1 |
 | [小米 10 Ultra](/zh/devices/models/cas) | cas | SM8250 | 2 |
 | [小米 9](/zh/devices/models/cepheus) | cepheus | SM8150 | 4 |
@@ -59,6 +59,7 @@
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/zh/devices/models/flashlm) | flashlm | SM8150 | 1 |
 | [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 15 |
 | [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 1 |
+| [Preliminary garnet bring-up; not bootable](/zh/devices/models/garnet) | garnet | SM7435 | 1 |
 | [摩托罗拉 Moto G 5G](/zh/devices/models/gauguin) | gauguin | SM7225 | 1 |
 | [一加 Ace 5](/zh/devices/models/giulia) | giulia | SM8650 | 2 |
 | [Xiaomi Mi 9 SE](/zh/devices/models/grus) | grus | SDM710 | 1 |
@@ -111,8 +112,10 @@
 | [一加 13T](/zh/devices/models/oneplus13t) | oneplus13t | SM8750 | 2 |
 | [Redmi Turbo 4 Pro](/zh/devices/models/onyx) | onyx | SM8735 | 1 |
 | [OPPO Pad mini 5G \(OPD2515, SM8845P / Alor\)](/zh/devices/models/opd2515) | opd2515 | SM8845 | 1 |
+| [Orange Pi 5 Plus \(RK3588, 8 GB, SD only, HDMI only\)](/zh/devices/models/opi5plus) | opi5plus | RK3588 | 1 |
 | [Orange Pi 5 \(Rockchip RK3588S\)](/zh/devices/models/orangepi5) | orangepi5 | RK3588 | 1 |
 | [小米 17 Pro](/zh/devices/models/pandora) | pandora | SM8850 | 1 |
+| [Google Pixel 7 \(Tensor G2\)](/zh/devices/models/panther) | panther | gs201 | 1 |
 | [OPPO Reno Ace \(PCLM10 / Project 19081, Snapdragon 855+ SM8150-AC\)](/zh/devices/models/pclm10) | pclm10 | SM8150 | 1 |
 | [vivo iQOO 7 V2049A early XNU bring-up](/zh/devices/models/pd2049) | pd2049 | SM8350 | 1 |
 | [Sony Xperia 1 II](/zh/devices/models/pdx203) | pdx203 | SM8250 | 2 |
@@ -131,7 +134,7 @@
 | [QEMU virt](/zh/devices/models/qemu) | qemu | QEMU virt | 1 |
 | [OPPO R11](/zh/devices/models/r11) | r11 | SDM660 | 2 |
 | [Samsung Galaxy S20 FE](/zh/devices/models/r8q) | r8q | SM8250 | 1 |
-| [Redmi K20 Pro / Mi 9T Pro](/zh/devices/models/raphael) | raphael | SM8150 | 4 |
+| [Redmi K20 Pro / Mi 9T Pro](/zh/devices/models/raphael) | raphael | SM8150 | 5 |
 | [Realme 5 Pro](/zh/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/zh/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
 | [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/zh/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |
@@ -139,7 +142,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 45 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 47 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
@@ -168,6 +171,7 @@
 | [Xiaomi Mi 6X \(2018\)](/zh/devices/models/wayne) | wayne | SDM660 | 1 |
 | [Xiaomi Redmi Note 5](/zh/devices/models/whyred) | whyred | SDM636 | 1 |
 | [OPPO Find X9](/zh/devices/models/x9) | x9 | MT6993 | 1 |
+| [Xiaomi Redmi Pad SE 11"](/zh/devices/models/xun) | xun | SM6225 | 1 |
 | [Redmi Pad format-2 qualification candidate; boot Mu and cust UniXNU must remain separate](/zh/devices/models/yunluo) | yunluo | MT6789 | 1 |
 | [Microsoft Surface Duo 2](/zh/devices/models/zeta) | zeta | SM8350 | 1 |
 | [Xiaomi MIX Fold 2 \(zizhan, SM8475\): UniXNU bring-up derived from Pong](/zh/devices/models/zizhan) | zizhan | SM8475 | 1 |
