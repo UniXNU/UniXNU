@@ -136,20 +136,43 @@ seed's volume UUID:
 ./unixnu build kernel payload --os macos-27
 ```
 
-Without a seed the command stops before compiling and prints:
+Without a seed the command stops before compiling and prints the seed creation
+command, including the OS image, output path and `data_gib`.
+
+### Create an account and skip Setup {#account}
+
+Run from the UniXNU checkout. Use the paths and size printed by the build,
+and replace `unixnu:YOUR_PASSWORD` with the account name and password:
 
 ```sh
-sudo python3 <tree>/scripts/make-macos-data-seed.py <OS image> <output>/runtime/data.dbr --gib <data_gib>
+sudo python3 scripts/make-macos-data-seed.py \
+  "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
+  --skip-setup --user 'unixnu:YOUR_PASSWORD'
 ```
 
-Run it, then repeat the build. The script copies
-`/System/Library/Templates/Data` of the system volume with its file owners.
-Optional arguments:
+The script creates a local administrator and its home, preserves template
+owners, and skips both initial and first-login Setup. The output seed must be
+new.
+
+Build and pack using that seed:
+
+```sh
+./unixnu build kernel payload --os macos-27 \
+  --data-ramdisk "<output>/runtime/data.dbr"
+./unixnu bootimg --os macos-27 \
+  --data-ramdisk "<output>/runtime/data.dbr"
+```
+
+Boot and sign in with that account to reach the desktop. `--skip-setup` is a
+seed creation option.
+
+Seed creation options:
 
 | Argument | Effect |
 | --- | --- |
 | `--skip-setup` | Marks Setup Assistant done |
 | `--user NAME:PASSWORD` | Adds a local administrator and its home |
+| `--auto-login` | Logs the `--user` account in at boot. For unattended tests; requires `--user` |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | Records a keyboard layout type, so Keyboard Setup Assistant does not ask |
 | `--volume-uuid UUID` | Gives the Data volume a fixed UUID, so a new seed replaces an older one without a kernel build |
 
