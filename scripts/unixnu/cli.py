@@ -40,6 +40,7 @@ def common():
     p.add_argument('--unique-chip-id', metavar='HEX', help='platform seed for the device tree; or UNIXNU_UNIQUE_CHIP_ID')
     p.add_argument('--ipsw', metavar='PATH_OR_URL', help='the target IPSW: a local file or an https URL (default: url of board.toml [ipsw]); or UNIXNU_IPSW')
     p.add_argument('--dry-run', action='store_true', help='userdata: check sizes and pins, write nothing')
+    p.add_argument('--apfs-container', metavar='DIR', help='native APFS container directory for userdata and payload, made by scripts/make-macos-disk.py')
     p.add_argument('--object', action='append', default=[], metavar='NAME=FILE[:OFFSET]',
                    help='userdata: add a data object the kernel reads itself (policy table, firmware), '
                         'the bytes of FILE from OFFSET on (repeatable)')
