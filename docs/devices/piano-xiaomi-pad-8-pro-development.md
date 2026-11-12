@@ -6,7 +6,7 @@
 
 Xiaomi Pad 8 Pro \(piano, SM8750\): first XNU boot from RAM, not booted yet.
 
-Source record: [porting.toml](https://github.com/xiaomi-pad-8-pro-development/android_device_xiaomi_piano-unixnu/blob/34fb88d7cde1593b34deb358ecf38a579da4d8be/porting.toml), `34fb88d7cde1593b34deb358ecf38a579da4d8be`.
+Source record: [porting.toml](https://github.com/xiaomi-pad-8-pro-development/android_device_xiaomi_piano-unixnu/blob/d4f160c8ee60c11b293b5425af375846fcd438ff/porting.toml), `d4f160c8ee60c11b293b5425af375846fcd438ff`.
 
 This page is generated from the device record.
 

@@ -6,7 +6,7 @@
 
 Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is ipados-18.7.12-22H390 \(Darwin 24.6.0\): the root image comes from the iOS 18.7.12 restore of iPhone11,2, the arm64 kernelcache from the iPadOS 18.7.12 restore of iPad7,11. Configuration and image-assembly tooling are in place; kernel, firmware and every hardware area still need device verification.
 
-源记录: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/577e2ceda172e41aad295deeda99f4eb3fb823e3/porting.toml), `577e2ceda172e41aad295deeda99f4eb3fb823e3`.
+源记录: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/porting.toml), `c7d7630c82915f45d127e76461a910f7f66e0d3b`.
 
 本页按设备记录自动生成。
 
@@ -75,8 +75,8 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is
 
 ### 证据
 
-- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/577e2ceda172e41aad295deeda99f4eb3fb823e3/board.toml)
-- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/577e2ceda172e41aad295deeda99f4eb3fb823e3/feeds.toml)
+- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/board.toml)
+- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/feeds.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -138,6 +138,10 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is
 ### 开发经验
 
 - SM8150 Cortex-A76 and A55 do not implement ARMv8.3 FEAT\_PAuth, which is why arm64e is excluded
+- xnu-11417.140.69 \(Darwin 24\) dropped the BCM2837 machine configuration entirely: 'grep -r BCM2837' over the tree returns nothing, pexpert/pexpert/arm64/BCM2837.h and config/MASTER.arm64.bcm2837 no longer exist, and the supported list is now T6000..T8132 VMAPPLE. Apple added config/MASTER.arm64.iPhoneOS in their place
+- the shared arch patch series \(profiles/arch/arm64/patches/xnu/series, 56 patches\) was written against xnu-10063.141.1 / Darwin 23 and does not survive the move: 15 of the 56 fail 'git apply --check' against xnu-11417, 41 still apply. Two of the 15 \(native-arm-pan, source-machine-layer\) fail because their target file is gone, not merely shifted; the other 13 fail on hunk context alone
+- the prelink path still names DEVELOPMENT\_ARM64\_BCM2837 \(profile.toml \[kernel.prelink\] kernel\), so the machine configuration has to be settled before any kernel link can be trusted
+- pong \(SM8475, /tmp/pong18\) resolved the same problem by dropping BCM2837 rather than reviving it: it adds config/MASTER.arm64.pong, registers PONG in SUPPORTED\_ARM64\_MACHINE\_CONFIGS, builds DEVELOPMENT\_ARM64\_PONG, and leaves profiles/arch/arm64's own series out of its patch\_series behind an effectively empty migration/format2/arch-darwin24.series. Its Darwin24 work rides in a single 480 KB device aggregate \(patches/xnu-ipados18/0001-pong-darwin24.patch, 97 files\) that is SoC-specific and not reusable here
 
 ### 完成条件
 
@@ -146,9 +150,11 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is
 ### 当前范围
 
 - No device log exists yet; the CPU area is unverified on hardware
+- The Darwin 23 -&gt; 24 arch adaptation is not started: nothing yet replaces the 15 failing arch patches or names the machine configuration the kernel will actually be built with
 
 ### 下一步
 
+- Decide the machine configuration: drop BCM2837 for a raphael one \(pong's path\) or regenerate the arch series against xnu-11417
 - Boot the arm64 kernel and record the per-CPU startup log
 
 ### 证据

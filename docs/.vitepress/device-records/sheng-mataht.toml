@@ -4,7 +4,7 @@ schema_version = 1
 name = "sheng"
 soc = "SM8550"
 os_profile = "macos-26.5-25F71"
-summary = "Xiaomi Pad 6S Pro (sheng, CN 16 GB / 1 TB) running macOS 26.5 (25F71) from RAM-only fastboot boots. The full system reaches the CPU-rendered desktop, and with the Metal plug-in stack (WindowServer -> Metal plug-in -> metal2vulkan -> Turnip -> Adreno 740 kernel driver) it has for the first time displayed a GPU-composited interface on the tablet (wallpaper, menu bar and post-login Setup Assistant pages, with working touch) at about 6 frames per second. GPU acceleration is not yet usable: most 50 ms display waits and 1517 of 2274 kernel fence waits time out, plug-in boots are intermittently slow for undetermined reasons, and per-frame display copy takes 0.1 to 0.4 seconds over the Device-mapped framebuffer (~79 MiB/s write). Wi-Fi has run through stages 4 and 5 (stage 5 outcome unknown; no wireless stack behind it), keyboard cover stage 3 L12B voltage vote did not receive completion, and Bluetooth, USB, audio, battery reporting, brightness control, sleep and persistent disk writes do not work."
+summary = "ARCHIVED (2026-11-12): This experimental repository is archived and no longer updated because upstream (UniXNU / UniXNU-sheng, https://github.com/UniXNU/UniXNU-sheng) already has a faster-progressing macOS implementation for the Xiaomi Pad 6S Pro (sheng) covering macOS 27.3, GPU framebuffer copy and experimental direct scanout, CPU/GPU dynamic frequency scaling, working Wi-Fi networking, keyboard cover and touchpad support, audio and kernel work-interval patches. In this repository's macOS 26.5 (25F71) port on the CN 16 GB / 1 TB unit (RAM-only fastboot boots), the Metal plug-in stack (WindowServer -> Metal plug-in -> metal2vulkan -> Turnip -> Adreno 740 kernel driver) on a single GPU command ring (sheng-gpu-preempt=0) at 401 MHz with IO-coherent GPU buffers boots into a full GPU-composited macOS desktop (wallpaper, menu bar, widgets, Dock) where Finder (including full-screen), Notes, System Settings, App Store and About This Mac open and touch works. Persistent disk writes (native-ufs-root-writes=1) to the OS window on UFS and clean restarts and shutdowns from the Apple menu (sheng-psci-reset=1) are verified across four tablet boots (boots 46, 48, 49, 50), with TWRP chunk scans and offline APFS Fletcher-64 checks (up to xid 14318, 1008 objects verified, Data and Update volumes cleanly unmounted) confirming zero checksum failures and extracting 1266 log and crash-report files from the Data volume."
 
 [[area]]
 id = "configuration"
@@ -17,7 +17,7 @@ procedure = ["Build in CI (the builds run in a private repository; the workflow 
 findings = ["CI compiles and links with the Apple toolchain on an xcode-27 runner; -Werror failures in earlier runs were fixed on the same branch (see docs/ci.md).", "CI artifacts are kept for seven days; the build.json of each run records the SHA-256 of every output.", "A kernel can also be built on a Mac with Xcode 27.2 (SDK 27.2) by the same steps; the SDK check of the build script also accepts 27.2. Against a CI build of the same source the build records have the same keys and differ only in toolchain versions, output identities and absolute paths or parallelism, but object files and the kernel are not byte-identical. A Mac-built kernel counts as a new kernel and passes its own gates."]
 completion = ["Every selected driver compiles and links, the ABI audits pass (vtable slot counts, pointer-authentication metadata, no weak imports) and the artifact digests match the GitHub API."]
 limits = ["CI does not run the kernel. It proves compile, link and static audits only. This repository is not a UniXNU device repository and does not build with the unixnu tool."]
-next_action = ["Keep one CI run per integrated head and record its digests in docs/ci.md."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "host"
@@ -37,7 +37,7 @@ procedure = ["Build the firmware with scripts/build_firmware.py, package the ker
 findings = ["The bootloader of the CN OS3.0.306 unit accepts the self-built container and the firmware shows the UniXNU menu (first seen 2026-11-06).", "The bootloader leaves the display lit and a framebuffer in memory, which the kernel display driver reuses."]
 completion = ["The firmware reaches the UniXNU menu, DarwinBoot loads the kernel with the 16 GB memory map, and the framebuffer and reservations are preserved."]
 limits = ["Only the CN OS3.0.306 unit has been tested. Other vendor firmware versions are untested."]
-next_action = ["None until a second unit with a different firmware version is available."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
@@ -54,10 +54,10 @@ paths = ["platform/sheng/macos26/patches/machine-cpu-*.patch", "platform/sheng/m
 inputs = ["Eight cores (three Cortex-A510, four A715, one X3) brought up with PSCI; inter-processor interrupts through SPIs; CPU frequency registers read from the performance domains."]
 configuration = ["Boot arguments cpus=8, sheng-smp=1, armcpu-spi-ipi=1; sheng-cpufreq=1 enables the read-only frequency reader."]
 procedure = ["Boot with the packager's 8-CPU configuration; with sheng-cpufreq=1 the reader prints a CPUFREQ row every 5 seconds for 120 seconds."]
-findings = ["All eight cores came online on the tablet on 2026-11-07 (cpu_start 0 to 7), on an earlier build of this repository.", "The bootloader leaves the clusters near the top of their ranges: 1670 MHz (A510), 2707 MHz (A715), 2956 MHz (X3), including during slow Metal plug-in boots, so CPU throttling is ruled out.", "This CPU reports cache geometry in the 64-bit CCIDX format of CCSIDR; XNU's whole-cache set/way shortcut parses the old format and is effectively a no-op here, so display and GPU code clean caches by address."]
+findings = ["All eight cores came online on the tablet on 2026-11-07 (cpu_start 0 to 7), on an earlier build of this repository.", "The bootloader leaves the clusters near the top of their ranges: 1670 MHz (A510), 2707 MHz (A715), 2956 MHz (X3), L3 vote 12 (1574 MHz), including during slow Metal plug-in boots, so CPU throttling is ruled out.", "This CPU reports cache geometry in the 64-bit CCIDX format of CCSIDR; XNU's whole-cache set/way shortcut parses the old format and is effectively a no-op here, so display and GPU code clean caches by address."]
 completion = ["Every enabled core reaches its entry checkpoint; timers and inter-processor interrupts work on each core."]
-limits = ["Inter-processor interrupt correctness and stability under sustained load are not established."]
-next_action = ["Evaluate whether any L3 or DDR vote needs raising after framebuffer write-combined mapping is tested."]
+limits = ["No thermal sensor (TSENS) or dynamic CPU frequency scaling (DCVS) has run on hardware in this repository; kernel work-interval creation fails when AppKit starts live scrolling (causing scroll-bar drags to abort)."]
+next_action = ["Archived; upstream UniXNU / UniXNU-sheng already includes CPU/GPU DCVS and kernel work-interval patches."]
 
 [[area.evidence]]
 kind = "device"
@@ -72,12 +72,12 @@ status = "device-verified"
 components = []
 paths = ["patches/UniXNU-sheng/0009-adt-13gib-owned-memory.patch", "platform/sheng/macos26/power/native_memperf.cpp"]
 inputs = ["Two DRAM windows (0x80000000 to 0xFFFFFFFF and 0x880000000 to 0xBFFFFFFFF) on the 16 GB unit; macOS uses 16 KiB pages."]
-configuration = ["Memory map patch for the CN 16 GB unit in the UniXNU-sheng series (0009); 16 KiB page size in the kernel and the Adreno code; sheng-memperf=1 enables the read-only L3/RPMh report."]
+configuration = ["Memory map patch for the CN 16 GB unit in the UniXNU-sheng series (0009); 16 KiB page size in the kernel and the Adreno code; sheng-memperf=1 enables the read-only L3/RPMh and memory bandwidth report."]
 procedure = ["Boot the packaged kernel; the packager checks the memory map against the unit's layout."]
 findings = ["The full system runs with the 16 KiB-page kernel and this memory map.", "The NativeMemPerf benchmark on the tablet (boot 39) measured (MiB/s): cached write ~11236, read ~10637; Device write ~79, read ~141; write-combined write ~11275, read ~256."]
 completion = ["All handoff regions are accounted for and each DMA engine uses its allocated range with the documented cache policy."]
-limits = ["The framebuffer is currently mapped as Device memory (~79 MiB/s write), so a full-screen write takes about 0.3 seconds; CPU-rendered surfaces are read at about 70 MB/s (inferred to be mapped non-cacheable in the kernel)."]
-next_action = ["Switch the framebuffer mapping from Device to write-combined."]
+limits = ["In boot 43 most sampled frames spent 330 to 368 ms reading and comparing 24.8 MB of surface pixels (~75 MB/s, vs 52 to 55 ms and >=475 MB/s in two fast frames), inferred to be caused by non-cacheable surface page mappings on slow frames."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
@@ -91,40 +91,40 @@ id = "storage"
 status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/storage/**", "scripts/package_macos26_ufs.py", "scripts/native_log_file.py", "scripts/repartition_*.py", "scripts/install_macos26_*.py"]
-inputs = ["UFS controller with several LUNs; a new partition for macOS on LUN0; a small log partition; a system image supplied by the user (this repository neither contains nor documents how it is made)."]
-configuration = ["NativeUfs is a read-only driver that publishes only registered partition windows after checking the SHNGROOT header (size and SHA-256); writes are off by default. The system volume is selected by volume UUID with -nobsdmgroot; writes go to a volatile RAM overlay (boot argument native-ufs-root-overlay-mib)."]
-procedure = ["Create the partition and write the image only with the device owner's approval for each step; the packager refuses a package without matching install evidence. Boot with `fastboot boot`."]
-findings = ["The tablet reads its macOS partition through NativeUfs and runs the full system on it; persistent writes are implemented but disabled.", "Reading is slower than it needs to be; the read path is deliberately simple."]
-completion = ["The root volume mounts, the data volume mounts, and the system runs without disk writes."]
-limits = ["Persistent writes are not verified on the tablet. The UFS driver cannot be exercised in QEMU, so full-system QEMU evidence comes from a VirtIO build of the same kernel with only the storage driver replaced."]
-next_action = ["Enable and verify persistent writes with a separate approval; improve read throughput."]
+inputs = ["UFS controller with several LUNs; a dedicated partition for macOS on LUN0; a small log partition; a system image supplied by the user (this repository neither contains nor documents how it is made)."]
+configuration = ["NativeUfs publishes only registered partition windows after checking the SHNGROOT header (size and SHA-256). Writes are off by default and can go either to a volatile RAM overlay (native-ufs-root-overlay-mib, with optional wired-page pool outside the zone map via native-ufs-root-overlay-pool=1) or to persistent disk within the OS window of macossystem (native-ufs-root-writes=1)."]
+procedure = ["Create the partition and write the image only with the device owner's approval for each step; the packager refuses a package without matching install evidence. Boot with `fastboot boot`; after persistent boots, run a read-only TWRP 8 MiB chunk scan and offline APFS Fletcher-64 verification."]
+findings = ["The 1140 s RAM overlay write report (boot 47, 4096 MiB pool) showed a ~2 GiB burst in the first 6 minutes and ~250 MiB over the next 800 s, written by system cache daemons (coresymbolicationd 1885 MiB, iconservicesd 392 MiB, mediaanalysisd 385 MiB, iconservicesagent 198 MiB, corespotlightd 130 MiB).", "Persistent disk writes (native-ufs-root-writes=1) are guarded in both RootLayout and RootCommands (20 of 21 injected defects caught offline, 1 no-op when closed) and verified across four tablet boots (boots 46, 48, 49, 50, up to 593 modified 8 MiB chunks / ~2.59 GB), with 0 changes outside the OS window, 0 APFS Fletcher-64 checksum failures across checkpoints xid 12808 -> 13104 -> 13409 -> 13986 -> 14318 (up to 1008 objects verified), clean Data and Update volume unmounts on Apple menu Restart (boot 49) and Shut Down (boot 50), and 1266 log and crash-report files extracted from the Data volume."]
+completion = ["The root volume mounts, the data volume mounts, and both RAM-overlay and persistent OS-window writes work cleanly across reboots."]
+limits = ["No TRIM in persistent mode; UFS read/write/flush timeouts are tight (1 s, 2 s, 10 s). The UFS driver cannot be exercised in QEMU, so full-system QEMU evidence comes from a VirtIO build of the same kernel with only the storage driver replaced."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/mataht/sheng-macos-link-lab/blob/milestone-desktop-20261109/docs/status.md"
-command = "fastboot boot sheng-macos26-kernel.img"
-revision = "36e11087791ca3b68505ee19c1f8602d7713039d"
-result = "Root and data volumes mounted from UFS through NativeUfs with the RAM overlay; the system reached the desktop (2026-11-09)."
+reference = "https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md"
+command = "fastboot boot sheng-macos26-kernel.img (native-ufs-root-writes=1 sheng-psci-reset=1)"
+revision = "e5cd05044e6c9f2cb442da0d2c4444a270579994"
+result = "Persistent writes verified across four tablet boots (boots 46, 48, 49, 50); TWRP chunk scans and offline APFS Fletcher-64 checks confirmed 0 changes outside the OS window, 0 checksum failures through xid 14318, and clean Data/Update volume unmounts on Apple menu Restart and Shut Down (2026-11-10 to 2026-11-11)."
 
 [[area]]
 id = "display"
 status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/display/**", "platform/sheng/macos26/recovery/**", "config/macos26-recovery-ui-pages.json", "config/macos26-full-ui-pages.json"]
-inputs = ["Framebuffer left by the bootloader, 3048 x 2032 BGRA; panel size 262 x 175 mm; no GPU driver in use."]
-configuration = ["NativeGOPDisplay presents the framebuffer as an IOMobileFramebuffer (native-gop-display=1). WindowServer is switched to CPU compositing and BGRA output by in-memory edits of a few pages of the shared cache, each checked by original bytes and page hash (sheng-full-ui=1). A software cursor is forced; sleep is disabled."]
-procedure = ["Boot with native-gop-display=1 sheng-full-ui=1; optional native-gop-diag=1 draws a counter strip at the top left."]
-findings = ["The desktop shows wallpaper, widgets and windows; taps register.", "The new copy code supports copying only changed rows and cleaning caches by address (both default-off options, enabled in the GPU packages).", "Per-stage timing on the tablet shows 0.1 to 0.4 seconds per frame, spent mostly reading the surface, comparing with the previous frame and writing changed rows into the Device-mapped framebuffer (~79 MiB/s write, ~0.3 seconds for a full-screen change). Reading CPU-rendered surfaces also runs at ~70 MB/s (inferred non-cacheable mapping in the kernel)."]
-completion = ["The first frame is presented, the desktop is drawn and the pointer follows the finger."]
-limits = ["No backlight control; per-frame copy takes 0.1 to 0.4 seconds over the Device-mapped framebuffer."]
-next_action = ["Map the framebuffer as write-combined (inferred to be much faster based on the ~11275 MiB/s benchmark) and investigate the non-cacheable surface read path."]
+inputs = ["Framebuffer left by the bootloader, 3048 x 2032 BGRA; panel size 262 x 175 mm."]
+configuration = ["NativeGOPDisplay presents the framebuffer as an IOMobileFramebuffer (native-gop-display=1, requesting kIOMapWriteCombineCache). Without the Metal plug-in (sheng-full-ui=1), WindowServer is switched to CPU compositing; with the Metal plug-in (sheng-full-ui=2), WindowServer composites on the Adreno 740. A software cursor is forced; sleep is disabled; optional changed-row copy (native-gop-forward-mode=1), per-address cache maintenance (native-gop-cache=1) and strip-free desktop mode."]
+procedure = ["Boot with native-gop-display=1 and either sheng-full-ui=1 (software) or sheng-full-ui=2 (Metal plug-in)."]
+findings = ["Both CPU-rendered and GPU-composited desktops display wallpaper, menu bar, widgets, Dock and application windows; strip-free clean desktop verified in boots 49 and 50.", "In boot 43 (single GPU ring), GPU fence waits averaged ~1.5 ms, whereas the display driver's CPU copy took 0.36 to 0.40 s per frame (~2.5 to 3 fps): most sampled frames spent 330 to 368 ms reading and comparing 24.8 MB of surface pixels (~75 MB/s), while two fast frames completed read/compare and wrote 223 rows in 52 to 55 ms (>=475 MB/s read), inferred to reflect non-cacheable vs cacheable surface page mappings. NativeGOPDisplay requests kIOMapWriteCombineCache, which XNU honors only when is_dram_addr(pa) holds."]
+completion = ["The first frame is presented, the GPU-composited desktop and apps are drawn and the pointer follows the finger."]
+limits = ["No backlight control; per-frame CPU surface read/compare and blit takes 0.36 to 0.40 seconds (~2.5 to 3 fps)."]
+next_action = ["Archived; upstream UniXNU-sheng uses GPU framebuffer copy (fb-gpu=1) and experimental direct DPU scanout."]
 
 [[area.evidence]]
 kind = "device"
 reference = "https://github.com/mataht/sheng-macos-link-lab/blob/milestone-desktop-20261109/docs/status.md"
 command = "fastboot boot sheng-macos26-kernel.img"
 revision = "36e11087791ca3b68505ee19c1f8602d7713039d"
-result = "Desktop with wallpaper, widgets and system windows displayed about two minutes after the boot command; very laggy (2026-11-09)."
+result = "Desktop with wallpaper, widgets and system windows displayed about two minutes after the boot command (2026-11-09)."
 
 [[area.evidence]]
 kind = "device"
@@ -141,10 +141,10 @@ paths = ["platform/sheng/macos26/input/**", "scripts/native_touch.py", "scripts/
 inputs = ["Novatek NT36532E touch on a GENI SPI engine (QUP1 SE4, GPIO 44 to 47, interrupt GPIO 25), 20319 x 30479 raw range; power and volume keys on the PMIC (SPMI); the keyboard cover on GENI I2C with its own MCU."]
 configuration = ["Touch follows UniXNU-sheng's host-computed route: the host downloads the touch firmware into the controller at each boot, reads the capacitance frames and computes a single absolute pointer (sheng-touch=1..4). The firmware is a vendor file read from the user's own device and injected into the device tree locally; it is not in this repository. Keys: native-button-keys=1 reports arrows, Tab and Return. Keyboard cover: sheng-kbd=1..5, default off."]
 procedure = ["Boot with sheng-touch=4 for a working pointer; bring-up stages 1 to 3 are read-only or clock and pin only and were run in order with approval for each boot."]
-findings = ["The pointer follows the finger from the Apple-logo phase on; taps select rows in Recovery and work on the GPU-composited Setup Assistant pages.", "On the full system a stage-1 read of the keyboard cover shows regulators L6B, L12B and L13B off. Stage 2 (clocks and engine identity, no rail, no bus traffic) passed on the tablet. Stage 3 (boot 28, first voltage vote via RPMh for L12B 1.8 V and L13B 3000 mV) did not receive a completion signal for L12B within 50 ms and stopped by design (L13B not voted, no I2C traffic); 13 seconds later a kernel lock-wait timeout panic occurred (same signature as an earlier boot without a keyboard driver, causal link not established). Inferred cause of the missing completion: the command channel completion interrupt was not enabled before voting; a fix is written offline and not yet built or booted."]
-completion = ["Touch produces correct pointer coordinates and clicks; keys can drive Recovery; the cover types."]
-limits = ["Single finger only. The keyboard cover's stage 3 voltage vote did not complete, and stages 4 and 5 have never run. No interrupt line is used; the drivers poll."]
-next_action = ["Build and test the keyboard cover stage 3 completion-interrupt fix with approval."]
+findings = ["The pointer follows the finger from the Apple-logo phase on; touch opens and interacts with Finder, Notes, System Settings, App Store and Apple menu items (Restart in boot 49, Shut Down in boot 50); selecting About This Mac with the power key (Return) opens the window in boot 50, while slight finger movement between press and release causes menu items to treat some touch taps as drags.", "On the full system a stage-1 read of the keyboard cover shows regulators L6B, L12B and L13B off. Stage 2 (clocks and engine identity, no rail, no bus traffic) passed on the tablet. Stage 3 (boot 28, first voltage vote via RPMh for L12B 1.8 V and L13B 3000 mV) did not receive a completion signal for L12B within 50 ms and stopped by design (L13B not voted, no I2C traffic); 13 seconds later a kernel lock-wait timeout panic occurred (same signature as boots 03 and 45 without a keyboard driver, causal link not established). Inferred cause of the missing completion: the command channel (TCS 2) completion interrupt was not enabled before voting; a fix was written and verified in host tests and QEMU offline but not booted before archiving."]
+completion = ["Touch produces correct pointer coordinates and clicks; keys drive Recovery and menus; the cover types."]
+limits = ["Single finger only, no tap-slop threshold yet. The keyboard cover's stage 3 voltage vote did not complete on hardware in this repository, and stages 4 and 5 were not run on hardware. No interrupt line is used; the drivers poll."]
+next_action = ["Archived; upstream UniXNU-sheng already has working keyboard cover keys and touchpad pointer on macOS 27.3."]
 
 [[area.evidence]]
 kind = "device"
@@ -169,16 +169,16 @@ result = "Keyboard cover stage 2: clock vote, I2C engine identity registers read
 
 [[area]]
 id = "gpu"
-status = "implemented"
+status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/gpu/**", "patches/Adreno740/**", "patches/UniXNU-sheng-gpu/**", "config/turnip-sources.json", "config/metal-bridge-sources.json", "config/metal-plugin-sources.json"]
 inputs = ["Adreno 740 (a7xx) with its GMU, SMMU and firmware (firmware is read from a device tree node and is never stored here); UniXNU's Adreno740 component; Mesa's Turnip driver with a Darwin backend; a Rust Metal-to-Vulkan bridge; a Metal plug-in loaded by WindowServer."]
-configuration = ["Kernel: an IOAccelerator front end over UniXNU's Adreno kernel stack, 16 KiB pages, default off, sheng-gpu-power=1..9 (1 is read-only). User space: plug-in bundle (Metal front end, bridge, Turnip) delivered as a compressed device tree node in QEMU."]
+configuration = ["Kernel: an IOAccelerator front end over UniXNU's Adreno kernel stack, 16 KiB pages, default off, sheng-gpu-power=1..9 (1 is read-only), with cacheable client buffers + pre-submit cache maintenance (sheng-gpu-wc=0), IO-coherent GPU-owned buffers (sheng-gpu-owned-coherent=1), fixed operating point 401 MHz (sheng-gpu-perf=4) and single command ring (sheng-gpu-preempt=0). User space: plug-in bundle (Metal front end, bridge, Turnip) delivered via device tree node."]
 procedure = ["Build with the --build-gpu switch (kernel) and the gpu-userland workflow (plug-in); boot with sheng-gpu-power=1 for the read-only stage. Higher stages power the GPU and need the device owner's approval."]
-findings = ["QEMU stage A: WindowServer loaded the plug-in, called its initialisation, opened the accelerator and the runtime answered that no device exists (QEMU has no A740).", "QEMU stage B (fake A740 that executes nothing): Turnip created a device, two submissions, the first frame (800 x 600, no content); WindowServer then exited with SIGABRT intermittently, cause unknown.", "Tablet, stages 1 to 9 without the Metal plug-in (including control boot 39): power domains, clocks, the GMU SMMU context and GMU firmware, GX power and heartbeat, TrustZone zap authentication (three secure calls returning 0) and the first GPU command and interrupt through the GPU's own SMMU context all succeeded (with whole-page 16 KiB unmapping); boot 39 reached the CPU-rendered desktop quickly.", "Tablet, GPU hang avoided (sheng-gpu-wc=0): an earlier hang-panic QR showed the command processor at the end of the first indirect buffer, the first buffer words reading as 0, and 16 dirty or stale write-combine cache lines (inferred: buffer still in the CPU cache, not in DRAM). Making client buffers cacheable with pre-submission cache maintenance eliminated the hang.", "Tablet, first GPU-composited UI with the Metal plug-in (boot 38: WindowServer -> Metal plug-in -> metal2vulkan -> Turnip -> Adreno 740 kernel driver): fast boot; the screen displayed the desktop wallpaper, menu bar (Simplified Pinyin, Tue Nov 10) and post-login Setup Assistant pages (advancing from Auto Update to the network page with working touch) at about 6 frames per second; all 64 sampled display points had content (0 on earlier black-screen boots). The 300 s diagnostic panic QR recorded 759 submissions, 758 completed, no GPU hang, 7 processes that opened the GPU (inferred from truncated names: WindowServer, loginwindow, NotificationCenter, Setup Assistant, iconservicesagent), and the IO-coherence probe passed.", "The plug-in contains metal2vulkan (GPL-2.0-or-later or LGPL-3.0-or-later); its build artifacts are not redistributed."]
-completion = ["WindowServer renders through the Adreno 740 with Metal; AIR shaders compile to Adreno code."]
-limits = ["GPU acceleration is still slow (~6 fps) and not yet usable: most 50 ms display waits and 1517 of 2274 kernel fence waits time out; boots with the Metal plug-in are intermittently slow (boots 21 and 33 slow, ~104 s to WindowServer takeover in boot 33 vs 22 to 33 s when fast in boots 23, 38 and 39; CPU clocks are normal and the slowdown starts after launchd before WindowServer; why boot 38 was fast and showed a picture is undetermined)."]
-next_action = ["Investigate the display and kernel fence wait timeouts and the intermittent slow boots with the Metal plug-in; verify the remaining QR diagnostic fields."]
+findings = ["QEMU stage A and fake A740 stage B verified WindowServer plug-in loading and first-frame Turnip submission.", "Tablet, stages 1 to 9 without the Metal plug-in (including control boot 39): power domains, clocks, GMU SMMU context and firmware, GX power and heartbeat, TrustZone zap authentication (three secure calls returning 0) and the first GPU command and interrupt through the GPU's own SMMU context all succeeded; boot 39 reached the CPU-rendered desktop quickly.", "Tablet, GPU hang avoided (sheng-gpu-wc=0), IO-coherent GPU-owned buffers (sheng-gpu-owned-coherent=1, boot 40, cutting 300 s driver cache maintenance from ~20.4 s to ~0.58 s and raising completed submissions from 758 to 1088) and 401 MHz clock vote (sheng-gpu-perf=4, boot 41, raising completed submissions to 1534 and cutting the longest client fence wait from ~2.2 s to ~91.5 ms).", "Tablet, full GPU-composited macOS desktop and apps on a single command ring (boots 42, 43, 44, 46 to 50): after setting MiniBuddyLaunch=false, boot 42 reached the full GPU-composited desktop (~9 fps) before hanging the second ring on a CP_BLIT when opening the App Store; switching to a single command ring (sheng-gpu-preempt=0, boot 43) completed 2677 of 2677 submissions in 300 s with 0 hangs and ~1.5 ms average client fence wait, opening App Store, Notes, Finder (including full-screen), System Settings and About This Mac, and running 19 minutes without a GPU hang in boot 47.", "The plug-in contains metal2vulkan (GPL-2.0-or-later or LGPL-3.0-or-later); its build artifacts are not redistributed."]
+completion = ["WindowServer and system apps render through the Adreno 740 with Metal on a single command ring."]
+limits = ["No GPU thermal control or DCVS has run on hardware in this repository (fixed at 401 MHz); two-ring preemption hangs on a CP_BLIT when opening the App Store; Photos aborts in PXCreateContext when creating a Metal texture bitmap context; intermittent slow boots with the plug-in (boots 21 and 33 slow, subsequent boots fast, cause undetermined)."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "host"
@@ -203,17 +203,10 @@ result = "Desktop reached without a panic; first GPU interrupt, accelerator publ
 
 [[area.evidence]]
 kind = "device"
-reference = "https://github.com/mataht/sheng-macos-link-lab/blob/milestone-gpu-plugin-boot-20261109/docs/status.md"
-command = "fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2, second integrated kernel)"
-revision = "e5cd05044e6c9f2cb442da0d2c4444a270579994"
-result = "Plug-in installed, accelerator registered, WindowServer created the Turnip device, 107 client calls reached the driver, no fault, no panic; the whole screen stayed black with no pointer (2026-11-09 night, read from a video)."
-
-[[area.evidence]]
-kind = "device"
 reference = "https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md"
-command = "fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2)"
+command = "fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2 sheng-gpu-owned-coherent=1 sheng-gpu-perf=4 sheng-gpu-preempt=0)"
 revision = "e5cd05044e6c9f2cb442da0d2c4444a270579994"
-result = "First GPU-composited UI on the tablet (boot 38): wallpaper, menu bar and post-login Setup Assistant pages displayed with working touch at about 6 fps; all 64 sampled display points had content; 300 s diagnostic QR recorded 759 submissions, 758 completed, no GPU hang, IO-coherence probe passed; most 50 ms display waits and 1517 of 2274 kernel fence waits timed out (2026-11-10, video, photo and diagnostic QR)."
+result = "Full GPU-composited macOS desktop on a single command ring (boots 43, 44, 46 to 50): 2677 of 2677 submissions completed in 300 s with 0 hangs, average client fence wait ~1.5 ms; Finder (including full-screen), Notes, System Settings, App Store and About This Mac opened (2026-11-10 to 2026-11-11, videos, photos and diagnostic QRs)."
 
 [[area]]
 id = "network"
@@ -222,11 +215,11 @@ components = []
 paths = ["platform/sheng/macos26/net/**", "scripts/native_wifi.py"]
 inputs = ["Wi-Fi and Bluetooth chip (WCN7850 family) on PCIe0 with its power rails, the sleep-clock pin and the MHI interface; vendor firmware is never stored here."]
 configuration = ["NativeWifi, default off: sheng-wifi=1 read-only snapshot, 2 power and PCIe link with endpoint identification, 3 BAR0 and MHI registers. The class is an Ethernet-style controller from IONetworkingFamily. RPMh TCS 0 is used."]
-procedure = ["Boot with sheng-wifi=N for stage N; stages 2 and 3 power the chip and need approval for each boot."]
-findings = ["Stage 1 on the tablet: the PCIe0 power domain is collapsed with no clock votes; WLAN_EN, BT_EN and PERST# read low; two of the chip's rails read off and three on at the pinned voltages; the sleep-clock pin is idle and owned by another execution environment.", "Stage 2 on the tablet: power, PCIe0 link and endpoint identification; the endpoint ID reads 17cb:1107 (WCN7850), the sleep clock goes from idle to driving and one chip rail from off to on.", "Stage 3 on the tablet: BAR0 (2 MiB) mapped, bus mastering on, the MHI register block and the BHI registers read without a panic; MHIVER reads 0xdeadbeef, meaning not established (digits read from a video).", "Stage 4 on the tablet (boot 23): firmware loaded into the 8 MiB DMA window (length and digest verified by the kernel), Wi-Fi SMMU stream routed and MHI/BHI layout read without hanging; this SMMU does not support address translation self-test (ATOS), so the DMA window translation is unverified.", "Stage 5 on the tablet (boot 26): chip power-up and boot loader doorbell executed without hanging or panicking; the result rows print only after the chip reports ready, after the GUI had already taken over the screen, so the stage 5 outcome is unknown (needs a code change to observe)."]
+procedure = ["Boot with sheng-wifi=N for stage N; stages 2 and above power the chip and need approval for each boot."]
+findings = ["Stage 1 on the tablet: the PCIe0 power domain is collapsed with no clock votes; WLAN_EN, BT_EN and PERST# read low; two of the chip's rails read off and three on at the pinned voltages; the sleep-clock pin is idle and owned by another execution environment.", "Stage 2 on the tablet: power, PCIe0 link and endpoint identification; the endpoint ID reads 17cb:1107 (WCN7850), the sleep clock goes from idle to driving and one chip rail from off to on.", "Stage 3 on the tablet: BAR0 (2 MiB) mapped, bus mastering on, the MHI register block and the BHI registers read without a panic; MHIVER reads 0xdeadbeef, meaning not established (digits read from a video).", "Stage 4 on the tablet (boot 23): firmware loaded into the 8 MiB DMA window (length and digest verified by the kernel), Wi-Fi SMMU stream routed and MHI/BHI layout read without hanging; this SMMU does not support address translation self-test (ATOS), so the DMA window translation is unverified.", "Stage 5 on the tablet (boot 26): chip power-up and boot loader doorbell executed without hanging or panicking; the result rows print only after the chip reports ready, after the GUI had already taken over the screen, so the stage 5 outcome is unknown."]
 completion = ["The endpoint enumerates, firmware loads, a network interface is published and packets flow."]
-limits = ["The SMMU does not support ATOS, so the stage 4 DMA translation is unverified; the stage 5 outcome is unknown because the result rows printed after GUI takeover; there is no wireless protocol stack behind the driver, so networking is still far off. Firmware is read from the tablet's own Android partitions and never stored here. Bluetooth has only had its pin and clock read; the macOS-side HCI path is undecided."]
-next_action = ["Adjust logging timing so the stage 5 outcome is visible before GUI takeover; decide the wireless stack route."]
+limits = ["The SMMU does not support ATOS, so the stage 4 DMA translation is unverified; the stage 5 outcome was hidden behind GUI takeover; there is no wireless protocol stack in this repository. Firmware is read from the tablet's own Android partitions and never stored here. Bluetooth has only had its pin and clock read."]
+next_action = ["Archived; upstream UniXNU-sheng already has working Wi-Fi association, DHCP and traffic on macOS 27.3."]
 
 [[area.evidence]]
 kind = "device"
@@ -254,27 +247,27 @@ id = "audio"
 status = "planned"
 components = []
 paths = ["docs/status.md"]
-inputs = ["ADSP-owned audio path; no work has started."]
-configuration = ["None yet."]
-procedure = ["None yet."]
-findings = ["None yet."]
+inputs = ["ADSP-owned audio path; no work has started in this repository."]
+configuration = ["None."]
+procedure = ["None."]
+findings = ["None."]
 completion = ["Playback and capture through an audio driver that macOS recognises."]
-limits = ["Not started."]
-next_action = ["Wait for the ADSP stages and the battery service to run beyond their read-only first stage."]
+limits = ["Not started in this repository."]
+next_action = ["Archived; see upstream UniXNU-sheng for audio support."]
 evidence = []
 
 [[area]]
 id = "power"
-status = "implemented"
+status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/power/**", "platform/sheng/macos26/adsp/**"]
-inputs = ["PMIC state (RTC, backlight drivers KTZ8866 x 2), ADSP-owned battery and charger services, RPMh, the performance and memory-latency state."]
-configuration = ["Default-off drivers: NativeRtc (sheng-rtc), NativeBacklight (sheng-backlight, always clamped to 64..2047), NativeMemPerf (sheng-memperf), NativeAdsp and NativeBattery (sheng-adsp, sheng-battery), a PSCI reset hook (sheng-psci-reset). Charger writes are off and the critical battery level is never asserted."]
-procedure = ["Boot with sheng-<driver>=1 for the read-only snapshot; later stages need approval."]
-findings = ["The first stage of each ran on the tablet without writes. XNU waits up to 30 seconds for an IORTC service at boot. With sheng-rtc=2 the platform expert publishes IORTC early and NativeRtc moves the calendar forward; on the tablet this saved about 30 seconds (WindowServer's screen about 49 seconds after the boot command against 75 to 81 seconds before; read by hand from a video at 3 second steps). The calendar starts at the packaging time, not the true time. The ADSP firmware owns the Type-C controller.", "System sleep panics in QEMU because the platform does not register its cores for sleep, so sleep is disabled."]
-completion = ["Battery state and charging reported to macOS; brightness control; time kept across boots; sleep."]
-limits = ["No battery reporting, no brightness control, no true time (the calendar starts at the packaging time; the RTC counter probably clears on a forced reset, so an offset taken from Android is not usable), no sleep."]
-next_action = ["Measure the memory-bandwidth stage; decide the first ADSP stage that starts the DSP."]
+inputs = ["PMIC state (RTC, backlight drivers KTZ8866 x 2), ADSP-owned battery and charger services, RPMh, the performance and memory-latency state, and PSCI system reset/off."]
+configuration = ["Default-off drivers: NativeRtc (sheng-rtc), NativeBacklight (sheng-backlight, always clamped to 64..2047), NativeMemPerf (sheng-memperf), NativeAdsp and NativeBattery (sheng-adsp, sheng-battery), and a PSCI reset/poweroff hook (sheng-psci-reset). Charger writes are off and the critical battery level is never asserted."]
+procedure = ["Boot with sheng-<driver>=1 for the read-only snapshot; with sheng-rtc=2 and sheng-psci-reset=1 for RTC calendar publication and Apple menu Restart / Shut Down."]
+findings = ["The first stage of each ran on the tablet without writes. XNU waits up to 30 seconds for an IORTC service at boot. With sheng-rtc=2 the platform expert publishes IORTC early and NativeRtc moves the calendar forward; on the tablet this saved about 30 seconds (WindowServer's screen about 49 seconds after the boot command against 75 to 81 seconds before). The calendar starts at the packaging time, not the true time. The ADSP firmware owns the Type-C controller.", "With sheng-psci-reset=1, clicking Restart in the Apple menu (boot 49) and Shut Down in the Apple menu (boot 50) cleanly unmounted the APFS Data and Update volumes (xid 13986 and 14318, 0 checksum failures) and rebooted to Android or powered off the tablet.", "System sleep panics in QEMU because the platform does not register its cores for sleep, so sleep is disabled."]
+completion = ["Clean system restart and shutdown from macOS; RTC calendar published at boot; battery state, brightness control and sleep."]
+limits = ["No thermal sensor driver ran on hardware in this repository; no battery reporting, no brightness control, no true time (the calendar starts at the packaging time), no sleep."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
@@ -290,6 +283,13 @@ command = "fastboot boot sheng-macos26-kernel.img (sheng-rtc=2 with a floor time
 revision = "e5cd05044e6c9f2cb442da0d2c4444a270579994"
 result = "WindowServer's screen appeared about 49 seconds after the boot command against about 75 to 81 seconds before; the calendar started at the packaging time (2026-11-09 night, hand reading of a video)."
 
+[[area.evidence]]
+kind = "device"
+reference = "https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md"
+command = "fastboot boot sheng-macos26-kernel.img (sheng-psci-reset=1)"
+revision = "e5cd05044e6c9f2cb442da0d2c4444a270579994"
+result = "Apple menu Restart (boot 49) and Shut Down (boot 50) cleanly unmounted the Data and Update volumes and rebooted to Android or powered off the tablet (2026-11-10 to 2026-11-11)."
+
 [[area]]
 id = "packaging"
 status = "host-verified"
@@ -298,10 +298,10 @@ paths = ["scripts/package_macos26_ufs.py", "scripts/assemble_*.py", "scripts/qua
 inputs = ["CI outputs, the paired Apple kernel extensions (local only), a device tree generated from board facts, driver switches, and the evidence from QEMU runs and device steps."]
 configuration = ["The packager refuses a package unless its evidence matches: same kernel identity, QEMU observations, root install evidence and, for full-system packages, a sibling VirtIO build of the same kernel. A tiered policy decides whether earlier long-run evidence can be reused, by comparing build records."]
 procedure = ["Assemble the kernel twice and compare byte for byte; run the quick QEMU gates (root found, storage default off, memory layout, eight cores); package; verify the package with an independent script that compares container, kernel, device tree and boot arguments."]
-findings = ["Assembly outputs and packages contain Apple code and vendor firmware and stay local; the repository holds the tools and tests.", "Reusing evidence is decided by comparing build records, not by hand.", "Every new kernel booted on 2026-11-10 evening had a complete 1200-second QEMU full-system run beforehand without a panic and with the image unchanged, as did the changed-rows display copy mode. Earlier boots 14 to 17 were made under per-package user waivers before their 1200-second runs were completed afterwards.", "The QEMU observer tool was fixed so that if the VM stops in user space at the time limit, it briefly steps the VM into kernel space before the final kernel data read.", "The packager's sibling qualification does not reject a QEMU run that ended in a panic. The fix (refuse such a run unless an explicit waiver file bound to that run and kernel digest is given) is on a local branch and not merged."]
+findings = ["Assembly outputs and packages contain Apple code and vendor firmware and stay local; the repository holds the tools and tests.", "Reusing evidence is decided by comparing build records, not by hand.", "Every new kernel booted on 2026-11-10 evening and 2026-11-11 early morning had a complete 1200-second QEMU full-system run beforehand without a panic and with the image unchanged, as did the changed-rows display copy mode. Earlier boots 14 to 17 were made under per-package user waivers before their 1200-second runs were completed afterwards.", "The QEMU observer tool was fixed so that if the VM stops in user space at the time limit, it briefly steps the VM into kernel space before the final kernel data read."]
 completion = ["Every package passes the independent review before any boot is requested."]
 limits = ["The local assembly and review outputs are not published, so a third party cannot rerun the review without their own inputs."]
-next_action = ["Document the packager's evidence rules in docs/ so another unit can reuse them."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "host"
@@ -315,13 +315,13 @@ id = "diagnostics"
 status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/log/**", "scripts/decode_native_log.py", "scripts/decode_xnu_panic.py", "docs/panic-qr.md", "docs/boot-progress.md"]
-inputs = ["The framebuffer as a text console, a retained log in memory and in a small partition, and a QR code of the panic state."]
-configuration = ["Boot progress lines and driver status rows are printed on the screen (sheng-boot-progress); on a panic the screen shows a QR code with registers, stack and a caller resolved against the kernel's UUID; optional native-gop-diag and native-touch-diag strips."]
-procedure = ["Photograph or film the screen; scan the QR code and decode it with scripts/decode_xnu_panic.py."]
-findings = ["The first full-system boot panicked about 5 minutes 50 seconds after the command; the QR code identified watchdogd's exit as the cause.", "Unified logs of the guest can be read from the QEMU overlay."]
-completion = ["Every stage of the boot leaves a checkpoint on the screen and every panic leaves a decodable record."]
-limits = ["The retained log keeps only the tail (80 KB in QEMU runs). Guest logs are only readable in QEMU."]
-next_action = ["Add a persistent log of the userland stage for the full system."]
+inputs = ["The framebuffer as a text console, a retained log in memory and in a small partition, a QR code of the panic state, and read-only TWRP 8 MiB chunk scans of the OS window."]
+configuration = ["Boot progress lines and driver status rows are printed on the screen (sheng-boot-progress); on a panic the screen shows a QR code with registers, stack and a caller resolved against the kernel's UUID (including GPU state and RAM overlay write reports); optional native-gop-diag and native-touch-diag strips; post-boot TWRP chunk scan and offline APFS Fletcher-64 verifier / Data-volume crash-report extractor."]
+procedure = ["Photograph or film the screen, scan the QR code and decode it with scripts/decode_xnu_panic.py; after persistent boots, scan changed 8 MiB chunks in TWRP, verify APFS Fletcher-64 checksums offline and extract logs and .ips crash reports from the Data volume."]
+findings = ["The first full-system boot panicked about 5 minutes 50 seconds after the command; the QR code identified watchdogd's exit as the cause.", "Post-boot TWRP chunk scans and offline APFS checks after boots 46, 48, 49 and 50 verified 0 checksum failures across up to 1008 APFS objects and extracted 1266 files from the Data volume, pinpointing the AppKit PerfRegulatorStart work-interval abort on scroll-bar drags and the Photos PXCreateContext assertion failure."]
+completion = ["Every stage of the boot leaves a checkpoint on the screen, every panic leaves a decodable QR record, and persistent Data-volume crash reports can be extracted and verified offline."]
+limits = ["No offline parser for macOS unified log (.tracev3) files in this repository."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
@@ -341,7 +341,7 @@ procedure = ["Stage 1 needs nothing else; stages 3 and 4 need an external 5 V so
 findings = ["Stage 1 ran on the tablet without writes.", "The class description used for stage 4 is a generated declaration with opaque names."]
 completion = ["A USB device enumerates and works through macOS's own USB stack."]
 limits = ["Stages 2 and above have never run on the tablet. Stage 4 needs its own candidate and gates."]
-next_action = ["Stage 2 with approval, sharing the RPMh channel with the keyboard cover without a lock."]
+next_action = ["Archived; see upstream UniXNU / UniXNU-sheng for active development."]
 
 [[area.evidence]]
 kind = "device"
@@ -356,12 +356,12 @@ status = "device-verified"
 components = []
 paths = ["platform/sheng/macos26/login/**", "platform/sheng/macos26/recovery/**"]
 inputs = ["The installed macOS 26.5 system supplied by the user, its original trust caches, and a few services the platform lacks (a watchdog and a key store)."]
-configuration = ["Development policy: dyld skips libignition; the original trust caches are loaded unchanged with no entries of our own (Metal plug-in boots add the plug-in's two CDHashes and set lp-sip0 to 2); platform UUID from the device tree; panic_on_crash_disabled=1; minimal IOWatchdog (reports disabled) and AppleKeyStore (no keybag, no passcode, unlocked) enabled by sheng-watchdog=1 and sheng-aks=1."]
-procedure = ["Boot the full-system package; auto-login and no screen lock are required because the tablet has no hardware keyboard."]
-findings = ["The first full-system boot ran to WindowServer and then panicked when watchdogd exited without its service; a later boot reached the login window; with the services and the lock preference off it reached the desktop.", "loginwindow and WindowServer run; apps and long-run stability are not tested.", "In QEMU, opendirectoryd's first node open often times out after 5 seconds and is retried; all 7 runs with readable guest logs show 1 to 5 such timeouts, after which the process restarts and succeeds. Occasionally the process panics instead (Failed to open /Search), which panic_on_crash_disabled does not mask. The cause is not established. No such panic was seen on the tablet, where guest logs are not readable, so silent restarts cannot be excluded."]
-completion = ["The desktop appears and stays up; apps run."]
-limits = ["Development kernel without a root seal check, AMFI developer mode, no SEP. Apps, network and stability under load are untested."]
-next_action = ["Find the cause of the slow composition, then test apps and a long run."]
+configuration = ["Development policy: dyld skips libignition; the original trust caches are loaded unchanged with no entries of our own (Metal plug-in boots add the plug-in's two CDHashes and set lp-sip0 to 2); platform UUID from the device tree; panic_on_crash_disabled=1; minimal IOWatchdog (reports disabled) and AppleKeyStore (no keybag, no passcode, unlocked) enabled by sheng-watchdog=1 and sheng-aks=1; autoLoginUserScreenLocked=false and MiniBuddyLaunch=false."]
+procedure = ["Boot the full-system package; auto-login, no screen lock and skipping the post-login Setup Assistant (MiniBuddyLaunch=false) are used on the tablet."]
+findings = ["With the login services, MiniBuddyLaunch=false and the single-ring Metal plug-in stack, the tablet boots directly into the GPU-composited macOS desktop and opens Finder (including full-screen), Notes, System Settings, App Store and About This Mac.", "Crash reports extracted from the tablet's Data volume after persistent boots identified two userland/kernel gaps: dragging or clicking a scroll bar aborts in AppKit PerfRegulatorStart with 'Failed to create performance regulator work interval (error %i).' because kernel work-interval calls are unimplemented in this repository; Photos aborts with an uncaught NSAssertionHandler exception in PhotosUIFoundation PXCreateContext under PXGMetalTextureConverter createTextureFromCGImage / _createTransparentTexture. Offline inspection also showed Safari is missing because the AppOS cryptex was not installed in the 26.5 system image (17 dangling symlinks into /System/Cryptexes/App), and mobileactivationd and apsd crash every ~10 seconds as in QEMU.", "In QEMU, opendirectoryd's first node open often times out after 5 seconds and is retried; runs that hit its intermittent /Search or /Local/Default panic are rerun and not used as evidence."]
+completion = ["The GPU-composited desktop appears, persists across clean Apple menu restarts and shutdowns, and runs bundled applications."]
+limits = ["Development kernel without a root seal check, AMFI developer mode, no SEP; scroll-bar drag aborts in PerfRegulatorStart without kernel work-interval patches; Photos aborts in PXCreateContext; AppOS cryptex not installed in the 26.5 image."]
+next_action = ["Archived; upstream UniXNU / UniXNU-sheng includes the kernel work-interval patches and mounts the AppOS cryptex on macOS 27.3."]
 
 [[area.evidence]]
 kind = "device"
