@@ -1,0 +1,67 @@
+System executables and libraries of the addon, shown over /usr/sbin and /usr/lib.
+
+A board whose hardware needs its own build of a system daemon ships it in the addon's sbin, and a library that daemon loads in
+the addon's lib (/private/var/ngpu/sbin and /private/var/ngpu/lib after the addon is written to Data). Each directory that exists
+is bound read-only over /usr/sbin or /usr/lib as a union: the system's own launchd jobs start the board's builds by their usual
+paths, the daemons load the library from a place their sandbox lets them map code from, and every other name still comes from
+the system volume. sheng uses it for the Bluetooth daemon, BlueTool and the capability library; iPadOS has the same arrangement in
+the board's runtime patch. Trust stays with the owner trust bundle.
+Requires macos-owner-data-firmlinks.patch.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 06b8985..af3fdca 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9441,11 +9441,44 @@ done:
+ }
+ #endif
+ 
++/*
++ * System executables and libraries of the addon. A board whose hardware needs its own build of a system daemon (the Bluetooth
++ * daemon for a controller Apple's does not drive) ships it in the addon's sbin, and a library that daemon loads in the addon's lib;
++ * native_gpu_addon_install writes them to /private/var/ngpu/sbin and /private/var/ngpu/lib. Each directory that exists is shown
++ * read-only over /usr/sbin or /usr/lib as a union, so the system's own launchd jobs start the board's builds by their usual paths,
++ * the daemons load the library from a place their sandbox lets them map code from, and every other name still comes from the
++ * system volume. iPadOS does the same for its Bluetooth runtime. The files are trusted like any other: by the hashes the owner
++ * trust bundle carries. Never fatal; the results are logged.
++ */
++volatile int native_owner_addon_sbin_status = -1;
++static void native_owner_macos_addon_sbin(proc_t p, user_addr_t scratch);
+ /*
+  * gpu-addon=1: the payload's GPU addon is written into Data (native_gpu_addon_install, as on iPadOS); its Metal plugin goes to
+  * /Library/GPUBundles, protected for IOGPU's trust check (native_gpu_bundle_protect). The macOS bundle keeps Info.plist in
+  * Contents. The iPadOS addon's launchd jobs and wallpapers are not mounted. Never fatal; stage and status as native_gpu_addon_mount records them.
+  */
++static void
++native_owner_macos_addon_sbin(proc_t p, user_addr_t scratch)
++{
++	static const char *const binds[][2] = {{"/private/var/ngpu/lib", "/usr/lib"}, {"/private/var/ngpu/sbin", "/usr/sbin"}};
++	int status = 0;
++	for (size_t i = 0; i < sizeof(binds) / sizeof(binds[0]); ++i) {
++		vnode_t directory = NULLVP;
++		int error = vnode_lookup(binds[i][0], 0, &directory, vfs_context_current());
++		if (error == ENOENT) {
++			continue;   /* the addon ships nothing for this directory */
++		}
++		if (!error) {
++			const int is_directory = vnode_vtype(directory) == VDIR;
++			vnode_put(directory);
++			error = is_directory ? native_cryptex_os_bind(p, scratch, binds[i][0], binds[i][1], MNT_UNION) : ENOTDIR;
++		}
++		printf("owner Data: addon %s over %s: %d\n", binds[i][0], binds[i][1], error);
++		if (error && !status) status = error;
++	}
++	native_owner_addon_sbin_status = status;
++}
++
+ static void
+ native_owner_macos_gpu_addon(proc_t p, user_addr_t scratch)
+ {
+@@ -9565,6 +9598,7 @@ native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
+ 	if (!error) native_owner_macos_app_cryptex(p, scratch);
+ #endif
+ 	if (!error) native_owner_macos_gpu_addon(p, scratch);
++	if (!error) native_owner_macos_addon_sbin(p, scratch);
+ 	if (!error) native_owner_macos_boot_shims(p, scratch);
+ done:
+ 	if (data_root) vnode_put(data_root);

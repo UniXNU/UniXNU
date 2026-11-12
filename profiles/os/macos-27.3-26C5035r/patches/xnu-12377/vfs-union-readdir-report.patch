@@ -1,0 +1,83 @@
+A union directory read continues below without a console report.
+
+getdirentries moves an open directory of a union mount to the directory below it once the upper one is read. The first 48
+moves of a boot were printed ("union readdir: <name> lookup 0 step 0 error 0"), a measurement that has its answer: of the 240
+lines of five sheng boots, 237 report a move that happened and 3 report System/Library/dyld, which has no directory below. A
+kernel printf is written by the calling thread, to the log and through the console ring to the consoles; with vc-text=1 that
+includes the text drawn on the boot framebuffer, and these lines come while launchd and the first daemons list their
+directories. The report is removed: the function is the original one again plus the end of directory rule of
+native-union-readdir-eof.patch, which stays.
+Requires native-union-readdir-eof.patch.
+
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -11181,22 +11181,6 @@
+ /*
+  * Read a block of directory entries in a file system independent format.
+  */
+-#if CONFIG_UNION_MOUNTS
+-/*
+- * Measurement (sheng macOS run34): the outcome of continuing a union directory in the one below it, for the first 48 switches:
+- * the upper directory, lookup_traverse_union's error, the step that failed (1 not a directory, 2 MAC open check, 3 vnode_ref,
+- * 4 VNOP_OPEN) and its error. A step of 0 with errors 0 is a switch that happened.
+- */
+-static void
+-native_union_readdir_report(vnode_t vp, int lookup, int step, int err)
+-{
+-	static _Atomic uint32_t reports;
+-	if (os_atomic_inc_orig(&reports, relaxed) < 48) {
+-		printf("union readdir: %s lookup %d step %d error %d\n", vp->v_name ? vp->v_name : "?", lookup, step, err);
+-	}
+-}
+-#endif /* CONFIG_UNION_MOUNTS */
+-
+ static int
+ getdirentries_common(int fd, user_addr_t bufp, user_size_t bufsize, ssize_t *bytesread,
+     off_t *offset, int *eofflag, int flags)
+@@ -11282,34 +11266,18 @@
+ 	if ((user_ssize_t)bufsize == uio_resid(auio) &&
+ 	    (vp->v_mount->mnt_flag & MNT_UNION)) {
+ 		vnode_t uvp;
+-		int union_lookup = lookup_traverse_union(vp, &uvp, &context);
+-		int union_step = 0;
+ 
+-		if (union_lookup == 0) {
++		if (lookup_traverse_union(vp, &uvp, &context) == 0) {
+ 			if (vnode_isdir(uvp) == 0) {
+ 				error = EINVAL;
+-				union_step = 1;
+ 			}
+ #if CONFIG_MACF
+ 			if (error == 0) {
+ 				error = mac_vnode_check_open(&context, uvp, fp->fp_glob->fg_flag);
+-				union_step = error ? 2 : 0;
+ 			}
+ #endif /* CONFIG_MACF */
+-			int union_ref = error ? 0 : vnode_ref(uvp);
+-			if (union_ref) {
+-				union_step = 3;
+-			}
+-			if (error == 0 && union_ref == 0) {
+-				error = VNOP_OPEN(uvp, fp->fp_glob->fg_flag, &context);
+-				if (error) {
+-					union_step = 4;
+-					vnode_rele(uvp);        /* the reference taken above; the vnode_put below drops the iocount */
+-				}
+-			}
+-			native_union_readdir_report(vp, union_lookup, union_step, error ? error : union_ref);
+-			if (error == 0 && union_ref == 0) {
+-				if (error == 0) {
++			if (error == 0 && vnode_ref(uvp) == 0) {
++				if ((error = VNOP_OPEN(uvp, fp->fp_glob->fg_flag, &context)) == 0) {
+ 					fp_set_data(fp, uvp);
+ 					/* Close the old vnode to maintain proper lifecycle */
+ 					VNOP_CLOSE(vp, fp->fp_glob->fg_flag, &context);
+@@ -11326,8 +11294,6 @@
+ 				/* can't replace in fd */
+ 				vnode_put(uvp);
+ 			}
+-		} else {
+-			native_union_readdir_report(vp, union_lookup, 0, 0);
+ 		}
+ 	}
+ 	/*

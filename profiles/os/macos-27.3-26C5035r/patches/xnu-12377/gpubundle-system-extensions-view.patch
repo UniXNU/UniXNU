@@ -1,0 +1,49 @@
+gpu-bundle-system=1 on macOS: the Metal plugin is found under /System/Library/Extensions.
+
+libsystem_sandbox's gpu_bundle_find_trusted searches /Library/GPUBundles first and /System/Library/Extensions second. The
+sandbox profiles of the WebKit GPU process and of replayd allow code to be mapped only from the second, so with the bundle in
+/Library/GPUBundles both are refused the mapping and get no Metal device. With the argument the Data volume's bundles are
+shown over /System/Library/Extensions as a union and /Library/GPUBundles is covered by an empty directory; the files and
+their rootless protection are the same ones. Without the argument nothing changes.
+
+Has not run on hardware.
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9479,6 +9479,8 @@
+ 	native_owner_addon_sbin_status = status;
+ }
+ 
++/* gpu-bundle-system=1: 1 both mounts made, 0 not asked, 0x1000 + errno the cover failed, else the errno of the union. */
++volatile int native_gpu_bundle_system_view = 0;
+ static void
+ native_owner_macos_gpu_addon(proc_t p, user_addr_t scratch)
+ {
+@@ -9495,6 +9497,28 @@
+ 	if (!native_gpu_addon_status) {
+ 		vnode_put(probe);
+ 		native_gpu_addon_stage = 5;
++	}
++	/*
++	 * gpu-bundle-system=1: the bundles are shown over /System/Library/Extensions as a union, and /Library/GPUBundles is covered by
++	 * an empty directory. libsystem_sandbox searches /Library/GPUBundles first and /System/Library/Extensions second, and the
++	 * sandbox profiles of the WebKit GPU process and of replayd allow code to be mapped only from the second, so a bundle found
++	 * in the first is refused there and the process gets no Metal device. The files and their protection are the same ones.
++	 */
++	uint32_t system_view = 0;
++	if (native_gpu_addon_stage == 5 && PE_parse_boot_argn("gpu-bundle-system", &system_view, sizeof(system_view)) && system_view == 1) {
++		static const char empty[] = "/private/var/ngpu/no-bundles";
++		struct mkdir_args request = {.path = scratch + 0xc00, .mode = 0755};
++		int32_t result = 0;
++		int error = native_cryptex_os_bind(p, scratch, "/Library/GPUBundles", "/System/Library/Extensions", MNT_UNION);
++		int cover = -1;
++		if (!error) {
++			cover = copyout(empty, request.path, sizeof(empty));
++			if (!cover) cover = mkdir(p, &request, &result);
++			if (cover == EEXIST) cover = 0;
++			if (!cover) cover = native_cryptex_os_bind(p, scratch, empty, "/Library/GPUBundles", 0);
++		}
++		native_gpu_bundle_system_view = error ? error : (cover ? 0x1000 + cover : 1);
++		printf("owner Data: GPU bundles over /System/Library/Extensions: %d, /Library/GPUBundles covered: %d\n", error, cover);
+ 	}
+ 	printf("owner Data: GPU addon %d files, %d written, %d same, %d failed (%d); GPUBundles stage %d, status %d, protected %d (%d)\n",
+ 	    native_gpu_addon_files, native_gpu_addon_written, native_gpu_addon_same, native_gpu_addon_failed, native_gpu_addon_error,

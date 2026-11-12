@@ -1,0 +1,114 @@
+The application cryptex (Cryptex1,AppOS) at /System/Volumes/Preboot/Cryptexes/App.
+
+macOS keeps Safari in the App cryptex: Data's /Applications/Safari.app links to
+/System/Cryptexes/App/System/Applications/Safari.app, and /System/Cryptexes/App to /System/Volumes/Preboot/Cryptexes/App, where a
+Mac grafts the cryptex. The board's storage already publishes the cryptex as a verified volume, but nothing mounted it, so the
+link led nowhere: Safari's Dock tile was a question mark and it could not be opened.
+native_owner_macos_app_cryptex mounts the volume read-only at that path after the Preboot view exists. Only a volume the storage
+authenticates is used, and the mount must be that device, read-only, APFS; otherwise it is unmounted again. Never fatal; stage and
+status go to the boot log. The volume comes from the OS profile ([root] app_volume_uuid, XNU_OWNER_APP_VOLUME_UUID).
+Requires macos-owner-data-firmlinks.patch.
+
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index d22beaf..c9e935b 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -9330,6 +9330,88 @@ native_owner_macos_cryptex_view(proc_t p, user_addr_t scratch)
+ 	printf("owner Data: cryptex view stage %d, status %d\n", native_cryptex_os_stage, error);
+ }
+ 
++#ifdef XNU_OWNER_APP_VOLUME_UUID
++/*
++ * The application cryptex (Cryptex1,AppOS: Safari). Data's /Applications/Safari.app links to
++ * /System/Cryptexes/App/System/Applications/Safari.app, and /System/Cryptexes/App to /System/Volumes/Preboot/Cryptexes/App, where a
++ * Mac grafts the cryptex into Preboot. Here the cryptex is the APFS volume of its own verified window: it is mounted read-only at
++ * that path, over an owner Data directory of the Preboot view (native_owner_macos_cryptex_view). Without it the link led nowhere:
++ * Safari's Dock tile was a question mark and it could not be opened.
++ * Only a volume the board's storage authenticates is used (native_verified_block_volume_device), and what got mounted must be that
++ * device, read-only, APFS; otherwise it is unmounted again. Never fatal. Stage: 1 mount point made, 2 volume found, 3 mounted,
++ * 4 checked, 5 Safari's Info.plist visible through /Applications (the firmlink, both links and the mount).
++ */
++#define NATIVE_OWNER_APP_CRYPTEX_POINT "/System/Volumes/Preboot/Cryptexes/App"
++volatile int native_owner_app_cryptex_stage = 0;
++volatile int native_owner_app_cryptex_status = -1;
++static void
++native_owner_macos_app_cryptex(proc_t p, user_addr_t scratch)
++{
++	extern int native_verified_block_root_authorized(dev_t);
++	extern int native_verified_block_volume_device(const char *, dev_t *, char *, size_t);
++	vfs_context_t ctx = vfs_context_current();
++	vnode_t mounted = NULLVP, probe = NULLVP;
++	dev_t selected = NODEV;
++	char device_path[64] = {0};
++	uint8_t payload[0x150] = {0};
++	user64_addr_t spec = scratch + 0x160;
++	uint64_t mount_flags = MNT_RDONLY;
++	uint16_t mode = 1;
++	uint32_t anonymous_owner = 99;
++	struct mount_args request = {.type = scratch + 0x100, .path = scratch + 0x120,
++	    .flags = MNT_RDONLY | MNT_DONTBROWSE, .data = scratch + 0x200};
++	int32_t result = 0;
++	int error = native_cryptex_os_stage >= 2 ? 0 : ENOENT;
++	_Static_assert(sizeof(NATIVE_OWNER_APP_CRYPTEX_POINT) <= 0x40, "mount point overlaps the device path");
++	if (!error) error = native_gpu_addon_parents(p, scratch, "/private/var/ngpu/preboot/Cryptexes/App/");
++	if (error) goto done;
++	native_owner_app_cryptex_stage = 1;
++	if (!native_verified_block_volume_device(XNU_OWNER_APP_VOLUME_UUID, &selected, device_path, sizeof(device_path))) {
++		error = ENODEV;
++		goto done;
++	}
++	native_owner_app_cryptex_stage = 2;
++	/* The APFS mount arguments of the SystemOS volume's mount (native_owner_cache_prepare). */
++	memcpy(payload, &spec, sizeof(spec));
++	memcpy(payload + 8, &mount_flags, sizeof(mount_flags));
++	memcpy(payload + 16, &mode, sizeof(mode));
++	memcpy(payload + 0x144, &anonymous_owner, sizeof(anonymous_owner));
++	memcpy(payload + 0x148, &anonymous_owner, sizeof(anonymous_owner));
++	if ((error = copyout("apfs", request.type, 5)) ||
++	    (error = copyout(NATIVE_OWNER_APP_CRYPTEX_POINT, request.path, sizeof(NATIVE_OWNER_APP_CRYPTEX_POINT))) ||
++	    (error = copyout(device_path, spec, strlen(device_path) + 1)) ||
++	    (error = copyout(payload, request.data, sizeof(payload)))) goto done;
++	error = mount(p, &request, &result);
++	if (error) goto done;
++	native_owner_app_cryptex_stage = 3;
++	error = vnode_lookup(NATIVE_OWNER_APP_CRYPTEX_POINT, 0, &mounted, ctx);
++	if (error) goto done;
++	mount_t app_mount = vnode_mount(mounted);
++	vnode_t device_node = vfs_devvp(app_mount);
++	dev_t actual = device_node ? vnode_specrdev(device_node) : NODEV;
++	if (device_node) vnode_put(device_node);
++	if (!(vfs_flags(app_mount) & MNT_RDONLY) || actual != selected || strcmp(vfs_statfs(app_mount)->f_fstypename, "apfs") ||
++	    !native_verified_block_root_authorized(actual)) {
++		fsid_t fsid = vfs_statfs(app_mount)->f_fsid;
++		vnode_put(mounted);
++		mounted = NULLVP;
++		(void)vfs_unmountbyfsid(&fsid, MNT_FORCE, ctx);
++		error = EAUTH;
++		goto done;
++	}
++	native_owner_app_cryptex_stage = 4;
++	error = vnode_lookup("/Applications/Safari.app/Contents/Info.plist", 0, &probe, ctx);
++	if (!error) {
++		vnode_put(probe);
++		native_owner_app_cryptex_stage = 5;
++	}
++done:
++	if (mounted) vnode_put(mounted);
++	native_owner_app_cryptex_status = error;
++	printf("owner Data: App cryptex %s stage %d, status %d\n", device_path, native_owner_app_cryptex_stage, error);
++}
++#endif
++
+ /*
+  * gpu-addon=1: the payload's GPU addon is written into Data (native_gpu_addon_install, as on iPadOS); its Metal plugin goes to
+  * /Library/GPUBundles, protected for IOGPU's trust check (native_gpu_bundle_protect). The macOS bundle keeps Info.plist in
+@@ -9449,6 +9531,9 @@ native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
+ 	}
+ 	if (!error) native_owner_macos_hardware_volume(p, scratch);
+ 	if (!error) native_owner_macos_cryptex_view(p, scratch);
++#ifdef XNU_OWNER_APP_VOLUME_UUID
++	if (!error) native_owner_macos_app_cryptex(p, scratch);
++#endif
+ 	if (!error) native_owner_macos_gpu_addon(p, scratch);
+ 	if (!error) native_owner_macos_boot_shims(p, scratch);
+ done:

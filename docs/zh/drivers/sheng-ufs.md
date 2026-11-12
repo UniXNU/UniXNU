@@ -19,13 +19,6 @@ ShengUfs 提供 SM8550 UFS 存储路径，管理主机控制器、SMMU 映射、
 ./unixnu build kernel -D /path/to/device
 ```
 
-## APFS 容器存储
-
-`native-ufs-root=2` 校验 userdata 的 GPT 和版本 3 的 SHNGROOT 头，要求
-`count=0`、`image_bytes=4096`。ShengUfs 记录持久存储与日志区域的布局，
-[RamBlock](/zh/drivers/ram-block#apfs-根容器) 发布 APFS 磁盘。
-此模式不发布根镜像窗口；`native-ufs-root=1` 发布经过校验的根镜像窗口。
-
 ## 移植与记录
 
 ShengUfs 由设备仓库作为子模块提供。阅读 [UFS 移植指南](/zh/porting/ufs)，

@@ -1,0 +1,267 @@
+The macOS Data volume. macOS mounts Data at /System/Volumes/Data and reaches it through the firmlinks
+in the system volume's /usr/share/firmlinks; APFS sets those only for the Data volume of the system
+volume's own group. The owner Data volume is on another device:
+- on XNU_TARGET_OS_OSX, init's owner Data mount is native_owner_macos_data_prepare: the mount of
+  native_owner_data_prepare at /System/Volumes/Data, then each listed firmlink set with
+  vnode_setasfirmlink (entries without a source or target are skipped and logged; /private is
+  required, as /etc, /var and /tmp resolve through it). The iPadOS function is left unchanged.
+- then the OS cryptex view at /System/Volumes/Preboot/Cryptexes/OS (native_cryptex_os_view's binds at the
+  macOS path) and, with gpu-addon=1, the GPU addon's plugin over /System/Library/Extensions.
+- lookup follows a firmlink source directory on a name cache miss as cache_lookup_path does on a hit.
+Requires offline-owner-systemos-mount.patch, zzy-native-gpu-addon-mount.patch and zzyb-native-cryptex-os-view.patch.
+diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
+index 20cda24..095a12b 100644
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -8975,6 +8975,210 @@ done:
+ }
+ #endif
+ 
++#if defined(XNU_OWNER_DATA_MOUNT) && XNU_OWNER_DATA_MOUNT && defined(XNU_TARGET_OS_OSX) && XNU_TARGET_OS_OSX
++#if !CONFIG_FIRMLINKS
++#error The macOS Data volume needs firmlinks
++#endif
++/*
++ * macOS keeps Data at /System/Volumes/Data and reaches it through the firmlinks listed in the system
++ * volume's /usr/share/firmlinks ("/source<TAB>path in Data"). APFS sets those only for the Data volume
++ * of the system volume's own group. This Data volume is on another device, so the kernel sets each one.
++ * The cryptex view and the GPU addon follow (native_owner_macos_cryptex_view, native_owner_macos_gpu_addon).
++ * /private is required: /etc, /var and /tmp resolve through it.
++ */
++#define NATIVE_OWNER_DATA_MOUNT_POINT "/System/Volumes/Data"
++#define NATIVE_OWNER_FIRMLINK_LIST_MAX 16384
++volatile int native_owner_firmlink_count = 0;
++volatile int native_owner_firmlink_skipped = 0;
++volatile int native_owner_firmlink_status = -1;
++
++static int
++native_owner_data_firmlinks(vfs_context_t ctx)
++{
++	vnode_t list = NULLVP;
++	off_t size = 0;
++	int error, resid = 0, linked = 0, skipped = 0, has_private = 0;
++	char *buffer = NULL, *target_path = kalloc_data(MAXPATHLEN, Z_WAITOK | Z_ZERO);
++
++	error = vnode_lookup("/usr/share/firmlinks", 0, &list, ctx);
++	if (error) goto done;
++	error = vnode_size(list, &size, ctx);
++	if (error) goto done;
++	if (size <= 0 || size > NATIVE_OWNER_FIRMLINK_LIST_MAX) { error = EFBIG; goto done; }
++	buffer = kalloc_data((vm_size_t)size + 1, Z_WAITOK | Z_ZERO);
++	if (!buffer || !target_path) { error = ENOMEM; goto done; }
++	error = vn_rdwr(UIO_READ, list, buffer, (int)size, 0, UIO_SYSSPACE, 0,
++	    vfs_context_ucred(ctx), &resid, vfs_context_proc(ctx));
++	if (!error && resid) error = EIO;
++	if (error) goto done;
++	for (char *line = buffer, *next = NULL; line && *line; line = next) {
++		next = strchr(line, '\n');
++		if (next) *next++ = '\0';
++		char *relative = strchr(line, '\t');
++		if (!relative || line[0] != '/' || relative[1] == '\0' || relative[1] == '/') { skipped++; continue; }
++		*relative++ = '\0';
++		if (strlcpy(target_path, NATIVE_OWNER_DATA_MOUNT_POINT "/", MAXPATHLEN) >= MAXPATHLEN ||
++		    strlcat(target_path, relative, MAXPATHLEN) >= MAXPATHLEN) { skipped++; continue; }
++		vnode_t source = NULLVP, target = NULLVP;
++		int result = vnode_lookup(line, VNODE_LOOKUP_NOFOLLOW, &source, ctx);
++		if (!result) result = vnode_lookup(target_path, VNODE_LOOKUP_NOFOLLOW, &target, ctx);
++		if (!result && (vnode_vtype(source) != VDIR || vnode_vtype(target) != VDIR ||
++		    vnode_mount(source) == vnode_mount(target))) result = ENOTDIR;
++		if (!result) result = vnode_setasfirmlink(source, target);
++		if (target) vnode_put(target);
++		if (source) vnode_put(source);
++		if (result) {
++			/* An entry for content this system does not ship (/AppleInternal) has no source or target. */
++			printf("owner Data: firmlink %s -> %s not set: %d\n", line, target_path, result);
++			skipped++;
++			continue;
++		}
++		linked++;
++		if (!strcmp(line, "/private")) has_private = 1;
++	}
++	if (!has_private) error = ENOENT;
++done:
++	if (list) vnode_put(list);
++	if (buffer) kfree_data(buffer, (vm_size_t)size + 1);
++	if (target_path) kfree_data(target_path, MAXPATHLEN);
++	native_owner_firmlink_count = linked;
++	native_owner_firmlink_skipped = skipped;
++	native_owner_firmlink_status = error;
++	printf("owner Data: %d firmlinks set, %d skipped, status %d\n", linked, skipped, error);
++	return error;
++}
++
++/*
++ * The OS cryptex where macOS looks for it: /System/Cryptexes/OS links to /System/Volumes/Preboot/Cryptexes/OS, and system volume
++ * entries such as /System/Library/Frameworks/WebKit.framework link into it. As native_cryptex_os_view does for iPadOS's
++ * /private/preboot, two owner Data directories are shown over the empty /System/Volumes/Preboot as a read-only union, and the SystemOS
++ * volume's /System and /usr (the upper layer of the root union) are bound over them. Never fatal. Stage: 1 mount points made,
++ * 2 Preboot shown, 3 System bound, 4 usr bound, 5 a cryptex framework visible through /System/Cryptexes/OS.
++ */
++static void
++native_owner_macos_cryptex_view(proc_t p, user_addr_t scratch)
++{
++	static const char *const points[] = {"/private/var/ngpu/preboot/Cryptexes/OS/System/", "/private/var/ngpu/preboot/Cryptexes/OS/usr/"};
++	vnode_t probe = NULLVP;
++	int error = 0;
++	for (size_t i = 0; i < sizeof(points) / sizeof(points[0]) && !error; ++i) {
++		error = native_gpu_addon_parents(p, scratch, points[i]);
++	}
++	if (!error) {
++		native_cryptex_os_stage = 1;
++		error = native_cryptex_os_bind(p, scratch, "/private/var/ngpu/preboot", "/System/Volumes/Preboot", MNT_UNION);
++	}
++	if (!error) {
++		native_cryptex_os_stage = 2;
++		error = native_cryptex_os_bind(p, scratch, "/System", "/System/Volumes/Preboot/Cryptexes/OS/System", 0);
++	}
++	if (!error) {
++		native_cryptex_os_stage = 3;
++		error = native_cryptex_os_bind(p, scratch, "/usr", "/System/Volumes/Preboot/Cryptexes/OS/usr", 0);
++	}
++	if (!error) {
++		native_cryptex_os_stage = 4;
++		error = vnode_lookup("/System/Cryptexes/OS/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Resources/Info.plist",
++		    0, &probe, vfs_context_current());
++		if (!error) {
++			vnode_put(probe);
++			native_cryptex_os_stage = 5;
++		}
++	}
++	native_cryptex_os_status = error;
++	printf("owner Data: cryptex view stage %d, status %d\n", native_cryptex_os_stage, error);
++}
++
++/*
++ * gpu-addon=1: the payload's GPU addon is written below /private/var/ngpu in Data (native_gpu_addon_install, as on iPadOS) and its
++ * plugin directory is shown over /System/Library/Extensions. The macOS bundle keeps Info.plist in Contents. The iPadOS addon's
++ * launchd jobs and wallpapers are not mounted. Never fatal; stage and status as native_gpu_addon_mount records them.
++ */
++static void
++native_owner_macos_gpu_addon(proc_t p, user_addr_t scratch)
++{
++	uint32_t enabled = 0;
++	if (!PE_parse_boot_argn("gpu-addon", &enabled, sizeof(enabled)) || enabled != 1) {
++		return;
++	}
++	native_gpu_addon_install(p, scratch);
++	static const char source[] = "/private/var/ngpu/addons", point[] = "/System/Library/Extensions";
++	native_gpu_addon_mount(p, scratch, 0x400, source, sizeof(source), point, sizeof(point),
++	    "/System/Library/Extensions/AGXMetalG15G_B0.bundle/Contents/Info.plist",
++	    "/System/Library/Extensions/NativeAdrenoMetal.bundle/Contents/Info.plist", &native_gpu_addon_stage, &native_gpu_addon_status);
++	printf("owner Data: GPU addon %d files, %d written, %d failed; Extensions stage %d, status %d\n", native_gpu_addon_files,
++	    native_gpu_addon_written, native_gpu_addon_failed, native_gpu_addon_stage, native_gpu_addon_status);
++}
++
++/* The owner Data mount of native_owner_data_prepare at the macOS mount point, then the firmlinks. The
++ * iPadOS layers it adds over the mounted Data (GPU addon, staged system apps) are not used here. */
++static int
++native_owner_macos_data_prepare(proc_t p, user_addr_t scratch)
++{
++	uint64_t base = 0, size = 0;
++	dev_t device = NODEV;
++	int error = EINVAL;
++	vnode_t data_root = NULLVP;
++	char device_path[64] = "/dev/md0";
++#if defined(XNU_NATIVE_RAM_BLOCK) && XNU_NATIVE_RAM_BLOCK
++	if (!native_ram_block_volume_seed(XNU_OWNER_DATA_VOLUME_UUID, &device, device_path,
++	    sizeof(device_path), &base, &size, native_owner_data_seed_sha256)) { error = ENOENT; goto done; }
++	if (!size || size > UINT64_C(0x10000000000) || (size & 4095)) goto done;
++#else
++	device = mdevlookup(0);
++	if (device == NODEV || mdevgetrange(0, &base, &size) || base < VM_MIN_KERNEL_ADDRESS ||
++	    !size || size > UINT64_C(0x80000000) || (base & 4095) || (size & 4095)) goto done;
++	SHA256_CTX context;
++	SHA256_Init(&context);
++	SHA256_Update(&context, (const void *)base, size);
++	SHA256_Final(native_owner_data_seed_sha256, &context);
++#endif
++	native_owner_data_seed_base = base;
++	native_owner_data_seed_size = size;
++	native_owner_data_stage = 1;
++	strlcpy(native_owner_data_device_path, device_path, sizeof(native_owner_data_device_path));
++	uint8_t payload[0x150] = {0};
++	user64_addr_t spec = scratch + 0x160;
++	uint16_t mode = 1;
++	uint32_t anonymous_owner = 99;
++	memcpy(payload, &spec, sizeof(spec));
++	memcpy(payload + 16, &mode, sizeof(mode));
++	memcpy(payload + 0x144, &anonymous_owner, sizeof(anonymous_owner));
++	memcpy(payload + 0x148, &anonymous_owner, sizeof(anonymous_owner));
++	struct mount_args request = {.type = scratch + 0x100, .path = scratch + 0x120,
++	    .flags = 0, .data = scratch + 0x200};
++	int32_t result = 0;
++	_Static_assert(sizeof(NATIVE_OWNER_DATA_MOUNT_POINT) <= 0x40, "mount point overlaps the device path");
++	if ((error = copyout("apfs", request.type, 5)) ||
++	    (error = copyout(NATIVE_OWNER_DATA_MOUNT_POINT, request.path, sizeof(NATIVE_OWNER_DATA_MOUNT_POINT))) ||
++	    (error = copyout(device_path, spec, strlen(device_path) + 1)) ||
++	    (error = copyout(payload, request.data, sizeof(payload)))) goto done;
++	native_owner_data_stage = 2;
++	error = mount(p, &request, &result);
++	if (error) goto done;
++	native_owner_data_stage = 3;
++	error = vnode_lookup(NATIVE_OWNER_DATA_MOUNT_POINT, 0, &data_root, vfs_context_current());
++	if (error) goto done;
++	mount_t data_mount = vnode_mount(data_root);
++	vnode_t device_node = vfs_devvp(data_mount);
++	dev_t actual = device_node ? vnode_specrdev(device_node) : NODEV;
++	if (device_node) vnode_put(device_node);
++	native_owner_data_device = actual;
++	native_owner_data_readonly = (vfs_flags(data_mount) & MNT_RDONLY) != 0;
++	if (actual != device || (vfs_flags(data_mount) & MNT_RDONLY) ||
++	    strcmp(vfs_statfs(data_mount)->f_fstypename, "apfs")) error = EINVAL;
++	if (!error) native_owner_data_stage = 4;
++	if (!error) error = native_owner_data_firmlinks(vfs_context_current());
++	if (!error) native_owner_data_stage = 5;
++	if (!error) native_owner_macos_cryptex_view(p, scratch);
++	if (!error) native_owner_macos_gpu_addon(p, scratch);
++done:
++	if (data_root) vnode_put(data_root);
++	native_owner_data_status = error;
++	return error;
++}
++#endif
++
+ static int
+ load_init_program_at_path(proc_t p, user_addr_t scratch_addr, const char* path, user_addr_t envp)
+ {
+@@ -9126,7 +9330,12 @@ load_init_program(proc_t p)
+ #endif
+ #if defined(XNU_OWNER_DATA_MOUNT) && XNU_OWNER_DATA_MOUNT
+ 	boot_progress_stage("Data mount enter");
++#if defined(XNU_TARGET_OS_OSX) && XNU_TARGET_OS_OSX
++	(void)native_owner_data_prepare;
++	int data_error = native_owner_macos_data_prepare(p, (user_addr_t)scratch_addr);
++#else
+ 	int data_error = native_owner_data_prepare(p, (user_addr_t)scratch_addr);
++#endif
+ 	boot_progress_stage("Data mount returned");
+ 	if (data_error) panic("offline scratch Data mount failed: %d", data_error);
+ #if defined(XNU_BOOT_PROGRESS) && XNU_BOOT_PROGRESS
+diff --git a/bsd/vfs/vfs_lookup.c b/bsd/vfs/vfs_lookup.c
+index b8cf563..9ab1385 100644
+--- a/bsd/vfs/vfs_lookup.c
++++ b/bsd/vfs/vfs_lookup.c
+@@ -1208,6 +1208,23 @@ lookup_handle_found_vnode(struct nameidata *ndp, struct componentname *cnp, int
+ 		goto out;
+ 	}
+ 
++#if CONFIG_FIRMLINKS
++	/*
++	 * cache_lookup_path switches a firmlink source directory to its target on a name cache hit and
++	 * leaves a miss to the file system. APFS resolves firmlinks only within one volume group, so a
++	 * firmlink set with vnode_setasfirmlink across devices is followed here too.
++	 */
++	if (dp->v_type == VDIR && dp->v_fmlink != NULLVP && !(dp->v_flag & VFMLINKTARGET) &&
++	    !(cnp->cn_flags & CN_FIRMLINK_NOFOLLOW)) {
++		vnode_t target = dp->v_fmlink;
++		if (target->v_type == VDIR && vnode_getwithref(target) == 0) {
++			vnode_put(dp);
++			ndp->ni_vp = dp = target;
++			ndp->ni_flag |= NAMEI_FIRMLINK_FOLLOWED;
++		}
++	}
++#endif
++
+ #if CONFIG_MACF
+ 	if (vfs_flags(vnode_mount(dp)) & MNT_MULTILABEL) {
+ 		error = vnode_label(vnode_mount(dp), NULL, dp, NULL, 0, ctx);
