@@ -68,7 +68,6 @@ def main():
     parser.add_argument('--storage-source', type=Path)
     parser.add_argument('--policy-dir', type=Path,
                         help='Directory containing OS/ and SystemOS/ signed policies and verification.json')
-    parser.add_argument('--container', action='store_true', default=os.environ.get('XNU_SOURCE_STORAGE_CONTAINER') == '1', help='Build the mutable APFS container store without verified windows')
     args = parser.parse_args()
     tree = args.tree.resolve()
     device = (args.device or tree).resolve()
@@ -78,13 +77,14 @@ def main():
     if not build_id:
         parser.error('UNIXNU_IPSW_BUILD is not set; run through unixnu build kernel')
     policies = (args.policy_dir or tree / f'build/verified-root-{build_id}')
-    if not args.container:
-        if not args.policy_dir and not policies.is_dir():
-            shipped = sorted(tree.glob(f'scripts/policies/*{build_id}'))
-            if len(shipped) != 1:
-                parser.error(f'no policy directory for {build_id}')
-            policies = shipped[0]
-        policies = policies.resolve()
+    if not args.policy_dir and not policies.is_dir():
+        # A clean checkout ships the signed headers in the assembled tree (scripts/policies, copied
+        # from the device repository); the full block tables stay a local input of the userdata image.
+        shipped = sorted(tree.glob(f'scripts/policies/*{build_id}'))
+        if len(shipped) != 1:
+            parser.error(f'no policy directory for {build_id}: pass --policy-dir or ship scripts/policies/*{build_id}')
+        policies = shipped[0]
+    policies = policies.resolve()
     # The resolved build tree links the device package as kits/sheng, while an
     # explicit device repository keeps package/ and drivers/ side by side.
     package_dirs = [device / 'package']
@@ -110,59 +110,55 @@ def main():
     out = tree / 'build/sheng-source-storage'
     out.mkdir(parents=True, exist_ok=True)
     header_report = headers.prepare(storage, '7edb88fbae296fb7c8ce2f64e115e116e566d51c', out / 'headers')
-    key = bytes(395)
-    if args.container:
-        (out / 'root-policies.bin').unlink(missing_ok=True)
-    else:
-        # A bring-up image can carry one policy: the boot image must stay under the
-        # 192 MiB fastboot limit, and the second table does not fit yet.
-        tables_in_userdata = os.environ.get('XNU_SOURCE_STORAGE_TABLES', '') == 'userdata'
-        # The App window (the application cryptex of macOS) has a policy when its policy directory ships one.
-        default_policies = 'OS,SystemOS,App' if (policies / 'App').is_dir() else 'OS,SystemOS'
-        selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', default_policies)).split(',')
-                    if name.strip() in ('OS', 'SystemOS', 'App')]
-        if not selected:
-            parser.error('UNIXNU_SOURCE_STORAGE_POLICIES names no policy')
-        manifest_paths = [policies / name / 'manifest.bin' for name in selected]
-        key = (policies / f'{selected[0]}/trusted-key.bin').read_bytes()
-        if len(key) != 395 or any(key != (policies / f'{name}/trusted-key.bin').read_bytes() for name in selected):
-            parser.error('All selected policies must share the same complete explicit owner anchor')
-        manifests = []
-        expected = {}
-        for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS'), ('App', 'UNIXNU_ROOT_APP')):
-            digest, identity = os.environ.get(prefix + '_SHA256'), os.environ.get(prefix + '_UUID')
-            if name in selected and not (digest and identity):
-                parser.error(f'the OS profile has no [root] {name.lower()}_image_sha256 and {name.lower()}_volume_uuid')
-            expected[name] = (digest, identity and identity.upper())
-        for path in manifest_paths:
-            verification = json.loads(path.with_name('verification.json').read_text())
-            digest, identity = expected[path.parent.name]
-            if (not verification['real_c_signature_and_block_verification'] or
-                    verification['image_sha256'] != digest or verification['volume_uuid'] != identity or
-                    verification['trusted_key_sha256'] != hashlib.sha256(key).hexdigest()):
-                parser.error(f'{path.parent.name}: require complete verification of the actual {build_id} image')
-            # With the tables in userdata only the 544-byte signed header goes into the boot image;
-            # NativeUfs reads "<window>.vroot" from the root image and vr_open checks it against the header.
-            # A policy directory may ship manifest.header.bin, the header without the block tables: every
-            # check below still runs on it, and the full tables stay a local input of the userdata image.
-            header = path.with_name('manifest.header.bin')
-            if tables_in_userdata and header.is_file():
-                data = header.read_bytes()
-                if len(data) != 544 or data[56:88].hex() != digest:
-                    parser.error(f'{header}: policy header does not describe the selected image')
-                manifests.append(data)
-            else:
-                data = path.read_bytes()
-                if len(data) < 544 or data[56:88].hex() != digest:
-                    parser.error(f'{path}: manifest does not describe the selected image')
-                manifests.append(data[:544] if tables_in_userdata else data)
-        cursor = 32 + 16 * len(manifests)
-        table = bytearray()
-        for data in manifests:
-            table += struct.pack('<QQ', cursor, len(data))
-            cursor += len(data)
-        bundle = struct.pack('<8sQQQ', b'VROOTB01', 1, len(manifests), cursor) + table + b''.join(manifests)
-        (out / 'root-policies.bin').write_bytes(bundle)
+    # A bring-up image can carry one policy: the boot image must stay under the
+    # 192 MiB fastboot limit, and the second table does not fit yet.
+    tables_in_userdata = os.environ.get('XNU_SOURCE_STORAGE_TABLES', '') == 'userdata'
+    # The App window (the application cryptex of macOS) has a policy when its policy directory ships one.
+    default_policies = 'OS,SystemOS,App' if (policies / 'App').is_dir() else 'OS,SystemOS'
+    selected = [name.strip() for name in (os.environ.get('UNIXNU_SOURCE_STORAGE_POLICIES') or os.environ.get('XNU_SOURCE_STORAGE_POLICIES', default_policies)).split(',')
+                if name.strip() in ('OS', 'SystemOS', 'App')]
+    if not selected:
+        parser.error('UNIXNU_SOURCE_STORAGE_POLICIES names no policy')
+    manifest_paths = [policies / name / 'manifest.bin' for name in selected]
+    key = (policies / f'{selected[0]}/trusted-key.bin').read_bytes()
+    if len(key) != 395 or any(key != (policies / f'{name}/trusted-key.bin').read_bytes() for name in selected):
+        parser.error('All selected policies must share the same complete explicit owner anchor')
+    manifests = []
+    expected = {}
+    for name, prefix in (('OS', 'UNIXNU_ROOT_OS'), ('SystemOS', 'UNIXNU_ROOT_SYSTEMOS'), ('App', 'UNIXNU_ROOT_APP')):
+        digest, identity = os.environ.get(prefix + '_SHA256'), os.environ.get(prefix + '_UUID')
+        if name in selected and not (digest and identity):
+            parser.error(f'the OS profile has no [root] {name.lower()}_image_sha256 and {name.lower()}_volume_uuid')
+        expected[name] = (digest, identity and identity.upper())
+    for path in manifest_paths:
+        verification = json.loads(path.with_name('verification.json').read_text())
+        digest, identity = expected[path.parent.name]
+        if (not verification['real_c_signature_and_block_verification'] or
+                verification['image_sha256'] != digest or verification['volume_uuid'] != identity or
+                verification['trusted_key_sha256'] != hashlib.sha256(key).hexdigest()):
+            parser.error(f'{path.parent.name}: require complete verification of the actual {build_id} image')
+        # With the tables in userdata only the 544-byte signed header goes into the boot image;
+        # NativeUfs reads "<window>.vroot" from the root image and vr_open checks it against the header.
+        # A policy directory may ship manifest.header.bin, the header without the block tables: every
+        # check below still runs on it, and the full tables stay a local input of the userdata image.
+        header = path.with_name('manifest.header.bin')
+        if tables_in_userdata and header.is_file():
+            data = header.read_bytes()
+            if len(data) != 544 or data[56:88].hex() != digest:
+                parser.error(f'{header}: policy header does not describe the selected image')
+            manifests.append(data)
+        else:
+            data = path.read_bytes()
+            if len(data) < 544 or data[56:88].hex() != digest:
+                parser.error(f'{path}: manifest does not describe the selected image')
+            manifests.append(data[:544] if tables_in_userdata else data)
+    cursor = 32 + 16 * len(manifests)
+    table = bytearray()
+    for data in manifests:
+        table += struct.pack('<QQ', cursor, len(data))
+        cursor += len(data)
+    bundle = struct.pack('<8sQQQ', b'VROOTB01', 1, len(manifests), cursor) + table + b''.join(manifests)
+    (out / 'root-policies.bin').write_bytes(bundle)
     # Only the independent trust anchor is linked into the kernel. The large
     # signed hash tables are a separate firmware handoff, authenticated in XNU.
     boot_log_defaults = out / 'BootLogDefaults.c'
@@ -259,8 +255,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
     shutil.copyfile(archive, catalog_output)
     report = dict(archive=str(archive), archive_sha256=build.sha(archive), sources=inputs,
                   headers=header_report, target=target.TRIPLE,
-                  policy_bundle_sha256=None if args.container else build.sha(out / 'root-policies.bin'),
-                  storage_mode='container' if args.container else 'verified-windows',
+                  policy_bundle_sha256=build.sha(out / 'root-policies.bin'),
                   trusted_key_sha256=hashlib.sha256(key).hexdigest(), runtime_qualified=False)
     (out / 'report.json').write_text(json.dumps(report, indent=2) + '\n')
     print(archive)

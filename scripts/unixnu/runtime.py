@@ -42,16 +42,7 @@ def prepare(ctx, kernel_build=False):
     args = ctx.args
     out = ctx.work / 'runtime'
     out.mkdir(parents=True, exist_ok=True)
-    seed = Path(args.data_ramdisk).expanduser().resolve() if args.data_ramdisk else out / ('container.dbr' if spec.get('container_layout') else 'data.dbr')
-    container = spec.get('container_layout', False)
-    if container:
-        sys.path.insert(0, str(ctx.tree / 'scripts'))
-        from macos_container import empty_seed
-        expected_seed = empty_seed(spec['data_gib'] << 30)
-        if not seed.exists():
-            seed.write_bytes(expected_seed)
-        if seed.read_bytes() != expected_seed:
-            raise Error('native APFS container requires its empty packed seed, not a legacy Data seed')
+    seed = Path(args.data_ramdisk).expanduser().resolve() if args.data_ramdisk else out / 'data.dbr'
     init = bool(getattr(args, 'init_data', False))
     if init and args.data_ramdisk:
         raise Error('--init-data cannot replace --data-ramdisk; use one first-install seed or reuse the original')
@@ -67,7 +58,7 @@ def prepare(ctx, kernel_build=False):
         raise Error('No preserved Data seed. Pass --data-ramdisk FILE for an existing installation, '
                     'or --init-data for a FIRST installation; a missing cache never regenerates Data automatically')
     previous = out / 'inputs.json'
-    if not container and not args.data_ramdisk and seed.is_file() and previous.is_file():
+    if not args.data_ramdisk and seed.is_file() and previous.is_file():
         expected = json.loads(previous.read_text())['inputs']['data_ramdisk']['sha256']
         if sha256_file(seed) != expected:
             raise Error('Saved Data seed differs from its recorded SHA-256; restore the original installation seed')
@@ -115,9 +106,9 @@ def prepare(ctx, kernel_build=False):
         seed = Path(generated['data_ramdisk'])
         trust, addon = generated['trust_cache'], generated['gpu_addon']
         owner = trust
-    identity = None if container else seed_uuid(ctx.tree, seed)
+    identity = seed_uuid(ctx.tree, seed)
     config = ctx.need_config()
-    if not container and identity != config.get('XNU_OWNER_DATA_VOLUME_UUID'):
+    if identity != config.get('XNU_OWNER_DATA_VOLUME_UUID'):
         if not kernel_build:
             raise Error('Data seed UUID differs from the compiled configuration; rebuild the kernel with this seed')
         text = ctx.config_path.read_text()
@@ -135,5 +126,5 @@ def prepare(ctx, kernel_build=False):
     inputs = {name: {'path': str(path), 'sha256': sha256_file(Path(path))}
               for name, path in [('data_ramdisk', seed), ('trust_cache', trust), ('gpu_addon', addon)] if path}
     (out / 'inputs.json').write_text(json.dumps(dict(inputs=inputs, data_volume_uuid=identity), indent=2) + '\n')
-    log(f'runtime: {"APFS container" if container else identity}; seed sha256 {inputs["data_ramdisk"]["sha256"]}')
+    log(f'runtime: Data UUID {identity}; preserved seed sha256 {inputs["data_ramdisk"]["sha256"]}')
     ctx._runtime_prepared = True

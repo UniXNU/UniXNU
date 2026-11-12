@@ -6,8 +6,7 @@
 
 [源码仓库](https://github.com/UniXNU/RamBlock).
 
-RamBlock 将 Data 镜像和持久化 APFS 根容器发布为块设备。
-持久存储接口使用 `native_ufs_store` 回调，板级提供存储与重置策略。
+RamBlock 将 Data 镜像发布为块设备。持久存储接口使用 native_ufs_store 回调，板级提供存储与重置策略。
 
 ## 直接模式
 
@@ -15,14 +14,6 @@ RamBlock 将 Data 镜像和持久化 APFS 根容器发布为块设备。
 请求并发执行：读取不加锁，同一页的写入不会重叠，flush 会等待进行中的写入完成，
 因此介质上的每个位图位都指向已落盘的页。存储提供缓存写入时以回写方式运行
 （`data-fua=1` 改为直写）；自上次 flush 以来没有写入时，synchronize 不发送命令。
-
-## APFS 根容器
-
-`root-container=1` 等待 IOBSD 就绪并打开匹配的可写持久存储后才发布磁盘。
-存储缺失或不匹配时不发布磁盘。`data-reset` 不重置根容器。
-
-整盘 IOMedia 使用 iBoot System Container 内容提示，供系统发现 Hardware 和 xART。
-`native_ram_block_root_device` 判断介质是否由当前可写根存储提供。
 
 ## 集成
 

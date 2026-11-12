@@ -65,7 +65,7 @@ def check_native_root(kernel, arguments, vmm_present=False):
         key, separator, value = argument.partition('=')
         if separator:
             values.setdefault(key, []).append(value)
-    if not any(value in ('1', '2') for value in values.get('native-ufs-root', [])):
+    if '1' not in values.get('native-ufs-root', []):
         return
     if values.get('pmgr') != ['2']:
         raise Error('native UFS root boot needs exactly one pmgr=2; the unchanged target AMFI otherwise panics with No PMGR')
@@ -108,14 +108,6 @@ def build(ctx, kernel=None):
     if not spec:
         raise Error('board.toml has no [payload]')
     args = ctx.args
-    if spec.get('runtime', {}).get('container_layout'):
-        import sys
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-        from macos_container import bind_payload
-        try:
-            bind_payload(ctx)
-        except (ValueError, KeyError, OSError) as error:
-            raise Error(f'container: {error}') from error
     kernel = expand(kernel or getattr(args, 'kernel', None) or ctx.work / 'kernel/kernel.macho')
     if not kernel.is_file():
         raise Error(f'kernel not found: {kernel}; run "unixnu build kernel" or pass --kernel FILE')
@@ -146,8 +138,6 @@ def build(ctx, kernel=None):
             raise Error('board.toml [payload] has no skip_setup_tool')
         data = skip_setup_seed(ctx, data, spec['skip_setup_tool'], [str(arg) for arg in spec.get('skip_setup_args', [])])
     addon = expand(args.gpu_addon) if getattr(args, 'gpu_addon', None) else None
-    if spec.get('runtime', {}).get('container_layout'):
-        addon = None
     if addon and (not addon.is_file() or addon.read_bytes()[:8] != b'NGPUADD2'):
         raise Error(f'GPU addon not found or not made by scripts/make-gpu-addon.py: {addon}')
     policy_path = spec.get('root_policies')
