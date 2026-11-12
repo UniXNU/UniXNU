@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from RAM-only fastboot boots. The full system reaches the CPU-rendered desktop, and with the Metal plug-in stack \(WindowServer -&gt; Metal plug-in -&gt; metal2vulkan -&gt; Turnip -&gt; Adreno 740 kernel driver\) it has for the first time displayed a GPU-composited interface on the tablet \(wallpaper, menu bar and post-login Setup Assistant pages, with working touch\) at about 6 frames per second. GPU acceleration is not yet usable: most 50 ms display waits and 1517 of 2274 kernel fence waits time out, plug-in boots are intermittently slow for undetermined reasons, and per-frame display copy takes 0.1 to 0.4 seconds over the Device-mapped framebuffer \(\~79 MiB/s write\). Wi-Fi has run through stages 4 and 5 \(stage 5 outcome unknown; no wireless stack behind it\), keyboard cover stage 3 L12B voltage vote did not receive completion, and Bluetooth, USB, audio, battery reporting, brightness control, sleep and persistent disk writes do not work.
+ARCHIVED \(2026-11-12\): This experimental repository is archived and no longer updated because upstream \(UniXNU / UniXNU-sheng, https://github.com/UniXNU/UniXNU-sheng\) already has a faster-progressing macOS implementation for the Xiaomi Pad 6S Pro \(sheng\) covering macOS 27.3, GPU framebuffer copy and experimental direct scanout, CPU/GPU dynamic frequency scaling, working Wi-Fi networking, keyboard cover and touchpad support, audio and kernel work-interval patches. In this repository's macOS 26.5 \(25F71\) port on the CN 16 GB / 1 TB unit \(RAM-only fastboot boots\), the Metal plug-in stack \(WindowServer -&gt; Metal plug-in -&gt; metal2vulkan -&gt; Turnip -&gt; Adreno 740 kernel driver\) on a single GPU command ring \(sheng-gpu-preempt=0\) at 401 MHz with IO-coherent GPU buffers boots into a full GPU-composited macOS desktop \(wallpaper, menu bar, widgets, Dock\) where Finder \(including full-screen\), Notes, System Settings, App Store and About This Mac open and touch works. Persistent disk writes \(native-ufs-root-writes=1\) to the OS window on UFS and clean restarts and shutdowns from the Apple menu \(sheng-psci-reset=1\) are verified across four tablet boots \(boots 46, 48, 49, 50\), with TWRP chunk scans and offline APFS Fletcher-64 checks \(up to xid 14318, 1008 objects verified, Data and Update volumes cleanly unmounted\) confirming zero checksum failures and extracting 1266 log and crash-report files from the Data volume.
 
-源记录: [porting.toml](https://github.com/mataht/sheng-macos-link-lab/blob/be7c6c4b8684492870a95d316e8fac86db4cb0a1/porting.toml), `be7c6c4b8684492870a95d316e8fac86db4cb0a1`.
+源记录: [porting.toml](https://github.com/mataht/sheng-macos-link-lab/blob/5ca6b8b4c8f4caf57ff947fb353edad665c07dfe/porting.toml), `5ca6b8b4c8f4caf57ff947fb353edad665c07dfe`.
 
 本页按设备记录自动生成。
 
@@ -19,10 +19,10 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 | [存储与根卷](#storage) | `device-verified` |
 | [显示](#display) | `device-verified` |
 | [输入](#input) | `device-verified` |
-| [GPU](#gpu) | `implemented` |
+| [GPU](#gpu) | `device-verified` |
 | [网络](#network) | `implemented` |
 | [音频](#audio) | `planned` |
-| [电源](#power) | `implemented` |
+| [电源](#power) | `device-verified` |
 | [镜像组装](#packaging) | `host-verified` |
 | [诊断](#diagnostics) | `device-verified` |
 | [usb](#usb) | `implemented` |
@@ -61,7 +61,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 下一步
 
-- Keep one CI run per integrated head and record its digests in docs/ci.md.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -99,7 +99,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 下一步
 
-- None until a second unit with a different firmware version is available.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -125,7 +125,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 ### 开发经验
 
 - All eight cores came online on the tablet on 2026-11-07 \(cpu\_start 0 to 7\), on an earlier build of this repository.
-- The bootloader leaves the clusters near the top of their ranges: 1670 MHz \(A510\), 2707 MHz \(A715\), 2956 MHz \(X3\), including during slow Metal plug-in boots, so CPU throttling is ruled out.
+- The bootloader leaves the clusters near the top of their ranges: 1670 MHz \(A510\), 2707 MHz \(A715\), 2956 MHz \(X3\), L3 vote 12 \(1574 MHz\), including during slow Metal plug-in boots, so CPU throttling is ruled out.
 - This CPU reports cache geometry in the 64-bit CCIDX format of CCSIDR; XNU's whole-cache set/way shortcut parses the old format and is effectively a no-op here, so display and GPU code clean caches by address.
 
 ### 完成条件
@@ -134,11 +134,11 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 当前范围
 
-- Inter-processor interrupt correctness and stability under sustained load are not established.
+- No thermal sensor \(TSENS\) or dynamic CPU frequency scaling \(DCVS\) has run on hardware in this repository; kernel work-interval creation fails when AppKit starts live scrolling \(causing scroll-bar drags to abort\).
 
 ### 下一步
 
-- Evaluate whether any L3 or DDR vote needs raising after framebuffer write-combined mapping is tested.
+- Archived; upstream UniXNU / UniXNU-sheng already includes CPU/GPU DCVS and kernel work-interval patches.
 
 ### 证据
 
@@ -155,7 +155,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 配置
 
-- Memory map patch for the CN 16 GB unit in the UniXNU-sheng series \(0009\); 16 KiB page size in the kernel and the Adreno code; sheng-memperf=1 enables the read-only L3/RPMh report.
+- Memory map patch for the CN 16 GB unit in the UniXNU-sheng series \(0009\); 16 KiB page size in the kernel and the Adreno code; sheng-memperf=1 enables the read-only L3/RPMh and memory bandwidth report.
 
 ### 操作步骤
 
@@ -172,11 +172,11 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 当前范围
 
-- The framebuffer is currently mapped as Device memory \(\~79 MiB/s write\), so a full-screen write takes about 0.3 seconds; CPU-rendered surfaces are read at about 70 MB/s \(inferred to be mapped non-cacheable in the kernel\).
+- In boot 43 most sampled frames spent 330 to 368 ms reading and comparing 24.8 MB of surface pixels \(\~75 MB/s, vs 52 to 55 ms and &gt;=475 MB/s in two fast frames\), inferred to be caused by non-cacheable surface page mappings on slow frames.
 
 ### 下一步
 
-- Switch the framebuffer mapping from Device to write-combined.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -189,37 +189,37 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 硬件与依赖
 
-- UFS controller with several LUNs; a new partition for macOS on LUN0; a small log partition; a system image supplied by the user \(this repository neither contains nor documents how it is made\).
+- UFS controller with several LUNs; a dedicated partition for macOS on LUN0; a small log partition; a system image supplied by the user \(this repository neither contains nor documents how it is made\).
 
 ### 配置
 
-- NativeUfs is a read-only driver that publishes only registered partition windows after checking the SHNGROOT header \(size and SHA-256\); writes are off by default. The system volume is selected by volume UUID with -nobsdmgroot; writes go to a volatile RAM overlay \(boot argument native-ufs-root-overlay-mib\).
+- NativeUfs publishes only registered partition windows after checking the SHNGROOT header \(size and SHA-256\). Writes are off by default and can go either to a volatile RAM overlay \(native-ufs-root-overlay-mib, with optional wired-page pool outside the zone map via native-ufs-root-overlay-pool=1\) or to persistent disk within the OS window of macossystem \(native-ufs-root-writes=1\).
 
 ### 操作步骤
 
-- Create the partition and write the image only with the device owner's approval for each step; the packager refuses a package without matching install evidence. Boot with \`fastboot boot\`.
+- Create the partition and write the image only with the device owner's approval for each step; the packager refuses a package without matching install evidence. Boot with \`fastboot boot\`; after persistent boots, run a read-only TWRP 8 MiB chunk scan and offline APFS Fletcher-64 verification.
 
 ### 开发经验
 
-- The tablet reads its macOS partition through NativeUfs and runs the full system on it; persistent writes are implemented but disabled.
-- Reading is slower than it needs to be; the read path is deliberately simple.
+- The 1140 s RAM overlay write report \(boot 47, 4096 MiB pool\) showed a \~2 GiB burst in the first 6 minutes and \~250 MiB over the next 800 s, written by system cache daemons \(coresymbolicationd 1885 MiB, iconservicesd 392 MiB, mediaanalysisd 385 MiB, iconservicesagent 198 MiB, corespotlightd 130 MiB\).
+- Persistent disk writes \(native-ufs-root-writes=1\) are guarded in both RootLayout and RootCommands \(20 of 21 injected defects caught offline, 1 no-op when closed\) and verified across four tablet boots \(boots 46, 48, 49, 50, up to 593 modified 8 MiB chunks / \~2.59 GB\), with 0 changes outside the OS window, 0 APFS Fletcher-64 checksum failures across checkpoints xid 12808 -&gt; 13104 -&gt; 13409 -&gt; 13986 -&gt; 14318 \(up to 1008 objects verified\), clean Data and Update volume unmounts on Apple menu Restart \(boot 49\) and Shut Down \(boot 50\), and 1266 log and crash-report files extracted from the Data volume.
 
 ### 完成条件
 
-- The root volume mounts, the data volume mounts, and the system runs without disk writes.
+- The root volume mounts, the data volume mounts, and both RAM-overlay and persistent OS-window writes work cleanly across reboots.
 
 ### 当前范围
 
-- Persistent writes are not verified on the tablet. The UFS driver cannot be exercised in QEMU, so full-system QEMU evidence comes from a VirtIO build of the same kernel with only the storage driver replaced.
+- No TRIM in persistent mode; UFS read/write/flush timeouts are tight \(1 s, 2 s, 10 s\). The UFS driver cannot be exercised in QEMU, so full-system QEMU evidence comes from a VirtIO build of the same kernel with only the storage driver replaced.
 
 ### 下一步
 
-- Enable and verify persistent writes with a separate approval; improve read throughput.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
-- `device`: [Root and data volumes mounted from UFS through NativeUfs with the RAM overlay; the system reached the desktop \(2026-11-09\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-desktop-20261109/docs/status.md)
-  Command: <code>fastboot boot sheng-macos26-kernel.img</code>. Revision: `36e11087791ca3b68505ee19c1f8602d7713039d`.
+- `device`: [Persistent writes verified across four tablet boots \(boots 46, 48, 49, 50\); TWRP chunk scans and offline APFS Fletcher-64 checks confirmed 0 changes outside the OS window, 0 checksum failures through xid 14318, and clean Data/Update volume unmounts on Apple menu Restart and Shut Down \(2026-11-10 to 2026-11-11\).](https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md)
+  Command: <code>fastboot boot sheng-macos26-kernel.img (native-ufs-root-writes=1 sheng-psci-reset=1)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
 
 ## 显示 {#display}
 
@@ -227,37 +227,36 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 硬件与依赖
 
-- Framebuffer left by the bootloader, 3048 x 2032 BGRA; panel size 262 x 175 mm; no GPU driver in use.
+- Framebuffer left by the bootloader, 3048 x 2032 BGRA; panel size 262 x 175 mm.
 
 ### 配置
 
-- NativeGOPDisplay presents the framebuffer as an IOMobileFramebuffer \(native-gop-display=1\). WindowServer is switched to CPU compositing and BGRA output by in-memory edits of a few pages of the shared cache, each checked by original bytes and page hash \(sheng-full-ui=1\). A software cursor is forced; sleep is disabled.
+- NativeGOPDisplay presents the framebuffer as an IOMobileFramebuffer \(native-gop-display=1, requesting kIOMapWriteCombineCache\). Without the Metal plug-in \(sheng-full-ui=1\), WindowServer is switched to CPU compositing; with the Metal plug-in \(sheng-full-ui=2\), WindowServer composites on the Adreno 740. A software cursor is forced; sleep is disabled; optional changed-row copy \(native-gop-forward-mode=1\), per-address cache maintenance \(native-gop-cache=1\) and strip-free desktop mode.
 
 ### 操作步骤
 
-- Boot with native-gop-display=1 sheng-full-ui=1; optional native-gop-diag=1 draws a counter strip at the top left.
+- Boot with native-gop-display=1 and either sheng-full-ui=1 \(software\) or sheng-full-ui=2 \(Metal plug-in\).
 
 ### 开发经验
 
-- The desktop shows wallpaper, widgets and windows; taps register.
-- The new copy code supports copying only changed rows and cleaning caches by address \(both default-off options, enabled in the GPU packages\).
-- Per-stage timing on the tablet shows 0.1 to 0.4 seconds per frame, spent mostly reading the surface, comparing with the previous frame and writing changed rows into the Device-mapped framebuffer \(\~79 MiB/s write, \~0.3 seconds for a full-screen change\). Reading CPU-rendered surfaces also runs at \~70 MB/s \(inferred non-cacheable mapping in the kernel\).
+- Both CPU-rendered and GPU-composited desktops display wallpaper, menu bar, widgets, Dock and application windows; strip-free clean desktop verified in boots 49 and 50.
+- In boot 43 \(single GPU ring\), GPU fence waits averaged \~1.5 ms, whereas the display driver's CPU copy took 0.36 to 0.40 s per frame \(\~2.5 to 3 fps\): most sampled frames spent 330 to 368 ms reading and comparing 24.8 MB of surface pixels \(\~75 MB/s\), while two fast frames completed read/compare and wrote 223 rows in 52 to 55 ms \(&gt;=475 MB/s read\), inferred to reflect non-cacheable vs cacheable surface page mappings. NativeGOPDisplay requests kIOMapWriteCombineCache, which XNU honors only when is\_dram\_addr\(pa\) holds.
 
 ### 完成条件
 
-- The first frame is presented, the desktop is drawn and the pointer follows the finger.
+- The first frame is presented, the GPU-composited desktop and apps are drawn and the pointer follows the finger.
 
 ### 当前范围
 
-- No backlight control; per-frame copy takes 0.1 to 0.4 seconds over the Device-mapped framebuffer.
+- No backlight control; per-frame CPU surface read/compare and blit takes 0.36 to 0.40 seconds \(\~2.5 to 3 fps\).
 
 ### 下一步
 
-- Map the framebuffer as write-combined \(inferred to be much faster based on the \~11275 MiB/s benchmark\) and investigate the non-cacheable surface read path.
+- Archived; upstream UniXNU-sheng uses GPU framebuffer copy \(fb-gpu=1\) and experimental direct DPU scanout.
 
 ### 证据
 
-- `device`: [Desktop with wallpaper, widgets and system windows displayed about two minutes after the boot command; very laggy \(2026-11-09\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-desktop-20261109/docs/status.md)
+- `device`: [Desktop with wallpaper, widgets and system windows displayed about two minutes after the boot command \(2026-11-09\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-desktop-20261109/docs/status.md)
   Command: <code>fastboot boot sheng-macos26-kernel.img</code>. Revision: `36e11087791ca3b68505ee19c1f8602d7713039d`.
 - `device`: [Recovery's language chooser showed one selection row after the changed-rows copy fix \(2026-11-08\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-recovery-keys-20261108/docs/status.md)
   Command: <code>fastboot boot sheng-macos26-kernel.img</code>. Revision: `e2da63e11cc4bc039b7ea090b68a589dc16efecd`.
@@ -280,20 +279,20 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 开发经验
 
-- The pointer follows the finger from the Apple-logo phase on; taps select rows in Recovery and work on the GPU-composited Setup Assistant pages.
-- On the full system a stage-1 read of the keyboard cover shows regulators L6B, L12B and L13B off. Stage 2 \(clocks and engine identity, no rail, no bus traffic\) passed on the tablet. Stage 3 \(boot 28, first voltage vote via RPMh for L12B 1.8 V and L13B 3000 mV\) did not receive a completion signal for L12B within 50 ms and stopped by design \(L13B not voted, no I2C traffic\); 13 seconds later a kernel lock-wait timeout panic occurred \(same signature as an earlier boot without a keyboard driver, causal link not established\). Inferred cause of the missing completion: the command channel completion interrupt was not enabled before voting; a fix is written offline and not yet built or booted.
+- The pointer follows the finger from the Apple-logo phase on; touch opens and interacts with Finder, Notes, System Settings, App Store and Apple menu items \(Restart in boot 49, Shut Down in boot 50\); selecting About This Mac with the power key \(Return\) opens the window in boot 50, while slight finger movement between press and release causes menu items to treat some touch taps as drags.
+- On the full system a stage-1 read of the keyboard cover shows regulators L6B, L12B and L13B off. Stage 2 \(clocks and engine identity, no rail, no bus traffic\) passed on the tablet. Stage 3 \(boot 28, first voltage vote via RPMh for L12B 1.8 V and L13B 3000 mV\) did not receive a completion signal for L12B within 50 ms and stopped by design \(L13B not voted, no I2C traffic\); 13 seconds later a kernel lock-wait timeout panic occurred \(same signature as boots 03 and 45 without a keyboard driver, causal link not established\). Inferred cause of the missing completion: the command channel \(TCS 2\) completion interrupt was not enabled before voting; a fix was written and verified in host tests and QEMU offline but not booted before archiving.
 
 ### 完成条件
 
-- Touch produces correct pointer coordinates and clicks; keys can drive Recovery; the cover types.
+- Touch produces correct pointer coordinates and clicks; keys drive Recovery and menus; the cover types.
 
 ### 当前范围
 
-- Single finger only. The keyboard cover's stage 3 voltage vote did not complete, and stages 4 and 5 have never run. No interrupt line is used; the drivers poll.
+- Single finger only, no tap-slop threshold yet. The keyboard cover's stage 3 voltage vote did not complete on hardware in this repository, and stages 4 and 5 were not run on hardware. No interrupt line is used; the drivers poll.
 
 ### 下一步
 
-- Build and test the keyboard cover stage 3 completion-interrupt fix with approval.
+- Archived; upstream UniXNU-sheng already has working keyboard cover keys and touchpad pointer on macOS 27.3.
 
 ### 证据
 
@@ -306,7 +305,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ## GPU {#gpu}
 
-`implemented`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -314,7 +313,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 配置
 
-- Kernel: an IOAccelerator front end over UniXNU's Adreno kernel stack, 16 KiB pages, default off, sheng-gpu-power=1..9 \(1 is read-only\). User space: plug-in bundle \(Metal front end, bridge, Turnip\) delivered as a compressed device tree node in QEMU.
+- Kernel: an IOAccelerator front end over UniXNU's Adreno kernel stack, 16 KiB pages, default off, sheng-gpu-power=1..9 \(1 is read-only\), with cacheable client buffers + pre-submit cache maintenance \(sheng-gpu-wc=0\), IO-coherent GPU-owned buffers \(sheng-gpu-owned-coherent=1\), fixed operating point 401 MHz \(sheng-gpu-perf=4\) and single command ring \(sheng-gpu-preempt=0\). User space: plug-in bundle \(Metal front end, bridge, Turnip\) delivered via device tree node.
 
 ### 操作步骤
 
@@ -322,24 +321,23 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 开发经验
 
-- QEMU stage A: WindowServer loaded the plug-in, called its initialisation, opened the accelerator and the runtime answered that no device exists \(QEMU has no A740\).
-- QEMU stage B \(fake A740 that executes nothing\): Turnip created a device, two submissions, the first frame \(800 x 600, no content\); WindowServer then exited with SIGABRT intermittently, cause unknown.
-- Tablet, stages 1 to 9 without the Metal plug-in \(including control boot 39\): power domains, clocks, the GMU SMMU context and GMU firmware, GX power and heartbeat, TrustZone zap authentication \(three secure calls returning 0\) and the first GPU command and interrupt through the GPU's own SMMU context all succeeded \(with whole-page 16 KiB unmapping\); boot 39 reached the CPU-rendered desktop quickly.
-- Tablet, GPU hang avoided \(sheng-gpu-wc=0\): an earlier hang-panic QR showed the command processor at the end of the first indirect buffer, the first buffer words reading as 0, and 16 dirty or stale write-combine cache lines \(inferred: buffer still in the CPU cache, not in DRAM\). Making client buffers cacheable with pre-submission cache maintenance eliminated the hang.
-- Tablet, first GPU-composited UI with the Metal plug-in \(boot 38: WindowServer -&gt; Metal plug-in -&gt; metal2vulkan -&gt; Turnip -&gt; Adreno 740 kernel driver\): fast boot; the screen displayed the desktop wallpaper, menu bar \(Simplified Pinyin, Tue Nov 10\) and post-login Setup Assistant pages \(advancing from Auto Update to the network page with working touch\) at about 6 frames per second; all 64 sampled display points had content \(0 on earlier black-screen boots\). The 300 s diagnostic panic QR recorded 759 submissions, 758 completed, no GPU hang, 7 processes that opened the GPU \(inferred from truncated names: WindowServer, loginwindow, NotificationCenter, Setup Assistant, iconservicesagent\), and the IO-coherence probe passed.
+- QEMU stage A and fake A740 stage B verified WindowServer plug-in loading and first-frame Turnip submission.
+- Tablet, stages 1 to 9 without the Metal plug-in \(including control boot 39\): power domains, clocks, GMU SMMU context and firmware, GX power and heartbeat, TrustZone zap authentication \(three secure calls returning 0\) and the first GPU command and interrupt through the GPU's own SMMU context all succeeded; boot 39 reached the CPU-rendered desktop quickly.
+- Tablet, GPU hang avoided \(sheng-gpu-wc=0\), IO-coherent GPU-owned buffers \(sheng-gpu-owned-coherent=1, boot 40, cutting 300 s driver cache maintenance from \~20.4 s to \~0.58 s and raising completed submissions from 758 to 1088\) and 401 MHz clock vote \(sheng-gpu-perf=4, boot 41, raising completed submissions to 1534 and cutting the longest client fence wait from \~2.2 s to \~91.5 ms\).
+- Tablet, full GPU-composited macOS desktop and apps on a single command ring \(boots 42, 43, 44, 46 to 50\): after setting MiniBuddyLaunch=false, boot 42 reached the full GPU-composited desktop \(\~9 fps\) before hanging the second ring on a CP\_BLIT when opening the App Store; switching to a single command ring \(sheng-gpu-preempt=0, boot 43\) completed 2677 of 2677 submissions in 300 s with 0 hangs and \~1.5 ms average client fence wait, opening App Store, Notes, Finder \(including full-screen\), System Settings and About This Mac, and running 19 minutes without a GPU hang in boot 47.
 - The plug-in contains metal2vulkan \(GPL-2.0-or-later or LGPL-3.0-or-later\); its build artifacts are not redistributed.
 
 ### 完成条件
 
-- WindowServer renders through the Adreno 740 with Metal; AIR shaders compile to Adreno code.
+- WindowServer and system apps render through the Adreno 740 with Metal on a single command ring.
 
 ### 当前范围
 
-- GPU acceleration is still slow \(\~6 fps\) and not yet usable: most 50 ms display waits and 1517 of 2274 kernel fence waits time out; boots with the Metal plug-in are intermittently slow \(boots 21 and 33 slow, \~104 s to WindowServer takeover in boot 33 vs 22 to 33 s when fast in boots 23, 38 and 39; CPU clocks are normal and the slowdown starts after launchd before WindowServer; why boot 38 was fast and showed a picture is undetermined\).
+- No GPU thermal control or DCVS has run on hardware in this repository \(fixed at 401 MHz\); two-ring preemption hangs on a CP\_BLIT when opening the App Store; Photos aborts in PXCreateContext when creating a Metal texture bitmap context; intermittent slow boots with the plug-in \(boots 21 and 33 slow, subsequent boots fast, cause undetermined\).
 
 ### 下一步
 
-- Investigate the display and kernel fence wait timeouts and the intermittent slow boots with the Metal plug-in; verify the remaining QR diagnostic fields.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -349,10 +347,8 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
   Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=1)</code>. Revision: `36e11087791ca3b68505ee19c1f8602d7713039d`.
 - `device`: [Desktop reached without a panic; first GPU interrupt, accelerator published, 1023 of 1023 test dwords correct, read from a video of the screen \(2026-11-09 night\). The kernel has no complete full-system QEMU run.](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-gpu-plugin-boot-20261109/docs/status.md)
   Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9, second integrated kernel)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
-- `device`: [Plug-in installed, accelerator registered, WindowServer created the Turnip device, 107 client calls reached the driver, no fault, no panic; the whole screen stayed black with no pointer \(2026-11-09 night, read from a video\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-gpu-plugin-boot-20261109/docs/status.md)
-  Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2, second integrated kernel)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
-- `device`: [First GPU-composited UI on the tablet \(boot 38\): wallpaper, menu bar and post-login Setup Assistant pages displayed with working touch at about 6 fps; all 64 sampled display points had content; 300 s diagnostic QR recorded 759 submissions, 758 completed, no GPU hang, IO-coherence probe passed; most 50 ms display waits and 1517 of 2274 kernel fence waits timed out \(2026-11-10, video, photo and diagnostic QR\).](https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md)
-  Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
+- `device`: [Full GPU-composited macOS desktop on a single command ring \(boots 43, 44, 46 to 50\): 2677 of 2677 submissions completed in 300 s with 0 hangs, average client fence wait \~1.5 ms; Finder \(including full-screen\), Notes, System Settings, App Store and About This Mac opened \(2026-11-10 to 2026-11-11, videos, photos and diagnostic QRs\).](https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md)
+  Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-gpu-power=9 sheng-gpu-metal=1 sheng-full-ui=2 sheng-gpu-owned-coherent=1 sheng-gpu-perf=4 sheng-gpu-preempt=0)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
 
 ## 网络 {#network}
 
@@ -368,7 +364,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 操作步骤
 
-- Boot with sheng-wifi=N for stage N; stages 2 and 3 power the chip and need approval for each boot.
+- Boot with sheng-wifi=N for stage N; stages 2 and above power the chip and need approval for each boot.
 
 ### 开发经验
 
@@ -376,7 +372,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 - Stage 2 on the tablet: power, PCIe0 link and endpoint identification; the endpoint ID reads 17cb:1107 \(WCN7850\), the sleep clock goes from idle to driving and one chip rail from off to on.
 - Stage 3 on the tablet: BAR0 \(2 MiB\) mapped, bus mastering on, the MHI register block and the BHI registers read without a panic; MHIVER reads 0xdeadbeef, meaning not established \(digits read from a video\).
 - Stage 4 on the tablet \(boot 23\): firmware loaded into the 8 MiB DMA window \(length and digest verified by the kernel\), Wi-Fi SMMU stream routed and MHI/BHI layout read without hanging; this SMMU does not support address translation self-test \(ATOS\), so the DMA window translation is unverified.
-- Stage 5 on the tablet \(boot 26\): chip power-up and boot loader doorbell executed without hanging or panicking; the result rows print only after the chip reports ready, after the GUI had already taken over the screen, so the stage 5 outcome is unknown \(needs a code change to observe\).
+- Stage 5 on the tablet \(boot 26\): chip power-up and boot loader doorbell executed without hanging or panicking; the result rows print only after the chip reports ready, after the GUI had already taken over the screen, so the stage 5 outcome is unknown.
 
 ### 完成条件
 
@@ -384,11 +380,11 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 当前范围
 
-- The SMMU does not support ATOS, so the stage 4 DMA translation is unverified; the stage 5 outcome is unknown because the result rows printed after GUI takeover; there is no wireless protocol stack behind the driver, so networking is still far off. Firmware is read from the tablet's own Android partitions and never stored here. Bluetooth has only had its pin and clock read; the macOS-side HCI path is undecided.
+- The SMMU does not support ATOS, so the stage 4 DMA translation is unverified; the stage 5 outcome was hidden behind GUI takeover; there is no wireless protocol stack in this repository. Firmware is read from the tablet's own Android partitions and never stored here. Bluetooth has only had its pin and clock read.
 
 ### 下一步
 
-- Adjust logging timing so the stage 5 outcome is visible before GUI takeover; decide the wireless stack route.
+- Archived; upstream UniXNU-sheng already has working Wi-Fi association, DHCP and traffic on macOS 27.3.
 
 ### 证据
 
@@ -405,19 +401,19 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 硬件与依赖
 
-- ADSP-owned audio path; no work has started.
+- ADSP-owned audio path; no work has started in this repository.
 
 ### 配置
 
-- None yet.
+- None.
 
 ### 操作步骤
 
-- None yet.
+- None.
 
 ### 开发经验
 
-- None yet.
+- None.
 
 ### 完成条件
 
@@ -425,11 +421,11 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 当前范围
 
-- Not started.
+- Not started in this repository.
 
 ### 下一步
 
-- Wait for the ADSP stages and the battery service to run beyond their read-only first stage.
+- Archived; see upstream UniXNU-sheng for audio support.
 
 ### 证据
 
@@ -437,36 +433,37 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ## 电源 {#power}
 
-`implemented`
+`device-verified`
 
 ### 硬件与依赖
 
-- PMIC state \(RTC, backlight drivers KTZ8866 x 2\), ADSP-owned battery and charger services, RPMh, the performance and memory-latency state.
+- PMIC state \(RTC, backlight drivers KTZ8866 x 2\), ADSP-owned battery and charger services, RPMh, the performance and memory-latency state, and PSCI system reset/off.
 
 ### 配置
 
-- Default-off drivers: NativeRtc \(sheng-rtc\), NativeBacklight \(sheng-backlight, always clamped to 64..2047\), NativeMemPerf \(sheng-memperf\), NativeAdsp and NativeBattery \(sheng-adsp, sheng-battery\), a PSCI reset hook \(sheng-psci-reset\). Charger writes are off and the critical battery level is never asserted.
+- Default-off drivers: NativeRtc \(sheng-rtc\), NativeBacklight \(sheng-backlight, always clamped to 64..2047\), NativeMemPerf \(sheng-memperf\), NativeAdsp and NativeBattery \(sheng-adsp, sheng-battery\), and a PSCI reset/poweroff hook \(sheng-psci-reset\). Charger writes are off and the critical battery level is never asserted.
 
 ### 操作步骤
 
-- Boot with sheng-&lt;driver&gt;=1 for the read-only snapshot; later stages need approval.
+- Boot with sheng-&lt;driver&gt;=1 for the read-only snapshot; with sheng-rtc=2 and sheng-psci-reset=1 for RTC calendar publication and Apple menu Restart / Shut Down.
 
 ### 开发经验
 
-- The first stage of each ran on the tablet without writes. XNU waits up to 30 seconds for an IORTC service at boot. With sheng-rtc=2 the platform expert publishes IORTC early and NativeRtc moves the calendar forward; on the tablet this saved about 30 seconds \(WindowServer's screen about 49 seconds after the boot command against 75 to 81 seconds before; read by hand from a video at 3 second steps\). The calendar starts at the packaging time, not the true time. The ADSP firmware owns the Type-C controller.
+- The first stage of each ran on the tablet without writes. XNU waits up to 30 seconds for an IORTC service at boot. With sheng-rtc=2 the platform expert publishes IORTC early and NativeRtc moves the calendar forward; on the tablet this saved about 30 seconds \(WindowServer's screen about 49 seconds after the boot command against 75 to 81 seconds before\). The calendar starts at the packaging time, not the true time. The ADSP firmware owns the Type-C controller.
+- With sheng-psci-reset=1, clicking Restart in the Apple menu \(boot 49\) and Shut Down in the Apple menu \(boot 50\) cleanly unmounted the APFS Data and Update volumes \(xid 13986 and 14318, 0 checksum failures\) and rebooted to Android or powered off the tablet.
 - System sleep panics in QEMU because the platform does not register its cores for sleep, so sleep is disabled.
 
 ### 完成条件
 
-- Battery state and charging reported to macOS; brightness control; time kept across boots; sleep.
+- Clean system restart and shutdown from macOS; RTC calendar published at boot; battery state, brightness control and sleep.
 
 ### 当前范围
 
-- No battery reporting, no brightness control, no true time \(the calendar starts at the packaging time; the RTC counter probably clears on a forced reset, so an offset taken from Android is not usable\), no sleep.
+- No thermal sensor driver ran on hardware in this repository; no battery reporting, no brightness control, no true time \(the calendar starts at the packaging time\), no sleep.
 
 ### 下一步
 
-- Measure the memory-bandwidth stage; decide the first ADSP stage that starts the DSP.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -474,6 +471,8 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
   Command: <code>fastboot boot sheng-macos26-kernel.img (read-only stage 1 of RTC, backlight, ADSP, memory performance)</code>. Revision: `36e11087791ca3b68505ee19c1f8602d7713039d`.
 - `device`: [WindowServer's screen appeared about 49 seconds after the boot command against about 75 to 81 seconds before; the calendar started at the packaging time \(2026-11-09 night, hand reading of a video\).](https://github.com/mataht/sheng-macos-link-lab/blob/milestone-gpu-plugin-boot-20261109/docs/status.md)
   Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-rtc=2 with a floor time)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
+- `device`: [Apple menu Restart \(boot 49\) and Shut Down \(boot 50\) cleanly unmounted the Data and Update volumes and rebooted to Android or powered off the tablet \(2026-11-10 to 2026-11-11\).](https://github.com/mataht/sheng-macos-link-lab/blob/main/docs/status.md)
+  Command: <code>fastboot boot sheng-macos26-kernel.img (sheng-psci-reset=1)</code>. Revision: `e5cd05044e6c9f2cb442da0d2c4444a270579994`.
 
 ## 镜像组装 {#packaging}
 
@@ -495,9 +494,8 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 - Assembly outputs and packages contain Apple code and vendor firmware and stay local; the repository holds the tools and tests.
 - Reusing evidence is decided by comparing build records, not by hand.
-- Every new kernel booted on 2026-11-10 evening had a complete 1200-second QEMU full-system run beforehand without a panic and with the image unchanged, as did the changed-rows display copy mode. Earlier boots 14 to 17 were made under per-package user waivers before their 1200-second runs were completed afterwards.
+- Every new kernel booted on 2026-11-10 evening and 2026-11-11 early morning had a complete 1200-second QEMU full-system run beforehand without a panic and with the image unchanged, as did the changed-rows display copy mode. Earlier boots 14 to 17 were made under per-package user waivers before their 1200-second runs were completed afterwards.
 - The QEMU observer tool was fixed so that if the VM stops in user space at the time limit, it briefly steps the VM into kernel space before the final kernel data read.
-- The packager's sibling qualification does not reject a QEMU run that ended in a panic. The fix \(refuse such a run unless an explicit waiver file bound to that run and kernel digest is given\) is on a local branch and not merged.
 
 ### 完成条件
 
@@ -509,7 +507,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 下一步
 
-- Document the packager's evidence rules in docs/ so another unit can reuse them.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -522,32 +520,32 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 硬件与依赖
 
-- The framebuffer as a text console, a retained log in memory and in a small partition, and a QR code of the panic state.
+- The framebuffer as a text console, a retained log in memory and in a small partition, a QR code of the panic state, and read-only TWRP 8 MiB chunk scans of the OS window.
 
 ### 配置
 
-- Boot progress lines and driver status rows are printed on the screen \(sheng-boot-progress\); on a panic the screen shows a QR code with registers, stack and a caller resolved against the kernel's UUID; optional native-gop-diag and native-touch-diag strips.
+- Boot progress lines and driver status rows are printed on the screen \(sheng-boot-progress\); on a panic the screen shows a QR code with registers, stack and a caller resolved against the kernel's UUID \(including GPU state and RAM overlay write reports\); optional native-gop-diag and native-touch-diag strips; post-boot TWRP chunk scan and offline APFS Fletcher-64 verifier / Data-volume crash-report extractor.
 
 ### 操作步骤
 
-- Photograph or film the screen; scan the QR code and decode it with scripts/decode\_xnu\_panic.py.
+- Photograph or film the screen, scan the QR code and decode it with scripts/decode\_xnu\_panic.py; after persistent boots, scan changed 8 MiB chunks in TWRP, verify APFS Fletcher-64 checksums offline and extract logs and .ips crash reports from the Data volume.
 
 ### 开发经验
 
 - The first full-system boot panicked about 5 minutes 50 seconds after the command; the QR code identified watchdogd's exit as the cause.
-- Unified logs of the guest can be read from the QEMU overlay.
+- Post-boot TWRP chunk scans and offline APFS checks after boots 46, 48, 49 and 50 verified 0 checksum failures across up to 1008 APFS objects and extracted 1266 files from the Data volume, pinpointing the AppKit PerfRegulatorStart work-interval abort on scroll-bar drags and the Photos PXCreateContext assertion failure.
 
 ### 完成条件
 
-- Every stage of the boot leaves a checkpoint on the screen and every panic leaves a decodable record.
+- Every stage of the boot leaves a checkpoint on the screen, every panic leaves a decodable QR record, and persistent Data-volume crash reports can be extracted and verified offline.
 
 ### 当前范围
 
-- The retained log keeps only the tail \(80 KB in QEMU runs\). Guest logs are only readable in QEMU.
+- No offline parser for macOS unified log \(.tracev3\) files in this repository.
 
 ### 下一步
 
-- Add a persistent log of the userland stage for the full system.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -585,7 +583,7 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 下一步
 
-- Stage 2 with approval, sharing the RPMh channel with the keyboard cover without a lock.
+- Archived; see upstream UniXNU / UniXNU-sheng for active development.
 
 ### 证据
 
@@ -602,29 +600,29 @@ Xiaomi Pad 6S Pro \(sheng, CN 16 GB / 1 TB\) running macOS 26.5 \(25F71\) from R
 
 ### 配置
 
-- Development policy: dyld skips libignition; the original trust caches are loaded unchanged with no entries of our own \(Metal plug-in boots add the plug-in's two CDHashes and set lp-sip0 to 2\); platform UUID from the device tree; panic\_on\_crash\_disabled=1; minimal IOWatchdog \(reports disabled\) and AppleKeyStore \(no keybag, no passcode, unlocked\) enabled by sheng-watchdog=1 and sheng-aks=1.
+- Development policy: dyld skips libignition; the original trust caches are loaded unchanged with no entries of our own \(Metal plug-in boots add the plug-in's two CDHashes and set lp-sip0 to 2\); platform UUID from the device tree; panic\_on\_crash\_disabled=1; minimal IOWatchdog \(reports disabled\) and AppleKeyStore \(no keybag, no passcode, unlocked\) enabled by sheng-watchdog=1 and sheng-aks=1; autoLoginUserScreenLocked=false and MiniBuddyLaunch=false.
 
 ### 操作步骤
 
-- Boot the full-system package; auto-login and no screen lock are required because the tablet has no hardware keyboard.
+- Boot the full-system package; auto-login, no screen lock and skipping the post-login Setup Assistant \(MiniBuddyLaunch=false\) are used on the tablet.
 
 ### 开发经验
 
-- The first full-system boot ran to WindowServer and then panicked when watchdogd exited without its service; a later boot reached the login window; with the services and the lock preference off it reached the desktop.
-- loginwindow and WindowServer run; apps and long-run stability are not tested.
-- In QEMU, opendirectoryd's first node open often times out after 5 seconds and is retried; all 7 runs with readable guest logs show 1 to 5 such timeouts, after which the process restarts and succeeds. Occasionally the process panics instead \(Failed to open /Search\), which panic\_on\_crash\_disabled does not mask. The cause is not established. No such panic was seen on the tablet, where guest logs are not readable, so silent restarts cannot be excluded.
+- With the login services, MiniBuddyLaunch=false and the single-ring Metal plug-in stack, the tablet boots directly into the GPU-composited macOS desktop and opens Finder \(including full-screen\), Notes, System Settings, App Store and About This Mac.
+- Crash reports extracted from the tablet's Data volume after persistent boots identified two userland/kernel gaps: dragging or clicking a scroll bar aborts in AppKit PerfRegulatorStart with 'Failed to create performance regulator work interval \(error %i\).' because kernel work-interval calls are unimplemented in this repository; Photos aborts with an uncaught NSAssertionHandler exception in PhotosUIFoundation PXCreateContext under PXGMetalTextureConverter createTextureFromCGImage / \_createTransparentTexture. Offline inspection also showed Safari is missing because the AppOS cryptex was not installed in the 26.5 system image \(17 dangling symlinks into /System/Cryptexes/App\), and mobileactivationd and apsd crash every \~10 seconds as in QEMU.
+- In QEMU, opendirectoryd's first node open often times out after 5 seconds and is retried; runs that hit its intermittent /Search or /Local/Default panic are rerun and not used as evidence.
 
 ### 完成条件
 
-- The desktop appears and stays up; apps run.
+- The GPU-composited desktop appears, persists across clean Apple menu restarts and shutdowns, and runs bundled applications.
 
 ### 当前范围
 
-- Development kernel without a root seal check, AMFI developer mode, no SEP. Apps, network and stability under load are untested.
+- Development kernel without a root seal check, AMFI developer mode, no SEP; scroll-bar drag aborts in PerfRegulatorStart without kernel work-interval patches; Photos aborts in PXCreateContext; AppOS cryptex not installed in the 26.5 image.
 
 ### 下一步
 
-- Find the cause of the slow composition, then test apps and a long run.
+- Archived; upstream UniXNU / UniXNU-sheng includes the kernel work-interval patches and mounts the AppOS cryptex on macOS 27.3.
 
 ### 证据
 

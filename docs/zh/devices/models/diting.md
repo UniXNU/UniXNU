@@ -5,4 +5,5 @@
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
 | [dddqmmx/UniXNU-diting](https://github.com/dddqmmx/UniXNU-diting) | [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline \(dddqmmx\)](/zh/devices/diting-dddqmmx) | 适配记录 | SM8475 |
+| [hh233z/UniXNU-diting](https://github.com/hh233z/UniXNU-diting) | [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Diting baseline \(hh233z\)](/zh/devices/diting-hh233z) | 适配记录 | SM8475 |
 | [nagatoquin33/UniXNU-diting](https://github.com/nagatoquin33/UniXNU-diting) | [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/zh/devices/diting) | 适配记录 | SM8475 |

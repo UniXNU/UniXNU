@@ -6,7 +6,7 @@
 
 Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The board data comes from the public xVanTuring/UniXNU-pipa and xVanTuring/uefi-pipa ports; this fork's build has not been booted on hardware.
 
-源记录: [porting.toml](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/porting.toml), `7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6`.
+源记录: [porting.toml](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/porting.toml), `517e2764181b807349de1c9da35940953194ce0b`.
 
 本页按设备记录自动生成。
 
@@ -48,6 +48,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 开发经验
 
+- 2026-11-12 Renamed the CI workflow to xnu-source.yml \(it runs on Ubuntu, not macOS\) and pinned its actions, and package.yml's, by commit SHA.
 - 2026-11-11 Replaced the TB-J716F board file, defconfig, DTS, patch names and workflow paths with the pipa equivalents; removed the TB-J716F DTS and backlight sources from the build tree.
 - 2026-11-10 Read the pipa DRAM banks, userdata window, boot-image parameters and ADT values from xVanTuring/uefi-pipa \(Resources/Configs/pipa.toml, Resources/DTBs/pipa.dts\) and from Android's /memory on the measured 16 GB unit.
 
@@ -65,9 +66,9 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The pipa fallback tree compiles with the shared SM8250 CPU, GICv3, timer and PSCI nodes.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/dts/pipa.dts)
+- `host`: [The pipa fallback tree compiles with the shared SM8250 CPU, GICv3, timer and PSCI nodes.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/dts/pipa.dts)
   Command: <code>dtc -I dts -O dtb -i socs/sm8250/dts dts/pipa.dts -o /tmp/pipa.dtb</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
-- `host`: [Stages build/pipa/pipa.dtb from uefi-pipa when available \(or compiles dts/pipa.dts\) and writes build/pipa/check.json with hardware\_boot\_demonstrated = false.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/scripts/check-pipa.py)
+- `host`: [Stages build/pipa/pipa.dtb from uefi-pipa when available \(or compiles dts/pipa.dts\) and writes build/pipa/check.json with hardware\_boot\_demonstrated = false.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/scripts/check-pipa.py)
   Command: <code>python3 scripts/check-pipa.py</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## 固件与启动 {#firmware}
@@ -89,6 +90,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 开发经验
 
+- 2026-11-12 check-pipa.py now reports a missing dtc separately instead of blaming a missing or uncompilable dts/pipa.dts.
 - 2026-11-10 Replaced the TB-J716F firmware paths with pipaPkg and the pipa memory descriptors \(UEFI FD 0x9fc00000+0x300000, stack 0x9ff90000+0x40000, display reserved 0x9c000000+0x2400000\).
 
 ### 完成条件
@@ -105,7 +107,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [Validates the pipa platform files, the pipa.toml boot-image keys, the UEFI FD/stack descriptors and the Resources/DTBs/pipa.dtb splash region.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/scripts/check-pipa.py)
+- `host`: [Validates the pipa platform files, the pipa.toml boot-image keys, the UEFI FD/stack descriptors and the Resources/DTBs/pipa.dtb splash region.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/scripts/check-pipa.py)
   Command: <code>UNIXNU_UEFI=../uefi-pipa python3 scripts/check-pipa.py</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## CPU 与中断 {#cpu}
@@ -144,7 +146,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The tree compiles with 8 CPU nodes and the GICv3 redistributor stride.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/socs/sm8250/dts/sm8250.dtsi)
+- `host`: [The tree compiles with 8 CPU nodes and the GICv3 redistributor stride.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/socs/sm8250/dts/sm8250.dtsi)
   Command: <code>dtc -I dts -O dtb -i socs/sm8250/dts dts/pipa.dts -o /tmp/pipa.dtb &amp;&amp; fdtget /tmp/pipa.dtb /cpus/cpu@700 compatible</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## 内存与 DMA {#memory}
@@ -166,6 +168,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 开发经验
 
+- 2026-11-12 Annotated the fallback tree with the 8 GB variant \(drop memory@800000000, dram\_size becomes 0x200000000\) and added scripts/check-pipa-board.py, which fails --ddr-gb 8 until the banks are re-measured on the target.
 - 2026-11-10 Replaced the 6 GiB TB-J716F span with the measured pipa banks.
 
 ### 完成条件
@@ -182,7 +185,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `source`: [The \[payload\] and \[payload.adt\] DRAM values match the three measured banks \(base 0x80000000, end 0x980000000\).](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/board.toml)
+- `source`: [The \[payload\] and \[payload.adt\] DRAM values match the three measured banks \(base 0x80000000, end 0x980000000\).](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/board.toml)
 
 ## 存储与根卷 {#storage}
 
@@ -222,7 +225,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The SMMU plan uses the SM8250 UFS streams 0x0e0 and 0x4e0, matching the pipa DT's iommus.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/drivers/ShengUfs/PipaSmmuTakeover.h)
+- `host`: [The SMMU plan uses the SM8250 UFS streams 0x0e0 and 0x4e0, matching the pipa DT's iommus.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/drivers/ShengUfs/PipaSmmuTakeover.h)
   Command: <code>grep -n 'kPipaUfsStreams' drivers/ShengUfs/PipaSmmuTakeover.h</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## 显示 {#display}
@@ -262,7 +265,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The builder no longer copies or compiles AppleARMBacklight.cpp / BacklightProbe.cpp; the backlight symbols stay weak in the other objects.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/scripts/build-gop-legacy-display.py)
+- `host`: [The builder no longer copies or compiles AppleARMBacklight.cpp / BacklightProbe.cpp; the backlight symbols stay weak in the other objects.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/scripts/build-gop-legacy-display.py)
   Command: <code>python3 -m py_compile scripts/build-gop-legacy-display.py</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## 输入 {#input}
@@ -302,7 +305,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The GENI SPI register-model test and the Novatek protocol/point-report/touch-core host tests pass; hardware is not involved.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/drivers/QcomGeniSpi/Test/geni-spi.c)
+- `host`: [The GENI SPI register-model test and the Novatek protocol/point-report/touch-core host tests pass; hardware is not involved.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/drivers/QcomGeniSpi/Test/geni-spi.c)
   Command: <code>gcc -std=c11 -O2 -Wall -Wextra -Werror drivers/QcomGeniSpi/Test/geni-spi.c drivers/QcomGeniSpi/GeniSpi.c -o /tmp/geni-spi &amp;&amp; /tmp/geni-spi</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## GPU {#gpu}
@@ -342,7 +345,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `source`: [Uses the Adreno 650 chip id, GMEM geometry, hwcg and a650\_protect tables from the upstream pipa port; no TB-J716F-only DCVS block is compiled.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/package/GpuProbe.cpp)
+- `source`: [Uses the Adreno 650 chip id, GMEM geometry, hwcg and a650\_protect tables from the upstream pipa port; no TB-J716F-only DCVS block is compiled.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/package/GpuProbe.cpp)
 
 ## 网络 {#network}
 
@@ -417,7 +420,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [The PM8150B gauge/charger decoding \(SOC ramp, voltage, current, temperature, charge stage\) passes against Android's recorded values; no hardware is read.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/package/NativeBatteryTests.c)
+- `host`: [The PM8150B gauge/charger decoding \(SOC ramp, voltage, current, temperature, charge stage\) passes against Android's recorded values; no hardware is read.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/package/NativeBatteryTests.c)
   Command: <code>gcc -std=c11 -Wall -Wextra -Werror -I package package/NativeBatteryTests.c -o /tmp/pipa-battery &amp;&amp; /tmp/pipa-battery</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
 
 ## 镜像组装 {#packaging}
@@ -440,6 +443,8 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 开发经验
 
+- 2026-11-12 Fixed the extractor's adb shell crash, restored the Adreno 650 digest comparison, replaced the recorded adb serial with a truncated SHA-256, and made it record MemTotal plus the userdata geometry so the per-SKU values can be checked against the tablet.
+- 2026-11-12 Moved the inline board and manifest assertions out of CI into scripts/check-pipa-board.py, which also cross-checks the DTS memory banks against dram\_size/owned\_memory\_size and can assert a specific DDR or storage SKU.
 - 2026-11-11 Added scripts/extract-pipa-firmware.py, which pulls /vendor, modem and Bluetooth firmware from a booted pipa, records the ROM fingerprint as provenance and writes a SHA-256 manifest for proprietary-files.txt; it deliberately leaves the built-in Novatek image UNMEASURED.
 - 2026-11-11 Renamed the pipa patch series, updated the GitHub workflows to xVanTuring/uefi-pipa and UniXNU/out/pipa, and added the pipa DTB and driver checks to CI.
 
@@ -457,9 +462,11 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `host`: [Compiles dts/pipa.dts, validates board.toml and proprietary-files.txt, and runs the GopFramebuffer, QcomRpmh, QcomGeniSpi and ShengNovatekTouch host tests.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/.github/workflows/xnu-source-macos.yml)
+- `host`: [Compiles dts/pipa.dts, runs check-pipa.py and check-pipa-board.py \(board, manifest and memory/userdata consistency\), and runs the GopFramebuffer, QcomRpmh, QcomGeniSpi and ShengNovatekTouch host tests.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/.github/workflows/xnu-source.yml)
   Command: <code>Run the Pipa XNU source checks workflow</code>. Revision: `421c34bdcaf116bd15b8a895fa81ee483d4d8f31`.
-- `host`: [The extractor parses and exits with a clear error when no adb device is present; it has not run against a tablet, so no firmware digest is claimed yet.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/scripts/extract-pipa-firmware.py)
+- `host`: [Passes on the reference unit's values and fails with --ddr-gb 8 or --storage-gb 256, which is the intended guard until the target tablet's /memory and GPT are measured.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/scripts/check-pipa-board.py)
+  Command: <code>python3 scripts/check-pipa-board.py</code>. Revision: `4fcdf64ca97da84d5af2d40a90f9957ec70caac8`.
+- `host`: [The extractor parses and exits with a clear error when no adb device is present; it has not run against a tablet, so no firmware digest is claimed yet.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/scripts/extract-pipa-firmware.py)
   Command: <code>python3 -m py_compile scripts/extract-pipa-firmware.py</code>. Revision: `efd421170a2b99be7f5146d6b678d696f8f23abd`.
 
 ## 诊断 {#diagnostics}
@@ -497,7 +504,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 证据
 
-- `source`: [The ramoops writer keeps 512 KiB of the pipa boot-log region at 0xb0000000, parses the pipa-restart-\* arguments, and preserves the zone across the warm reset into fastboot.](https://github.com/EsaiJJ/UniXNU-pipa/blob/7442e5a5f0f1d6c87edc75e7cdc25250b601f7d6/package/BootRamoops.c)
+- `source`: [The ramoops writer keeps 512 KiB of the pipa boot-log region at 0xb0000000, parses the pipa-restart-\* arguments, and preserves the zone across the warm reset into fastboot.](https://github.com/EsaiJJ/UniXNU-pipa/blob/517e2764181b807349de1c9da35940953194ce0b/package/BootRamoops.c)
 
 ## 音频 {#audio}
 
@@ -517,6 +524,7 @@ Xiaomi Pad 6 \(pipa / SM8250-AC\) porting record for UniXNU iPadOS 17.7.11. The 
 
 ### 开发经验
 
+- 2026-11-12 The dts/pipa.dts edit is comment-only \(radio status and the 8 GB variant\); no audio node or manifest entry changed.
 - 2026-11-11 Left audio out of the first pipa port; the TB-J716F CS35L41 manifest entries were removed because they do not describe pipa's amplifiers.
 
 ### 完成条件
