@@ -33,6 +33,8 @@ MobileGestalt 从 Apple 设备树（ADT）读取设备信息。负载在构建�
 
 `DeviceClass` 把 `hw.product` 按前缀与 `iPhone`、`iPod`、`iPad`、`AppleTV`、`Watch` 等系列比较。前缀不匹配时回退为 `iPod`。根节点 `model` 提供 `hw.product`，需要和 `/product` 的值一起设置。
 
+缺少 `/chosen/display-scale` 时主屏幕缩放为 0。FrontBoard 从 QuartzCore 取得缩放，QuartzCore 读取 MobileGestalt 的 `main-screen-scale`；在 iOS 16.5 上 FrontBoard 会在 `+[FBDisplayManager sharedInstance]` 中断言失败，报 `FBSDisplayMode cannot be configured as requested`，与画布尺寸无关。
+
 ## 全面屏手势
 
 使用没有主屏幕按钮的身份：

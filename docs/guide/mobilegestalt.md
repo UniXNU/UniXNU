@@ -33,6 +33,8 @@ MobileGestalt answers device queries from the Apple device tree (ADT). The paylo
 
 `DeviceClass` compares `hw.product` by prefix with `iPhone`, `iPod`, `iPad`, `AppleTV`, `Watch` and other families. A name outside those prefixes falls back to `iPod`. The root `model` property supplies `hw.product`, so set it together with the `/product` values.
 
+Without `/chosen/display-scale` the main screen reports scale 0. FrontBoard takes the scale from QuartzCore, which reads MobileGestalt `main-screen-scale`, and on iOS 16.5 asserts in `+[FBDisplayManager sharedInstance]` with `FBSDisplayMode cannot be configured as requested` at any canvas size.
+
 ## Full-screen gestures
 
 Use a device without a Home button:

@@ -147,6 +147,7 @@ for XNU work. Hardware peripheral results are recorded on the target device.
 | Kernel entry, no log | Boot arguments, serial selection, framebuffer address |
 | Panic naming a provider | ADT node, driver archive, kernel flag |
 | No root | Userdata image, UUID, partition capacity |
+| `no valid root manifest` after Android ran | Android reformatted userdata on its boot; rewrite the userdata image. Charge powered off, or keep both systems with the [dual-system partition](/porting/dual-system-partition) |
 
 ## Next steps
 

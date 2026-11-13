@@ -27,6 +27,16 @@ GPU revision and compare register, firmware, packet and memory interfaces.
 For another GPU generation, implement the matching kernel backend and compiler
 support before selecting its frontend.
 
+Adreno 750 (gen7_9_1) runs through the same a740-family GMU, HFI and `hw_init` code in Linux v6.16. It differs from A740 in:
+
+| Item | A740 | A750 |
+| --- | --- | --- |
+| Chip ID | 0x43050a01 | 0x43051401 |
+| GMU firmware | `gmu_gen70200.bin` | `gmu_gen70900.bin` |
+| SQE firmware | `a740_sqe.fw` | `gen70900_sqe.fw`: 85360 bytes without its first dword, more than the 77824 bytes Adreno740 reserves (`GpuSqeBytes`) |
+| Clock gating in `hw_init` | hwcg register table | global clock gating with the CGC P2S handshake |
+| ECO writes in `hw_init` | `RB_CMP_DBG_ECO_CNTL` bit 11 | `RB_CMP_DBG_ECO_CNTL` bit 19, `TPL1_DBG_ECO_CNTL1` 0xc0700 |
+
 For another A740 board, collect GPU/GMU registers, interrupts, SMMU context and
 stream IDs, firmware, power domains, clock/voltage levels, interconnect votes,
 RAM reservations and scanout layout. Check them against the selected firmware.
@@ -50,6 +60,8 @@ The reference recipe `scripts/build-adreno740-kits.py` embeds these local inputs
 The recipe checks pins in `scripts/data/adreno-inputs.json` and reads
 `.cache/firmware/sheng-gpu/`. Adapt the extraction paths and pins to the target's
 verified firmware; record provenance in `proprietary-files.txt`.
+
+Register sources number the GMU registers differently. The `a6xx_gmu.xml` that the reference recipe pins numbers them from the GPU base (`CM3_SYSRESET` 0x1f800); Linux v6.16 numbers them from the GMU block (0x5000), as `gmu_read()` uses them. Subtracting the GPU-to-GMU delta from v6.16 numbers puts every GMU write at the wrong offset, and the cold start stops early (on SM8650 at status 4, phase 1). After generating the register header, check one known register: `CM3_SYSRESET` is at byte 0x14000 of the GMU window.
 
 **Expected result:** board power inputs and firmware match the target GPU.
 Confirm GMU startup and HFI response before submitting commands.

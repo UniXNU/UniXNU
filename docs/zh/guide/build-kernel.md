@@ -89,6 +89,8 @@ DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 | `XNU_BOOT_PROGRESS` | 加入启动进度层 | `build/boot-progress/libBootProgress.a` |
 | `XNU_SOURCE_MOCKFS` | 加入 mockfs 测试文件 | `build/mockfs-fixture/libmockfs_fixture.a` |
 
+未启用 `XNU_NATIVE_PAN` 构建的内核需要设置 `SCTLR_EL1.SPAN`。SPAN 为 0 时，CPU 在每次进入异常时置位 `PSTATE.PAN`，而这种内核从不清除它，系统调用的第一次 `copyin` 会触发异常并无限重试。xnu-8796 的编译不接收 `CFLAGS_EXTRA`，通过它传入的 `-DXNU_NATIVE_PAN=1` 会丢失。
+
 `board.toml` 的 `[kernel] archives` 按顺序列出静态库脚本。每个条目是构建树中的脚本及其参数。例如：
 
 ```toml

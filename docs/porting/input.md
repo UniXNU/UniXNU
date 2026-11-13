@@ -45,10 +45,13 @@ IDs and contact count as one coherent frame for the HID consumer.
    SMMU stream from its DTS and clock/pin definitions. `TouchBoard.h` is a board
    data-layout reference.
 2. Implement power/reset ownership and verify engine firmware, pins and clocks.
+   A touch rail can be off at boot, and the controller then answers with zeros. Vote an RPMh rail through the apps RSC: read the resource address from the command DB, then send the VRM vote through a TCS. Command DB slave IDs are ARC 3, VRM 4 and BCM 5 (`include/soc/qcom/cmd-db.h`); LDO rails are VRM resources.
 3. Set DMA addressing and cache maintenance for the target SMMU context.
 4. Read the chip ID, then load its firmware and check the returned geometry.
 5. Decode complete frames and map coordinates to the display's orientation.
 6. Check stable contact IDs, simultaneous contacts, edge behavior and release.
+
+A QUP serial engine can run SPI firmware with its FIFO interface disabled (`GENI_IF_DISABLE_RO` bit 0), which leaves only GSI DMA. `QcomGeniSpi` refuses such an engine with `GENI_ERR_NOTSUP` (-95) because its GPI DMA path is not implemented; `allow_fifo_disabled` tries FIFO mode anyway, the Linux fallback when no GPI channel exists. Read `GENI_IF_DISABLE_RO` before choosing the transport. Two SM8650 ports found the touch engine (QUP1 SE4) in this state and drive its pins as GPIO SPI from the TLMM instead; FIFO mode was not tried there.
 
 The Novatek processing core uses a 40 × 60 matrix. Verify geometry and bounds
 when adapting its firmware or processing core. Firmware extraction is owned by
