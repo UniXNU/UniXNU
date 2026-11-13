@@ -4,7 +4,7 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [bangbang0822/UniXNU-alioth](https://github.com/bangbang0822/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(bangbang0822\)](/zh/devices/alioth-bangbang0822) | 记录待补齐 | SM8250 |
+| [bangbang0822/UniXNU-alioth](https://github.com/bangbang0822/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(bangbang0822\)](/zh/devices/alioth-bangbang0822) | 适配记录 | SM8250 |
 | [FFT-infra/UniXNU-alioth](https://github.com/FFT-infra/UniXNU-alioth) | [Redmi K40（alioth）](/zh/devices/alioth) | 适配记录 | SM8250 |
 | [fjcx555/UniXNU-alioth](https://github.com/fjcx555/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(fjcx555\)](/zh/devices/alioth-fjcx555) | 记录待补齐 | SM8250 |
 | [songchiyu/UniXNU-alioth](https://github.com/songchiyu/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(songchiyu\)](/zh/devices/alioth-songchiyu) | 记录待补齐 | SM8250 |

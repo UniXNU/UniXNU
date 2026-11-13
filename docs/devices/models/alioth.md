@@ -4,7 +4,7 @@ Browse device documentation and porting records from each repository.
 
 | Repository | Device page | Documentation | SoC |
 | --- | --- | --- | --- |
-| [bangbang0822/UniXNU-alioth](https://github.com/bangbang0822/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(bangbang0822\)](/devices/alioth-bangbang0822) | Record pending | SM8250 |
+| [bangbang0822/UniXNU-alioth](https://github.com/bangbang0822/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(bangbang0822\)](/devices/alioth-bangbang0822) | Porting record | SM8250 |
 | [FFT-infra/UniXNU-alioth](https://github.com/FFT-infra/UniXNU-alioth) | [Redmi K40 \(alioth\)](/devices/alioth) | Porting record | SM8250 |
 | [fjcx555/UniXNU-alioth](https://github.com/fjcx555/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(fjcx555\)](/devices/alioth-fjcx555) | Record pending | SM8250 |
 | [songchiyu/UniXNU-alioth](https://github.com/songchiyu/UniXNU-alioth) | [Xiaomi Redmi K40 \(alioth, M2012K11AC\) \(songchiyu\)](/devices/alioth-songchiyu) | Record pending | SM8250 |

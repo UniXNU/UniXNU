@@ -6,7 +6,7 @@
 
 Migrated from HakiOS, where iOS 16.5 reaches the home screen with touch, GPU, audio, Wi-Fi and battery. Format 2 configuration and hardware description in place; no UniXNU build and no UniXNU device boot yet.
 
-Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/494ec7e64d40b5f880caa7fd08fe67f0824e4d9d/porting.toml), `494ec7e64d40b5f880caa7fd08fe67f0824e4d9d`.
+Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/3b46798676eb1e523efd3fcfebfb75cec0950caa/porting.toml), `3b46798676eb1e523efd3fcfebfb75cec0950caa`.
 
 This page is generated from the device record.
 
@@ -474,6 +474,9 @@ Components: `SoftwareAES`, `AppleKeyStoreState`.
 
 - UniXNU's 56 ARM64 patches against xnu-8796.121.2 \(2026-11-12\): 44 apply unchanged and are referenced from UniXNU \(arch:\); 5 are ported in os-profiles/ios-16.5-20F66/patches/xnu-8796 \(apple-only-cpu-tunables, external-archive-dependencies, native-aes-personality, source-machine-layer, zzx-pmap-sync-64bit-pa\); 3 do not apply to xnu-8796 \(pgz-aligned-validation, public-entitlements-header, published-freezer-condition\); 4 iPadOS 17 owner/addon/cryptex patches are left out. Both XnuPrelink patches apply unchanged. The resolved 51-patch order applies cleanly to a fresh xnu-8796.121.2 tree.
 - zzx-pmap-sync-64bit-pa matters on apollo: 4 GiB of DRAM lies above 4 GiB.
+- With UniXNU's Linux toolchain \(2026-11-12\) xnu-8796.121.2 compiles and links \(mach.development.bcm2837\) after seven more OS-profile patches: clang-drop-auto-var-init-acknowledgement and clang-uio-stackbuf \(current clang\), iorpc-kernel-content \(the toolchain's iig emits xnu-10063 DriverKit glue\), kalloc-pointee-type \(os\_get\_pointee\_type backport for C++ void pointers\), arm64-kpc-from-xnu-10063 \(the 8796 source release omits osfmk/arm64/kpc.c; non-Apple stubs\), compile-records \(clang -MJ, which the archive builders read\) and pthread-jit-entitled-callback \(UniXNU's libpthread 519.120.4\). ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, AppleKeyStoreState, corecrypto and libpthread then build against xnu-8796.
+- Prelink stops on the iOS 16.5 kernelcache \(sha256 e6fa7559...\): emit\_prelink finds external PC-relative encodings in inline data. With its existing catalogue applied \(SHA-256 K, Adler-32 vectors and the Libm pools all match iOS 16.5 too\), only 8 words remain, all in com.apple.kec.Libm \_\_TEXT\_EXEC \(va 0xfffffff005b8d000\): 0x11cc, 0x11dc, 0x11ec, 0x11fc and 0x1490, 0x14a0, 0x14d4, 0x14ec. They lie in one block of double-precision constants that starts after the RET at 0x1050 and is read through ADR \(targets 0x1068, 0x107c, 0x1088, 0x109c, 0x10c4, 0x14cc\). Libm has no symbols, LC\_FUNCTION\_STARTS or ADRP data references, and no BL target delimits the block end yet.
+- UniXNU build caching: patches that change exported headers do not reach .cache/fakeroot until its .xnu-&lt;version&gt;-headers stamp and the startup.o.json record are removed.
 - The HakiOS apollo drivers depend on HakiOS's shared core patch \(input, QMI, lx, audio plug-in layers\), which is not in this repository.
 
 ### Completion criteria
@@ -482,11 +485,11 @@ Components: `SoftwareAES`, `AppleKeyStoreState`.
 
 ### Current limits
 
-- Not compiled yet: the Linux kernel toolchain \(scripts/linux/setup-toolchain.py, run as root\) is not installed on the porting host. The ArmCpu/ArmDTPlatform/SoftwareAES components and the patches are only checked to apply, not to build against xnu-8796.
+- kernel.macho is not produced yet: prelink is blocked \(see findings\). Nothing has run on hardware.
 
 ### Next action
 
-- Install the Linux toolchain, run ./unixnu kernel -D ../UniXNU-apollo and fix compile errors against xnu-8796.
+- Find the end of the Libm constant block after 0x1054 \(first real instruction after 0x14ec\), catalogue that span \(prefix, size, SHA-256\) in a device prelink wrapper that extends emit\_prelink.MATH\_LITERAL\_POOLS, set \[kernel.prelink\] tool to it, then finish ./unixnu kernel.
 
 ### Evidence
 
