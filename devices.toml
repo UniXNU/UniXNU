@@ -3500,6 +3500,18 @@ components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoo
 record_state = "available"
 
 [[device]]
+name = "rmx3823-miniyv"
+repository = "miniyv/simple-RMX3823-UniXNU"
+title = "realme GT5 240W (RMX3823, miniyv): UEFI bring-up, full boot chain over fastboot boot"
+title_zh = "realme GT5 240W（RMX3823，miniyv）：UEFI 移植，fastboot 临时启动全链贯通"
+format = 1
+legacy_page = "preserve"
+repository_id = 1453055417
+revision = "23b17bbc2be76cee1c6cf04efd9da62fa74305a9"
+board = "rmx3823"
+soc = "SM8550"
+
+[[device]]
 name = "rothko"
 repository = "woaphone/UniXNU-rothko"
 title = "Xiaomi Redmi K70 Ultra (rothko, MediaTek Dimensity 9300)"

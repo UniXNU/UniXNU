@@ -140,7 +140,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Redmi K20 Pro / Mi 9T Pro](/devices/models/raphael) | raphael | SM8150 | 5 |
 | [Realme 5 Pro](/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
-| [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |
+| [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/devices/models/rmx3823) | rmx3823 | SM8550 | 2 |
 | [Xiaomi Redmi K70 Ultra \(rothko, MediaTek Dimensity 9300\)](/devices/models/rothko) | rothko | MT6989 | 1 |
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |

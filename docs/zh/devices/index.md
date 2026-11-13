@@ -140,7 +140,7 @@
 | [Redmi K20 Pro / Mi 9T Pro](/zh/devices/models/raphael) | raphael | SM8150 | 5 |
 | [Realme 5 Pro](/zh/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/zh/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
-| [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/zh/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |
+| [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/zh/devices/models/rmx3823) | rmx3823 | SM8550 | 2 |
 | [Xiaomi Redmi K70 Ultra \(rothko, MediaTek Dimensity 9300\)](/zh/devices/models/rothko) | rothko | MT6989 | 1 |
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
