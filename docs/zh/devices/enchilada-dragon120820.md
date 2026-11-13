@@ -6,7 +6,7 @@
 
 OnePlus 6 \(A6003\) / SDM845 / Cortex-A75+A55, arm64 only \(no FEAT\_PAuth\). Skeleton record: every area is planned; inputs below are measured facts, not verified implementation.
 
-源记录: [porting.toml](https://github.com/dragon120820/UniXNU-enchilada/blob/a89c29d14ace416dd3fecff4880b16d4bace4233/porting.toml), `a89c29d14ace416dd3fecff4880b16d4bace4233`.
+源记录: [porting.toml](https://github.com/dragon120820/UniXNU-enchilada/blob/dda6a08c024828e79e2aa026e7aad7ed8180e98f/porting.toml), `dda6a08c024828e79e2aa026e7aad7ed8180e98f`.
 
 本页按设备记录自动生成。
 
@@ -86,6 +86,8 @@ OnePlus 6 \(A6003\) / SDM845 / Cortex-A75+A55, arm64 only \(no FEAT\_PAuth\). Sk
 - \[LOCAL\] panic\_screen and stage 3 cannot both be installed: the probe reported the panic screen occupying 0xa1f bytes from 0xfffffff007404620 up to the end of the padding at 0xfffffff007404ff0, and run 43034417057 then failed to place the stage 3 cave. One instrument per run; stage 3 is the one that answers a yes/no question about the MMU.
 - \[DEVICE\] Stage 3 answered the MMU question: with the payload that carries no panic screen, the handset reset on its own and kept cycling, so the CPU executes the instruction that turns the MMU on. Stage 4 now moves the same reset to just after the first call to PE\_init\_platform in \_arm\_init \(commit e4c84af plus this one\), which asks whether the device-tree platform expert starts and returns.
 - XNU keeps 8 pages of bootstrap page tables unless ARM\_LARGE\_MEMORY is defined, and 8 pages covers 3 GiB \(2 L1 plus 6 L2, one L2 per GiB per tree\). owned\_memory\_size was 0x130000000 \(4.75 GiB\), which needs 5 L2 tables per tree, so create\_bootstrap\_mapping wrote the KVA table past bootstrap\_pagetables. The kernel then faulted the first time it touched a kernel virtual address, which is why every entry-path band before the return to \_arm\_init appeared and nothing after it did. It is now 0x80000000 so both trees stay inside the array. \[HOST\]
+- \[HOST 2026-11-13\] Disable the completed stage-4 reset experiment explicitly with entry\_probe\_reset\_delay=0 for both local and CI payloads. Remote board blob 8c33215f6076433485651709a81b03c782ddf1b2 still enabled delay=5 and reset\_after=\_PE\_init\_platform despite a local comment-only change. Disassembly of payload kernel fade3e9178f8ab315cb8efad9ec710bbbb4d41327c739b2f82abf0517d5e73a6 confirms arm\_init at 0xfffffff007a52f5c branches to 0xfffffff007404620: BL PE\_init\_platform returns to 0xfffffff007404624, waits 96000000 counter ticks and issues PSCI SYSTEM\_RESET. Thus absent mark2 and recurring reset were the deliberate diagnostic path, not evidence of PE return failure or Apple register access. A separately retained candidate restores only the four-byte BL; it stopped the observed reset loop on 2026-11-13 but exposed a CPU topology assertion. Configuration correction does not claim a successful iOS boot.
+- \[HOST/DEVICE 2026-11-13\] SWEET is compiled for NO\_ECORE=1 and MAX\_CPU\_CLUSTERS=1, with HAS\_CLUSTER=0. The actual payload topology parser maps cluster-type P to physical cluster index 1 and asserts against MAX\_CPU\_CLUSTER\_PHY\_ID=0 at machine\_routines.c:1055. Hardware ADT previously exported four E and four P nodes. Set payload.adt.cpu\_topology=smp in the generator to encode zero \(the parser defaults to CLUSTER\_TYPE\_SMP\), keeping all eight CPU reg affinities, cpus=8, PSCI, kernel assertions and the physical E/P DTS unchanged. A controlled candidate changes exactly eight bytes in ADT, preserving kernel SHA1616a6bcf16bb5d09eeffa493045dff767299413c6d8138c9024a1b6ffaada24. Generator regression verifies default hardware mode unchanged, SMP-only classification differences and invalid-policy rejection. True asymmetric scheduling remains unimplemented. Candidate SHA9046e0b06043a2cca4187475469ac5b6e8d7db18cfa25ec30878a3b1147f9054 was flashed only to system\_b; screen result pending.
 
 ### 完成条件
 
@@ -155,9 +157,9 @@ OnePlus 6 \(A6003\) / SDM845 / Cortex-A75+A55, arm64 only \(no FEAT\_PAuth\). Sk
 
 ### 证据
 
-- `host`: [2026-11-07: run 42380779873 succeeded, SILICIUM\_UEFI.fd sha256 5bd55aa8..., packed into a 1,626,112 byte boot.img](https://github.com/dragon120820/UniXNU-enchilada/blob/a89c29d14ace416dd3fecff4880b16d4bace4233/firmware/mu-silicium-unixnu-integration.patch)
+- `host`: [2026-11-07: run 42380779873 succeeded, SILICIUM\_UEFI.fd sha256 5bd55aa8..., packed into a 1,626,112 byte boot.img](https://github.com/dragon120820/UniXNU-enchilada/blob/dda6a08c024828e79e2aa026e7aad7ed8180e98f/firmware/mu-silicium-unixnu-integration.patch)
   Command: <code>python3 ./unixnu build firmware --device ../device --os 17 --uefi ../Mu-Silicium --target RELEASE</code>. Revision: `aaaff2dfbfde8969f10ee543da40f99c919e99b1`.
-- `device`: [2026-11-07 22:22: the UniXNU 0.1.0 boot menu appeared on the enchilada screen; no boot entry found because no payload volume exists; zero partition writes](https://github.com/dragon120820/UniXNU-enchilada/blob/a89c29d14ace416dd3fecff4880b16d4bace4233/evidence/20261107_unixnu_menu.md)
+- `device`: [2026-11-07 22:22: the UniXNU 0.1.0 boot menu appeared on the enchilada screen; no boot entry found because no payload volume exists; zero partition writes](https://github.com/dragon120820/UniXNU-enchilada/blob/dda6a08c024828e79e2aa026e7aad7ed8180e98f/evidence/20261107_unixnu_menu.md)
   Command: <code>fastboot boot out/bootimg9/boot/boot.img</code>. Revision: `2b9e37c84f9e4d94de311b70c3594216bfd01801`.
 
 ## CPU 与中断 {#cpu}
