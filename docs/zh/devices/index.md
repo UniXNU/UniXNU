@@ -20,7 +20,7 @@
 | [LG G8 ThinQ \(LM-G820, alphalm\)](/zh/devices/models/alphaplus) | alphaplus | SM8150 | 1 |
 | [Redmi Note 14 Pro+ 5G](/zh/devices/models/amethyst) | amethyst | SM7635 | 2 |
 | [Xiaomi Mi Mix 3 5G](/zh/devices/models/andromeda) | andromeda | SM8150 | 2 |
-| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/zh/devices/models/apollo) | apollo | SM8250 | 1 |
+| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/zh/devices/models/apollo) | apollo | SM8250 | 2 |
 | [Nothing Phone \(3a\)](/zh/devices/models/asteroids) | asteroids | SM7635 | 2 |
 | [OnePlus Ace 3 PJE110](/zh/devices/models/aston) | aston | SM8550 | 1 |
 | [Xiaomi MIX Fold 3](/zh/devices/models/babylon) | babylon | SM8550 | 1 |
@@ -59,7 +59,7 @@
 | [一加 15T](/zh/devices/models/fairlady) | fairlady | SM8850 | 1 |
 | [一加 6T](/zh/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/zh/devices/models/flashlm) | flashlm | SM8150 | 1 |
-| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 15 |
+| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 16 |
 | [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/zh/devices/models/garnet) | garnet | SM7435 | 1 |
 | [摩托罗拉 Moto G 5G](/zh/devices/models/gauguin) | gauguin | SM7225 | 1 |
@@ -100,9 +100,9 @@
 | [Redmi K80 Pro](/zh/devices/models/miro) | miro | SM8750 | 1 |
 | [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/zh/devices/models/mondrian) | mondrian | SM8475 | 6 |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/zh/devices/models/munch) | munch | SM8250 | 3 |
-| [Xiaomi Pad 7 Pro](/zh/devices/models/muyu) | muyu | SM8635 | 2 |
+| [Xiaomi Pad 7 Pro](/zh/devices/models/muyu) | muyu | SM8635 | 3 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/zh/devices/models/myron) | myron | SM8850 | 2 |
-| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 6 |
+| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 7 |
 | [摩托罗拉 Moto Z2 Force](/zh/devices/models/nash) | nash | MSM8998 | 1 |
 | [一加 10 Pro 5G](/zh/devices/models/negroni) | negroni | SM8450 | 1 |
 | [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/zh/devices/models/nio) | nio | SM8250 | 1 |
@@ -112,6 +112,7 @@
 | [nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ \(NX769J\)](/zh/devices/models/nx769j) | nx769j | SM8650 | 2 |
 | [Xiaomi Mi MIX 4 \(odin, Snapdragon 888+ / SM8350\)](/zh/devices/models/odin) | odin | SM8350 | 3 |
 | [AYN Odin 3 \(Dragonwing Q8, SM8750\), 16 GiB](/zh/devices/models/odin3) | odin3 | SM8750 | 1 |
+| [Xiaomi Redmi 7 / Redmi Y3 \(onclite\), Qualcomm MSM8953 Snapdragon 632, 3 GiB RAM](/zh/devices/models/onclite) | onclite | MSM8953 | 1 |
 | [一加 13T](/zh/devices/models/oneplus13t) | oneplus13t | SM8750 | 2 |
 | [Redmi Turbo 4 Pro](/zh/devices/models/onyx) | onyx | SM8735 | 1 |
 | [OPPO Pad mini 5G \(OPD2515, SM8845P / Alor\)](/zh/devices/models/opd2515) | opd2515 | SM8845 | 1 |
@@ -145,7 +146,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 49 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 50 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |

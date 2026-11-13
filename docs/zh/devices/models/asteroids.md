@@ -4,5 +4,5 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [filipnavara/UniXNU-asteroids](https://github.com/filipnavara/UniXNU-asteroids) | [Nothing Phone \(3a\) \(filipnavara\)](/zh/devices/asteroids-filipnavara) | 记录待补齐 | SM7635 |
+| [filipnavara/UniXNU-asteroids](https://github.com/filipnavara/UniXNU-asteroids) | [Nothing Phone \(3a\) \(filipnavara\)](/zh/devices/asteroids-filipnavara) | 适配记录 | SM7635 |
 | [rootstockos/UniXNU-asteroids](https://github.com/rootstockos/UniXNU-asteroids) | [Nothing Phone \(3a\)（asteroids）](/zh/devices/asteroids) | 适配记录 | SM7635 |

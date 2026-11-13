@@ -6,7 +6,7 @@
 
 Migrated from HakiOS, where iOS 16.5 reaches the home screen with touch, GPU, audio, Wi-Fi and battery. Format 2 configuration and hardware description in place; no UniXNU build and no UniXNU device boot yet.
 
-Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/3b46798676eb1e523efd3fcfebfb75cec0950caa/porting.toml), `3b46798676eb1e523efd3fcfebfb75cec0950caa`.
+Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/984455d0e6fda13facdeb63e39fd059200b38756/porting.toml), `984455d0e6fda13facdeb63e39fd059200b38756`.
 
 This page is generated from the device record.
 
@@ -476,6 +476,7 @@ Components: `SoftwareAES`, `AppleKeyStoreState`.
 - zzx-pmap-sync-64bit-pa matters on apollo: 4 GiB of DRAM lies above 4 GiB.
 - With UniXNU's Linux toolchain \(2026-11-12\) xnu-8796.121.2 compiles and links \(mach.development.bcm2837\) after seven more OS-profile patches: clang-drop-auto-var-init-acknowledgement and clang-uio-stackbuf \(current clang\), iorpc-kernel-content \(the toolchain's iig emits xnu-10063 DriverKit glue\), kalloc-pointee-type \(os\_get\_pointee\_type backport for C++ void pointers\), arm64-kpc-from-xnu-10063 \(the 8796 source release omits osfmk/arm64/kpc.c; non-Apple stubs\), compile-records \(clang -MJ, which the archive builders read\) and pthread-jit-entitled-callback \(UniXNU's libpthread 519.120.4\). ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, AppleKeyStoreState, corecrypto and libpthread then build against xnu-8796.
 - Prelink stops on the iOS 16.5 kernelcache \(sha256 e6fa7559...\): emit\_prelink finds external PC-relative encodings in inline data. With its existing catalogue applied \(SHA-256 K, Adler-32 vectors and the Libm pools all match iOS 16.5 too\), only 8 words remain, all in com.apple.kec.Libm \_\_TEXT\_EXEC \(va 0xfffffff005b8d000\): 0x11cc, 0x11dc, 0x11ec, 0x11fc and 0x1490, 0x14a0, 0x14d4, 0x14ec. They lie in one block of double-precision constants that starts after the RET at 0x1050 and is read through ADR \(targets 0x1068, 0x107c, 0x1088, 0x109c, 0x10c4, 0x14cc\). Libm has no symbols, LC\_FUNCTION\_STARTS or ADRP data references, and no BL target delimits the block end yet.
+- The Libm block ends at 0x1520 \(2026-11-13\): 0x1054-0x1520, 1228 bytes, after the RET at 0x1050 and before the next function's stp x29, x30, \[sp, \#-0x10\]\!; 0x151c is zero padding. Libm reads it only through ADR and LDR \(literal\) from 0xc90-0x1024, and no direct branch lands in it \(the boundary rule of UniXNU's scripts/audit-target-libm-inline-data.py\). It is the iOS 16.5 counterpart of the iPadOS pool at 0xf60-0x1440. package/prelink/emit\_prelink\_ios16\_5.py adds it \(prefix 0000807f0000004100008040db0f493f, sha256 73df5b75...c385f\) to emit\_prelink.MATH\_LITERAL\_POOLS, and the OS profile's \[kernel.prelink\] tool points to it. Prelink then emits kernel.macho \(55599104 bytes, sha256 545a58d6...3ee3\): 235530 PC-relative encodings preserved, executable bytes unchanged, runtime\_qualified and loadable false.
 - UniXNU build caching: patches that change exported headers do not reach .cache/fakeroot until its .xnu-&lt;version&gt;-headers stamp and the startup.o.json record are removed.
 - The HakiOS apollo drivers depend on HakiOS's shared core patch \(input, QMI, lx, audio plug-in layers\), which is not in this repository.
 
@@ -485,15 +486,16 @@ Components: `SoftwareAES`, `AppleKeyStoreState`.
 
 ### Current limits
 
-- kernel.macho is not produced yet: prelink is blocked \(see findings\). Nothing has run on hardware.
+- kernel.macho is an experimental prelink candidate: emit\_prelink does not qualify register dataflow or runtime behaviour. The block belongs to the iOS 16.5 kernelcache, not to apollo, and should move into UniXNU's catalogue. Payload and boot image not built yet. Nothing has run on hardware.
 
 ### Next action
 
-- Find the end of the Libm constant block after 0x1054 \(first real instruction after 0x14ec\), catalogue that span \(prefix, size, SHA-256\) in a device prelink wrapper that extends emit\_prelink.MATH\_LITERAL\_POOLS, set \[kernel.prelink\] tool to it, then finish ./unixnu kernel.
+- Build the payload and boot image \(./unixnu payload, ./unixnu bootimg with the uefi-apollo firmware\) and boot it through DarwinBoot on the phone; offer the iOS 16.5 Libm pool to UniXNU's kits/XnuPrelink.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `host`: [CachyOS, /opt/unixnu-linux toolchain, kernelcache e6fa7559...: xnu-8796.121.2 builds and prelink emits kernel.macho sha256 545a58d6c39379daa36c4e4d66f4c2274c8a33bb4845ef09f4c6fc162c853ee3 with the Libm block catalogued \(UniXNU-apollo commit carrying package/prelink\).](https://github.com/UniXNU/UniXNU/commit/7d85ede80092050f4d87f72ac7229bb605ce07fb)
+  Command: <code>./unixnu prelink -D ../UniXNU-apollo</code>. Revision: `7d85ede80092050f4d87f72ac7229bb605ce07fb`.
 
 ## Diagnostics {#diagnostics}
 
