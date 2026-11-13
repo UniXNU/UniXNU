@@ -74,7 +74,7 @@
 | [摩托罗拉 Moto G9 Play](/zh/devices/models/guamp) | guamp | SM6115 | 1 |
 | [Redmi K40 Pro](/zh/devices/models/haydn) | haydn | SM8350 | 3 |
 | [三星 Galaxy S7 Edge](/zh/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
-| [小米 14](/zh/devices/models/houji) | houji | SM8650 | 3 |
+| [小米 14](/zh/devices/models/houji) | houji | SM8650 | 4 |
 | [一加 Ace 5 Pro](/zh/devices/models/hummer) | hummer | SM8750 | 1 |
 | [一加 8 Pro](/zh/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [小米 13 Ultra](/zh/devices/models/ishtar) | ishtar | SM8550 | 3 |
@@ -126,7 +126,7 @@
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 4 |
 | [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 8 |
-| [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 4 |
+| [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 5 |
 | [一加 Ace 3（PJE110）](/zh/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/zh/devices/models/pma120) | pma120 | SM8850 | 1 |
 | [小米 MIX 2S](/zh/devices/models/polaris) | polaris | SDM845 | 4 |
@@ -145,7 +145,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 48 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 49 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |

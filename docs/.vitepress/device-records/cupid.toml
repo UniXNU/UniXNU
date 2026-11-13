@@ -4,30 +4,65 @@ schema_version = 1
 name = "cupid"
 soc = "SM8450"
 os_profile = "ios-27.0.1-24A446"
-summary = "Xiaomi 12 (cupid, SM8450) running iOS 27.0.1 (24A446, arm64e) under an iPhone17,2 / D94AP identity, with the iOS 26.5.2 (23F84) image kept as a fallback. This record separates what is established from host sources from what still needs the phone."
+summary = "Xiaomi 12 (cupid, SM8450) running iOS 27.0.1 (24A446, arm64e) under an iPhone17,2 / D94AP identity. The kernel reaches BSD init; the active milestone is SM8450 UFS storage and the root volume."
 
 [[area]]
 id = "configuration"
 status = "implemented"
 components = []
-paths = ["board.toml", "feeds.toml", "configs/**", "profiles/**", ".github/**", ".gitignore", "scripts/install-os-profile.sh", "scripts/build-cupid-dtb.sh", "notes/**"]
-inputs = ["SM8450 SoC source pin; iPhone-flavoured iOS 27.0.1 build 24A446 profile, with iOS 26.5.2 build 23F84 retained as fallback; cupid defconfigs and device tree.", "UniXNU main does not ship an iPhone OS profile: this repository carries profiles/os/ios-27.0.1-24A446 and profiles/os/ios-26.5.2-23F84 and installs them into the checkout."]
-configuration = ["board.os_profile = ios-27.0.1-24A446; board.soc = SM8450; board.soc_source = sm8450; schema_version = 2.", "profiles/os/ios-27.0.1-24A446 is the iPhone17,2 (D94AP) 24A446 profile with the upstream XnuPrelink 24A446 fixture retargeted to the iPhone collection; profiles/os/ios-26.5.2-23F84 remains the fallback.", "NOT the shipped ipados-27.0.1-24A446 profile: different IPSW, original kexts and ADT identity."]
-procedure = ["Read https://unixnu.com/porting/device-repository and https://unixnu.com/porting/records.", "Run scripts/install-os-profile.sh ../UniXNU to install both iPhone profiles into the UniXNU checkout.", "Run ./unixnu defconfig cupid_ios27_defconfig -D ../UniXNU-cupid, ./unixnu fetch -D ../UniXNU-cupid, ./unixnu status --json -D ../UniXNU-cupid."]
-findings = ["The upstream 24A446 fixture's data entries: the 13 vnodeop_desc descriptors are retargeted to the iPhone 27 collection by their unique vnop_* name strings and vdesc_name slots; the 8 metaclass slots and _gIODTPHandleKey, _audio_active, _tk_rawcc, _tk_nin and _gPESerialBaud remain to be retargeted by the reference data map/source consumers. notes/IOS27-SHENG.md records the fixture/recipe, the generic sheng 24A446 bring-up hunks and the relevant 4 KiB/arm64e/prelink/security/bring-up docs. ", "The sheng 24A446 boot uses XnuPrelink's upstream fileset-24A446-symbols.json (156 native bindings), not a 30-shim list. Retargeted to the iPhone17,2 24A446 kernelcache by exact function hash (36) and shape (93) and merged with the old iOS 27 shims that still have compiled C functions, the local prelink with the old native/reference leaves 55 stubs/17 missing (140 fixture inputs), versus 137 stubs for the old 30-shim build. The iOS 27 profile is restored and selected; iOS 26.5.2 remains a staged fallback. ", "The iPhone17,2 26.5.2 kernelcache reports xnu-12377.122.8~1/RELEASE_ARM64_T8140 and has 302 fileset entries; the newest public source is xnu-12377.121.6. Same major/minor, so the iOS 26 profile applies only zzz-boot-progress and not the Darwin 26 syscall/KPI patches that 24A446 needs.", "An iPhone profile is required for a phone: iPadOS presents iPad product identity, idiom and display assumptions that SpringBoard and UIKit read from /product.", "The first iOS 26 prelink without a fileset reference left 1668 targets / 18367 sites (apfs 3757, AppleM2 2706, AppleARMPlatform 1755, ApplePMGR 1443, IOGPUFamily 1427). With the reference the exact tree left 92 owner-site pairs / 766 sites. The sixteen reviewed bindings in patches/xnuprelink/fileset-cupid-23F84-symbols.json cover ml_set_interrupts, two PMGR thunks, zfree, uiomove64, zalloc_ro, task_deallocate, vnode_getwithref, the AppleImage4 security-flag shim, the lck_mtx_gate open/steal/alloc/free family, and the pmap PPL functions. The first boot panic named AppleImage4 0xabda26c; the second was a tail-branch stub from AppleImage4, so fileset-register-report.patch now saves x0-x30 and prints x16/x17 plus data-slot candidates. --allow-missing still writes the candidate; any remaining stub is named exactly by the report. The iPhone 26 native __DATA_CONST (0x11c000) and __LASTDATA_CONST do not fit before AppleARMPlatform __DATA_CONST at +0x119f40, so prelink fails with 'Native __DATA_CONST overlaps a retained segment'. patches/xnu/no-assert-strings.patch keeps MACH_ASSERT (the prelinked ipc_port ABI stays 160) but no-ops the assert/assertf/assert3 message macros, removing most of the 0x2ef3c __assert section. DTrace and LOCK_STATS stay enabled: disabling DTrace broke the bsd partial link, and turning MACH_ASSERT off changed ipc_port from 160 to 144 bytes. AMFI early init: the 24A446 value 0xfffffff00921000c is the wrapper at AppleMobileFileIntegrity __TEXT_EXEC+0xe7ec; the same offset lands mid-function in 23F84. The 23F84 wrapper is 0xfffffff008edda30 (__TEXT_EXEC+0xdee0): it calls the original initializer at 0xfffffff008edd2a0 and returns 0.", "The iPhone 26 fileset has every root of the iPad 26 profile except com.apple.iokit.IOHIDEventDriver; the class itself ships in IOHIDFamily.", "Arrays replace inherited arrays: board.toml repeats every selected component, configuration fragment and patch series entry.", "The macOS workflow repairs two stale UniXNU submodule gitlinks before fetch: ArmCpu 2e11cda/16040839 to the existing 93a5030, and AppleKeyStoreState 6ff4f11 (gone from the remote) to main 58e5461. The latter blocked build 42779052201 in the resolve step. The macOS workflow builds the EDK II package (UniXNU.efi) after the kernel, so a push that changes board.toml, profiles, configs or the workflow itself exercises image assembly without the phone.", "scripts/build-cupid-dtb.sh builds the firmware DTB from the LineageOS waipio-v2 + cupid overlay (cpp + dtc + fdtoverlay), sha256 6246e11cc2867946183b7e453797d5ec0fb3c49c6297115f2605a7bf8c0e0b50. It is not byte-identical to the stock vendor_boot base+dtbo merge (956745 bytes, sha256 ea574733...): the stock base is a larger vendor tree. The device reports dtb_idx 10 (Waipio v2) and revision 2.2. The live ABL FDT was pulled from the phone (sha256 3d669081f48c6a810f0d95f7c5fa37d62dcb1c40a9d6fe4eb8b79bc24bebf7f0, 773371 bytes, model 'Cupid based on Qualcomm Technologies, Inc SM8450') and scripts/build-cupid-dtb.sh accepts it with UNIXNU_CUPID_LIVE_FDT; the compiled tree now patches the cupid root identity and measures 451042 bytes (sha256 7604f605...).", "macOS cpp mis-parses -x assembler-with-cpp (cc: no input files); the DTB script now defaults to clang -E and the workflow builds cupid.dtb before the kernel so a tree failure is not hidden behind a 19-minute kernel step.", "notes/FASTBOOT.md records the one-boot procedure: fastboot boot loads the image into RAM, nothing is flashed, and the unlocked state must be confirmed before the Gunyah PAC test.", "The workflow applies patches/unixnu/*.patch to the UniXNU checkout before building; patches/unixnu/0001-patch-xnu-entry-probe-skip-nm-headers.patch makes the entry-probe parser skip non-hex nm header lines.", "The payload step passes --uefi ../uefi-cupid: panic_screen=true needs Mu-Silicium FrameBufferSerialPortLib/Font.h; without it patch-xnu-entry-probe.py aborts before writing the volume.", "notes/first-boot-2026-11-07.md is the first device boot result: fastboot accepted the image but the screen stayed black, traced to the FD base 0xA7100000 versus the stock UEFI ELF window at 0xA7000000 size 0x2A2000.", "notes/first-uefi-boot-2026-11-07.md records the first successful UEFI boot: header v4 reaches BootShim and the UniXNU menu on cupid; the payload volume is not published (no SimpleFileSystem), so the menu falls back to BDS.", "The workflow applies patches/darwinboot/0001 inside the DarwinBoot submodule after the kernel step has fetched it, so the firmware build sees the window diagnostics.", "notes/PROJECT-STATE.md and notes/PROJECT-NEXT.md snapshot the working state (repos, commits, measured device facts, boot history, patches, next step) so a compacted session can resume without losing critical detail.", "notes/pac-trap-2026-11-07.md records the first XNU start and the Gunyah trap on the EL1 PAC key write; the next image disables the key-programming block.", "The panic instruction was decoded as 0xd51be228 (msr CNTP_CTL_EL0), not PAC: the screen wrapped instr=d5 onto the next line. The timer is the current blocker; the record was corrected.", "The macOS workflow uploads cupid-native-symbols (unstripped native kernel, kernel.json and kernel.map.json) so an unmatched target can be reviewed against real symbols offline.", "The iOS 27-only reviewed-symbol fixture, the PAC key-write skip, the report-registers probe and the 24A446 profile were removed at the pivot to iOS 26. The device XNU series now contains only the timer patch.", "The iPhone 26 OS and Cryptex1,SystemOS images decrypt on macOS with /usr/bin/aea: OS 094-54688-107.dmg has sha256 14b119c0d44826e080c9cd61f3f5cf9ff7449d990b1f5e0dfb4b93fc3a29d58b and volume 1A2E284A-0A7E-40A9-8F5D-35A1C1F44E9E; Cryptex1,SystemOS 094-54806-109.dmg has sha256 7e992fd0fde7339a45607b511f4c024641f71095c6730de0a1c9f47b3970df56 and volume 21AAD942-A60B-4026-B7B4-0A57205CC9A9."]
-completion = ["status resolves ios-27.0.1-24A446 with arch arm64e, the sm8450 SoC source and the cupid_ios27 defconfig; the iPhone17,2 24A446 kernelcache prelinks with the retargeted 24A446 fixture."]
-limits = ["The iPhone17,2 identity advertises a 1320x2868 display; cupid is 1080x2400. Display identity is corrected with the panel milestone."]
-next_action = ["Run the macOS kernel workflow, record the stubbed/missing target counts, and boot the staged image on cupid."]
-
-[[area.evidence]]
-kind = "source"
-reference = "board.toml"
-result = "Format 2 board configuration selecting SM8450, ios-26.5.2-23F84 and the stage-0 component set."
-
-[[area.evidence]]
-kind = "source"
-reference = "profiles/os/ios-26.5.2-23F84/profile.toml"
-result = "iPhone17,2 26.5.2 IPSW pins, arm64e architecture selection, the 23F84 AMFI wrapper 0xfffffff008edda30, the iPhone prelink roots and the pending root images."
+paths = [
+    "board.toml",
+    "feeds.toml",
+    "configs/**",
+    "profiles/**",
+    ".github/**",
+    ".gitignore",
+    "scripts/install-os-profile.sh",
+    "scripts/build-cupid-dtb.sh",
+    "notes/**",
+]
+inputs = [
+    "SM8450 SoC source pin; iPhone-flavoured iOS 27.0.1 build 24A446 profile; cupid defconfig and device tree.",
+    "UniXNU main does not ship an iPhone OS profile: this repository carries profiles/os/ios-27.0.1-24A446 and installs it into the checkout.",
+]
+configuration = [
+    "board.os_profile = ios-27.0.1-24A446; board.soc = SM8450; board.soc_source = sm8450; schema_version = 2.",
+    "profiles/os/ios-27.0.1-24A446 is the iPhone17,2 (D94AP) 24A446 profile with the upstream XnuPrelink 24A446 fixture retargeted to the iPhone collection. It is the only OS profile in this repository.",
+    "NOT the shipped ipados-27.0.1-24A446 profile: different IPSW, original kexts and ADT identity.",
+]
+procedure = [
+    "Read https://unixnu.com/porting/device-repository and https://unixnu.com/porting/records.",
+    "Run scripts/install-os-profile.sh ../UniXNU to install the iPhone 27 profile into the UniXNU checkout.",
+    "Run ./unixnu defconfig cupid_ios27_defconfig -D ../UniXNU-cupid, ./unixnu fetch -D ../UniXNU-cupid, ./unixnu status --json -D ../UniXNU-cupid.",
+    "Run .github/workflows/userdata.yml on a macOS runner to build the iOS 27 userdata image; download the chunks and flash it with fastboot flash userdata.",
+]
+findings = [
+    "The upstream 24A446 fixture's data entries: the 13 vnodeop_desc descriptors are retargeted to the iPhone 27 collection by their unique vnop_* name strings and vdesc_name slots; the 8 metaclass slots and _gIODTPHandleKey, _audio_active, _tk_rawcc, _tk_nin and _gPESerialBaud remain to be retargeted by the reference data map/source consumers. notes/IOS27-SHENG.md records the fixture/recipe, the generic sheng 24A446 bring-up hunks and the relevant 4 KiB/arm64e/prelink/security/bring-up docs. ",
+    "An iPhone profile is required for a phone: iPadOS presents iPad product identity, idiom and display assumptions that SpringBoard and UIKit read from /product.",
+    "Arrays replace inherited arrays: board.toml repeats every selected component, configuration fragment and patch series entry.",
+    "The macOS workflow repairs two stale UniXNU submodule gitlinks before fetch: ArmCpu 2e11cda/16040839 to the existing 93a5030, and AppleKeyStoreState 6ff4f11 (gone from the remote) to main 58e5461. The latter blocked build 42779052201 in the resolve step. The macOS workflow builds the EDK II package (UniXNU.efi) after the kernel, so a push that changes board.toml, profiles, configs or the workflow itself exercises image assembly without the phone.",
+    "scripts/build-cupid-dtb.sh builds the firmware DTB from the LineageOS waipio-v2 + cupid overlay (cpp + dtc + fdtoverlay), sha256 6246e11cc2867946183b7e453797d5ec0fb3c49c6297115f2605a7bf8c0e0b50. It is not byte-identical to the stock vendor_boot base+dtbo merge (956745 bytes, sha256 ea574733...): the stock base is a larger vendor tree. The device reports dtb_idx 10 (Waipio v2) and revision 2.2. The live ABL FDT was pulled from the phone (sha256 3d669081f48c6a810f0d95f7c5fa37d62dcb1c40a9d6fe4eb8b79bc24bebf7f0, 773371 bytes, model 'Cupid based on Qualcomm Technologies, Inc SM8450') and scripts/build-cupid-dtb.sh accepts it with UNIXNU_CUPID_LIVE_FDT; the compiled tree now patches the cupid root identity and measures 451042 bytes (sha256 7604f605...).",
+    "macOS cpp mis-parses -x assembler-with-cpp (cc: no input files); the DTB script now defaults to clang -E and the workflow builds cupid.dtb before the kernel so a tree failure is not hidden behind a 19-minute kernel step.",
+    "notes/FASTBOOT.md records the one-boot procedure: fastboot boot loads the image into RAM, nothing is flashed, and the unlocked state must be confirmed before the Gunyah PAC test.",
+    "The workflow applies patches/unixnu/*.patch to the UniXNU checkout before building; patches/unixnu/0001-patch-xnu-entry-probe-skip-nm-headers.patch makes the entry-probe parser skip non-hex nm header lines.",
+    "The payload step passes --uefi ../uefi-cupid: panic_screen=true needs Mu-Silicium FrameBufferSerialPortLib/Font.h; without it patch-xnu-entry-probe.py aborts before writing the volume.",
+    "notes/first-boot-2026-11-07.md is the first device boot result: fastboot accepted the image but the screen stayed black, traced to the FD base 0xA7100000 versus the stock UEFI ELF window at 0xA7000000 size 0x2A2000.",
+    "notes/first-uefi-boot-2026-11-07.md records the first successful UEFI boot: header v4 reaches BootShim and the UniXNU menu on cupid; the payload volume is not published (no SimpleFileSystem), so the menu falls back to BDS.",
+    "The workflow applies patches/darwinboot/0001 inside the DarwinBoot submodule after the kernel step has fetched it, so the firmware build sees the window diagnostics.",
+    "notes/pac-trap-2026-11-07.md records the first XNU start and the Gunyah trap on the EL1 PAC key write; the next image disables the key-programming block.",
+    "The panic instruction was decoded as 0xd51be228 (msr CNTP_CTL_EL0), not PAC: the screen wrapped instr=d5 onto the next line. The timer is the current blocker; the record was corrected.",
+    "The macOS workflow uploads cupid-native-symbols (unstripped native kernel, kernel.json and kernel.map.json) so an unmatched target can be reviewed against real symbols offline.",
+    "The iOS 27 kernel passes every remaining import stub and reaches BSD init. It now panics in IOKitBSDInit.cpp \"Failed to mount root device\": no IOMedia carries the iOS 27 OS volume UUID. CONFIG_XNU_NATIVE_UFS is not set, package/Sm8450Ufs is only headers plus a host test, and the iOS 27 SHNGROOT userdata image is not installed. notes/ROOT-UFS.md records the milestone; patches/xnu/ufs-probe.patch reports the SM8450 GCC/UFSHCI state read-only.",
+]
+completion = [
+    "status resolves ios-27.0.1-24A446 with arch arm64e, the sm8450 SoC source and the cupid_ios27 defconfig; the iPhone17,2 24A446 kernelcache prelinks with the retargeted fixture and the kernel reaches BSD init.",
+]
+limits = [
+    "The iPhone17,2 identity advertises a 1320x2868 display; cupid is 1080x2400. Display identity is corrected with the panel milestone.",
+]
+next_action = [
+    "Boot the unixnu-ufs-probe build, record the GCC/UFSHCI values, then implement and enable the SM8450 UFS block driver and flash the iOS 27 userdata image.",
+]
 
 [[area.evidence]]
 kind = "source"
@@ -41,25 +76,44 @@ command = "adb shell su -c 'getprop | grep ro.boot'"
 revision = "4730e3b1fb52e1238a5d370bdc1f381622033de9"
 result = "ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb_idx=10 (Waipio v2), dtbo_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2."
 
-[[area.evidence]]
-kind = "device"
-reference = "notes/PANIC-2026-11-10-ios26-image4.md"
-command = "fastboot boot %USERPROFILE%\\Downloads\\cupid-unixnu\\boot-v4-ios26.img"
-revision = "05539859958a8e2edc690bdda61310578a4220f8"
-result = "First iOS 26 XNU start: fileset stub panic from 0xfffffff008d05be8 (AppleImage4). The call site resolves to original 0xfffffff00abda26c, the one-time security-flag initializer; bound to _unixnu_apple_image4_flags (status 2, flags 0)."
-
 [[area]]
 id = "firmware"
 status = "host-verified"
-components = ["DarwinBoot"]
-paths = ["proprietary-files.txt", "scripts/*firmware*"]
-inputs = ["A Mu-Silicium UEFI fork for cupid (uefi-cupid), cupid's stock UEFI/ABL firmware and the live ABL device tree.", "PSCI SMC entry, GOP framebuffer handoff and the memory map UniXNU may own."]
-configuration = ["board.toml [firmware] names config cupid, dsc Platforms/Xiaomi/cupidPkg/cupid.dsc and the SILICIUM_UEFI.fd path.", "Firmware DSC/FDF must embed UniXNU, UniXNUDxe, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and FAT support."]
-procedure = ["Fork uefi-sheng into uefi-cupid, add cupidPkg and its Binaries/cupid module from the stock UEFI image.", "Build with ./unixnu build firmware -D ../UniXNU-cupid --uefi ../uefi-cupid.", "Record the firmware revision, FD size and the handoff memory map."]
-findings = ["uefi-cupid is forked from UniXNU/uefi-sheng and carries Platforms/Xiaomi/cupidPkg: CUPID_VENDOR_HW = 0, USE_CUSTOM_DISPLAY_DRIVER = 0, WaipioPkg.dsc.inc (SM8450, 8 cores, GIC 0x17100000), SimpleFbDxe on ABL's 1080x2400 scan-out, and UniXNUPkg + DarwinBoot + UniXNURamDiskDxe.", "The memory and configuration maps are copied from the SM8450 ingres platform (same DRAM base, FD window and SoC carveouts) and are REQUIRED to be replaced with cupid's stock uefiplat.cfg.", "The minimal configuration deliberately omits Binaries/cupid, so no stock vendor module is needed to build the firmware volume; vendor clocks, UFS, USB, charger and the stock display chain are a later CUPID_VENDOR_HW = 1 step.", "The stock splash_region (0xb8000000 + 0x2b00000) is present in waipio display DTSI and is assumed in the payload and boot image."]
-completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves documented reservations."]
-limits = ["cupidPkg builds and produces SILICIUM_UEFI.fd, but the memory map and FD base are still the ingres SM8450 values and vendor hardware is off; neither is device-verified."]
-next_action = ["Build firmware with ./unixnu build firmware --uefi ../uefi-cupid and record the FD size; then import Binaries/cupid from the HyperOS archive for CUPID_VENDOR_HW = 1."]
+components = [
+    "DarwinBoot",
+]
+paths = [
+    "proprietary-files.txt",
+    "scripts/*firmware*",
+]
+inputs = [
+    "A Mu-Silicium UEFI fork for cupid (uefi-cupid), cupid's stock UEFI/ABL firmware and the live ABL device tree.",
+    "PSCI SMC entry, GOP framebuffer handoff and the memory map UniXNU may own.",
+]
+configuration = [
+    "board.toml [firmware] names config cupid, dsc Platforms/Xiaomi/cupidPkg/cupid.dsc and the SILICIUM_UEFI.fd path.",
+    "Firmware DSC/FDF must embed UniXNU, UniXNUDxe, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and FAT support.",
+]
+procedure = [
+    "Fork uefi-sheng into uefi-cupid, add cupidPkg and its Binaries/cupid module from the stock UEFI image.",
+    "Build with ./unixnu build firmware -D ../UniXNU-cupid --uefi ../uefi-cupid.",
+    "Record the firmware revision, FD size and the handoff memory map.",
+]
+findings = [
+    "uefi-cupid is forked from UniXNU/uefi-sheng and carries Platforms/Xiaomi/cupidPkg: CUPID_VENDOR_HW = 0, USE_CUSTOM_DISPLAY_DRIVER = 0, WaipioPkg.dsc.inc (SM8450, 8 cores, GIC 0x17100000), SimpleFbDxe on ABL's 1080x2400 scan-out, and UniXNUPkg + DarwinBoot + UniXNURamDiskDxe.",
+    "The memory and configuration maps are copied from the SM8450 ingres platform (same DRAM base, FD window and SoC carveouts) and are REQUIRED to be replaced with cupid's stock uefiplat.cfg.",
+    "The minimal configuration deliberately omits Binaries/cupid, so no stock vendor module is needed to build the firmware volume; vendor clocks, UFS, USB, charger and the stock display chain are a later CUPID_VENDOR_HW = 1 step.",
+    "The stock splash_region (0xb8000000 + 0x2b00000) is present in waipio display DTSI and is assumed in the payload and boot image.",
+]
+completion = [
+    "Firmware image builds, enters UniXNU, publishes the framebuffer and preserves documented reservations.",
+]
+limits = [
+    "cupidPkg builds and produces SILICIUM_UEFI.fd, but the memory map and FD base are still the ingres SM8450 values and vendor hardware is off; neither is device-verified.",
+]
+next_action = [
+    "Build firmware with ./unixnu build firmware --uefi ../uefi-cupid and record the FD size; then import Binaries/cupid from the HyperOS archive for CUPID_VENDOR_HW = 1.",
+]
 
 [[area.evidence]]
 kind = "source"
@@ -116,15 +170,40 @@ result = "BootShim and the cupidPkg UEFI run on the phone: console shows loading
 [[area]]
 id = "cpu"
 status = "implemented"
-components = ["ArmCpu", "ArmDTPlatform"]
-paths = ["dts/**"]
-inputs = ["SM8450 CPU topology, MPIDR numbering, GICv3 windows and 19.2 MHz timebase from mainline Linux sm8450.dtsi.", "PSCI 1.0 over SMC."]
-configuration = ["dts/sm8450.dtsi: 8 CPUs at MPIDR Affinity1 0x000-0x700; 4x Cortex-A510, 3x Cortex-A710, 1x Cortex-X2.", "GIC distributor 0x17100000 (0x10000), redistributors 0x17180000 (0x200000), 0x40000 stride, interrupt cells 4.", "dts/cupid.dts marks cpu0-3 as the E cluster and cpu4-7 as the P cluster.", "soc:patches/xnu/series raises MAX_CPUS to 8 and reads the core number from Affinity0/Affinity1 for BCM2837 targets."]
-procedure = ["Compile the board DTS and inspect enabled CPUs, GIC ranges and timebase in the ADT.", "Record per-CPU entry, timer interrupts and IPI delivery on the phone."]
-findings = ["SM8450 numbers cores in MPIDR Affinity1 exactly like SM8550, so the shared native-smp-secondary patch context applies unchanged.", "SM8450 UFS PHY is at 0x1d87000, not SM8550's 0x1d80000; SoC values cannot be copied across without checking."]
-completion = ["Every enabled CPU reaches its entry checkpoint; timer and IPI handling work on each enabled CPU."]
-limits = ["No CPU has entered XNU on this board yet; the topology is host-verified only."]
-next_action = ["After the first boot, record each CPU's MPIDR and entry checkpoint."]
+components = [
+    "ArmCpu",
+    "ArmDTPlatform",
+]
+paths = [
+    "dts/**",
+]
+inputs = [
+    "SM8450 CPU topology, MPIDR numbering, GICv3 windows and 19.2 MHz timebase from mainline Linux sm8450.dtsi.",
+    "PSCI 1.0 over SMC.",
+]
+configuration = [
+    "dts/sm8450.dtsi: 8 CPUs at MPIDR Affinity1 0x000-0x700; 4x Cortex-A510, 3x Cortex-A710, 1x Cortex-X2.",
+    "GIC distributor 0x17100000 (0x10000), redistributors 0x17180000 (0x200000), 0x40000 stride, interrupt cells 4.",
+    "dts/cupid.dts marks cpu0-3 as the E cluster and cpu4-7 as the P cluster.",
+    "soc:patches/xnu/series raises MAX_CPUS to 8 and reads the core number from Affinity0/Affinity1 for BCM2837 targets.",
+]
+procedure = [
+    "Compile the board DTS and inspect enabled CPUs, GIC ranges and timebase in the ADT.",
+    "Record per-CPU entry, timer interrupts and IPI delivery on the phone.",
+]
+findings = [
+    "SM8450 numbers cores in MPIDR Affinity1 exactly like SM8550, so the shared native-smp-secondary patch context applies unchanged.",
+    "SM8450 UFS PHY is at 0x1d87000, not SM8550's 0x1d80000; SoC values cannot be copied across without checking.",
+]
+completion = [
+    "Every enabled CPU reaches its entry checkpoint; timer and IPI handling work on each enabled CPU.",
+]
+limits = [
+    "No CPU has entered XNU on this board yet; the topology is host-verified only.",
+]
+next_action = [
+    "After the first boot, record each CPU's MPIDR and entry checkpoint.",
+]
 
 [[area.evidence]]
 kind = "source"
@@ -154,14 +233,35 @@ result = "XNU started on cupid for the first time and panicked on msr CNTP_CTL_E
 id = "memory"
 status = "implemented"
 components = []
-paths = ["dts/**", "package/*Memory*", "package/*Smmu*"]
-inputs = ["cupid UEFI memory map (largest contiguous run), reserved regions, SMMU stream IDs and DMA widths."]
-configuration = ["board.toml [payload.adt] owned_memory_size = 0x80000000 (2 GiB) matches the measured run.", "dts/cupid.dts memory@80000000 describes a 2 GiB nominal handoff range."]
-procedure = ["Dump the live ABL/UEFI memory map over UART or fastboot oem command.", "Set owned_memory_size to the largest run the firmware can hand over."]
-findings = ["The stock bootloader memory layout has not been measured on cupid; the sheng/ishtar windows are 4.75 GiB and 9 GiB on different boards and are not evidence for this one."]
-completion = ["Every handoff region is accounted for and DMA engines access only allocated ranges with the documented cache policy."]
-limits = ["No memory-map measurement from the phone."]
-next_action = ["Capture the cupid memory map before the first payload boot."]
+paths = [
+    "dts/**",
+    "package/*Memory*",
+    "package/*Smmu*",
+]
+inputs = [
+    "cupid UEFI memory map (largest contiguous run), reserved regions, SMMU stream IDs and DMA widths.",
+]
+configuration = [
+    "board.toml [payload.adt] owned_memory_size = 0x80000000 (2 GiB) matches the measured run.",
+    "dts/cupid.dts memory@80000000 describes a 2 GiB nominal handoff range.",
+]
+procedure = [
+    "Dump the live ABL/UEFI memory map over UART or fastboot oem command.",
+    "Set owned_memory_size to the largest run the firmware can hand over.",
+]
+findings = [
+    "The stock bootloader memory layout has not been measured on cupid; the sheng/ishtar windows are 4.75 GiB and 9 GiB on different boards and are not evidence for this one.",
+]
+completion = [
+    "Every handoff region is accounted for and DMA engines access only allocated ranges with the documented cache policy.",
+]
+limits = [
+    "No memory-map measurement from the phone.",
+]
+next_action = [
+    "Capture the cupid memory map before the first payload boot.",
+]
+
 [[area.evidence]]
 kind = "device"
 reference = "notes/device-2026-11-07.md"
@@ -169,19 +269,44 @@ command = "adb shell su -c 'cat /proc/iomem'"
 revision = "4730e3b1fb52e1238a5d370bdc1f381622033de9"
 result = "System RAM runs measured; largest contiguous 0x840000000-0x97fffffff (5 GiB) with the reserved tail from 0x96ef68000; owned_memory_size set to 0x12e000000."
 
-
 [[area]]
 id = "storage"
 status = "planned"
 components = []
-paths = ["drivers/**", "scripts/*ufs*", "scripts/*storage*", "package/Sm8450Ufs/**"]
-inputs = ["SM8450 UFS host 0x1d84000 (SPI 265) and QMP PHY 0x1d87000; SM8450 GCC UFS clock/reset offsets; LUN 0 GPT geometry."]
-configuration = ["SoC DTSI publishes ufshc/ufsphy disabled; the cupid defconfig leaves CONFIG_XNU_NATIVE_UFS unset."]
-procedure = ["Add an SM8450 UFS component (or parameterise ShengUfs by SoC compatible and GCC offsets).", "Enable ufs/ufsphy in the board DTS, then record capacity, GPT and userdata window."]
-findings = ["ShengUfs matches only qcom,sm8550-ufshc and hardcodes SM8550 GCC UFS registers, so it cannot drive cupid as-is.", "SM8450 UFS PHY is at 0x1d87000; SM8550 is at 0x1d80000.", "Measured from gcc-sm8450.c against ShengUfs/GccUfs.h: SM8450 branches are ufs_phy_axi 0x87018, ahb 0x87020, tx_symbol_0 0x87024, rx_symbol_0 0x87028, unipro_core 0x87064, ice_core 0x8706c, phy_aux 0x870a4, rx_symbol_1 0x870c0, aggre_ufs_phy_axi 0x870d4, ufs_phy_gdsc 0x87004. SM8450 has no separate UFS_MEM_PHY_GDSC, so a per-SoC table is required.", "package/Sm8450Ufs/Sm8450UfsRegs.h is the first SM8450 UFS component: nine 0x87xxx branch offsets, GDSC 0x87004, HC 0x1d84000, PHY 0x1d87000 and a read-only probe; .github/workflows/ufs-regs.yml compiles it with a host test.", "package/Sm8450Ufs/Sm8450UfsHci.h adds the UFSHCI command path: HCE 0x34, IS 0x20, UIC 0x90, doorbell 0x58, controller enable/disable, UIC DME_GET/link-startup, UTRD and command-UPIU layouts (READ CAPACITY(10)), transfer-list base and doorbell ring/clear, exercised against a fake controller.", "The UTRD keeps DW0-3 as raw words: the C bitfield header pads to 40 bytes, so the static asserts pin 32 bytes with the UCD base at 16 and PRDT at 28; the fake-controller test caught the padded layout.", "Fixed the UPIU header field order (LUN b1, task tag b2, IID/CS b3, CDB b12) and added ResponseUpiu (52 bytes, residual and sense fields), PrdtEntry (16 bytes), 4-byte PRDT padding and the UCD layout at 0/512/1024; the host test pins every offset."]
-completion = ["Host: register, clock and link facts match the board inventory. Reads: capacity, GPT and known blocks are correct. Root: the OS volume mounts and launchd starts."]
-limits = ["No SM8450 UFS driver exists in the component catalog."]
-next_action = ["Add UCD/PRDT allocation, response-UPIU parsing and a SCSI READ(10) transfer to the host model; then map MMIO in a kext and verify the SM8450 GCC clocks and link startup on the phone."]
+paths = [
+    "drivers/**",
+    "scripts/*ufs*",
+    "scripts/*storage*",
+    "package/Sm8450Ufs/**",
+]
+inputs = [
+    "SM8450 UFS host 0x1d84000 (SPI 265) and QMP PHY 0x1d87000; SM8450 GCC UFS clock/reset offsets; LUN 0 GPT geometry.",
+]
+configuration = [
+    "SoC DTSI publishes ufshc/ufsphy disabled; the cupid defconfig leaves CONFIG_XNU_NATIVE_UFS unset.",
+]
+procedure = [
+    "Add an SM8450 UFS component (or parameterise ShengUfs by SoC compatible and GCC offsets).",
+    "Enable ufs/ufsphy in the board DTS, then record capacity, GPT and userdata window.",
+]
+findings = [
+    "ShengUfs matches only qcom,sm8550-ufshc and hardcodes SM8550 GCC UFS registers, so it cannot drive cupid as-is.",
+    "SM8450 UFS PHY is at 0x1d87000; SM8550 is at 0x1d80000.",
+    "Measured from gcc-sm8450.c against ShengUfs/GccUfs.h: SM8450 branches are ufs_phy_axi 0x87018, ahb 0x87020, tx_symbol_0 0x87024, rx_symbol_0 0x87028, unipro_core 0x87064, ice_core 0x8706c, phy_aux 0x870a4, rx_symbol_1 0x870c0, aggre_ufs_phy_axi 0x870d4, ufs_phy_gdsc 0x87004. SM8450 has no separate UFS_MEM_PHY_GDSC, so a per-SoC table is required.",
+    "package/Sm8450Ufs/Sm8450UfsRegs.h is the first SM8450 UFS component: nine 0x87xxx branch offsets, GDSC 0x87004, HC 0x1d84000, PHY 0x1d87000 and a read-only probe; .github/workflows/ufs-regs.yml compiles it with a host test.",
+    "package/Sm8450Ufs/Sm8450UfsHci.h adds the UFSHCI command path: HCE 0x34, IS 0x20, UIC 0x90, doorbell 0x58, controller enable/disable, UIC DME_GET/link-startup, UTRD and command-UPIU layouts (READ CAPACITY(10)), transfer-list base and doorbell ring/clear, exercised against a fake controller.",
+    "The UTRD keeps DW0-3 as raw words: the C bitfield header pads to 40 bytes, so the static asserts pin 32 bytes with the UCD base at 16 and PRDT at 28; the fake-controller test caught the padded layout.",
+    "Fixed the UPIU header field order (LUN b1, task tag b2, IID/CS b3, CDB b12) and added ResponseUpiu (52 bytes, residual and sense fields), PrdtEntry (16 bytes), 4-byte PRDT padding and the UCD layout at 0/512/1024; the host test pins every offset.",
+]
+completion = [
+    "Host: register, clock and link facts match the board inventory. Reads: capacity, GPT and known blocks are correct. Root: the OS volume mounts and launchd starts.",
+]
+limits = [
+    "No SM8450 UFS driver exists in the component catalog.",
+]
+next_action = [
+    "Add UCD/PRDT allocation, response-UPIU parsing and a SCSI READ(10) transfer to the host model; then map MMIO in a kext and verify the SM8450 GCC clocks and link startup on the phone.",
+]
 
 [[area.evidence]]
 kind = "source"
@@ -199,14 +324,37 @@ result = "iomem confirms ufshc 0x1d84000 (ufs_mem, ufs_ice 0x1d88000, ufs_ice_hw
 id = "display"
 status = "planned"
 components = []
-paths = ["package/*Display*", "package/*Framebuffer*", "scripts/*display*", "scripts/*gop*"]
-inputs = ["Panel: Xiaomi L3 42 02 0a, 1080x2400, DSI command mode with DSC, 60/90/120 Hz timings.", "Cont splash framebuffer 0xb8000000 + 0x2b00000; backlight and panel supplies L7C (AVDD) and L2C (VDD)."]
-configuration = ["[payload] does not yet bind a display component; CONFIG_XNU_NATIVE_LEGACY_DISPLAY stays unset.", "The iPhone17,2 profile advertises 1320x2868; it must be corrected for 1080x2400 when the panel binds."]
-procedure = ["Port build-gop-legacy-display-26.py to the iPhone17,2 (d94ap) ABI record.", "Bind the panel timings and backlight, then verify geometry, colors and refresh."]
-findings = ["cupid's panel is 1080x2400 and 120 Hz-capable; the iPad and iPhone 16 Pro Max profiles describe different sizes.", "Framebuffer handoff and splash region are shared with the waipio platform DTSI."]
-completion = ["A known frame appears with correct geometry and colors; userland presentation and backlight control work."]
-limits = ["No display ABI record for d94ap and no panel driver."]
-next_action = ["Produce abi/legacy-display-23F84-d94ap.json and bind the L3 panel timing set."]
+paths = [
+    "package/*Display*",
+    "package/*Framebuffer*",
+    "scripts/*display*",
+    "scripts/*gop*",
+]
+inputs = [
+    "Panel: Xiaomi L3 42 02 0a, 1080x2400, DSI command mode with DSC, 60/90/120 Hz timings.",
+    "Cont splash framebuffer 0xb8000000 + 0x2b00000; backlight and panel supplies L7C (AVDD) and L2C (VDD).",
+]
+configuration = [
+    "[payload] does not yet bind a display component; CONFIG_XNU_NATIVE_LEGACY_DISPLAY stays unset.",
+    "The iPhone17,2 profile advertises 1320x2868; it must be corrected for 1080x2400 when the panel binds.",
+]
+procedure = [
+    "Port build-gop-legacy-display-26.py to the iPhone17,2 (d94ap) ABI record.",
+    "Bind the panel timings and backlight, then verify geometry, colors and refresh.",
+]
+findings = [
+    "cupid's panel is 1080x2400 and 120 Hz-capable; the iPad and iPhone 16 Pro Max profiles describe different sizes.",
+    "Framebuffer handoff and splash region are shared with the waipio platform DTSI.",
+]
+completion = [
+    "A known frame appears with correct geometry and colors; userland presentation and backlight control work.",
+]
+limits = [
+    "No display ABI record for d94ap and no panel driver.",
+]
+next_action = [
+    "Produce abi/legacy-display-23F84-d94ap.json and bind the L3 panel timing set.",
+]
 
 [[area.evidence]]
 kind = "device"
@@ -219,84 +367,220 @@ result = "The firmware console and the UniXNU menu render on the 1080x2400 panel
 id = "input"
 status = "planned"
 components = []
-paths = ["drivers/**", "package/*Touch*", "package/*Button*", "scripts/*touch*"]
-inputs = ["STMicroelectronics FTS touch over QUPv3 SE4 SPI, IRQ TLMM GPIO 21, reset GPIO 20, firmware st_fts_l3.ftb.", "Power/volume keys on PM8550/PMK8550."]
-configuration = ["No input component is selected; the SoC DTSI does not model SPI or TLMM yet."]
-procedure = ["Add SPI/TLMM resources to the SoC layer, then port an FTS HID input component with the 1080x2400 coordinate map.", "Record contact IDs, release events and button reports."]
-findings = ["cupid uses FTS (st,spi), not the Novatek NT36532 of sheng, so ShengNovatekTouch is not reusable.", "The vendor DTS gives fts,x-max 10800 and y-max 24000 (12x scaling) and FOD coordinates."]
-completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, buttons produce HID reports."]
-limits = ["No FTS component and no SPI/TLMM nodes in the SoC DTSI."]
-next_action = ["Model QUPv3 SE4 SPI and TLMM in sm8450.dtsi, then write the FTS transport."]
+paths = [
+    "drivers/**",
+    "package/*Touch*",
+    "package/*Button*",
+    "scripts/*touch*",
+]
+inputs = [
+    "STMicroelectronics FTS touch over QUPv3 SE4 SPI, IRQ TLMM GPIO 21, reset GPIO 20, firmware st_fts_l3.ftb.",
+    "Power/volume keys on PM8550/PMK8550.",
+]
+configuration = [
+    "No input component is selected; the SoC DTSI does not model SPI or TLMM yet.",
+]
+procedure = [
+    "Add SPI/TLMM resources to the SoC layer, then port an FTS HID input component with the 1080x2400 coordinate map.",
+    "Record contact IDs, release events and button reports.",
+]
+findings = [
+    "cupid uses FTS (st,spi), not the Novatek NT36532 of sheng, so ShengNovatekTouch is not reusable.",
+    "The vendor DTS gives fts,x-max 10800 and y-max 24000 (12x scaling) and FOD coordinates.",
+]
+completion = [
+    "Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, buttons produce HID reports.",
+]
+limits = [
+    "No FTS component and no SPI/TLMM nodes in the SoC DTSI.",
+]
+next_action = [
+    "Model QUPv3 SE4 SPI and TLMM in sm8450.dtsi, then write the FTS transport.",
+]
 evidence = []
 
 [[area]]
 id = "gpu"
 status = "planned"
 components = []
-paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*"]
-inputs = ["Adreno 730 at 0x3d00000, GMU 730.1 at 0x3d6a000, GPU SMMU 0x3da0000, signed ZAP firmware and GPU votes.", "iPhone17,2 ioaccelerator ABI record."]
-configuration = ["sm8450.dtsi describes GPU/GMU/SMMU; all nodes are disabled.", "CONFIG_XNU_NATIVE_ADRENO must stay unset: the catalog's Adreno740 driver targets a different generation."]
-procedure = ["Add an Adreno730 component (or parametrise Adreno740 by GPU id), its GMU command database and votes.", "Port the accelerator ABI to d94ap, then enable the nodes and verify submissions and presentation."]
-findings = ["Adreno740/AdrenoMetal are the only GPU components and carry Adreno 740 register layouts; pointing them at a 730 is not a supported configuration.", "SM8450 GMU PDC window is 0xb290000; SM8550 uses 0xb280000."]
-completion = ["GPU submissions complete, fences are correct, a known image renders and Metal presents it."]
-limits = ["No Adreno 730 driver and no d94ap GPU ABI record."]
-next_action = ["Inventory the Adreno 730 firmware and GMU register map from the vendor kernel, then scope an Adreno730 component."]
+paths = [
+    "package/*Gpu*",
+    "package/*Gmu*",
+    "package/*Adreno*",
+    "scripts/*adreno*",
+]
+inputs = [
+    "Adreno 730 at 0x3d00000, GMU 730.1 at 0x3d6a000, GPU SMMU 0x3da0000, signed ZAP firmware and GPU votes.",
+    "iPhone17,2 ioaccelerator ABI record.",
+]
+configuration = [
+    "sm8450.dtsi describes GPU/GMU/SMMU; all nodes are disabled.",
+    "CONFIG_XNU_NATIVE_ADRENO must stay unset: the catalog's Adreno740 driver targets a different generation.",
+]
+procedure = [
+    "Add an Adreno730 component (or parametrise Adreno740 by GPU id), its GMU command database and votes.",
+    "Port the accelerator ABI to d94ap, then enable the nodes and verify submissions and presentation.",
+]
+findings = [
+    "Adreno740/AdrenoMetal are the only GPU components and carry Adreno 740 register layouts; pointing them at a 730 is not a supported configuration.",
+    "SM8450 GMU PDC window is 0xb290000; SM8550 uses 0xb280000.",
+]
+completion = [
+    "GPU submissions complete, fences are correct, a known image renders and Metal presents it.",
+]
+limits = [
+    "No Adreno 730 driver and no d94ap GPU ABI record.",
+]
+next_action = [
+    "Inventory the Adreno 730 firmware and GMU register map from the vendor kernel, then scope an Adreno730 component.",
+]
 evidence = []
 
 [[area]]
 id = "network"
 status = "planned"
 components = []
-paths = ["drivers/**", "package/*Wifi*", "scripts/*wifi*"]
-inputs = ["cupid WLAN/BT combo: confirm WCN6750 or WCN6855 from vendor firmware (both qca6490 and qca6750 configs ship in the device tree).", "PCIe or MHI transport, firmware, NVM and MAC address."]
-configuration = ["No network component is selected; no wlan node is exported in the board DTS."]
-procedure = ["Confirm the chipset from vendor/etc/wifi and the stock DTB.", "Select a matching UniXNU Wi-Fi component, add bus resources and stage firmware."]
-findings = ["The LineageOS sm8450-common package ships both qca6490 and qca6750 WCNSS configuration files, so the chipset cannot be inferred from the package list alone."]
-completion = ["Scanning, association, address configuration and sustained traffic pass."]
-limits = ["Chipset unconfirmed; no component selected."]
-next_action = ["Read the stock DTB and vendor Wi-Fi firmware names to identify the chipset."]
+paths = [
+    "drivers/**",
+    "package/*Wifi*",
+    "scripts/*wifi*",
+]
+inputs = [
+    "cupid WLAN/BT combo: confirm WCN6750 or WCN6855 from vendor firmware (both qca6490 and qca6750 configs ship in the device tree).",
+    "PCIe or MHI transport, firmware, NVM and MAC address.",
+]
+configuration = [
+    "No network component is selected; no wlan node is exported in the board DTS.",
+]
+procedure = [
+    "Confirm the chipset from vendor/etc/wifi and the stock DTB.",
+    "Select a matching UniXNU Wi-Fi component, add bus resources and stage firmware.",
+]
+findings = [
+    "The LineageOS sm8450-common package ships both qca6490 and qca6750 WCNSS configuration files, so the chipset cannot be inferred from the package list alone.",
+]
+completion = [
+    "Scanning, association, address configuration and sustained traffic pass.",
+]
+limits = [
+    "Chipset unconfirmed; no component selected.",
+]
+next_action = [
+    "Read the stock DTB and vendor Wi-Fi firmware names to identify the chipset.",
+]
 evidence = []
 
 [[area]]
 id = "audio"
 status = "planned"
 components = []
-paths = ["package/*Audio*", "package/*Adsp*", "scripts/*audio*"]
-inputs = ["ADSP firmware, LPASS macro codecs, Cirrus CS35L41 speakers (from the vendor DTS), audio routes."]
-configuration = ["No audio component is selected and no DSP firmware is staged."]
-procedure = ["Add ADSP boot, GPR/GLINK transport and the codec routes from the vendor DTS.", "Verify playback and capture per declared route."]
-findings = ["The vendor cupid DTS declares CS35L41 speaker amplifiers; the sheng audio HAL is a different board and cannot be copied."]
-completion = ["Each declared route carries the selected format through playback or capture and handles start/stop."]
-limits = ["Not started; blocked behind storage and power bring-up."]
-next_action = ["Inventory ADSP firmware and codec wiring after stage 0 boots."]
+paths = [
+    "package/*Audio*",
+    "package/*Adsp*",
+    "scripts/*audio*",
+]
+inputs = [
+    "ADSP firmware, LPASS macro codecs, Cirrus CS35L41 speakers (from the vendor DTS), audio routes.",
+]
+configuration = [
+    "No audio component is selected and no DSP firmware is staged.",
+]
+procedure = [
+    "Add ADSP boot, GPR/GLINK transport and the codec routes from the vendor DTS.",
+    "Verify playback and capture per declared route.",
+]
+findings = [
+    "The vendor cupid DTS declares CS35L41 speaker amplifiers; the sheng audio HAL is a different board and cannot be copied.",
+]
+completion = [
+    "Each declared route carries the selected format through playback or capture and handles start/stop.",
+]
+limits = [
+    "Not started; blocked behind storage and power bring-up.",
+]
+next_action = [
+    "Inventory ADSP firmware and codec wiring after stage 0 boots.",
+]
 evidence = []
 
 [[area]]
 id = "power"
 status = "planned"
 components = []
-paths = ["package/*Power*", "package/*Battery*", "scripts/*power*"]
-inputs = ["PM8550/PMK8550 PMIC set, RPMh regulators, battery profile, charging and thermal limits."]
-configuration = ["No power component is selected; the board relies on firmware-provided regulators for stage 0."]
-procedure = ["Add RPMh/PMIC access, battery readings and the supported sleep/resume transitions.", "Record each transition and its dependent peripherals."]
-findings = ["cupid uses PM8550/PMK8550; sheng's sheng_pmgr code is board-specific and is not selected."]
-completion = ["Power controls and battery readings match observations; sleep/resume restores dependent peripherals."]
-limits = ["Not started."]
-next_action = ["Inventory PMIC rails and the battery profile from the vendor DTS."]
+paths = [
+    "package/*Power*",
+    "package/*Battery*",
+    "scripts/*power*",
+]
+inputs = [
+    "PM8550/PMK8550 PMIC set, RPMh regulators, battery profile, charging and thermal limits.",
+]
+configuration = [
+    "No power component is selected; the board relies on firmware-provided regulators for stage 0.",
+]
+procedure = [
+    "Add RPMh/PMIC access, battery readings and the supported sleep/resume transitions.",
+    "Record each transition and its dependent peripherals.",
+]
+findings = [
+    "cupid uses PM8550/PMK8550; sheng's sheng_pmgr code is board-specific and is not selected.",
+]
+completion = [
+    "Power controls and battery readings match observations; sleep/resume restores dependent peripherals.",
+]
+limits = [
+    "Not started.",
+]
+next_action = [
+    "Inventory PMIC rails and the battery profile from the vendor DTS.",
+]
 evidence = []
 
 [[area]]
 id = "packaging"
 status = "host-verified"
-components = ["XnuPrelink"]
-paths = ["package/**", "scripts/package.sh", "patches/**"]
-inputs = ["iPhone17,2 26.5.2 kernelcache for prelink, the OS/SystemOS images for userdata, Data seed and the platform seed (UNIXNU_UNIQUE_CHIP_ID)."]
-configuration = ["board.toml [payload] builds a 176 MiB CUPIDESP FAT volume; [bootimg] packs header v0 at 4096-byte pages.", "scripts/package.sh is the standard UniXNU packaging script and reads [package] unixnu and [package.defconfig]."]
-procedure = ["Install the OS profile, then run scripts/package.sh --os ios-27.0.1-24A446 --uefi ../uefi-cupid once the firmware exists.", "Run the macOS workflow for kernel-only builds until then."]
-findings = ["patches/xnuprelink/fileset-cupid-23F84-symbols.json is a reviewed fixture for the iPhone17,2 26.5.2 kernelcache. It binds sixteen kernel functions/thunks by string/call evidence, including the lck_mtx_gate open/steal/alloc/free family and the pmap PPL functions. The first batch paired the lck_mtx_gate allocator (alloc_init) with the native destroy, and the native gate check panicked: 'Trying to destroy a gate that was allocated by gate_alloc_init; gate_free should be used'. The corrected deallocator is _lck_mtx_gate_free. fileset-register-report.patch replaces the simple stub with a register-saving report (x0-x30, x16/x17, data-slot candidates) so any remaining stub names its slot instead of relying on the stale tail-branch return address.", "build-fileset-release-reference.py --tree . --lto is required for iOS 26: the stripped native kernel cannot shape-match the kernel-function imports of the original kexts, so without the symbol-bearing reference prelink left 1668 targets / 18367 sites. The reference cut that to 92 owner-site pairs / 766 sites; the sixteen-binding batch and --allow-missing write the candidate, and the register report names any remaining slot.", "The iPhone 26 prelink layout leaves only 0x119f40 before AppleARMPlatform __DATA_CONST; the DEVELOPMENT native __DATA_CONST plus __LASTDATA_CONST exceed it. patches/xnu/no-assert-strings.patch removes most of the __assert strings so the native constants fit. MACH_ASSERT stays defined: the ipc_port ABI is 160 bytes, and a MACH_ASSERT=0 build failed the genassym static assertion at 144. DTrace/LOCK_STATS also stay on.", "Kernel and package steps do not need the firmware checkout; payload and boot image do because they embed the firmware volume.", "package/Sm8450Ufs is board-owned host-tested code, not yet part of the kernel archive: ufs-regs compiles Sm8450UfsRegs.h and Sm8450UfsHci.h with c++ -Werror on every change, and the package step continues to build only the EDK II drivers.", "The board package still carries the host-tested UFS transport model (Sm8450UfsHci.h); it does not enter the kernel archive, so the EDK II package step is unchanged.", "patches/unixnu/0001-patch-xnu-entry-probe-skip-nm-headers.patch is required for payload: the upstream parser crashed on a three-token nm header line (int(Symbols)) while reading the prelinked kernel.", "patches/unixnu/0002-ramdisk-find-fat-in-initrd.patch makes UniXNURamDiskDxe scan up to 256 MiB of the initrd, log the first two words at every 16 MiB boundary, and, if the 512-byte walk finds no boot sector, search byte-wise for the CUPIDESP volume label and derive the FAT start from offset 71. cupid v4 ABL publishes 0xBC8BE00 bytes starting with an LZ4 vendor ramdisk; 64 MiB and 256 MiB sector walks found no FAT although the bulk data is present.", "patches/darwinboot/0001-darwinboot-log-window-failure.patch prints NO WINDOW and the FREE runs to the console; owned_memory_size was lowered to 0x80000000 so a 2 GiB run can satisfy the kernel window while the log reports the real largest run.", "patches/xnu/timers-avoid-trapped-physical-timer.patch removes the precautionary CNTP_CTL_EL0 write in _enable_virtual_timer; Gunyah traps EL1 physical-timer access. It is the only device XNU series entry after the pivot.", "The iOS 27 reviewed-symbol fixture (30 shims), the PAC key-write skip and the report-registers probe were removed: the iPhone 26 kernel is the same XNU major/minor as the source, so prelink must pair natively and --allow-missing/--fileset-reference are gone.", "The 13432-only shims (corecrypto wrappers, AppleM2 clock/property, AppleImage4 flags/gates, sandbox checks, AppleARMPlatform lookup and the AMFI DRBG initializer) are not part of the iOS 26 build; they were responses to the 24A446 source mismatch."]
-completion = ["Kernel and prelink succeed with no missing targets, the payload contains all declared inputs, and the boot image matches the bootloader format and size limit."]
-limits = ["Kernel, package and firmware are host-verified. Payload is blocked on the platform seed (UNIXNU_UNIQUE_CHIP_ID); the boot image is blocked on a cupid firmware DTB. Neither is in the repository."]
-next_action = ["Build payload and boot image once the owner supplies UNIXNU_UNIQUE_CHIP_ID and cupid's firmware DTB; the macOS workflow already stages boot-v4 images."]
+components = [
+    "XnuPrelink",
+]
+paths = [
+    "package/**",
+    "scripts/package.sh",
+    "patches/**",
+]
+inputs = [
+    "iPhone17,2 26.5.2 kernelcache for prelink, the OS/SystemOS images for userdata, Data seed and the platform seed (UNIXNU_UNIQUE_CHIP_ID).",
+]
+configuration = [
+    "board.toml [payload] builds a 176 MiB CUPIDESP FAT volume; [bootimg] packs header v0 at 4096-byte pages.",
+    "scripts/package.sh is the standard UniXNU packaging script and reads [package] unixnu and [package.defconfig].",
+]
+procedure = [
+    "Install the OS profile, then run scripts/package.sh --os ios-27.0.1-24A446 --uefi ../uefi-cupid once the firmware exists.",
+    "Run the macOS workflow for kernel-only builds until then.",
+]
+findings = [
+    "patches/xnuprelink/fileset-cupid-23F84-symbols.json is a reviewed fixture for the iPhone17,2 26.5.2 kernelcache. It binds sixteen kernel functions/thunks by string/call evidence, including the lck_mtx_gate open/steal/alloc/free family and the pmap PPL functions. The first batch paired the lck_mtx_gate allocator (alloc_init) with the native destroy, and the native gate check panicked: 'Trying to destroy a gate that was allocated by gate_alloc_init; gate_free should be used'. The corrected deallocator is _lck_mtx_gate_free. fileset-register-report.patch replaces the simple stub with a register-saving report (x0-x30, x16/x17, data-slot candidates) so any remaining stub names its slot instead of relying on the stale tail-branch return address.",
+    "build-fileset-release-reference.py --tree . --lto is required for iOS 26: the stripped native kernel cannot shape-match the kernel-function imports of the original kexts, so without the symbol-bearing reference prelink left 1668 targets / 18367 sites. The reference cut that to 92 owner-site pairs / 766 sites; the sixteen-binding batch and --allow-missing write the candidate, and the register report names any remaining slot.",
+    "The iPhone 26 prelink layout leaves only 0x119f40 before AppleARMPlatform __DATA_CONST; the DEVELOPMENT native __DATA_CONST plus __LASTDATA_CONST exceed it. patches/xnu/no-assert-strings.patch removes most of the __assert strings so the native constants fit. MACH_ASSERT stays defined: the ipc_port ABI is 160 bytes, and a MACH_ASSERT=0 build failed the genassym static assertion at 144. DTrace/LOCK_STATS also stay on.",
+    "Kernel and package steps do not need the firmware checkout; payload and boot image do because they embed the firmware volume.",
+    "package/Sm8450Ufs is board-owned host-tested code, not yet part of the kernel archive: ufs-regs compiles Sm8450UfsRegs.h and Sm8450UfsHci.h with c++ -Werror on every change, and the package step continues to build only the EDK II drivers.",
+    "The board package still carries the host-tested UFS transport model (Sm8450UfsHci.h); it does not enter the kernel archive, so the EDK II package step is unchanged.",
+    "patches/unixnu/0001-patch-xnu-entry-probe-skip-nm-headers.patch is required for payload: the upstream parser crashed on a three-token nm header line (int(Symbols)) while reading the prelinked kernel.",
+    "patches/unixnu/0002-ramdisk-find-fat-in-initrd.patch makes UniXNURamDiskDxe scan up to 256 MiB of the initrd, log the first two words at every 16 MiB boundary, and, if the 512-byte walk finds no boot sector, search byte-wise for the CUPIDESP volume label and derive the FAT start from offset 71. cupid v4 ABL publishes 0xBC8BE00 bytes starting with an LZ4 vendor ramdisk; 64 MiB and 256 MiB sector walks found no FAT although the bulk data is present.",
+    "patches/darwinboot/0001-darwinboot-log-window-failure.patch prints NO WINDOW and the FREE runs to the console; owned_memory_size was lowered to 0x80000000 so a 2 GiB run can satisfy the kernel window while the log reports the real largest run.",
+    "patches/xnu/timers-avoid-trapped-physical-timer.patch removes the precautionary CNTP_CTL_EL0 write in _enable_virtual_timer; Gunyah traps EL1 physical-timer access. It is the only device XNU series entry after the pivot.",
+    "The iOS 27 reviewed-symbol fixture (30 shims), the PAC key-write skip and the report-registers probe were removed: the iPhone 26 kernel is the same XNU major/minor as the source, so prelink must pair natively and --allow-missing/--fileset-reference are gone.",
+    "The 13432-only shims (corecrypto wrappers, AppleM2 clock/property, AppleImage4 flags/gates, sandbox checks, AppleARMPlatform lookup and the AMFI DRBG initializer) are not part of the iOS 26 build; they were responses to the 24A446 source mismatch.",
+]
+completion = [
+    "Kernel and prelink succeed with no missing targets, the payload contains all declared inputs, and the boot image matches the bootloader format and size limit.",
+]
+limits = [
+    "Kernel, package and firmware are host-verified. Payload is blocked on the platform seed (UNIXNU_UNIQUE_CHIP_ID); the boot image is blocked on a cupid firmware DTB. Neither is in the repository.",
+]
+next_action = [
+    "Build payload and boot image once the owner supplies UNIXNU_UNIQUE_CHIP_ID and cupid's firmware DTB; the macOS workflow already stages boot-v4 images.",
+]
 
 [[area.evidence]]
 kind = "host"
@@ -306,44 +590,43 @@ revision = "14ab2c0527b2b808ac94afd66025fa56238b9168"
 result = "Pre-pivot iOS 27 run: rebuilt arm64e XNU and built the EDK II package (DEBUG/CLANGPDB, UniXNU.efi and the shared drivers). This evidence is kept as packaging history, not as the current profile."
 
 [[area.evidence]]
-kind = "host"
-reference = "https://github.com/obaosp/UniXNU-cupid/actions/runs/42369952333"
-command = "./unixnu build kernel -D ../device"
-revision = "4cd54a6dbaabfcd53214a522a51f5a04c90d19ec"
-result = "Pre-pivot iOS 27.0.1 build: 70-patch series, XNU 12377.121.6, iPhone17,2 fileset reference and AMFI early init 0xfffffff00921000c. The iOS 26 profile replaces this with the native 23F84 pair."
-
-[[area.evidence]]
 kind = "device"
 reference = "notes/device-2026-11-07.md"
 command = "adb shell su -c 'sh /data/local/tmp/collect2.sh'"
 revision = "4730e3b1fb52e1238a5d370bdc1f381622033de9"
 result = "userdata geometry measured from the live GPT (sda38, 3170304..61528058 at 4096-byte LBA)."
 
-[[area.evidence]]
-kind = "host"
-reference = "https://github.com/obaosp/UniXNU-cupid/actions/runs/42688310664"
-command = "./unixnu build kernel -D ../device"
-revision = "39b14e69c6558ebb2d10e6d9559c70d14d0832a9"
-result = "First iOS 26 build: the native kernel and matcher completed (8571/21033 functions), then prelink failed with Native __DATA_CONST overlaps a retained segment: the native __DATA_CONST is 0x11c000 and com.apple.driver.AppleARMPlatform starts at +0x119f40. This is the tighter iPhone 26 collection layout, not a source mismatch."
-
-[[area.evidence]]
-kind = "host"
-reference = "https://github.com/obaosp/UniXNU-cupid/actions/runs/42688639330"
-command = "python3 tools/ios26-roots.py UniXNU"
-revision = "29dc688af880ed79ca5d39b100d955fa0654f55c"
-result = "macOS AEA pass: OS 094-54688-107.dmg 9430892544 bytes sha256 14b119c0... volume 1A2E284A-0A7E-40A9-8F5D-35A1C1F44E9E (LuckF23F84.D94OS); Cryptex1,SystemOS 094-54806-109.dmg 5244977152 bytes sha256 7e992fd0... volume 21AAD942-A60B-4026-B7B4-0A57205CC9A9 (LuckF23F84.D94SystemCryptex)."
-
 [[area]]
 id = "diagnostics"
 status = "planned"
 components = []
-paths = ["scripts/check-*", "scripts/read-*", "unixnu.lock", "tools/**"]
-inputs = ["UART serial access, the firmware log exporter and reproducible build logs."]
-configuration = ["The payload kernel command line starts with -v serial=3 debug=0x14e."]
-procedure = ["Attach UART, capture firmware and XNU logs, and store each result with its revision and command."]
-findings = ["No phone is attached to the build host, so no firmware or kernel log exists yet.", "tools/diagnose-unmapped-call.py reproduces the fileset panic diagnosis from the emitted kernel.macho and the pinned decompressed kernelcache: it resolves the caller component, the direct BL or import-stub GOT slot, the original target and its function range, and prints the strings the original function references. On run 42471867225 it names the known site 0xfffffff00ab15578 as corecrypto -> __memcpy_chk (0xfffffff00ad05978) and shows the emitted slot resolved from the stub 0xfffffff00b405c60 to native ___memcpy_chk 0xfffffff00ad3f568.", "tools/match-unmapped-target.py searches the unstripped native kernel for the closest function to an unmatched original using the XnuPrelink relocation-masked shape. It found no candidate above 0.55 for AppleM2 0xad714b8/0xb0de1d8, confirming they are 13432-only; it also lets future targets be reviewed against real symbols instead of guessed."]
-completion = ["Each claimed milestone has a reproducible command, a matching revision and an accessible result."]
-limits = ["No device access from the current host (no adb, fastboot or USB bus)."]
-next_action = ["Attach the phone and capture the first firmware log."]
+paths = [
+    "scripts/check-*",
+    "scripts/read-*",
+    "unixnu.lock",
+    "tools/**",
+]
+inputs = [
+    "UART serial access, the firmware log exporter and reproducible build logs.",
+]
+configuration = [
+    "The payload kernel command line starts with -v serial=3 debug=0x14e.",
+]
+procedure = [
+    "Attach UART, capture firmware and XNU logs, and store each result with its revision and command.",
+]
+findings = [
+    "No phone is attached to the build host, so no firmware or kernel log exists yet.",
+    "tools/diagnose-unmapped-call.py reproduces the fileset panic diagnosis from the emitted kernel.macho and the pinned decompressed kernelcache: it resolves the caller component, the direct BL or import-stub GOT slot, the original target and its function range, and prints the strings the original function references. On run 42471867225 it names the known site 0xfffffff00ab15578 as corecrypto -> __memcpy_chk (0xfffffff00ad05978) and shows the emitted slot resolved from the stub 0xfffffff00b405c60 to native ___memcpy_chk 0xfffffff00ad3f568.",
+    "tools/match-unmapped-target.py searches the unstripped native kernel for the closest function to an unmatched original using the XnuPrelink relocation-masked shape. It found no candidate above 0.55 for AppleM2 0xad714b8/0xb0de1d8, confirming they are 13432-only; it also lets future targets be reviewed against real symbols instead of guessed.",
+]
+completion = [
+    "Each claimed milestone has a reproducible command, a matching revision and an accessible result.",
+]
+limits = [
+    "No device access from the current host (no adb, fastboot or USB bus).",
+]
+next_action = [
+    "Attach the phone and capture the first firmware log.",
+]
 evidence = []
-

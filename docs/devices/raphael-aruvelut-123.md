@@ -6,7 +6,7 @@
 
 Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is ipados-18.7.12-22H390 \(Darwin 24.6.0\): the root image comes from the iOS 18.7.12 restore of iPhone11,2, the arm64 kernelcache from the iPadOS 18.7.12 restore of iPad7,11. Configuration and image-assembly tooling are in place; kernel, firmware and every hardware area still need device verification.
 
-Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/porting.toml), `c7d7630c82915f45d127e76461a910f7f66e0d3b`.
+Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/2dc378ba24e5e8d8096023ea885c8bdf237f0af8/porting.toml), `2dc378ba24e5e8d8096023ea885c8bdf237f0af8`.
 
 This page is generated from the device record.
 
@@ -75,8 +75,8 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/board.toml)
-- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/c7d7630c82915f45d127e76461a910f7f66e0d3b/feeds.toml)
+- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/2dc378ba24e5e8d8096023ea885c8bdf237f0af8/board.toml)
+- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/2dc378ba24e5e8d8096023ea885c8bdf237f0af8/feeds.toml)
 
 ## Firmware and boot {#firmware}
 

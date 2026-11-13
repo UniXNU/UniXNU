@@ -15,6 +15,7 @@
 | [Ason-74/UniXNU-sheng](https://github.com/Ason-74/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Ason-74\)](/zh/devices/sheng-ason-74) | 适配记录 | SM8550 |
 | [bai805/UniXNU-sheng](https://github.com/bai805/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(bai805\)](/zh/devices/sheng-bai805) | 适配记录 | SM8550 |
 | [chenjin1494/UniXNU-sheng](https://github.com/chenjin1494/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(chenjin1494\)](/zh/devices/sheng-chenjin1494) | 适配记录 | SM8550 |
+| [daniel-lili/UniXNU-sheng](https://github.com/daniel-lili/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(daniel-lili\)](/zh/devices/sheng-daniel-lili) | 适配记录 | SM8550 |
 | [dlc16/UniXNU-sheng](https://github.com/dlc16/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(dlc16\)](/zh/devices/sheng-dlc16) | 适配记录 | SM8550 |
 | [DnuyaSha/UniXNU-sheng](https://github.com/DnuyaSha/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(DnuyaSha\)](/zh/devices/sheng-dnuyasha) | 适配记录 | SM8550 |
 | [Dong666-yantong/UniXNU-sheng](https://github.com/Dong666-yantong/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Dong666-yantong\)](/zh/devices/sheng-dong666-yantong) | 适配记录 | SM8550 |

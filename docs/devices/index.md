@@ -74,7 +74,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Motorola Moto G9 Play](/devices/models/guamp) | guamp | SM6115 | 1 |
 | [Redmi K40 Pro](/devices/models/haydn) | haydn | SM8350 | 3 |
 | [Samsung Galaxy S7 Edge](/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
-| [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 3 |
+| [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 4 |
 | [OnePlus Ace 5 Pro](/devices/models/hummer) | hummer | SM8750 | 1 |
 | [OnePlus 8 Pro](/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [Xiaomi 13 Ultra](/devices/models/ishtar) | ishtar | SM8550 | 3 |
@@ -126,7 +126,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [OPPO Find X7 Ultra \(PHY120\)](/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [Xiaomi Pad 8 Pro](/devices/models/piano) | piano | SM8750 | 4 |
 | [Redmi K30 5G](/devices/models/picasso) | picasso | SM7250 | 8 |
-| [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 4 |
+| [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 5 |
 | [OnePlus Ace 3 \(PJE110\)](/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/devices/models/pma120) | pma120 | SM8850 | 1 |
 | [Xiaomi Mi MIX 2S](/devices/models/polaris) | polaris | SDM845 | 4 |
@@ -145,7 +145,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 48 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 49 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |

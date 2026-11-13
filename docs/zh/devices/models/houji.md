@@ -4,6 +4,7 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
+| [hannana-26/UniXNU-houji-ios27](https://github.com/hannana-26/UniXNU-houji-ios27) | [Xiaomi 14 23127PN0CC \(houji\) \(hannana-26\)](/zh/devices/houji-hannana-26) | 记录待补齐 | SM8650 |
 | [Kizashi3/UniXNU-houji](https://github.com/Kizashi3/UniXNU-houji) | [Xiaomi 14 houji SM8650 \(Kizashi3\)](/zh/devices/houji-kizashi3) | 仓库链接 | SM8650 |
 | [lonzzi/UniXNU-houji](https://github.com/lonzzi/UniXNU-houji) | [小米 14（houji）](/zh/devices/houji) | 设备说明 | SM8650 |
 | [SAKAYORILROHA/unixnu-houji](https://github.com/SAKAYORILROHA/unixnu-houji) | [Xiaomi 14 houji SM8650 \(SAKAYORILROHA\)](/zh/devices/houji-sakayorilroha) | 仓库链接 | SM8650 |
