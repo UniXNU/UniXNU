@@ -4,7 +4,7 @@ schema_version = 1
 name = "pipa"
 soc = "SM8250"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Xiaomi Pad 6 (pipa / SM8250-AC) porting record for UniXNU iPadOS 17.7.11. The board data comes from the public xVanTuring/UniXNU-pipa and xVanTuring/uefi-pipa ports; this fork's build has not been booted on hardware."
+summary = "Xiaomi Pad 6 (pipa / SM8250-AC) porting record for UniXNU iPadOS 17.7.11. The board data combines the public xVanTuring/UniXNU-pipa and xVanTuring/uefi-pipa ports with the target unit's measured memory/GPT and the official pipa stock ROM's firmware digests; this fork's build has not been booted on hardware."
 
 # Status vocabulary used here:
 #   implemented   - source and board configuration are present and build through the static/host checks
@@ -20,7 +20,7 @@ paths = ["board.toml", "feeds.toml", "configs/**", "dts/**", "socs/**", ".github
 inputs = ["Xiaomi Pad 6 board identity (SM8250-AC, measured 8 GB / 256 GB target unit), iPadOS 17.7.11 (21H461 / j120ap) OS profile, pipa_defconfig, and device:dts/pipa.dts."]
 configuration = ["board.toml uses schema_version = 2, name = pipa, kit = pipa, soc = SM8250, soc_source = sm8250, os_profile = ipados-17.7.11-21H461, and device:dts/pipa.dts.", "configs/pipa_defconfig selects ArmDTPlatform, ArmCpu, SoftwareAES, RamBlock, VirtioMmioBlock (Verified), VerifiedRoot, ShengUfs, GopFramebuffer, Adreno 650, BootProgress and PMGR.", "The boot image uses the pipa UEFI values: base 0x10000000, kernel_offset 0x8000, tags_offset 0x100, pagesize 2048, header_version 1."]
 procedure = ["Run dtc -I dts -O dtb -i socs/sm8250/dts dts/pipa.dts -o /tmp/pipa.dtb, then python3 scripts/check-pipa.py."]
-findings = ["2026-11-12 Replaced the reference unit's DRAM/userdata values with the target unit's measured ones (8 GB, two /memory ranges, 0x200000000 span; userdata 0x293000..0x3b037fa) and recorded the ColorOS port's pipa DT model, custom kernel and OnePlus build props as provenance.", "2026-11-12 Documented the read-only hardware pass (--skip-pull --provisional) in README.md; it needs no root or fastboot and does not modify the tablet.", "2026-11-12 Renamed the CI workflow to xnu-source.yml (it runs on Ubuntu, not macOS) and pinned its actions, and package.yml's, by commit SHA.", "2026-11-11 Replaced the TB-J716F board file, defconfig, DTS, patch names and workflow paths with the pipa equivalents; removed the TB-J716F DTS and backlight sources from the build tree.", "2026-11-10 Read the pipa DRAM banks, userdata window, boot-image parameters and ADT values from xVanTuring/uefi-pipa (Resources/Configs/pipa.toml, Resources/DTBs/pipa.dts) and from Android's /memory on the measured 16 GB unit."]
+findings = ["2026-11-13 Added a py_compile pass over scripts/*.py to the xnu-source workflow so a syntax error in either firmware extractor fails CI before a hardware run.", "2026-11-12 Replaced the reference unit's DRAM/userdata values with the target unit's measured ones (8 GB, two /memory ranges, 0x200000000 span; userdata 0x293000..0x3b037fa) and recorded the ColorOS port's pipa DT model, custom kernel and OnePlus build props as provenance.", "2026-11-12 Documented the read-only hardware pass (--skip-pull --provisional) in README.md; it needs no root or fastboot and does not modify the tablet.", "2026-11-12 Renamed the CI workflow to xnu-source.yml (it runs on Ubuntu, not macOS) and pinned its actions, and package.yml's, by commit SHA.", "2026-11-11 Replaced the TB-J716F board file, defconfig, DTS, patch names and workflow paths with the pipa equivalents; removed the TB-J716F DTS and backlight sources from the build tree.", "2026-11-10 Read the pipa DRAM banks, userdata window, boot-image parameters and ADT values from xVanTuring/uefi-pipa (Resources/Configs/pipa.toml, Resources/DTBs/pipa.dts) and from Android's /memory on the measured 16 GB unit."]
 completion = ["The board identity, source paths, defconfig and patch series resolve, and the fallback DTB compiles."]
 limits = ["Only static and host checks have run; nothing in this fork has been booted on a Xiaomi Pad 6."]
 next_action = ["Boot the packaged image and record the first pipa hardware evidence."]
@@ -43,13 +43,13 @@ result = "Stages build/pipa/pipa.dtb from uefi-pipa when available (or compiles 
 id = "firmware"
 status = "implemented"
 components = []
-paths = ["proprietary-files.txt", "scripts/check-pipa.py", "board.toml"]
-inputs = ["Mu-Silicium uefi-pipa platform (Platforms/Xiaomi/pipaPkg/pipa.dsc, pipa.fdf, Resources/Configs/pipa.toml) and the pipa UEFI memory map."]
-configuration = ["board.toml [firmware] builds Platforms/Xiaomi/pipaPkg/pipa.dsc and expects Build/pipaPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd.", "check-pipa.py verifies the dsc/fdf/includes, the pipa.toml [uefi_fd] and [boot_image] values, the page alignment and non-overlap of MemoryMapLib descriptors, and the Binaries/pipa inputs."]
-procedure = ["Clone xVanTuring/uefi-pipa branch pipa, then run python3 scripts/check-pipa.py with UNIXNU_UEFI pointing at it."]
-findings = ["2026-11-12 board.toml now describes the target 8 GB unit's DRAM (span 0x80000000..0x280000000); the pipaPkg descriptors (UEFI FD 0x9fc00000+0x300000, stack 0x9ff90000+0x40000, display reserved 0x9c000000+0x2400000) all stay inside the first measured range, so no firmware value changed.", "2026-11-12 check-pipa.py now reports a missing dtc separately instead of blaming a missing or uncompilable dts/pipa.dts.", "2026-11-10 Replaced the TB-J716F firmware paths with pipaPkg and the pipa memory descriptors (UEFI FD 0x9fc00000+0x300000, stack 0x9ff90000+0x40000, display reserved 0x9c000000+0x2400000)."]
+paths = ["proprietary-files.txt", "scripts/check-pipa.py", "scripts/extract-pipa-firmware.py", "scripts/extract-stock-firmware.py", "firmware/README.md", "board.toml"]
+inputs = ["Mu-Silicium uefi-pipa platform (Platforms/Xiaomi/pipaPkg/pipa.dsc, pipa.fdf, Resources/Configs/pipa.toml), the pipa UEFI memory map, and the official pipa fastboot ROM pipa_global_images_OS2.0.16.0.UMZMIXM_14.0 (HyperOS 2.0.16, Android 14) for the stock digests."]
+configuration = ["board.toml [firmware] builds Platforms/Xiaomi/pipaPkg/pipa.dsc and expects Build/pipaPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd.", "check-pipa.py verifies the dsc/fdf/includes, the pipa.toml [uefi_fd] and [boot_image] values, the page alignment and non-overlap of MemoryMapLib descriptors, and the Binaries/pipa inputs.", "scripts/extract-stock-firmware.py hashes every stock image, reads NON-HLOS.bin/BTFM.bin as FAT16, parses the gpt_both*.bin templates, extracts dtbo entry 16 (the xiaomi pipa overlay) and, with --touch, the stock kernel's built-in firmware table; firmware/README.md documents where the private blobs go and how they were identified."]
+procedure = ["Clone xVanTuring/uefi-pipa branch pipa, then run python3 scripts/check-pipa.py with UNIXNU_UEFI pointing at it.", "Hash and extract the stock blobs with python3 scripts/extract-stock-firmware.py --images <rom>/images --touch; the blobs stay outside Git and only proprietary-files.txt lists them."]
+findings = ["2026-11-13 Extracted the official pipa fastboot ROM: NON-HLOS.bin and BTFM.bin are FAT16 filesystems (54 qca6390 files and 4 Bluetooth files), dtbo.img entry 16 is the xiaomi pipa overlay (board-id 0x34, both m82 panels, novatek@0), and the boot.img kernel's built-in firmware table supplies the NT36532 images. The extractor found 0 digest mismatches against proprietary-files.txt.", "2026-11-13 proprietary-files.txt now records measured digests for every firmware input and the source each came from (official stock image or live partition); no UNMEASURED placeholder remains. Official Xiaomi blobs are not published: only digests and provenance are in the repository.", "2026-11-12 board.toml now describes the target 8 GB unit's DRAM (span 0x80000000..0x280000000); the pipaPkg descriptors (UEFI FD 0x9fc00000+0x300000, stack 0x9ff90000+0x40000, display reserved 0x9c000000+0x2400000) all stay inside the first measured range, so no firmware value changed.", "2026-11-12 check-pipa.py now reports a missing dtc separately instead of blaming a missing or uncompilable dts/pipa.dts.", "2026-11-10 Replaced the TB-J716F firmware paths with pipaPkg and the pipa memory descriptors (UEFI FD 0x9fc00000+0x300000, stack 0x9ff90000+0x40000, display reserved 0x9c000000+0x2400000)."]
 completion = ["The pipa firmware source builds with UniXNU, the boot memory driver and DarwinBoot added."]
-limits = ["The uefi-pipa checkout and its Binaries submodule are external; the static firmware checks are skipped when the checkout is absent."]
+limits = ["The uefi-pipa checkout and its Binaries submodule are external; the static firmware checks are skipped when the checkout is absent. The firmware binaries themselves are external and unpublished."]
 next_action = ["Run check-pipa.py against a full uefi-pipa checkout and build the FD."]
 
 [[area.evidence]]
@@ -58,6 +58,13 @@ revision = "421c34bdcaf116bd15b8a895fa81ee483d4d8f31"
 reference = "scripts/check-pipa.py"
 command = "UNIXNU_UEFI=../uefi-pipa python3 scripts/check-pipa.py"
 result = "Validates the pipa platform files, the pipa.toml boot-image keys, the UEFI FD/stack descriptors and the Resources/DTBs/pipa.dtb splash region."
+
+[[area.evidence]]
+kind = "host"
+revision = "d17858f84c3fae46088a1069a253b8f4ae275e39"
+reference = "scripts/extract-stock-firmware.py"
+command = "python3 scripts/extract-stock-firmware.py --images <rom>/images --touch --vmlinux-to-elf <venv>/bin/vmlinux-to-elf"
+result = "On pipa_global_images_OS2.0.16.0.UMZMIXM_14.0: 11 stock images hashed, 54 modem + 4 Bluetooth + 5 built-in touch files extracted, dtbo entry 16 identified as xiaomi pipa, 0 digest mismatches and 0 errors against proprietary-files.txt."
 
 [[area]]
 id = "cpu"
@@ -112,9 +119,9 @@ paths = ["drivers/ShengUfs/**", "configs/pipa_defconfig", "board.toml"]
 inputs = ["SM8250 UFS 3.1 host controller at 0x01d84000, Apps SMMU streams 0x0e0 and 0x4e0, and the target 256 GB userdata partition sda34 / LBA 0x293000..0x3b037fa (473448408 512-byte sectors, 242.4 GB)."]
 configuration = ["ShengUfs keeps the SM8250/pipa GCC registers and both UFS stream IDs; board.toml [userdata] uses the measured GPT window; pipa_defconfig enables NativeUfs, the Verified virtio block query, VerifiedRoot and the owner chain.", "native-ufs-root=1 and sheng-data-persist=2 are in the pipa kernel arguments."]
 procedure = ["Build libShengUfs.a through scripts/build-arm-driver.py ShengUfs, then boot and mount the APFS OS, SystemOS and Data volumes."]
-findings = ["2026-11-12 Measured the target 256 GB unit's userdata geometry (sda34, start 0x293000, size 473448408 512-byte sectors, last_lba 0x3b037fa) from the booted ColorOS port and updated board.toml [userdata]. The start matches the 128 GB reference unit, so only the end grew.", "2026-11-11 Renamed the leftover J716F UFS symbols/files to PipaSmmuTakeover/PipaNativeUfsHost; the stream IDs (0x0e0, 0x4e0), host base and userdata window are already pipa's.", "2026-11-10 Adopted the pipa userdata window (0x293000..0x1d387fa) and the pipa root volume UUID."]
+findings = ["2026-11-13 Parsed the stock ROM's gpt_both0.bin: it is a 4K-LBA template whose userdata entry is zero-length at 0x293000 because the LUN ends there, so it cannot define the retail partition. The live sda34 geometry (start 0x293000, last_lba 0x3b037fa) remains the authority for board.toml [userdata].", "2026-11-12 Measured the target 256 GB unit's userdata geometry (sda34, start 0x293000, size 473448408 512-byte sectors, last_lba 0x3b037fa) from the booted ColorOS port and updated board.toml [userdata]. The start matches the 128 GB reference unit, so only the end grew.", "2026-11-11 Renamed the leftover J716F UFS symbols/files to PipaSmmuTakeover/PipaNativeUfsHost; the stream IDs (0x0e0, 0x4e0), host base and userdata window are already pipa's.", "2026-11-10 Adopted the pipa userdata window (0x293000..0x1d387fa) and the pipa root volume UUID."]
 completion = ["The UFS controller initializes and mounts the iPadOS root, SystemOS and persistent Data volumes."]
-limits = ["The GPT is the ColorOS port's; a stock restore should confirm the same window. Flashing the userdata image erases Android's data, and no pipa storage run exists for this fork."]
+limits = ["The userdata window is the ColorOS port's live GPT; the stock template's zero-length entry is not authoritative. Flashing the userdata image erases Android's data, and no pipa storage run exists for this fork."]
 next_action = ["Re-check the GPT if the tablet is ever repartitioned, then boot with native-ufs-root=1 and check the APFS mount."]
 
 [[area.evidence]]
@@ -131,6 +138,13 @@ reference = "scripts/extract-pipa-firmware.py"
 command = "python3 scripts/extract-pipa-firmware.py --skip-pull --provisional --force"
 result = "On the target unit, measured userdata as /dev/block/sda34, start sector 21594112, size 473448408 512-byte sectors, last 4 KiB LBA 0x3b037fa (242405584896 bytes); board.toml [userdata] carries that window."
 
+[[area.evidence]]
+kind = "host"
+revision = "d17858f84c3fae46088a1069a253b8f4ae275e39"
+reference = "scripts/extract-stock-firmware.py"
+command = "python3 scripts/extract-stock-firmware.py --images <rom>/images"
+result = "The stock template GPT is 4K-LBA with 64 entries and 34 partitions; its userdata entry is zero-length at 0x293000 because the template LUN ends there, so the live sda34 window (last_lba 0x3b037fa) stays authoritative."
+
 [[area]]
 id = "display"
 status = "implemented"
@@ -139,7 +153,7 @@ paths = ["drivers/GopFramebuffer/**", "package/LegacyDisplayProbe.cpp", "package
 inputs = ["1800x2880 UEFI GOP scanout at 0x9c000000, the pipa display reserved region 0x9c000000+0x2400000, and the upstream pipa GPU scanout path."]
 configuration = ["board.toml sets CONFIG_XNU_NATIVE_LEGACY_DISPLAY, display-scale = 2, display-rotation = 0, sheng-vsync=60 and sheng-fb-gpu=1; the GOP frame buffer and the GPU copy_rows presenter are built into libNativeLegacyDisplay.late.a."]
 procedure = ["Boot with the pipa UEFI GOP initialized and check the framebuffer rows and the scanout copy in the log."]
-findings = ["2026-11-12 board.toml now carries the target 8 GB unit's DRAM values; the GOP scanout 0x9c000000+0x2400000 sits inside the first measured range (0x80000000+0x3bb00000), so no display value changed.", "2026-11-10 Set the pipa 1800x2880 GOP aperture and UI scale; removed the TB-J716F RM692E6 backlight sources from the archive.", "The KTZ8866 brightness controller (I2C11 0x11, enable GPIO139) is not ported, so sheng-backlight stays unset and the panel brightness is whatever the firmware left."]
+findings = ["2026-11-13 The legacy display builder now embeds novatek_nt36532_m82_fw_csot.bin for panel m82 42 02 0b; the GOP aperture, scale and scanout path are unchanged.", "2026-11-12 board.toml now carries the target 8 GB unit's DRAM values; the GOP scanout 0x9c000000+0x2400000 sits inside the first measured range (0x80000000+0x3bb00000), so no display value changed.", "2026-11-10 Set the pipa 1800x2880 GOP aperture and UI scale; removed the TB-J716F RM692E6 backlight sources from the archive.", "The KTZ8866 brightness controller (I2C11 0x11, enable GPIO139) is not ported, so sheng-backlight stays unset and the panel brightness is whatever the firmware left."]
 completion = ["WindowServer presents the desktop through the GOP framebuffer with GPU scanout copies."]
 limits = ["No runtime brightness control and no native MDSS mode setting; the bootloader's panel state is used."]
 next_action = ["Port the KTZ8866 backlight driver and then enable sheng-backlight."]
@@ -156,12 +170,12 @@ id = "input"
 status = "implemented"
 components = ["ShengHidInput", "ShengNovatekTouch", "QcomGeniSpi"]
 paths = ["drivers/ShengHidInput/**", "drivers/QcomGeniSpi/**", "drivers/ShengNovatekTouch/**", "package/TouchProbe.cpp", "package/TouchBoard.h", "package/Buttons.c", "package/ButtonsCore.h", "scripts/build-gop-legacy-display.py"]
-inputs = ["Novatek NT36532 on QUPv3_0 SE4 GENI SPI (0x990000, wrapper 0x9c0000, 9.6 MHz, IRQ GPIO39 rising, CS 11, reset GPIO33, 40x60 matrix, coordinates 0..17999 x 0..28799) and the PM8150 PON keys (kpdpwr, resin, GPIO6 volume up)."]
-configuration = ["board.toml sets pipa-touch=5, pipa-buttons=1, sheng-touch-hid=1, offline-hid-input=1 and offline-hid-home=1.", "The NT36532 point-report firmware (novatek_nt36532_m82_fw_tm.bin) is embedded by the archive builder; Buttons.c is the pipa version without the TB-J716F volume-key swipe injection."]
+inputs = ["Novatek NT36532 on QUPv3_0 SE4 GENI SPI (0x990000, wrapper 0x9c0000, 9.6 MHz, IRQ GPIO39 rising, CS 11, reset GPIO33, 40x60 matrix, coordinates 0..17999 x 0..28799), panel m82 42 02 0b (display-maker 0x42), and the PM8150 PON keys (kpdpwr, resin, GPIO6 volume up)."]
+configuration = ["board.toml sets pipa-touch=5, pipa-buttons=1, sheng-touch-hid=1, offline-hid-input=1 and offline-hid-home=1.", "The NT36532 point-report firmware (novatek_nt36532_m82_fw_csot.bin) is embedded by the archive builder; the DT pairs display-maker 0x42 with the CSOT image, while the _tm image belongs to the 0x36 panel. Buttons.c is the pipa version without the TB-J716F volume-key swipe injection."]
 procedure = ["Boot with pipa-touch=5, then test multi-touch, the on-screen keyboard and the Power/Volume keys."]
-findings = ["2026-11-10 Replaced the Goodix GT7386 I2C driver with the pipa Novatek NT36532 GENI SPI path (TouchBoard.h, TouchProbe.cpp, NvtProtocol, NvtTouchCore, GeniSpi) and the upstream pipa Buttons.c."]
+findings = ["2026-11-13 Read the live touch DT node while the tablet was reconnected: /soc/spi@990000/novatek@0 has config-array-size 2, cfg_0 display-maker 0x42 with novatek_nt36532_m82_fw_csot.bin/_mp_csot.bin and cfg_1 display-maker 0x36 with the _tm names; the boot arg is msm_drm.dsi_display0=qcom,mdss_dsi_m82_42_02_0b_dual_dphy_video and input8 is NVTCapacitiveTouchScreen. This confirms the CSOT choice from the device itself.", "2026-11-13 Resolved the touch firmware selection from the stock kernel's built-in table and the live panel name: panel m82 42 02 0b has display-maker 0x42, so use novatek_nt36532_m82_fw_csot.bin (sha256 ba7d0eb9...); novatek_nt36532_m82_fw_tm.bin is for 0x36 panels. Updated build-gop-legacy-display.py, TouchProbe.cpp and extract-pipa-firmware.py accordingly.", "2026-11-10 Replaced the Goodix GT7386 I2C driver with the pipa Novatek NT36532 GENI SPI path (TouchBoard.h, TouchProbe.cpp, NvtProtocol, NvtTouchCore, GeniSpi) and the upstream pipa Buttons.c."]
 completion = ["Touch reports reach IOHIDFamily and the PON keys generate power/volume events."]
-limits = ["The reference port reports touch working on hardware; this fork's integration is untested and the touch firmware is not in the tree."]
+limits = ["The reference port reports touch working on hardware; this fork's integration is untested and the touch blob stays outside the tree."]
 next_action = ["Boot and verify the axes, the 40x60 matrix and the attention-line timing."]
 
 [[area.evidence]]
@@ -171,17 +185,24 @@ reference = "drivers/QcomGeniSpi/Test/geni-spi.c"
 command = "gcc -std=c11 -O2 -Wall -Wextra -Werror drivers/QcomGeniSpi/Test/geni-spi.c drivers/QcomGeniSpi/GeniSpi.c -o /tmp/geni-spi && /tmp/geni-spi"
 result = "The GENI SPI register-model test and the Novatek protocol/point-report/touch-core host tests pass; hardware is not involved."
 
+[[area.evidence]]
+kind = "host"
+revision = "0ce47495e5eaf9978e0f6504f666f7c34c04948c"
+reference = "scripts/build-gop-legacy-display.py"
+command = "adb shell 'od -An -tx1 /sys/firmware/devicetree/base/soc/spi@990000/novatek@0/novatek,cfg_{0,1}/novatek,display-maker; cat /sys/firmware/devicetree/base/soc/spi@990000/novatek@0/novatek,cfg_{0,1}/novatek,fw-name'"
+result = "Live pipa DT: config-array-size 2; cfg_0 display-maker 0x42 with novatek_nt36532_m82_fw_csot.bin / _mp_csot.bin, cfg_1 display-maker 0x36 with the _tm names. The boot arg names panel m82_42_02_0b and input8 is NVTCapacitiveTouchScreen, matching the CSOT choice."
+
 [[area]]
 id = "gpu"
 status = "implemented"
 components = ["AdrenoPM4", "AdrenoFirmware", "ArmSmmu4K", "AirNir"]
 paths = ["drivers/Adreno650/**", "drivers/AdrenoMetal/**", "kits/ArmSmmu4K/**", "package/GpuProbe.cpp", "package/A650Gmu.c", "scripts/build-adreno650.py", "scripts/build-pipa-gpu-addon.py", "board.toml"]
-inputs = ["Adreno 650 (chip id 0x06050002), GMU firmware a650_gmu.bin, SQE a650_sqe.fw and the TZ PAS 13 zap shader a650_zap.elf."]
+inputs = ["Adreno 650 (chip id 0x06050002), GMU firmware a650_gmu.bin, SQE a650_sqe.fw and the TZ PAS 13 zap images a650_zap.mdt/.b00..b02/.elf."]
 configuration = ["board.toml sets pipa-gpu=12, sheng-gpu-addon=1 and sheng-fb-gpu=1; pipa_defconfig enables CONFIG_XNU_NATIVE_ADRENO with libAdreno650.a.", "GpuProbe keeps the upstream pipa defaults: Turnip \"nocb\", the upstream sandbox grant list, and no GPU DCVS block."]
 procedure = ["Run pipa-gpu=12 with the GPU addon, then exercise SpringBoard/Settings and read the gpu.status counters."]
-findings = ["2026-11-12 Pulled the target's /vendor/firmware: a650_gmu.bin, a650_sqe.fw and a650_zap.b00/.b02 match the TB-J716F digests, but a650_zap.mdt, .b01 and .elf differ (the ZAP shader is device-signed). The pipa set is recorded in pipa-firmware/manifest.json as provisional; the Lenovo ZAP is unlikely to load on pipa's TZ, so use the pipa images once a stock image confirms them.", "2026-11-12 board.toml now carries the target 8 GB unit's DRAM span (0x80000000..0x280000000); the Adreno 650 firmware/PM4 paths and the GPU SMMU mappings are unchanged.", "2026-11-10 Adopted the upstream pipa GpuProbe.cpp, NativeBatteryBoard.h, and the pipa GPU addon script name; the pipa GPU defaults replace the TB-J716F DCVS/backlight add-on."]
+findings = ["2026-11-13 Recorded the pipa ZAP set in proprietary-files.txt: a650_gmu.bin, a650_sqe.fw and a650_zap.b00/.b02 match the TB-J716F digests, while a650_zap.mdt/.b01/.elf are device-signed and differ. The pipa values are the ones to use for hardware; the Lenovo ZAP is unlikely to load on pipa's TZ.", "2026-11-12 board.toml now carries the target 8 GB unit's DRAM span (0x80000000..0x280000000); the Adreno 650 firmware/PM4 paths and the GPU SMMU mappings are unchanged.", "2026-11-10 Adopted the upstream pipa GpuProbe.cpp, NativeBatteryBoard.h, and the pipa GPU addon script name; the pipa GPU defaults replace the TB-J716F DCVS/backlight add-on."]
 completion = ["The Adreno 650 KMD, GMU, GPU SMMU and NativeAdrenoMetal/Turnip render the desktop."]
-limits = ["No pipa GPU run in this fork; GMU/SQE/zap firmware files are external."]
+limits = ["No pipa GPU run in this fork; GMU/SQE/zap blobs are external."]
 next_action = ["Boot pipa-gpu=12 on hardware and capture the GPU log rows."]
 
 [[area.evidence]]
@@ -194,13 +215,13 @@ id = "network"
 status = "planned"
 components = ["Ath12kWifi", "QcaBluetooth"]
 paths = ["package/Wifi*.cpp", "package/Bluetooth*.cpp", "drivers/ShengUfs/**", "proprietary-files.txt"]
-inputs = ["QCA6390 Wi-Fi on PCIe0 and Bluetooth on QUPv3_0 SE6 GENI UART; BRCM/WCNSS board data and firmware from the pipa vendor partitions."]
-configuration = ["The Wi-Fi/Bluetooth sources remain in the tree but board.toml does not set sheng-wifi or sheng-bluetooth, so neither driver starts.", "proprietary-files.txt records the expected images and leaves their pipa digests UNMEASURED."]
-procedure = ["Only after the base port boots: extract the QCA6390 firmware, confirm the pipa rails/pins, then set sheng-wifi=4 / sheng-bluetooth=1."]
-findings = ["2026-11-12 Pulled 50 files read-only from the ported ROM. image/htbtfw20.tlv and image/htnv20.bin came from /vendor/bt_firmware/image, and firmware/WCNSS_qcom_cfg_qca6390.ini from /vendor/etc/wifi/qca6390 (WCNSS_qcom_cfg.ini). /vendor/firmware_mnt/image is uid 1000 system-only and this ROM has no su, so image/qca6390/amss20.bin, m3.bin and bdwlan.elf still need an official fastboot ROM (or root). The pulled digests are in pipa-firmware/manifest.json as provisional.", "2026-11-11 Kept the TB-J716F QCA6390 implementation as an unverified carry-over; the pipa DT's pins (WLAN_EN GPIO20, BT_EN GPIO21, PERST GPIO79, PCIe0 CLKREQ GPIO80, BT SW_CTRL GPIO124) match the probe's constants, but nothing has been run."]
+inputs = ["QCA6390 Wi-Fi on PCIe0 and Bluetooth on QUPv3_0 SE6 GENI UART; BRCM/WCNSS board data and firmware from the pipa stock NON-HLOS.bin/BTFM.bin and /vendor."]
+configuration = ["The Wi-Fi/Bluetooth sources remain in the tree but board.toml does not set sheng-wifi or sheng-bluetooth, so neither driver starts.", "proprietary-files.txt records the measured stock digests for the QCA6390 AMSS/M3/board data, the Bluetooth TLV/NVM and the WCNSS config."]
+procedure = ["Only after the base port boots: place the stock blobs in .cache/firmware, confirm the pipa rails/pins, then set sheng-wifi=4 / sheng-bluetooth=1."]
+findings = ["2026-11-13 The official stock ROM supplied the modem blobs the live pull could not read: image/qca6390/amss20.bin, m3.bin and bdwlan.elf from NON-HLOS.bin, and image/htbtfw20.tlv plus htnv20.bin from BTFM.bin (the Bluetooth pair is byte-identical to the live /vendor/bt_firmware copy). WCNSS_qcom_cfg.ini came from /vendor/etc/wifi/qca6390. Their digests are now in proprietary-files.txt; the driver stays default-off until the rail/pin sequence is validated.", "2026-11-12 Pulled 50 files read-only from the ported ROM. image/htbtfw20.tlv and image/htnv20.bin came from /vendor/bt_firmware/image, and firmware/WCNSS_qcom_cfg_qca6390.ini from /vendor/etc/wifi/qca6390 (WCNSS_qcom_cfg.ini). /vendor/firmware_mnt/image is uid 1000 system-only and this ROM has no su, so image/qca6390/amss20.bin, m3.bin and bdwlan.elf still need an official fastboot ROM (or root).", "2026-11-11 Kept the TB-J716F QCA6390 implementation as an unverified carry-over; the pipa DT's pins (WLAN_EN GPIO20, BT_EN GPIO21, PERST GPIO79, PCIe0 CLKREQ GPIO80, BT SW_CTRL GPIO124) match the probe's constants, but nothing has been run."]
 completion = ["en0/wifid and BlueTool/bluetoothd start on the QCA6390."]
-limits = ["Default-off and unverified; the QCA6390 firmware is not in the tree."]
-next_action = ["Extract and hash the QCA6390 firmware, then validate the rail/pin sequence on pipa."]
+limits = ["Default-off and unverified; the QCA6390 blobs stay outside the tree."]
+next_action = ["Validate the QCA6390 rail/pin sequence on pipa, then enable sheng-wifi and sheng-bluetooth."]
 evidence = []
 
 [[area]]
@@ -230,11 +251,11 @@ components = ["XnuPrelink", "DarwinBoot"]
 paths = ["board.toml", "configs/**", "dts/**", "patches/**", "scripts/**", "package/**", ".github/workflows/**"]
 inputs = ["The prelinked iPadOS 17.7.11 kernel, Format 2 ADT, trust caches, the pipa DTB, the NGPUADD2 addon and the UEFI FD."]
 configuration = ["scripts/package.sh drives ./unixnu release with the pipa defconfig and build/pipa/pipa.dtb; the payload volume is PIPAESP and the image uses Android header v1."]
-procedure = ["Run bash scripts/package.sh --no-deps --uefi ../uefi-pipa with UNIXNU_UNIQUE_CHIP_ID set."]
-findings = ["2026-11-12 Measured the target unit and updated board.toml/dts/pipa.dts from it; the extractor now handles a bare /memory node with multiple ranges and records the DT model/compatible, which is how the pipa hardware was confirmed despite OnePlus build props on the ported ROM.", "2026-11-12 The extractor can now run read-only on a ported ROM: --skip-pull --provisional records /memory banks and suggested_adt, MemTotal, the userdata start/size, panel name, multitouch input device, battery design capacity and display size, and marks the ROM-specific digests provisional.", "2026-11-12 Fixed the extractor's adb shell crash, restored the Adreno 650 digest comparison, replaced the recorded adb serial with a truncated SHA-256, and made it record MemTotal plus the userdata geometry so the per-SKU values can be checked against the tablet.", "2026-11-12 Moved the inline board and manifest assertions out of CI into scripts/check-pipa-board.py, which also cross-checks the DTS memory banks against dram_size/owned_memory_size and can assert a specific DDR or storage SKU.", "2026-11-11 Added scripts/extract-pipa-firmware.py, which pulls /vendor, modem and Bluetooth firmware from a booted pipa, records the ROM fingerprint as provenance and writes a SHA-256 manifest for proprietary-files.txt; it deliberately leaves the built-in Novatek image UNMEASURED.", "2026-11-11 Renamed the pipa patch series, updated the GitHub workflows to xVanTuring/uefi-pipa and UniXNU/out/pipa, and added the pipa DTB and driver checks to CI."]
+procedure = ["Build the image, then start it once with fastboot boot, which writes no partition. Only the userdata root image is flashed, and that erases Android's data."]
+findings = ["2026-11-13 The no-flash route is the reference pipa port's hardware route: its 204 MB payload boot image was accepted by fastboot boot, the firmware reached the UniXNU menu, and XNU stopped at the root mount without a root image (xVanTuring/UniXNU-pipa README, 2026-10-23). fastboot boot writes nothing to the tablet. The PIPAESP payload alone is 192 MiB, larger than the stock 128 MiB boot.img, so RAM boot is the practical route and flashing the assembled image to boot is not assumed to fit; this fork has not run it yet.", "2026-11-13 Added scripts/extract-stock-firmware.py, which reproduces the stock digests from an official fastboot ROM without a tablet and compares them with proprietary-files.txt. firmware/README.md documents the private blob layout and provenance.", "2026-11-13 The archive builder now embeds novatek_nt36532_m82_fw_csot.bin for panel m82 42 02 0b (display-maker 0x42); TouchProbe.cpp and the adb extractor were corrected from the 0x36-panel _tm image.", "2026-11-12 Measured the target unit and updated board.toml/dts/pipa.dts from it; the extractor now handles a bare /memory node with multiple ranges and records the DT model/compatible, which is how the pipa hardware was confirmed despite OnePlus build props on the ported ROM.", "2026-11-12 The extractor can now run read-only on a ported ROM: --skip-pull --provisional records /memory banks and suggested_adt, MemTotal, the userdata start/size, panel name, multitouch input device, battery design capacity and display size, and marks the ROM-specific digests provisional.", "2026-11-12 Fixed the extractor's adb shell crash, restored the Adreno 650 digest comparison, replaced the recorded adb serial with a truncated SHA-256, and made it record MemTotal plus the userdata geometry so the per-SKU values can be checked against the tablet.", "2026-11-12 Moved the inline board and manifest assertions out of CI into scripts/check-pipa-board.py, which also cross-checks the DTS memory banks against dram_size/owned_memory_size and can assert a specific DDR or storage SKU.", "2026-11-11 Added scripts/extract-pipa-firmware.py, which pulls /vendor, modem and Bluetooth firmware from a booted pipa, records the ROM fingerprint as provenance and writes a SHA-256 manifest for proprietary-files.txt; it deliberately leaves the built-in Novatek image to the stock-ROM extractor.", "2026-11-11 Renamed the pipa patch series, updated the GitHub workflows to xVanTuring/uefi-pipa and UniXNU/out/pipa, and added the pipa DTB and driver checks to CI."]
 completion = ["One command builds the kernel, archives, firmware, payload and boot.img."]
 limits = ["The build needs the external UniXNU and uefi-pipa checkouts plus the firmware caches."]
-next_action = ["Run the package workflow and flash boot.img to slot B."]
+next_action = ["Build the boot image and trial-boot it with fastboot boot; flash userdata only after the read-only stages are understood."]
 
 [[area.evidence]]
 kind = "host"
@@ -290,7 +311,7 @@ paths = ["dts/**", "proprietary-files.txt"]
 inputs = ["Qualcomm ADSP PAS, SoundWire and the pipa codec/amplifier topology."]
 configuration = ["No audio driver or boot argument is enabled."]
 procedure = ["Implement ADSP remoteproc/GPR audio or USB audio first."]
-findings = ["2026-11-12 The dts/pipa.dts memory-node update for the 8 GB unit does not touch audio; no codec, SoundWire or manifest entry changed.", "2026-11-12 The dts/pipa.dts edit is comment-only (radio status and the 8 GB variant); no audio node or manifest entry changed.", "2026-11-11 Left audio out of the first pipa port; the TB-J716F CS35L41 manifest entries were removed because they do not describe pipa's amplifiers."]
+findings = ["2026-11-13 The proprietary-files.txt rewrite is firmware-only (QCA6390, Bluetooth, touch, Adreno); audio still has no manifest entry or driver.", "2026-11-12 The dts/pipa.dts memory-node update for the 8 GB unit does not touch audio; no codec, SoundWire or manifest entry changed.", "2026-11-12 The dts/pipa.dts edit is comment-only (radio status and the 8 GB variant); no audio node or manifest entry changed.", "2026-11-11 Left audio out of the first pipa port; the TB-J716F CS35L41 manifest entries were removed because they do not describe pipa's amplifiers."]
 completion = ["IOAudio2Family outputs PCM audio to the speakers or headphones."]
 limits = ["Not started."]
 next_action = ["Identify the pipa codec/amplifier parts and their firmware."]

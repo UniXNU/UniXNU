@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Note 3 \(kenzo\) Snapdragon 650 porting record.
 
-Source record: [porting.toml](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/porting.toml), `3042b7540a21aa19a2e7ee4220fcf339efe8edaa`.
+Source record: [porting.toml](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/porting.toml), `e48ccd6a69acb27a74a6067ef53284aa774d7948`.
 
 This page is generated from the device record.
 
@@ -41,6 +41,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 - board.toml selects ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink and DarwinBoot; kenzo\_defconfig; SoC and OS config fragments; ordered arch, SoC, OS and device patch series.
 - \[package\] unixnu is ../UniXNU and \[package.defconfig\] maps ipados-17.7.11-21H461 to kenzo\_defconfig.
+- \[bootimg.image\] defines base=0x80000000, pagesize=2048, offsets, and \[\[bootimg.dtb\_node\]\] adds continuous splash buffer.
 
 ### Procedure
 
@@ -55,6 +56,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - The extracted 86-DTB QCDT set contains reference roots only, but a live device-tree capture now identifies the bootloader-populated MSM8956 MTP tree and matching reference selector DTB 0.
 - The kernel-only macOS workflow checks out UniXNU at c34f018aafd6befd5dc93c05a8dccd5bdce6724b and uploads the kernel binary and redacted text logs. Its pre-build helper removes only the optional Sheng PMGR probe hunk from the generic boot-progress patch; it fails closed if the upstream hunk layout changes.
 - Run 43170315275 completed successfully on macOS. The final build and prelink produced kernel.macho with SHA-256 43bad77f58e9a3582f330ebb3c70ad4b48d0c350188d17c2bd38ed8454b7650f. The bootstrap pass first reported unresolved mockfs symbols before the configured archive build; the later main kernel link succeeded. The first successful run retained redacted logs but did not yet publish the kernel as an artifact.
+- Updated board.toml with verified bootimg parameters \(base 0x80000000, pagesize 2048, offsets\) and continuous splash DTB node; package check passed with 59 patches and kenzo\_defconfig.
 
 ### Completion criteria
 
@@ -70,17 +72,19 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [Format 2 board selection and package path/defconfig mapping.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/board.toml)
-- `source`: [Pinned MSM8956 shared SoC feed at d6845aea8fc3e5c14993b269fcca92927e85fb45.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/feeds.toml)
-- `source`: [Local extracted roots identify Qualcomm reference platforms only; the live device FDT selector matches extracted DTB 0.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-dtb-inventory.md)
-- `source`: [Local XNU patching needed a Sheng-only hunk workaround; builds on /mnt/c failed during atomic header replacement, and the ext4 retry was interrupted before completion.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-local-kernel-attempt.md)
-- `source`: [Pre-build helper removes only the optional Sheng PMGR progress hunk and fails if its recognized layout changes.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/scripts/prepare-kernel-patches.py)
-- `source`: [Compiles Kenzo DTS and generates the OS-specific ADT on macOS Actions using the pinned SoC feed.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/.github/workflows/dts-adt.yml)
+- `source`: [Format 2 board selection and package path/defconfig mapping.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/board.toml)
+- `source`: [Pinned MSM8956 shared SoC feed at d6845aea8fc3e5c14993b269fcca92927e85fb45.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/feeds.toml)
+- `source`: [Local extracted roots identify Qualcomm reference platforms only; the live device FDT selector matches extracted DTB 0.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-dtb-inventory.md)
+- `source`: [Local XNU patching needed a Sheng-only hunk workaround; builds on /mnt/c failed during atomic header replacement, and the ext4 retry was interrupted before completion.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-local-kernel-attempt.md)
+- `source`: [Pre-build helper removes only the optional Sheng PMGR progress hunk and fails if its recognized layout changes.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/scripts/prepare-kernel-patches.py)
+- `source`: [Compiles Kenzo DTS and generates the OS-specific ADT on macOS Actions using the pinned SoC feed.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/.github/workflows/dts-adt.yml)
 - `source`: [Reusable macOS workflow provides a kernel-only build with redacted text logs and no image artifacts.](https://github.com/UniXNU/UniXNU/blob/c34f018aafd6befd5dc93c05a8dccd5bdce6724b/.github/workflows/macos.yml)
-- `host`: [Historical pass on WSL/Linux against SoC pin 894aea231e7ac7133b2947777b2dbc89bdd4c6aa \(not the corrected current pin\): wrote config for kenzo\_defconfig, extracted profile IPSW inputs, resolved 59 patches. UniXNU source revision 5a00e20157f3975d155f13ced7593347f9f5bf73.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-package-check.md)
+- `host`: [Historical pass on WSL/Linux against SoC pin 894aea231e7ac7133b2947777b2dbc89bdd4c6aa \(not the corrected current pin\): wrote config for kenzo\_defconfig, extracted profile IPSW inputs, resolved 59 patches. UniXNU source revision 5a00e20157f3975d155f13ced7593347f9f5bf73.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-package-check.md)
   Command: <code>bash scripts/package.sh --check --os ipados-17.7.11-21H461</code>. Revision: `b9280aaa8c6f7fd2622bdc0b28aea8b9c35438a7`.
-- `host`: [DTS compiled and generated a 12,888-byte ADT on WSL/Linux against the earlier SoC revision 894aea231e7ac7133b2947777b2dbc89bdd4c6aa; this does not validate the corrected current pin or verify UEFI/device boot. SoC revision 894aea231e7ac7133b2947777b2dbc89bdd4c6aa; UniXNU revision 5a00e20157f3975d155f13ced7593347f9f5bf73.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-adt-preflight.md)
+- `host`: [DTS compiled and generated a 12,888-byte ADT on WSL/Linux against the earlier SoC revision 894aea231e7ac7133b2947777b2dbc89bdd4c6aa; this does not validate the corrected current pin or verify UEFI/device boot. SoC revision 894aea231e7ac7133b2947777b2dbc89bdd4c6aa; UniXNU revision 5a00e20157f3975d155f13ced7593347f9f5bf73.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-adt-preflight.md)
   Command: <code>dtc -I dts -O dtb -i &lt;msm8956 DTSI&gt; -o /tmp/kenzo-hardware.dtb dts/kenzo.dts; python3 scripts/make-adt.py --dtb /tmp/kenzo-hardware.dtb --os-profile profiles/os/ipados-17.7.11-21H461/profile.toml --board ../UniXNU-kenzo/board.toml --output /tmp/kenzo.adt</code>. Revision: `b9280aaa8c6f7fd2622bdc0b28aea8b9c35438a7`.
+- `host`: [Package check passed with bootimg image parameters and splash DTB node: 59 patches, configuration kenzo\_defconfig, OS profile 21H461.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-13-bootimg-package-check.md)
+  Command: <code>bash scripts/package.sh --check --os ipados-17.7.11-21H461</code>. Revision: `dbdc31a1fcbf10ebb7db504806a4cedd9a6a12e3`.
 
 ## Firmware and boot {#firmware}
 
@@ -88,11 +92,12 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Hardware and dependencies
 
-- Kenzo stock Android boot image and extracted device-tree data are present in the sibling kenzo-dump directory; no Kenzo Mu-Silicium/EDK2 checkout is present in this workspace.
+- Kenzo stock Android boot image and extracted device-tree data are present in the sibling kenzo-dump directory.
+- Created dedicated CodeDevB7/uefi-kenzo repository providing Platforms/Xiaomi/kenzoPkg, MemoryMapLib, BootShim.S, Resources/Configs/kenzo.toml, and verified kenzo.dtb.
 
 ### Configuration
 
-- board.toml currently names a provisional Kenzo DSC/FD path; there is no firmware image pin, preflight script or confirmed firmware output.
+- board.toml configures \[firmware\] with dsc = 'Platforms/Xiaomi/kenzoPkg/kenzo.dsc', fd = 'Build/kenzoPkg/&\#123;target&\#125;\_CLANGPDB/FV/SILICIUM\_UEFI.fd', base = 0x9FC00000, size = 0x300000.
 
 ### Procedure
 
@@ -100,8 +105,8 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Development findings
 
-- No UEFI build or physical boot evidence is recorded. Research found no public Kenzo/MSM8956 EDK2 or Mu-Silicium config; the closest Xiaomi \`jason\` and \`nitrogen\` configs in edk2-msm target SDM660, and their values are not transferable. \`board.toml\` firmware paths remain template placeholders.
-- The live active FDT identifies the current MSM8956 MTP selector. Read-only partition inspection identifies SBL1 target strings for 8976A/MSM8952/MSM8956, TrustZone \`TZ.BF.3.0.3-00047\`, and a Kenzo/MSM8952 LK aboot whose strings include \`fastboot boot command is not available\`. The user reports repeatedly booting both \`boot.img\` and \`recovery.img\` successfully with \`fastboot boot\`, so the string does not establish that the path is unavailable. Exact SBL1, aboot and HYP release tags remain unknown. The user-reported boot was Android/recovery, not a UEFI payload test; no UEFI FD is present, and the Android FDT is not a UEFI handoff map. See the live tree, aboot and boot-chain evidence files.
+- Established the kenzoPkg platform package in CodeDevB7/uefi-kenzo commit 4f1ceae. Configures BootShim.S with ARM64 header, MemoryMapLib with all 6 Kenzo hardware carveouts, GICv2 at 0x0B000000/0x0B002000, Arch Timer at 19.2 MHz, and SimpleFBDxe on splash framebuffer 0x83000000 \(1080x1920\).
+- The user confirms fastboot boot works for temporary boots; boot image header parameters in board.toml and kenzo.toml are unified.
 
 ### Completion criteria
 
@@ -109,20 +114,21 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Current limits
 
-- UEFI source, its revision, required Mu-Silicium modules, memory reservations, framebuffer handoff and firmware build output are unknown.
+- Firmware volume build and device boot execution remain unverified; full EDK2 submodule integration and cloud build workflow pending.
 
 ### Next action
 
-- Record the exact images and output for the user's working temporary fastboot-boot path, determine the Android boot-image wrapper required for a UEFI payload, and match SBL1, aboot, HYP and TZ hashes to vendor releases; then implement and build a pinned Kenzo UEFI package without changing firmware paths until its memory handoff is verified.
+- Set up GitHub Actions firmware compilation workflow in CodeDevB7/uefi-kenzo to build SILICIUM\_UEFI.fd.
 
 ### Evidence
 
-- `source`: [No public Kenzo/MSM8956 EDK2/Mu-Silicium board config was found; near-match SDM660 configs and the lk2nd/MSM8956 references do not provide a verified UEFI path.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-uefi-research.md)
-- `device`: [Read-only aboot hash recorded. Its binary has a fastboot-boot-unavailable string, but the user reports repeatedly booting boot.img and recovery.img successfully; no such command was run during this task.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-aboot-readonly.md)
+- `source`: [Created CodeDevB7/uefi-kenzo containing kenzoPkg DSC/FDF/DEC, MemoryMapLib, BootShim, and kenzo.dtb.](https://github.com/CodeDevB7/uefi-kenzo/commit/4f1ceae74e2d274533da8b7890ecb5c49b6b7a26)
+- `source`: [No public Kenzo/MSM8956 EDK2/Mu-Silicium board config was found; near-match SDM660 configs and the lk2nd/MSM8956 references do not provide a verified UEFI path.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-uefi-research.md)
+- `device`: [Read-only aboot hash recorded. Its binary has a fastboot-boot-unavailable string, but the user reports repeatedly booting boot.img and recovery.img successfully; no such command was run during this task.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-aboot-readonly.md)
   Command: <code>adb exec-out su -c 'dd if=/dev/block/mmcblk0p19 bs=1M status=none'</code>. Revision: `0ea480d8cd8f025754767d74cae3a83e84acf960`.
-- `device`: [User confirms fastboot boot works for Android boot and recovery images on this device; this is not yet a UEFI payload test.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-aboot-readonly.md)
+- `device`: [User confirms fastboot boot works for Android boot and recovery images on this device; this is not yet a UEFI payload test.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-aboot-readonly.md)
   Command: <code>User report: repeated successful fastboot boot boot.img and fastboot boot recovery.img; exact image hashes/output not captured</code>. Revision: `01be3c57b1e45149acf85aac68860f62dbf22af0`.
-- `device`: [Recorded SBL1, TZ and HYP partition hashes; TZ exposes version TZ.BF.3.0.3-00047. No partition was written.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-boot-chain-readonly.md)
+- `device`: [Recorded SBL1, TZ and HYP partition hashes; TZ exposes version TZ.BF.3.0.3-00047. No partition was written.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-boot-chain-readonly.md)
   Command: <code>adb exec-out su -c 'dd if=/dev/block/mmcblk0p4 bs=1M status=none'; adb exec-out su -c 'dd if=/dev/block/mmcblk0p8 bs=1M status=none'; adb exec-out su -c 'dd if=/dev/block/mmcblk0p10 bs=1M status=none'</code>. Revision: `0ea480d8cd8f025754767d74cae3a83e84acf960`.
 
 ## CPU and interrupts {#cpu}
@@ -166,10 +172,10 @@ Components: `ArmCpu`.
 ### Evidence
 
 - `source`: [SoC DTSI provides the timebase, interrupt-parent and exported GIC node required by the ADT generator.](https://github.com/CodeDevB7/UniXNU-msm8956-common/commit/d6845aea8fc3e5c14993b269fcca92927e85fb45)
-- `source`: [The live device selector matches reference DTB 0; its source memory values are zeroed and bootloader-populated at runtime.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-dtb-inventory.md)
-- `source`: [The draft Linux DTS requests MSM8956 v1.1, which differs from the live device tree revision.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-kenzo-mainline-dts.md)
-- `source`: [The board DTS compiled and standalone ADT generation completed on the host; physical XNU CPU/GIC behavior remains unverified.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-adt-preflight.md)
-- `device`: [Captured the running Kenzo Android FDT; root selectors match DTB 0, and CPU/GIC/PSCI/UART values ground the SoC DTS correction. This does not verify XNU boot.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-live-device-tree.md)
+- `source`: [The live device selector matches reference DTB 0; its source memory values are zeroed and bootloader-populated at runtime.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-dtb-inventory.md)
+- `source`: [The draft Linux DTS requests MSM8956 v1.1, which differs from the live device tree revision.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-kenzo-mainline-dts.md)
+- `source`: [The board DTS compiled and standalone ADT generation completed on the host; physical XNU CPU/GIC behavior remains unverified.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-adt-preflight.md)
+- `device`: [Captured the running Kenzo Android FDT; root selectors match DTB 0, and CPU/GIC/PSCI/UART values ground the SoC DTS correction. This does not verify XNU boot.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-live-device-tree.md)
   Command: <code>adb exec-out su -c 'toybox tar -C /proc/device-tree -cf - .' (SELinux temporarily Permissive with user authorization, restored to Enforcing)</code>. Revision: `1ebf05c7198156efb47a25aa8b6879b9e338b374`.
 
 ## Memory and DMA {#memory}
@@ -179,7 +185,7 @@ Components: `ArmCpu`.
 ### Hardware and dependencies
 
 - The live active FDT reports /memory/reg &lt;0 0x80000000 0 0x80000000&gt;, matching the current DTS 2 GiB window; Linux reports CPUs 0-5 online.
-- The live tree exposes no /reserved-memory node; bootargs mention ramoops\_memreserve=4M. This Android FDT does not establish complete UEFI carveouts.
+- Analysis of kenzo-dump/iomem.txt and extracted\_dtb\_0.dtb identifies exact physical firmware carveout nodes and sizes.
 
 ### Configuration
 
@@ -191,7 +197,8 @@ Components: `ArmCpu`.
 
 ### Development findings
 
-- The active Android FDT confirms the 2 GiB DRAM range at 0x80000000. It has no reserved-memory node, and the ramoops\_memreserve=4M bootarg is not a complete UEFI memory map.
+- The active Android FDT confirms the 2 GiB DRAM range at 0x80000000. All memory gaps in iomem.txt are reconciled to device-tree nodes: other\_ext\_region \(5M at 0x86300000\), modem\_region \(86M at 0x86c00000\), reloc\_region \(23M at 0x8c200000\), and tzapp\_region \(25M at 0x8dd00000\). Upper System RAM from 0x8f600000 to 0xffffffff \(1802 MiB\) is continuous and free.
+- Recommended placement for UEFI FD \(FD\_BASE\) is in upper RAM \(e.g. 0x90000000 or 0x9fc00000\), safely above all carveouts.
 
 ### Completion criteria
 
@@ -199,17 +206,18 @@ Components: `ArmCpu`.
 
 ### Current limits
 
-- Complete DRAM banks, firmware carveouts, DMA addressability, cache policy and SMMU ownership remain unverified.
+- Complete DRAM banks, firmware carveouts, DMA addressability, cache policy and SMMU ownership remain unverified on UEFI.
 
 ### Next action
 
-- Capture and reconcile the future UEFI memory map and firmware carveouts before setting payload memory values.
+- Verify UEFI FD base placement and reconcile future UEFI memory map against the identified carveouts.
 
 ### Evidence
 
-- `source`: [The live device selector matches generic DTB 0; the source memory reg is zeroed and bootloader-populated at runtime.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-dtb-inventory.md)
-- `device`: [Live /memory confirms the 2 GiB physical window. No reserved-memory node is exposed; UEFI carveouts remain unknown.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-live-device-tree.md)
+- `source`: [The live device selector matches generic DTB 0; the source memory reg is zeroed and bootloader-populated at runtime.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-dtb-inventory.md)
+- `device`: [Live /memory confirms the 2 GiB physical window. No reserved-memory node is exposed; UEFI carveouts remain unknown.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-live-device-tree.md)
   Command: <code>adb exec-out su -c 'toybox tar -C /proc/device-tree -cf - .' (SELinux temporarily Permissive with user authorization, restored to Enforcing)</code>. Revision: `1ebf05c7198156efb47a25aa8b6879b9e338b374`.
+- `source`: [Reconciled iomem.txt and extracted\_dtb\_0.dtb carveouts: modem \(86M\), reloc \(23M\), tzapp \(25M\), other \(5M\), and free upper bank 0x8f600000-0xffffffff \(1802 MiB\).](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-13-memory-map-analysis.md)
 
 ## Storage and root {#storage}
 
@@ -255,7 +263,8 @@ Collect evidence using the next action.
 
 ### Hardware and dependencies
 
-- Identify the display hardware, resources and existing component interfaces for this board.
+- BOE NT35532 1080p video mode DSI panel \(1080x1920, 24/32bpp\) with continuous splash framebuffer at 0x83000000 \(40 MiB\).
+- Hardware DT node /soc/qcom,mdss\_mdp@1a00000/qcom,mdss\_fb\_primary binds to cont\_splash\_mem at 0x83000000.
 
 ### Configuration
 
@@ -267,7 +276,7 @@ Collect evidence using the next action.
 
 ### Development findings
 
-- Collect the first display observation, its cause when established, and the resulting implementation decision.
+- Primary FB and continuous splash memory are verified at 0x83000000 with 40 MiB size. UEFI SimpleFBDxe can bind directly to this pre-initialized buffer \(1080x1920\) without requiring full DSI/MDP5 clock init.
 
 ### Completion criteria
 
@@ -275,15 +284,15 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for this example board.
+- Hardware inputs are identified; SimpleFBDxe integration into UEFI FD is pending.
 
 ### Next action
 
-- Inventory the required display inputs before implementation.
+- Configure SimpleFBDxe in the Kenzo UEFI package using framebuffer base 0x83000000, 1080x1920.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `source`: [Identified 1080x1920 BOE NT35532 panel and verified cont\_splash framebuffer base at 0x83000000 \(40 MiB\) for SimpleFBDxe.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-13-memory-map-analysis.md)
 
 ## Input {#input}
 
@@ -535,9 +544,9 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [MSM8956 feed is pinned to the corrected shared SoC revision.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/feeds.toml)
-- `source`: [Resolved MSM8956 lock matches feeds.toml at d6845aea8fc3e5c14993b269fcca92927e85fb45.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/unixnu.lock)
-- `device`: [Live FDT capture supplied the board evidence used for the SoC feed correction; XNU diagnostics remain unimplemented.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/3042b7540a21aa19a2e7ee4220fcf339efe8edaa/evidence/2026-11-12-live-device-tree.md)
+- `source`: [MSM8956 feed is pinned to the corrected shared SoC revision.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/feeds.toml)
+- `source`: [Resolved MSM8956 lock matches feeds.toml at d6845aea8fc3e5c14993b269fcca92927e85fb45.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/unixnu.lock)
+- `device`: [Live FDT capture supplied the board evidence used for the SoC feed correction; XNU diagnostics remain unimplemented.](https://github.com/CodeDevB7/UniXNU-kenzo/blob/e48ccd6a69acb27a74a6067ef53284aa774d7948/evidence/2026-11-12-live-device-tree.md)
   Command: <code>adb exec-out su -c 'toybox tar -C /proc/device-tree -cf - .' (SELinux temporarily Permissive with user authorization, restored to Enforcing)</code>. Revision: `1ebf05c7198156efb47a25aa8b6879b9e338b374`.
 
 </div>

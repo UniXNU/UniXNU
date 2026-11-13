@@ -17,5 +17,6 @@ Browse device documentation and porting records from each repository.
 | [Sohytrs/UniXNU-fuxi](https://github.com/Sohytrs/UniXNU-fuxi) | [Xiaomi 13 \(Sohytrs\)](/devices/fuxi-sohytrs) | Repository link | SM8550 |
 | [Star-mailaz/fuxi-ios16-device](https://github.com/Star-mailaz/fuxi-ios16-device) | [Xiaomi 13 \(Star-mailaz\)](/devices/fuxi-star-mailaz) | Record pending | SM8550 |
 | [UNIXNU-FUXI/unixnu-fuxi](https://github.com/UNIXNU-FUXI/unixnu-fuxi) | [Xiaomi 13 \(UNIXNU-FUXI\)](/devices/fuxi-unixnu-fuxi) | Record pending | SM8550 |
+| [XRC111/unixnu-fuxi](https://github.com/XRC111/unixnu-fuxi) | [Xiaomi 13 \(XRC111\)](/devices/fuxi-xrc111) | Record pending | SM8550 |
 | [Xyvern08371/UniXNU-sheng](https://github.com/Xyvern08371/UniXNU-sheng) | [Xiaomi 13 \(SM8550\) \(Xyvern08371\)](/devices/fuxi-xyvern08371) | Repository link | SM8550 |
 | [yigezhong011-ops/unixnu-fuxi](https://github.com/yigezhong011-ops/unixnu-fuxi) | [Xiaomi 13 \(yigezhong011-ops\)](/devices/fuxi-yigezhong011-ops) | Repository link | SM8550 |

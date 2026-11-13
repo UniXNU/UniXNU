@@ -20,7 +20,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [LG G8 ThinQ \(LM-G820, alphalm\)](/devices/models/alphaplus) | alphaplus | SM8150 | 1 |
 | [Redmi Note 14 Pro+ 5G](/devices/models/amethyst) | amethyst | SM7635 | 2 |
 | [Xiaomi Mi Mix 3 5G](/devices/models/andromeda) | andromeda | SM8150 | 2 |
-| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/devices/models/apollo) | apollo | SM8250 | 1 |
+| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/devices/models/apollo) | apollo | SM8250 | 2 |
 | [Nothing Phone \(3a\)](/devices/models/asteroids) | asteroids | SM7635 | 2 |
 | [OnePlus Ace 3 PJE110](/devices/models/aston) | aston | SM8550 | 1 |
 | [Xiaomi MIX Fold 3](/devices/models/babylon) | babylon | SM8550 | 1 |
@@ -59,7 +59,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [OnePlus 15T](/devices/models/fairlady) | fairlady | SM8850 | 1 |
 | [OnePlus 6T](/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/devices/models/flashlm) | flashlm | SM8150 | 1 |
-| [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 15 |
+| [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 16 |
 | [Gree G0245D \(格力手机 / 色界\)](/devices/models/g0245d) | g0245d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/devices/models/garnet) | garnet | SM7435 | 1 |
 | [Motorola Moto G 5G](/devices/models/gauguin) | gauguin | SM7225 | 1 |
@@ -100,9 +100,9 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Redmi K80 Pro](/devices/models/miro) | miro | SM8750 | 1 |
 | [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/devices/models/mondrian) | mondrian | SM8475 | 6 |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/devices/models/munch) | munch | SM8250 | 3 |
-| [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 2 |
+| [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 3 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/devices/models/myron) | myron | SM8850 | 2 |
-| [Xiaomi Pad 5](/devices/models/nabu) | nabu | SM8150 | 6 |
+| [Xiaomi Pad 5](/devices/models/nabu) | nabu | SM8150 | 7 |
 | [Motorola Moto Z2 Force](/devices/models/nash) | nash | MSM8998 | 1 |
 | [OnePlus 10 Pro 5G](/devices/models/negroni) | negroni | SM8450 | 1 |
 | [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/devices/models/nio) | nio | SM8250 | 1 |
@@ -112,6 +112,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ \(NX769J\)](/devices/models/nx769j) | nx769j | SM8650 | 2 |
 | [Xiaomi Mi MIX 4 \(odin, Snapdragon 888+ / SM8350\)](/devices/models/odin) | odin | SM8350 | 3 |
 | [AYN Odin 3 \(Dragonwing Q8, SM8750\), 16 GiB](/devices/models/odin3) | odin3 | SM8750 | 1 |
+| [Xiaomi Redmi 7 / Redmi Y3 \(onclite\), Qualcomm MSM8953 Snapdragon 632, 3 GiB RAM](/devices/models/onclite) | onclite | MSM8953 | 1 |
 | [OnePlus 13T](/devices/models/oneplus13t) | oneplus13t | SM8750 | 2 |
 | [Redmi Turbo 4 Pro](/devices/models/onyx) | onyx | SM8735 | 1 |
 | [OPPO Pad mini 5G \(OPD2515, SM8845P / Alor\)](/devices/models/opd2515) | opd2515 | SM8845 | 1 |
@@ -145,7 +146,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 49 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 50 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |

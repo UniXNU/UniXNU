@@ -6,7 +6,7 @@
 
 iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under development, with system GPU composition not yet working.
 
-源记录: [porting.toml](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/porting.toml), `3a10e39c01edb0bae551686df08bdd9f223627a3`.
+源记录: [porting.toml](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/porting.toml), `199a50c23e5bcd7832c6080bfc498927ed76a254`.
 
 本页按设备记录自动生成。
 
@@ -63,7 +63,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 固件与启动 {#firmware}
 
@@ -101,7 +101,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## CPU 与中断 {#cpu}
 
@@ -137,7 +137,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 内存与 DMA {#memory}
 
@@ -173,7 +173,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 存储与根卷 {#storage}
 
@@ -214,7 +214,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 显示 {#display}
 
@@ -252,7 +252,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 输入 {#input}
 
@@ -289,7 +289,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## GPU {#gpu}
 
@@ -327,9 +327,9 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [记录受控 AIR 四帧回读、门控桌面和系统 Metal abort 的实机结果与限制。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/HANDOFF.md)
-- `source`: [A540 用户客户端、BO 和 GPU 提交实现。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/package/BoardRuntime/CheeseburgerGpuService.cpp)
-- `source`: [受控 Metal 图形与资源复用结果；非系统 GPU 合成。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_METAL_CONTINUOUS_20261106.md)
+- `source`: [记录受控 AIR 四帧回读、门控桌面和系统 Metal abort 的实机结果与限制。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/HANDOFF.md)
+- `source`: [A540 用户客户端、BO 和 GPU 提交实现。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/package/BoardRuntime/CheeseburgerGpuService.cpp)
+- `source`: [受控 Metal 图形与资源复用结果；非系统 GPU 合成。](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_METAL_CONTINUOUS_20261106.md)
 
 ## 网络 {#network}
 
@@ -365,7 +365,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 音频 {#audio}
 
@@ -401,7 +401,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 电源 {#power}
 
@@ -439,7 +439,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 镜像组装 {#packaging}
 
@@ -475,7 +475,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## 诊断 {#diagnostics}
 
@@ -512,7 +512,7 @@ iPadOS 17.7.11 desktop and touch run on OnePlus 5; A540 Metal rendering is under
 
 ### 证据
 
-- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/3a10e39c01edb0bae551686df08bdd9f223627a3/docs/P21_OFFICIAL_ADAPTATION.md)
+- `source`: [当前适配与待办记录，非新镜像实机成功声明](https://github.com/DinnerABC/UniXNU-cheeseburger/blob/199a50c23e5bcd7832c6080bfc498927ed76a254/docs/P21_OFFICIAL_ADAPTATION.md)
 
 ## cellular {#cellular}
 
