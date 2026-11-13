@@ -85,8 +85,9 @@ def toolchain_path(path=None):
 def linux_env(ctx):
     """Environment of the kernel step on a Linux host, with the toolchain of scripts/linux/setup-toolchain.py.
 
-    The xcrun shim answers every --sdk query with the fakeroot this build makes. The target is plain arm64 for
-    iOS 17, so the clang wrapper adds only the flag that keeps C++ static destructors in __mod_term_func.
+    The xcrun shim answers every --sdk query with the fakeroot this build makes. The target architecture and
+    deployment come from the selected arch and OS profiles, so the clang wrapper adds only the flag that keeps
+    C++ static destructors in __mod_term_func.
     CCC_OVERRIDE_OPTIONS (read by the clang driver itself, so also by the archive builders that replay xnu's
     compile records) turns off two warnings that upstream clang has and Apple clang does not; the builders compile
     with -Werror.
@@ -98,12 +99,26 @@ def linux_env(ctx):
         if not path.exists():
             raise Error(f'{path} missing; run "sudo scripts/linux/setup-toolchain.py {toolchain}"')
     fakeroot = ctx.tree / '.cache/fakeroot'
+    # The selected profiles decide the architecture and the deployment target. Without this the archive
+    # builders fall back to kernel_target.py's arm64/iOS 17 default, which conflicts with an arm64e profile's
+    # -mios-version-min and fails under -Werror ("overriding '-mios-version-min=27.0'").
+    arch_root = ctx.profile_roots.get('arch')
+    arch = (load_toml(arch_root / 'profile.toml').get('arch', {}).get('name')
+            if arch_root and (arch_root / 'profile.toml').is_file() else None) or \
+        ctx.board.get('arch', {}).get('name', 'arm64')
+    os_root = ctx.profile_roots.get('os')
+    os_profile = (load_toml(os_root / 'profile.toml').get('os', {})
+                  if os_root and (os_root / 'profile.toml').is_file() else ctx.board.get('os', {}))
+    if arch not in ('arm64', 'arm64e'):
+        raise Error(f'unsupported kernel architecture {arch}')
+    ios_version = os_profile.get('ios_version') or ctx.board.get('os', {}).get('ios_version') or '17.0'
     return {'PATH': os.pathsep.join([str(clt / 'bin'), str(toolchain / 'bin'), os.environ.get('PATH', '')]),
             'LC_ALL': 'C', 'CLT_PREFIX': str(clt), 'XCTOOLCHAIN_PREFIX': str(xctoolchain),
             'XNU_TOOLCHAIN_BIN': f'{clt / "bin"} {xctoolchain / "bin"}',
-            'UNIXNU_SDKROOT': str(fakeroot), 'UNIXNU_SDK_VERSION': '17.0',
+            'UNIXNU_SDKROOT': str(fakeroot), 'UNIXNU_SDK_VERSION': ios_version,
+            'UNIXNU_XNU_ARCH': arch, 'UNIXNU_IOS_VERSION': ios_version,
             'UNIXNU_PLATFORM_PATH': str(fakeroot / 'Platforms/iPhoneOS.platform'),
-            'CROSS_CLANG': str(toolchain / 'llvm/bin/clang'), 'DARWIN_TRIPLE': 'arm64-apple-ios17.0',
+            'CROSS_CLANG': str(toolchain / 'llvm/bin/clang'), 'DARWIN_TRIPLE': f'{arch}-apple-ios{ios_version}',
             'CROSS_EXTRA_FLAGS': '-mllvm -disable-atexit-based-global-dtor-lowering',
             'CCC_OVERRIDE_OPTIONS': '# +-Wno-missing-designated-field-initializers +-Wno-unused-but-set-global'}
 
