@@ -1,0 +1,49 @@
+Keep the read-only SystemOS root union mounted until the platform resets.
+
+The ordinary shutdown sweep force-unmounts the SystemOS upper layer. On sheng,
+PID 1 then faults fetching an instruction and the kernel panics before reset.
+Retain the two read-only root layers through both sweeps. Data and other mounts
+still follow the normal sync and unmount sequence.
+
+--- a/bsd/vfs/vfs_subr.c
++++ b/bsd/vfs/vfs_subr.c
+@@ -4274,6 +4274,24 @@ struct unmount_info {
+ 	int     u_only_non_system;
+ };
+ 
++#if XNU_TARGET_OS_OSX
++extern mount_t native_union_identity(mount_t mp);
++
++static bool
++native_shutdown_root_layer(mount_t mp)
++{
++	mount_t top = rootvnode != NULLVP ? vnode_mount(rootvnode) : NULL;
++	if (top == NULL || (top->mnt_flag & (MNT_RDONLY | MNT_UNION)) != (MNT_RDONLY | MNT_UNION) ||
++	    top->mnt_vnodecovered == NULLVP) {
++		return false;
++	}
++	mount_t base = vnode_mount(top->mnt_vnodecovered);
++	/* The original root and its verified SystemOS layer supply PID 1's executable pages. */
++	return base != NULL && base != top && (base->mnt_flag & MNT_RDONLY) &&
++	       native_union_identity(base) == top && (mp == top || mp == base);
++}
++#endif
++
+ static int
+ unmount_callback(mount_t mp, void *arg)
+ {
+@@ -4282,6 +4300,14 @@ unmount_callback(mount_t mp, void *arg)
+ 	struct unmount_info *uip = arg;
+ 
+ 	uip->u_count++;
++#if XNU_TARGET_OS_OSX
++	if (native_shutdown_root_layer(mp)) {
++		printf("unmount(%d) %s retained for shutdown\n", uip->u_only_non_system,
++		    mp->mnt_vfsstat.f_mntonname);
++		mount_iterdrop(mp);
++		return VFS_RETURNED;
++	}
++#endif
+ 
+ 	mntname = zalloc_flags(ZV_NAMEI, Z_WAITOK | Z_NOFAIL);
+ 	strlcpy(mntname, mp->mnt_vfsstat.f_mntonname, MAXPATHLEN);
