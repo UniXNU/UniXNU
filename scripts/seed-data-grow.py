@@ -96,7 +96,8 @@ def main():
     logical, extents = packed_ramdisk.regions(blob)
     if target <= logical:
         sys.exit(f'The seed already holds {logical // GIB} GiB; growing needs a larger size')
-    with tempfile.TemporaryDirectory(prefix='data-grow-', dir=str(ROOT / 'build')) as scratch:
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='data-grow-', dir=args.output.parent) as scratch:
         raw = Path(scratch) / 'seed.raw'
         with raw.open('wb') as handle:
             handle.truncate(target)
