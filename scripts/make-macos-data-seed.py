@@ -18,7 +18,7 @@ blocks of the replaced files. --volume-uuid gives the Data volume the UUID the k
 (CONFIG_XNU_OWNER_DATA_VOLUME_UUID), so a new seed can replace an older one without a kernel build.
 
     sudo python3 scripts/make-macos-data-seed.py OS OUTPUT --gib N [--skip-setup] [--user NAME:PASSWORD [--auto-login]]
-        [--real-name DISPLAY_NAME] [--volume-uuid UUID]
+        [--user-stdin | --interactive-user] [--real-name DISPLAY_NAME] [--volume-uuid UUID]
 
 --skip-setup marks Setup Assistant done (/private/var/db/.AppleSetupDone: loginwindow shows its login window instead of Language
 Chooser and Setup Assistant, which would also ask to activate the Mac) and writes a managed SkipSetupItems, so a new user's first
@@ -41,13 +41,14 @@ import json
 import os
 from pathlib import Path
 import plistlib
-import re
 import stat
 import struct
 import subprocess
 import sys
 import tempfile
 import uuid
+
+from macos_account import add_account_arguments, read_account
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'drivers/DarwinBoot/Test'))
@@ -76,53 +77,23 @@ def main():
     parser.add_argument('--gib', type=int, required=True)
     parser.add_argument('--skip-setup', action='store_true',
                         help='mark Setup Assistant done (/private/var/db/.AppleSetupDone)')
-    account = parser.add_mutually_exclusive_group()
-    account.add_argument('--user', help='NAME:PASSWORD of a local administrator to add')
-    account.add_argument('--user-stdin', action='store_true',
-                         help='read a JSON object with name and password from standard input')
-    parser.add_argument('--real-name', help='display name of the administrator (default: account name)')
+    add_account_arguments(parser)
     parser.add_argument('--keyboard-type', action='append', default=[], metavar='PRODUCT-VENDOR-COUNTRY=TYPE',
                         help='a keyboard whose layout type is known (40 = ANSI); may repeat')
     parser.add_argument('--auto-login', action='store_true',
                         help='log the selected account in at boot (unattended test seeds only)')
     parser.add_argument('--volume-uuid', type=uuid.UUID, help='the Data volume UUID (default: a new one)')
     args = parser.parse_args()
-    read_account(parser, args)
-    if args.auto_login and not args.user:
-        parser.error('--auto-login needs --user or --user-stdin')
     if os.geteuid() != 0:
         parser.error('run as root: the Data template keeps its owners')
+    read_account(parser, args)
+    if args.auto_login and not args.user:
+        parser.error('--auto-login needs --user, --user-stdin or --interactive-user')
     if args.os.is_file():
         with os_mount(args.os) as point:
             build(parser, args, point)
     else:
         build(parser, args, args.os)
-
-
-def read_account(parser, args):
-    """Keep the short account name separate from its display name and home path."""
-    if args.user_stdin:
-        try:
-            record = json.load(sys.stdin)
-            name, password = record['name'], record['password']
-            if not isinstance(name, str) or not isinstance(password, str):
-                raise ValueError('name and password must be strings')
-            if ':' in name:
-                raise ValueError('the account name cannot contain a colon')
-            args.user = name + ':' + password
-        except (ValueError, KeyError, TypeError):
-            parser.error('--user-stdin needs a JSON object with string name and password fields')
-    if args.real_name is not None and not args.user:
-        parser.error('--real-name needs --user or --user-stdin')
-    if not args.user:
-        return
-    name, separator, password = args.user.partition(':')
-    if not separator or not password or '\0' in password:
-        parser.error('the account needs a nonempty password without NUL characters')
-    if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_.-]{0,31}', name) or name.lower() in ('root', 'daemon', 'nobody'):
-        parser.error('invalid short account name')
-    if args.real_name is not None and (not args.real_name.strip() or any(ord(c) < 32 for c in args.real_name)):
-        parser.error('the display name must be nonempty and contain no control characters')
 
 
 @contextlib.contextmanager
