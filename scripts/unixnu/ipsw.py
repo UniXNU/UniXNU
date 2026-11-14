@@ -7,14 +7,18 @@ out/ipsw/<build>/ with their sha256, and checked against the pins of board.toml 
 The board describes the image in [ipsw]: url (the default remote source), product, version, build, device_class,
 chip_id, board_id, and the components the steps use.
 """
+import concurrent.futures
+import contextlib
 import hashlib
 import http.client
 import io
 import json
+import os
 import platform
 import plistlib
 import struct
 import subprocess
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -35,19 +39,22 @@ class RangeFile(io.RawIOBase):
         self.url, self.block, self.retries = url, block, retries
         self.position = 0
         self.cache = {}
+        self._prefetch = None
         self.size = self._request()
         self._request(0, 0)
 
-    def _request(self, start=None, end=None):
+    def _request(self, start=None, end=None, stop=None):
         """Retry a complete range; truncated bytes never enter the seekable cache."""
         headers = {'Accept-Encoding': 'identity'}
         if start is not None:
             headers['Range'] = f'bytes={start}-{end}'
         label = 'size query' if start is None else f'bytes {start}-{end}'
         for attempt in range(self.retries):
+            if stop is not None and stop.is_set():
+                raise concurrent.futures.CancelledError()
             try:
                 request = urllib.request.Request(self.url, headers=headers, method='HEAD' if start is None else 'GET')
-                with urllib.request.urlopen(request, timeout=60 if start is None else 120) as response:
+                with urllib.request.urlopen(request, timeout=30 if stop is not None else 60 if start is None else 120) as response:
                     if start is None:
                         try:
                             size = int(response.headers['Content-Length'])
@@ -64,7 +71,21 @@ class RangeFile(io.RawIOBase):
                     length = response.headers.get('Content-Length')
                     if length is not None and length != str(expected):
                         raise OSError('Content-Length differs from the requested IPSW range')
-                    data = response.read(expected + 1)
+                    if stop is None:
+                        data = response.read(expected + 1)
+                    else:
+                        data = bytearray()
+                        deadline = time.monotonic() + 120
+                        while len(data) < expected:
+                            if stop.is_set():
+                                raise concurrent.futures.CancelledError()
+                            if time.monotonic() >= deadline:
+                                raise TimeoutError('range transfer exceeded 120s')
+                            chunk = response.read1(min(65536, expected - len(data)))
+                            if not chunk:
+                                break
+                            data.extend(chunk)
+                        data = bytes(data)
                     if len(data) != expected:
                         raise OSError(f'short range response: received {len(data)} of {expected} bytes')
                     return data
@@ -78,7 +99,48 @@ class RangeFile(io.RawIOBase):
                 delay = 2 ** attempt
                 log(f'ipsw: warning - {label} - {type(error).__name__}: {error} - '
                     f'retry {attempt + 2}/{self.retries} in {delay}s')
-                time.sleep(delay)
+                if stop is None:
+                    time.sleep(delay)
+                elif stop.wait(delay):
+                    raise concurrent.futures.CancelledError()
+
+    @contextlib.contextmanager
+    def prefetch(self, start, length, workers=64):
+        """Fetch only the active ZIP member, with at most one queued block per worker."""
+        if not 1 <= workers <= 64 or start < 0 or length < 0 or start + length > self.size:
+            raise Error('invalid IPSW parallel range window')
+        if self._prefetch is not None:
+            raise Error('nested IPSW prefetch windows are not supported')
+        first = start // self.block
+        end = (start + length + self.block - 1) // self.block
+        workers = min(workers, end - first) if length else 1
+        if workers <= 1:
+            yield 1
+            return
+        pool = concurrent.futures.ThreadPoolExecutor(max_workers=workers, thread_name_prefix='ipsw-range')
+        state = {'pool': pool, 'stop': threading.Event(), 'pending': {}, 'next': first,
+                 'end': end, 'workers': workers}
+        self._prefetch = state
+        try:
+            self._fill_prefetch()
+            yield workers
+        finally:
+            state['stop'].set()
+            for future in state['pending'].values():
+                future.cancel()
+            pool.shutdown(wait=True, cancel_futures=True)
+            self._prefetch = None
+
+    def _fill_prefetch(self):
+        state = self._prefetch
+        while state['next'] < state['end'] and len(state['pending']) < state['workers']:
+            index = state['next']
+            state['next'] += 1
+            if index in self.cache:
+                continue
+            start = index * self.block
+            end = min(start + self.block, self.size) - 1
+            state['pending'][index] = state['pool'].submit(self._request, start, end, state['stop'])
 
     def readable(self):
         return True
@@ -97,10 +159,16 @@ class RangeFile(io.RawIOBase):
         if index not in self.cache:
             start = index * self.block
             end = min(start + self.block, self.size) - 1
-            data = self._request(start, end)
+            pending = self._prefetch['pending'] if self._prefetch is not None else {}
+            future = pending.get(index)
+            data = future.result() if future is not None else self._request(start, end)
+            if future is not None:
+                del pending[index]
             if len(self.cache) >= 4:
                 self.cache.pop(next(iter(self.cache)))
             self.cache[index] = data
+            if future is not None:
+                self._fill_prefetch()
         return self.cache[index]
 
     def readinto(self, buffer):
@@ -131,6 +199,12 @@ class Ipsw:
             raise Error('board.toml has no [ipsw]')
         self.spec = spec or spec_of(ctx)
         self.remote = self.spec.startswith(('http://', 'https://'))
+        try:
+            self.jobs = int(os.environ.get('UNIXNU_IPSW_JOBS', '64'))
+        except ValueError as error:
+            raise Error('UNIXNU_IPSW_JOBS must be an integer in 1..64') from error
+        if not 1 <= self.jobs <= 64:
+            raise Error('UNIXNU_IPSW_JOBS must be in 1..64')
         if self.remote:
             log(f'ipsw: remote {self.spec}')
             self.stream = RangeFile(self.spec)
@@ -184,18 +258,24 @@ class Ipsw:
         started = reported = time.monotonic()
         done = 0
         with self.zip.open(name) as source, partial.open('wb') as target:
-            while chunk := source.read(CHUNK):
-                target.write(chunk)
-                digest.update(chunk)
-                done += len(chunk)
-                now = time.monotonic()
-                if now - reported >= 10 or done == size:
-                    elapsed = max(now - started, 0.001)
-                    speed = done / elapsed
-                    eta = int((size - done) / speed) if speed else 0
-                    log(f'ipsw: {component} - {100 * done / size:.1f}% - {done / (1 << 20):.1f}/{size / (1 << 20):.1f} MiB - '
-                        f'{speed / (1 << 20):.1f} MiB/s - elapsed {int(elapsed)}s - ETA {eta}s')
-                    reported = now
+            # ZipFile.open has consumed the local header, so tell() is the first compressed byte.
+            window = (self.stream.prefetch(self.stream.tell(), self.zip.getinfo(name).compress_size, self.jobs)
+                      if isinstance(getattr(self, 'stream', None), RangeFile) else contextlib.nullcontext(1))
+            with window as jobs:
+                if self.remote:
+                    log(f'ipsw: {component} - up to {jobs} parallel ranges - {CHUNK >> 20} MiB per range')
+                while chunk := source.read(CHUNK):
+                    target.write(chunk)
+                    digest.update(chunk)
+                    done += len(chunk)
+                    now = time.monotonic()
+                    if now - reported >= 10 or done == size:
+                        elapsed = max(now - started, 0.001)
+                        speed = done / elapsed
+                        eta = int((size - done) / speed) if speed else 0
+                        log(f'ipsw: {component} - {100 * done / size:.1f}% - {done / (1 << 20):.1f}/{size / (1 << 20):.1f} MiB - '
+                            f'{speed / (1 << 20):.1f} MiB/s - elapsed {int(elapsed)}s - ETA {eta}s')
+                        reported = now
         if partial.stat().st_size != size:
             partial.unlink()
             raise Error(f'incomplete extraction of {name}')

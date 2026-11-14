@@ -254,6 +254,10 @@ Modules are symbolic links to their sources. Scripts are copied. The device `pac
 
 The IPSW is read member by member. A remote IPSW is never downloaded as a whole. The zip directory and each needed member are read with HTTP range requests. Extracted members are cached in `out/ipsw/<build>/` and checked against the sha256 pins in `board.toml [ipsw.sha256]`.
 
+Member extraction prefetches up to 64 ranges of 8 MiB. Set `UNIXNU_IPSW_JOBS` to
+`1..64` to change concurrency; `1` disables prefetch. Interrupted ranges are retried
+before caching. Output shows extraction progress, speed and estimated remaining time.
+
 The image must match `[ipsw]`: product, version, build, device class, chip ID and board ID.
 
 ### kernel
