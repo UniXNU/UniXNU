@@ -24,7 +24,7 @@ args = parser.parse_args()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
-    '0042-unixnu-runtime-on-development-7ef17497.patch']]
+    '0043-unixnu-runtime-on-development-400efe79.patch']]
 
 
 def git_tree(*steps):
@@ -97,7 +97,8 @@ cargo = ['cargo', '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if ARM64E e
 # The translator source the runtime is built from (its pin and recorded patches), which keys the shader cache: shader priming keeps what it
 # finished while this stays the same (PrimeShaders.h).
 runtime_id = hashlib.sha256((PIN + '\n' + states[-1]).encode()).hexdigest()[:32]
-env = dict(os.environ, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
+component_id = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
 if ARM64E:
     env['RUSTC_BOOTSTRAP'] = '1'
 target_dir = ROOT / 'build/m2v-target'
