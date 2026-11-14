@@ -52,7 +52,8 @@ def main():
         sys.exit('Refuse to overwrite ' + str(output))
     blob = base.read_bytes()
     logical, extents = packed_ramdisk.regions(blob)
-    with tempfile.TemporaryDirectory(prefix='data-seed-', dir=str(ROOT / 'build')) as td:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='data-seed-', dir=output.parent) as td:
         raw = Path(td) / 'seed.raw'
         with raw.open('wb') as f:
             f.truncate(logical)
