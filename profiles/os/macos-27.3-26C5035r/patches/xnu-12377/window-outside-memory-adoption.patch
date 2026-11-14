@@ -309,7 +309,7 @@ diff --color -ruN a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 + * of the addresses the kernel map's ranges share, 2 GiB of about 3 GiB on a board with 6 GiB, and allocations failed
 + * with KERN_NO_SPACE. memory-outside=0 leaves the memory alone.
 + */
-+#define ARM_VM_OUTSIDE_RANGES 16
++#define ARM_VM_OUTSIDE_RANGES 128
 +SECURITY_READ_ONLY_LATE(pmap_paddr_t)                   arm_vm_outside_base;
 +SECURITY_READ_ONLY_LATE(pmap_paddr_t)                   arm_vm_outside_end;
 +SECURITY_READ_ONLY_LATE(vm_map_address_t)               arm_vm_outside_va;
