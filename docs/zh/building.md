@@ -245,6 +245,9 @@ tree/
 
 IPSW 按成员读取，远程 IPSW 不会整体下载。zip 目录和需要的成员通过 HTTP range 请求读取。解压的成员缓存在 `out/ipsw/<build>/`，并按 `board.toml [ipsw.sha256]` 的哈希校验。
 
+提取成员时最多并行预取 64 个 8 MiB 分块。通过 `UNIXNU_IPSW_JOBS` 设置 `1..64` 路并发，
+设为 `1` 关闭预取。断流分块重试成功后才写入缓存。日志显示提取进度、速度和预计剩余时间。
+
 镜像必须匹配 `[ipsw]` 的产品、版本、build、device class、chip ID 和 board ID。
 
 ### kernel

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise remote IPSW ranges against a local HTTP server with injected faults."""
 import collections
+import concurrent.futures
 import contextlib
 import hashlib
 import http.client
@@ -125,6 +126,81 @@ class RemoteRanges(unittest.TestCase):
         with ipsw.RangeFile(self.url, block=128) as stream:
             self.assertEqual(stream.read(128), self.archive[:128])
 
+    def test_parallel_prefetch_preserves_bytes_and_range_boundaries(self):
+        self.faults('bytes=128-255', 'short', 'ok')
+        with ipsw.RangeFile(self.url, block=128) as stream:
+            with stream.prefetch(0, len(self.archive), workers=4) as jobs:
+                self.assertEqual(jobs, 4)
+                self.assertLessEqual(len(stream._prefetch['pending']), jobs)
+                self.assertEqual(stream.read(), self.archive)
+            self.assertIsNone(stream._prefetch)
+            self.assertLessEqual(len(stream.cache), 4)
+        for key in self.server.calls:
+            if key.startswith('bytes='):
+                start, end = map(int, key[6:].split('-'))
+                self.assertGreaterEqual(start, 0)
+                self.assertLess(end, len(self.archive))
+
+    def test_64_workers_keep_a_bounded_queue(self):
+        data = bytes(range(256)) * 65
+        lock = threading.Lock()
+        barrier = threading.Barrier(64)
+        requests, active, peak = [], 0, 0
+
+        def request(start, end, stop=None):
+            nonlocal active, peak
+            with lock:
+                requests.append((start, end))
+                number = len(requests)
+                active += 1
+                peak = max(peak, active)
+            try:
+                if number <= 64:
+                    barrier.wait(timeout=5)
+                return data[start:end + 1]
+            finally:
+                with lock:
+                    active -= 1
+
+        with ipsw.RangeFile(self.url, block=128) as stream:
+            stream.size = len(data)
+            with patch.object(stream, '_request', side_effect=request):
+                with stream.prefetch(0, len(data), workers=64):
+                    self.assertEqual(len(stream._prefetch['pending']), 64)
+                    output = bytearray()
+                    while chunk := stream.read(128):
+                        output.extend(chunk)
+                        self.assertLessEqual(len(stream._prefetch['pending']), 64)
+                    self.assertEqual(bytes(output), data)
+        self.assertEqual(peak, 64)
+        self.assertEqual(len(requests), len(data) // 128)
+
+    def test_prefetch_failure_cancels_waiting_workers(self):
+        def request(start, end, stop=None):
+            if start == 0:
+                raise Error('injected range failure')
+            stop.wait(timeout=3)
+            raise concurrent.futures.CancelledError()
+
+        with ipsw.RangeFile(self.url, block=128) as stream:
+            with patch.object(stream, '_request', side_effect=request):
+                with self.assertRaisesRegex(Error, 'injected range failure'):
+                    with stream.prefetch(0, len(self.archive), workers=4):
+                        stream.read(128)
+            self.assertIsNone(stream._prefetch)
+            self.assertEqual(stream.tell(), 0)
+            self.assertNotIn(0, stream.cache)
+
+    def test_invalid_or_empty_prefetch_window(self):
+        with ipsw.RangeFile(self.url, block=128) as stream:
+            for start, length, workers in ((-1, 1, 4), (0, len(self.archive) + 1, 4), (0, 1, 65), (0, 1, 0)):
+                with self.subTest(start=start, length=length, workers=workers), self.assertRaises(Error):
+                    with stream.prefetch(start, length, workers):
+                        pass
+            with stream.prefetch(len(self.archive), 0, workers=64) as jobs:
+                self.assertEqual(jobs, 1)
+                self.assertIsNone(stream._prefetch)
+
     def test_permanent_http_error_is_reported_once(self):
         self.faults('bytes=0-127', 403)
         with ipsw.RangeFile(self.url, block=128) as stream:
@@ -149,6 +225,8 @@ class RemoteRanges(unittest.TestCase):
             self.assertFalse((source.cache / 'OS.dmg.json').exists())
             with ipsw.RangeFile(self.url, block=128) as stream, zipfile.ZipFile(stream) as packed:
                 source.zip = packed
+                source.stream = stream
+                source.jobs = 4
                 destination = source.extract('OS')
             self.assertEqual(destination.read_bytes(), bytes(range(256)) * 20)
             self.assertEqual(json.loads((source.cache / 'OS.dmg.json').read_text())['size'], 5120)
