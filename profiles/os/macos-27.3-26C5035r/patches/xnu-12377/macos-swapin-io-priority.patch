@@ -1,0 +1,57 @@
+Give native APFS demand swap-ins temporary I/O priority through the next user boundary.
+
+--- a/osfmk/vm/vm_compressor.c
++++ b/osfmk/vm/vm_compressor.c
+@@ -173,6 +173,8 @@
+ 
+ TUNABLE(uint32_t, vm_compression_limit, "vm_compression_limit", 0);
+ boolean_t             vm_compressor_is_active = 0;
++int vm_swapin_iotier_boost_enabled;
++SCALABLE_COUNTER_DEFINE(vm_swapin_iotier_grants);
+ boolean_t             vm_compressor_available = 0;
+ 
+ extern uint64_t vm_swap_get_max_configured_space(void);
+@@ -1002,6 +1004,14 @@
+ vm_compressor_init(void)
+ {
+ 	thread_t        thread;
++	int native_apfs = 0;
++	PE_parse_boot_argn("native-apfs-root", &native_apfs, sizeof(native_apfs));
++	vm_swapin_iotier_boost_enabled = native_apfs != 0;
++	PE_parse_boot_argn("vm-swapin-io", &vm_swapin_iotier_boost_enabled,
++	    sizeof(vm_swapin_iotier_boost_enabled));
++	vm_swapin_iotier_boost_enabled = vm_swapin_iotier_boost_enabled != 0;
++	printf("vm: Demand swap-in transient I/O priority %s\n",
++	    vm_swapin_iotier_boost_enabled ? "enabled" : "disabled");
+ #if RECORD_THE_COMPRESSED_DATA
+ 	vm_size_t       c_compressed_record_sbuf_size = 0;
+ #endif /* RECORD_THE_COMPRESSED_DATA */
+@@ -4862,6 +4872,12 @@
+ 
+ 	kernel_memory_populate(addr, io_size, KMA_NOFAIL | KMA_COMPRESSOR,
+ 	    VM_KERN_MEMORY_COMPRESSOR);
++
++	/* The next user abort or syscall clears this operation-scoped grant. */
++	if (vm_swapin_iotier_boost_enabled && current_task() != kernel_task) {
++		set_thread_iotier_override(current_thread(), THROTTLE_LEVEL_TIER0);
++		counter_inc(&vm_swapin_iotier_grants);
++	}
+ 
+ 	kr = vm_swap_get(c_seg, f_offset, io_size);
+ 	if (kr == KERN_SUCCESS) {
+--- a/bsd/vm/vm_unix.c
++++ b/bsd/vm/vm_unix.c
+@@ -695,6 +695,13 @@
+ extern uint32_t vm_cheads;
+ extern vm_chead_select_t vm_chead_select;
+ extern boolean_t vm_chead_rehint;
++extern int vm_swapin_iotier_boost_enabled;
++SCALABLE_COUNTER_DECLARE(vm_swapin_iotier_grants);
++SYSCTL_INT(_vm, OID_AUTO, swapin_iotier_boost, CTLFLAG_RD | CTLFLAG_LOCKED,
++    &vm_swapin_iotier_boost_enabled, 0, "Demand swap-in transient I/O priority");
++SYSCTL_SCALABLE_COUNTER(_vm, swapin_iotier_grants, vm_swapin_iotier_grants,
++    "Demand swap-in transient I/O grants");
++
+ #if DEVELOPMENT || DEBUG
+ SYSCTL_UINT(_vm, OID_AUTO, compressor_heads, CTLFLAG_RD | CTLFLAG_LOCKED, &vm_cheads, 0, "");
+ SYSCTL_UINT(_vm, OID_AUTO, compressor_head_select, CTLFLAG_RD | CTLFLAG_LOCKED, &vm_chead_select, 0, "");
