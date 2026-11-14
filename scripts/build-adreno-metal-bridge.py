@@ -24,38 +24,13 @@ args = parser.parse_args()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
-    # Each stacks on the source the ones before it leave.
-    '0002-resource-wait-storage-dependencies.patch', '0004-fold-constant-global-field-loads.patch',
-    # A draw whose pipeline the driver refused binds nothing (int-170: tu_CmdBindPipeline in the render server).
-    '0005-skip-draws-without-a-pipeline.patch',
-    # A cache directory a sandboxed process may not write, and a patch function with no control points.
-    '0007-optional-shader-cache-directory.patch', '0009-patch-with-no-control-points.patch',
-    # A two-plane surface's shadow starts as its memory lies.
-    '0011-two-plane-shadow-as-memory-lies.patch',
-    # Device::refuse_rebinds: no call logs or per-command holds of no-copy buffers, which only a rebind or a detach reads.
-    '0016-refuse-rebinds.patch',
-    # A heap texture's own-device answer rounded up to a multiple of its alignment, as Metal's answers are.
-    '0017-heap-texture-size-a-multiple-of-its-alignment.patch',
-    # The completion and compile threads' quality-of-service classes on iOS too.
-    '0023-quality-of-service-on-ios.patch',
-    # A cache hit stops refreshing access times after the platform refuses it once.
-    '0032-shader-cache-touch-refused-once.patch',
-    # The rest of the board's runtime over this pin, in one patch: the priming cache of device entry points and the system shader cache
-    # layer; a batch's barrier globals on the stack; pooled blocks that start at 4 MiB and grow, which the runtime's blocks made ahead
-    # follow, and every dedicated block kept within the heap's budget; HostPageTexturePolicy::InPlaceWrites (textures over surfaces and
-    # padded buffers rendered and written in place where their tile stores stay within their rows); the room thread, which runs the
-    # runtime's keep_room and frees kept empty blocks and parked objects by time; memory census bytes, kinds by size and allocation
-    # sites; the stage trace with its diagnostics switch and latency stages; specialized links, shared constants and allocation sizes;
-    # YCbCr surface textures over their planes alone.
-    '0040-unixnu-runtime-on-development-555b13d5.patch',
-    # A driver that compiles inside the call: pipeline makings stay on the asking thread (METAL2VULKAN_COMPILE_ON_ASKING_THREAD=1)
-    # instead of a thread started for each, which a thread without a quality-of-service class waited for.
-    '0041-compile-on-the-asking-thread.patch']]
+    '0042-unixnu-runtime-on-development-7ef17497.patch']]
 
 
 def git_tree(*steps):
     # The source tree a scratch index holds after HEAD and the given commands, without touching the source's own index.
     index = ROOT / 'build/adreno-metal-bridge-index'
+    index.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, GIT_INDEX_FILE=str(index))
     subprocess.run(['git', '-C', str(SOURCE), 'read-tree', 'HEAD'], env=env, check=True)
     for step in steps:
