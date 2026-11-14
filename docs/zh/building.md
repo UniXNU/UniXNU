@@ -62,6 +62,16 @@ cp unixnu.example.toml unixnu.local.toml
 前一条成功后再执行下一条。[内核准备](/zh/guide/build-kernel)说明归档、ABI 和预链接要求，
 [固件集成](/zh/porting/uefi-firmware#required-integration)说明必需的 DSC/FDF 模块。
 
+为状态前缀着色，并把命令输出保存为纯文本日志：
+
+```sh
+python3 scripts/build-log.py --log out/build.log -- ./unixnu build kernel
+```
+
+蓝色表示进度，绿色表示完成，黄色表示警告，红色表示失败。包装器也识别 pip、CMake 和
+编译器诊断。终端中自动启用颜色；`NO_COLOR` 或 `--color never` 关闭颜色，
+`--color always` 在重定向输出中启用颜色。包装器返回原命令的退出码。
+
 | 步骤 | 预期输出 |
 | --- | --- |
 | 内核 | `<output>/kernel/kernel.macho` 和构建/预链接日志 |
