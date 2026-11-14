@@ -8,6 +8,7 @@ The board describes the image in [ipsw]: url (the default remote source), produc
 chip_id, board_id, and the components the steps use.
 """
 import hashlib
+import http.client
 import io
 import json
 import platform
@@ -29,16 +30,55 @@ class RangeFile(io.RawIOBase):
     """A read-only seekable view of a remote file, fetched with HTTP range requests and a small block cache."""
 
     def __init__(self, url, block=CHUNK, retries=4):
+        if block <= 0 or retries <= 0:
+            raise ValueError('range block size and attempts must be positive')
         self.url, self.block, self.retries = url, block, retries
         self.position = 0
         self.cache = {}
-        request = urllib.request.Request(url, method='HEAD')
-        with urllib.request.urlopen(request, timeout=60) as response:
-            self.size = int(response.headers['Content-Length'])
-        probe = urllib.request.Request(url, headers={'Range': 'bytes=0-0'})
-        with urllib.request.urlopen(probe, timeout=60) as response:
-            if response.status != 206:
-                raise Error(f'{url} does not support range requests')
+        self.size = self._request()
+        self._request(0, 0)
+
+    def _request(self, start=None, end=None):
+        """Retry a complete range; truncated bytes never enter the seekable cache."""
+        headers = {'Accept-Encoding': 'identity'}
+        if start is not None:
+            headers['Range'] = f'bytes={start}-{end}'
+        label = 'size query' if start is None else f'bytes {start}-{end}'
+        for attempt in range(self.retries):
+            try:
+                request = urllib.request.Request(self.url, headers=headers, method='HEAD' if start is None else 'GET')
+                with urllib.request.urlopen(request, timeout=60 if start is None else 120) as response:
+                    if start is None:
+                        try:
+                            size = int(response.headers['Content-Length'])
+                        except (KeyError, TypeError, ValueError) as error:
+                            raise OSError('missing or invalid IPSW Content-Length') from error
+                        if response.status != 200 or size <= 0:
+                            raise OSError('invalid IPSW size response')
+                        return size
+                    expected = end - start + 1
+                    if response.status != 206:
+                        raise OSError('server did not return HTTP 206 for the requested range')
+                    if response.headers.get('Content-Range') != f'bytes {start}-{end}/{self.size}':
+                        raise OSError('Content-Range differs from the requested IPSW range')
+                    length = response.headers.get('Content-Length')
+                    if length is not None and length != str(expected):
+                        raise OSError('Content-Length differs from the requested IPSW range')
+                    data = response.read(expected + 1)
+                    if len(data) != expected:
+                        raise OSError(f'short range response: received {len(data)} of {expected} bytes')
+                    return data
+            except (OSError, http.client.HTTPException) as error:
+                if isinstance(error, urllib.error.HTTPError):
+                    error.close()
+                    if error.code not in (408, 425, 429, 500, 502, 503, 504):
+                        raise Error(f'IPSW {label} failed: HTTP {error.code} {error.reason}') from error
+                if attempt + 1 == self.retries:
+                    raise Error(f'IPSW {label} failed after {self.retries} attempts: {error}') from error
+                delay = 2 ** attempt
+                log(f'ipsw: warning - {label} - {type(error).__name__}: {error} - '
+                    f'retry {attempt + 2}/{self.retries} in {delay}s')
+                time.sleep(delay)
 
     def readable(self):
         return True
@@ -55,23 +95,12 @@ class RangeFile(io.RawIOBase):
 
     def _block(self, index):
         if index not in self.cache:
-            if len(self.cache) >= 4:
-                self.cache.pop(next(iter(self.cache)))
             start = index * self.block
             end = min(start + self.block, self.size) - 1
-            for attempt in range(self.retries):
-                try:
-                    request = urllib.request.Request(self.url, headers={'Range': f'bytes={start}-{end}'})
-                    with urllib.request.urlopen(request, timeout=120) as response:
-                        data = response.read()
-                    if len(data) != end - start + 1:
-                        raise OSError('short range response')
-                    self.cache[index] = data
-                    break
-                except (OSError, urllib.error.URLError):
-                    if attempt == self.retries - 1:
-                        raise
-                    time.sleep(2 ** attempt)
+            data = self._request(start, end)
+            if len(self.cache) >= 4:
+                self.cache.pop(next(iter(self.cache)))
+            self.cache[index] = data
         return self.cache[index]
 
     def readinto(self, buffer):
@@ -152,10 +181,21 @@ class Ipsw:
         partial = destination.with_suffix(destination.suffix + '.partial')
         digest = hashlib.sha256()
         log(f'ipsw: extracting {component} ({name}, {size >> 20} MiB)')
+        started = reported = time.monotonic()
+        done = 0
         with self.zip.open(name) as source, partial.open('wb') as target:
             while chunk := source.read(CHUNK):
                 target.write(chunk)
                 digest.update(chunk)
+                done += len(chunk)
+                now = time.monotonic()
+                if now - reported >= 10 or done == size:
+                    elapsed = max(now - started, 0.001)
+                    speed = done / elapsed
+                    eta = int((size - done) / speed) if speed else 0
+                    log(f'ipsw: {component} - {100 * done / size:.1f}% - {done / (1 << 20):.1f}/{size / (1 << 20):.1f} MiB - '
+                        f'{speed / (1 << 20):.1f} MiB/s - elapsed {int(elapsed)}s - ETA {eta}s')
+                    reported = now
         if partial.stat().st_size != size:
             partial.unlink()
             raise Error(f'incomplete extraction of {name}')
