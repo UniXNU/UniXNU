@@ -132,17 +132,33 @@ macOS 补丁序列增加的内核参数：
 
 ### 创建账户并跳过 Setup {#account}
 
-在 UniXNU 仓库中执行。使用构建命令打印的路径和大小，将 `unixnu:YOUR_PASSWORD` 替换为
-账户名和密码：
+在 UniXNU 仓库中执行，使用构建命令打印的路径和大小。
+交互输入短用户名、显示名称和隐藏密码：
 
 ```sh
 sudo python3 scripts/make-macos-data-seed.py \
   "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
-  --skip-setup --user 'unixnu:YOUR_PASSWORD'
+  --skip-setup --interactive-user --auto-login
 ```
 
 脚本创建本地管理员及其主目录，保留模板文件属主，并跳过首次开机和首次登录时的设置助理。
 输出文件必须是新 seed。
+
+提示默认使用 `admin` 和 `Admin`。`sudo` 验证构建主机账户的密码；
+交互输入的密码用于新建的 macOS 管理员账户。
+
+自动化时，将 `--interactive-user` 替换为 `--user NAME:PASSWORD --real-name NAME`，
+或从私有 JSON 文件读取凭据：
+
+```sh
+sudo -v
+sudo -n python3 scripts/make-macos-data-seed.py \
+  "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
+  --skip-setup --user-stdin --auto-login < account.json
+```
+
+`account.json` 包含字符串字段 `name`、`password` 和可选的 `real_name`。
+`--real-name` 优先于 JSON 中的显示名称。提供凭据后不再显示账户输入提示。
 
 使用该 seed 构建并打包：
 
@@ -162,8 +178,9 @@ sudo python3 scripts/make-macos-data-seed.py \
 | `--skip-setup` | 把设置助理标记为已完成 |
 | `--user NAME:PASSWORD` | 添加本地管理员及其主目录 |
 | `--real-name NAME` | 设置管理员的显示名称，短用户名与 `/Users/NAME` 路径保持不变 |
-| `--user-stdin` | 从标准输入读取 `{"name":"unixnu","password":"..."}`，代替 `--user` |
-| `--auto-login` | 开机自动登录指定账户。供无人值守测试使用，需要 `--user` 或 `--user-stdin` |
+| `--user-stdin` | 从标准输入的 JSON 对象读取 `name`、`password` 和可选的 `real_name` |
+| `--interactive-user` | 交互输入账户名、显示名称和密码 |
+| `--auto-login` | 开机自动登录指定账户，供无人值守测试使用 |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | 记录键盘布局类型，键盘设置助理不再询问 |
 | `--volume-uuid UUID` | 为 Data 卷指定固定 UUID，新 seed 可以替换旧 seed 而无需重新构建内核 |
 

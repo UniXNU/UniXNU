@@ -14,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 SOURCE = Path(__file__).resolve().parents[2] / 'scripts/make-macos-data-seed.py'
+sys.path.insert(0, str(SOURCE.parent))
 SPEC = importlib.util.spec_from_file_location('data_seed', SOURCE)
 SEED = importlib.util.module_from_spec(SPEC)
 # Image packing is outside this host fixture; the account functions are unchanged.
