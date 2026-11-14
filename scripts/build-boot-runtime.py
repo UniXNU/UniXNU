@@ -74,19 +74,11 @@ def checkout(path, pin):
 def make_prime_list(request, work, os_root):
     paths, counts = set(), {}
 
-    def failed(error):
-        raise error
-
     def collect(mount, prefix):
-        found = set()
-        for directory, dirs, files in os.walk(mount, followlinks=False, onerror=failed):
-            if Path(directory) == mount:
-                dirs[:] = [name for name in dirs if name not in ('.Trashes', '.Spotlight-V100', '.fseventsd')]
-            for name in files:
-                if name.endswith('.metallib'):
-                    relative = (Path(directory) / name).relative_to(mount).as_posix()
-                    found.add(prefix.rstrip('/') + '/' + relative)
-        return found
+        command = [sys.executable, str(ROOT / 'scripts/list-metal-libraries.py'), str(mount), prefix]
+        if os.geteuid() != 0:
+            command = ['sudo', '-n', *command]
+        return set(subprocess.check_output(command, text=True).splitlines())
 
     for image in request['prime_images']:
         if Path(image['image']).resolve() == Path(request['os_image']).resolve():
