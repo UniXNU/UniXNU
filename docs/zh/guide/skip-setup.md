@@ -1,5 +1,7 @@
 # Skip Setup
 
+macOS 按[创建账户并跳过 Setup](/zh/porting/macos#account)操作。以下步骤适用于 iPadOS。
+
 需要 macOS 镜像工具、匹配的 packed Data seed 和设备 `skip_setup_tool`，按[构建指南](/zh/building)准备。执行下方 payload 命令后，再运行 `./unixnu bootimg` 并启动新打包的镜像。
 
 全新的 Data 种子首次启动会进入 Setup。负载可以在写镜像前把 Setup 标记为完成，让设备直接进入 SpringBoard。

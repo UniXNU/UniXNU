@@ -6,7 +6,7 @@
 
 Nothing Phone \(2\), native iPhone17,2 iOS18.6.2/22G100 Darwin24 arm64e/PAC
 
-Source record: [porting.toml](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/porting.toml), `3b0cf3ee4764cda6d01e69f30d1b78344b0994c5`.
+Source record: [porting.toml](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/porting.toml), `08c1f94ba60ea57db4ddb4bfe20cff983d09931e`.
 
 This page is generated from the device record.
 
@@ -66,7 +66,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [Native22G100board/profile/arm64e source selection; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native22G100board/profile/arm64e source selection; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Firmware and boot {#firmware}
 
@@ -107,7 +107,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [PongUEFI and original signed Qualcomm firmware integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [PongUEFI and original signed Qualcomm firmware integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## CPU and interrupts {#cpu}
 
@@ -148,7 +148,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [EightCPU PSCI/GIC and native timer; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [EightCPU PSCI/GIC and native timer; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Memory and DMA {#memory}
 
@@ -189,7 +189,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [Native4KiB ownership and physical DMA translation; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native4KiB ownership and physical DMA translation; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Storage and root {#storage}
 
@@ -230,7 +230,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [NativeUFS/APFS and128GB writableData; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [NativeUFS/APFS and128GB writableData; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Display {#display}
 
@@ -271,7 +271,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [Native brightness and hardware display output; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native brightness and hardware display output; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Input {#input}
 
@@ -312,7 +312,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [GoodixIRQ and nativeHID/button integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [GoodixIRQ and nativeHID/button integration; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## GPU {#gpu}
 
@@ -353,7 +353,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [A730/Turnip/Metal hardware rendering and per-processVA; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [A730/Turnip/Metal hardware rendering and per-processVA; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Network {#network}
 
@@ -394,7 +394,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [PongQCA6490 nativeWiFi; actual cellular qualification separate; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [PongQCA6490 nativeWiFi; actual cellular qualification separate; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Audio {#audio}
 
@@ -435,7 +435,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [AudioReach/TFA9873 nativeIOAudio2 and software decoding; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [AudioReach/TFA9873 nativeIOAudio2 and software decoding; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Power {#power}
 
@@ -476,7 +476,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [Native battery/externalpower and AW20036Glyph; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native battery/externalpower and AW20036Glyph; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Image assembly {#packaging}
 
@@ -517,7 +517,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [Native kernel/bindings/closure/boot pipeline; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [Native kernel/bindings/closure/boot pipeline; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## Diagnostics {#diagnostics}
 
@@ -558,7 +558,7 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `source`: [RealSIM/IPA/WAN/QMI status with no fabricated networking state; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/kits/PongPlatform24/NATIVE_IOS18E.md)
+- `source`: [RealSIM/IPA/WAN/QMI status with no fabricated networking state; seeREADME for actual device evidence and limits](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/kits/PongPlatform24/NATIVE_IOS18E.md)
 
 ## native-root-source {#native-root-source}
 
@@ -601,9 +601,9 @@ Components: `PongPlatform24`.
 
 ### Evidence
 
-- `host`: [Full native22G100 arm64e kernel link returned0 from root sources and pinned driver submodules; native bootstrap/UI compilation returned0](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
+- `host`: [Full native22G100 arm64e kernel link returned0 from root sources and pinned driver submodules; native bootstrap/UI compilation returned0](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
   Command: <code>scripts/build-pong-ios18e.py --phase full --configuration DEVELOPMENT --chained --optimize-size with local ABI/firmware inputs</code>. Revision: `ddc0a02d6d940f0e79ee4a598970cf2980b676f3`.
-- `device`: [Original launchd, actual input and physical IMS registration observed; native calls/SMS still incomplete](https://github.com/Chengdong-Yu/UniXNU-pong/blob/3b0cf3ee4764cda6d01e69f30d1b78344b0994c5/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
+- `device`: [Original launchd, actual input and physical IMS registration observed; native calls/SMS still incomplete](https://github.com/Chengdong-Yu/UniXNU-pong/blob/08c1f94ba60ea57db4ddb4bfe20cff983d09931e/migration/ios18e/services302-native-bootstrap-input-filesystem.md)
   Command: <code>fastboot boot services300/boot-final/pong-xnu-initial.img with services302 runtime; two bounded USB captures</code>. Revision: `ddc0a02d6d940f0e79ee4a598970cf2980b676f3`.
 
 </div>

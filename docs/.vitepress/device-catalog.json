@@ -35,6 +35,11 @@
     "title_zh": "andromeda"
   },
   {
+    "name": "models/apollo",
+    "title": "apollo",
+    "title_zh": "apollo"
+  },
+  {
     "name": "models/asteroids",
     "title": "asteroids",
     "title_zh": "asteroids"
@@ -123,6 +128,11 @@
     "name": "models/dada2",
     "title": "dada2",
     "title_zh": "dada2"
+  },
+  {
+    "name": "models/dagu",
+    "title": "dagu",
+    "title_zh": "dagu"
   },
   {
     "name": "models/dali",
@@ -263,6 +273,11 @@
     "name": "models/gts7xlwifi",
     "title": "gts7xlwifi",
     "title_zh": "gts7xlwifi"
+  },
+  {
+    "name": "models/gts9u",
+    "title": "gts9u",
+    "title_zh": "gts9u"
   },
   {
     "name": "models/gts9uwifi",
@@ -478,6 +493,11 @@
     "name": "models/odin3",
     "title": "odin3",
     "title_zh": "odin3"
+  },
+  {
+    "name": "models/onclite",
+    "title": "onclite",
+    "title_zh": "onclite"
   },
   {
     "name": "models/oneplus13t",

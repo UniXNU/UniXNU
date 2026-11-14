@@ -17,5 +17,6 @@
 | [Sohytrs/UniXNU-fuxi](https://github.com/Sohytrs/UniXNU-fuxi) | [Xiaomi 13 \(Sohytrs\)](/zh/devices/fuxi-sohytrs) | 仓库链接 | SM8550 |
 | [Star-mailaz/fuxi-ios16-device](https://github.com/Star-mailaz/fuxi-ios16-device) | [Xiaomi 13 \(Star-mailaz\)](/zh/devices/fuxi-star-mailaz) | 记录待补齐 | SM8550 |
 | [UNIXNU-FUXI/unixnu-fuxi](https://github.com/UNIXNU-FUXI/unixnu-fuxi) | [Xiaomi 13 \(UNIXNU-FUXI\)](/zh/devices/fuxi-unixnu-fuxi) | 记录待补齐 | SM8550 |
+| [XRC111/unixnu-fuxi](https://github.com/XRC111/unixnu-fuxi) | [Xiaomi 13 \(XRC111\)](/zh/devices/fuxi-xrc111) | 记录待补齐 | SM8550 |
 | [Xyvern08371/UniXNU-sheng](https://github.com/Xyvern08371/UniXNU-sheng) | [Xiaomi 13 \(SM8550\) \(Xyvern08371\)](/zh/devices/fuxi-xyvern08371) | 仓库链接 | SM8550 |
 | [yigezhong011-ops/unixnu-fuxi](https://github.com/yigezhong011-ops/unixnu-fuxi) | [Xiaomi 13 \(yigezhong011-ops\)](/zh/devices/fuxi-yigezhong011-ops) | 仓库链接 | SM8550 |

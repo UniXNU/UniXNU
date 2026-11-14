@@ -6,7 +6,7 @@
 
 Samsung Galaxy S9 \(SM-G960F, Exynos 9810\) running iOS 16.5 on XNU through HakiOS. Upstream: based on HakiOS \(Scion-Project/scion-kernel, from oosexgang's HakiOS\), not on the UniXNU tree; no UniXNU components are used. Seen on the phone 1-3 November 2026, and on by default on every image \(configs/starlte.config, README.md, Defaults\): six cores, touch, battery, haptics, USB console, the S6E3HA8 panel through the DPP's scaler with zero-copy scan-out, brightness slider, Mali-G72 through Mesa Panfrost, CPU DVFS governor with touch boost and TMU throttling, native UFS root and persistent /var, RTC, Wi-Fi joined from iOS's Settings with DHCP, the front camera in the stock Camera app at 30 fps, speaker audio through ABOX and the MAX98512s, the CS47L93 codec's main microphone recorded through ABOX. Seen working but not a default \(no room on the line\): the sensor hub's six sensors and iOS's orientation and proximity \(shub=6, SENSORS.md\); Bluetooth patched at 4 Mbaud with an LE scan from the USB console \(bt=7, BLUETOOTH.md\); the codec's microphone as iOS's \(abox\_mic=1, AUDIO.md\). Not yet: headphones, Bluetooth in iOS, modem, rear cameras, core 1, the low RAM bank.
 
-Source record: [porting.toml](https://github.com/Scion-Project/scion-starlte/blob/5cd68c99b5987c3283243a6a079b652d8c156614/porting.toml), `5cd68c99b5987c3283243a6a079b652d8c156614`.
+Source record: [porting.toml](https://github.com/Scion-Project/scion-starlte/blob/87be95cc732570d256a6d6d462881945be671aca/porting.toml), `87be95cc732570d256a6d6d462881945be671aca`.
 
 This page is generated from the device record.
 

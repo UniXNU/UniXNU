@@ -5,7 +5,7 @@ schema_version = 1
 name = "dodge"
 soc = "SM8750"
 os_profile = "ios-16.7.16-20H392"
-summary = "OnePlus 13 CPH2653: native A830 iPhone development payload, local builds and a separate QEMU fixture reaching original launchd main through the SystemOS union and shared cache."
+summary = "OnePlus 13 CPH2653: native A830 iPhone development payload and local QEMU boot through keybag/persona initialization, with Data preserved across a forced VM stop and cold resume."
 
 [[area]]
 id = "configuration"
@@ -59,7 +59,7 @@ procedure = [
 findings = [
   "61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.",
   "Public reports use separate original and publication hashes. Builds inherit host memory settings and use four jobs.",
-  "Reviewed the porting guide and both 13T ports through UniXNU 13d0779e2ccd30d3caa1f8c9a15202730feace67 on 2026-11-11. The native route backports calling-thread compilation and Vulkan device retention after recovery. The latest core change updates Adreno740 address-space fault isolation. Source revisions and the iPhone profile remain pinned; the standard package check resolves 61 patches.",
+  "Reviewed the porting guide through UniXNU 2366e33e4934696424bb9f5aa7598df925fbc0c1 on 2026-11-12; the prior review covered both 13T ports. The native route backports calling-thread compilation and Vulkan device retention after recovery. New mainline tile-pipeline, shared shader-cache and retired-buffer sweep changes are pending integration. Source revisions and the iPhone profile remain pinned; the standard package check resolves 61 patches.",
   "The native prelink derives normal and explicit security startup from the original iPhone module records. Sandbox uses its existing module start; AMFI keeps its explicit early initializer. The shared source profile and original component code remain pinned.",
 ]
 completion = [
@@ -192,6 +192,11 @@ paths = [
   "scripts/build_qemu_storage.py",
   "scripts/check_qemu_storage.py",
   "scripts/check_qemu_storage_host.py",
+  "scripts/build_qemu_store.py",
+  "scripts/check_qemu_store.py",
+  "scripts/check_qemu_store_host.py",
+  "scripts/qemu_store_image.py",
+  "reports/public/ios16-qemu-store*.json",
   "scripts/prepare_qemu_root_policy.py",
   "scripts/build_qemu_owner_root.py",
   "scripts/check_qemu_owner_root.py",
@@ -269,6 +274,7 @@ procedure = [
   "Run scripts/build_data_stack.py for both APFS seeds, real source lifecycle/helpers, the 83-object strict original prelink and CPU paths; --check-only verifies current reports/artifacts.",
   "Run .venv-gpu/bin/python scripts/check_ramblock_start_kernel.py for the actual startup/live chain; --check-only validates its current evidence.",
   "Build the separate QEMU candidate with scripts/build_qemu_storage.py, then run scripts/check_qemu_storage.py with the GPU Python environment and local OS/SystemOS files. --check-only validates the recorded run.",
+  "After preparing the volatile Data candidate, run scripts/build_qemu_store.py and .venv-gpu/bin/python scripts/check_qemu_store.py for local crash/cold-resume persistence and rejection controls.",
 ]
 findings = [
   "Original iPhone storage ABI, 12 storage aliases and the concrete 190-slot class are checked. Complete read-only UFS/ordered root-window publication and deferred original-module/native-class startup compile into a combined 68-object kernel. 32 lifecycle, 25 combined scheduling, eleven source probe matching and production root-publication host checks pass with explicit peers. Combined strict prelink reads 58962 original pointers, 208 aliases and both concrete/parent vtables. Eleven linked CPU paths execute native/source/original constructors and combined IOBSD plus three full display lifetime paths. The exact 8380219392-byte OS/SystemOS regular-file payload passes full hash readback and 32 production consumer cases. All 198 stock initial Data entries are archived with numeric ownership, permissions, links and xattr metadata, with eight corruption controls. Separate 2/3 GiB APFS v2 seeds now preserve all content/metadata and compression, pass independent read-back, strict compatible apfsck and 17 rejection controls each. The 352-byte/190-slot RamBlock and deferred registration/one-shot start link into a separate 83-object candidate retaining 332 aliases. 77 sanitizer and 30 ARM64 paths pass, including original protected constructors/destructors; 43 rejection controls pass across Data stages.",
@@ -282,16 +288,19 @@ findings = [
   "Adding the original iPhone AppleFSCompressionTypeZlib extends the separate VM candidate to 29 components and 64,635 checked pointer sites. PID 1 is launchd with the original executable UUID. Its first EL0 instruction and 64 entry bytes match the original dyld extracted from OS. The missing-decompressor control fails exec with ENOTSUP before EL0.",
   "SoftwareAES binds to the original 288-byte iPhone AES class and 181 dispatch slots. Its actual CBC/interface self-tests pass, and original Image4 completes nonce requests using the separate public VM development identity. Original dyld returns from its ignition query, enters prepare and reaches the missing shared-cache/libSystem error. Wrong-answer and absent-identity controls are refused.",
   "The SystemOS fixture enables the existing Darwin 22 native union with the observed iPhone UUID. Its mounted device and signed read-only policy match, and the original OS root passes a second check. Original dyld maps the original shared cache and its live header matches all 512 bytes. Execution reaches launchd main with 16 matching original instruction bytes after the initial demand-page fault. A different SystemOS UUID is refused before mounting. Ignition remains enabled.",
+  "The native Darwin 22 KeyStore state service retains all 168 service and 186 user-client dispatch slots. Original launchd executes its first main instruction and all 20 userspace crypto self-tests pass. Original keybagd accepts selector 0 and two selector-14 queries; a closed service refuses the original client. The separate fixture has no passcode or hardware data protection.",
+  "A separate reproducible 2 GiB RAM Data seed retains all 198 initial installation entries and adds a root-owned empty development keybag-state plist. Original APFS mounts it read-write at /private/var and the actual RamBlock records successful I/O. Both system disks remain read-only. Original keybagd completes MKB_INIT and usermanagerd creates kernel personas and completes UMD_INIT. A mismatched seed hash is refused before the mount syscall.",
+  "The persistent QEMU candidate redirects RamBlock store calls to a separately marked VirtIO flat file. Every write waits for FLUSH completion. Two fresh VMs complete the original keybag/persona tasks, with an actual SIGKILL between them and no overlay reset on resume. Independent APFS readback confirms preserved persona identifiers. Wrong device identity and a valid-CRC foreign-seed header are refused before mounting without changing the rejected files. All 23 transport sanitizer cases pass. Physical UFS remains disabled.",
 ]
 completion = [
   "Qualified storage ABI, read transport, authenticated root policy and original launchd execution.",
 ]
 limits = [
-  "No physical UFS access, partition creation or authenticated-root readiness. Original system windows and initial Data content are prepared as local files; boot.img does not contain those windows, and APFS Data formatting/readback is prepared separately; writable runtime remains unqualified. Controller/SMMU/DMA ownership, class/IOStorageCompletion runtime ABI, actual service matching and APFS/Data/power remain unqualified. Failed hardware start retains resources until reset; rollback is unqualified.",
+  "Storage runtime results cover QEMU with local OS/SystemOS and Data files. Physical UFS controller/SMMU/DMA ownership, IOStorageCompletion behavior, power and persistence have not been tested on the phone. The development boot.img contains the packed Data seed; original system images remain separate. Hardware root trust and rollback protection remain open.",
 ]
 next_action = [
   "Qualify the implemented full read-only transport, original storage matching/completion and root publication; qualify authenticated-root, the implemented PID 1 Data mount route, original media matching, full parent/registry and crypto/power lifecycle. The default-off init route is wired and modeled; physical qualification remains outstanding.",
-  "Continue beyond launchd main into Data and system-service startup; retain the separate Apple authentication result and physical-storage work.",
+  "Continue beyond the completed keybag/persona tasks into later system services using the persistent VM Data candidate.",
 ]
 evidence = [
   {kind = "host", reference = "reports/public/ufs-source-probe.json", result = "The iOS 16 source probe compiles, 212 public native imports match by name, and the real local UBSAN runtime dependency is recorded for static linking. Eight existing read-only host suites pass ASan/UBSan.", command = ".venv-uefi/bin/python scripts/build_ufs_probe.py --partition unixnu", revision = "f5017376415268fd39dcf0b3fd68a94661cee078"},
@@ -299,6 +308,9 @@ evidence = [
   {kind = "host", reference = "reports/public/ios16-qemu-exec-entry.json", result = "Original iPhone launchd PID 1 executes the first dyld instruction in EL0; process UUID, 64 entry bytes and original decompressor callback instructions match. The missing-component control fails before EL0.", command = ".venv-gpu/bin/python scripts/check_qemu_exec.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22; VM candidate and original iPhone input hashes are recorded in the report"},
   {kind = "host", reference = "reports/public/ios16-qemu-aes-entry.json", result = "SoftwareAES passes actual CBC/interface tests, original Image4 serves its ignition query, and original iPhone dyld enters prepare and its cache loader. Two refusal controls pass. SystemOS cache attachment is next.", command = ".venv-gpu/bin/python scripts/check_qemu_aes.py --check-only", revision = "da07dd5c7d62bbe960f5bd4fe7789574d3a49d8c", revision_scope = "Pinned SoftwareAES; all binary bindings are derived from the iPhone 20H392 kernelcache"},
   {kind = "host", reference = "reports/public/ios16-qemu-systemos-entry.json", result = "Read-only owner-verified SystemOS union, original shared-cache mapping and launchd main entry execute in QEMU. The cache header and init entry bytes match the originals; a wrong volume UUID is refused before mounting.", command = ".venv-gpu/bin/python scripts/check_qemu_systemos.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 with the existing rebased SystemOS union patch; iPhone inputs are identified by report hashes"},
+  {kind = "host", reference = "reports/public/ios16-qemu-keystore-entry.json", result = "Original userspace crypto POST and keybagd handshake pass in QEMU; the closed-client control refuses access. ASan/UBSan checks state, encoding and partial outputs with IOKit peers.", command = ".venv-gpu/bin/python scripts/check_qemu_keystore.py --check-only", revision = "6ff4f11d8fdf853351f8d98e1bbe1373fb8da2e6", revision_scope = "Pinned AppleKeyStoreState with a local output/identity overlay, compiled against Darwin 22"},
+  {kind = "host", reference = "reports/public/ios16-qemu-data-entry.json", result = "Original APFS volatile Data writes, all userspace crypto POST tests, keybag/persona boot tasks and wrong-seed refusal execute in QEMU.", command = ".venv-gpu/bin/python scripts/check_qemu_data.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 and the original iPhone closure; separate local Data seed and owner-VM source hashes are recorded"},
+  {kind = "host", reference = "reports/public/ios16-qemu-store-entry.json", result = "Original Data survives actual QEMU SIGKILL and cold resume with the same persona identifiers. Both boots complete userspace crypto POST and keybag/persona tasks. Wrong device identity and a foreign-seed header are refused without writes.", command = ".venv-gpu/bin/python scripts/check_qemu_store.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 with a local VirtIO overlay backend; original iPhone inputs and source hashes are recorded"},
   {kind = "host", reference = "reports/public/ios16-ufs-root.json", result = "Complete read-only root publisher, original iPhone ABI, 32 lifecycle and 25 combined startup host cases; strict 68-object/208-alias source and original-component prelink, no runtime activation", command = ".venv-uefi/bin/python scripts/build_ufs_root.py", revision = "f5017376415268fd39dcf0b3fd68a94661cee078"},
   {kind = "host", reference = "reports/public/data-stack.json", result = "Six Data stages pass: two exact original-content APFS seeds, 77 sanitizer cases, 30 ARM64 paths, 43 rejection controls and an 83-object/28-component strict prelink. Original Data matching/mount and writable runtime remain unqualified.", command = ".venv-uefi/bin/python scripts/build_data_stack.py --check-only", revision = "4be2d7eb05ef5a98126c91e0302c149140c0e3e1"},
   {kind = "host", reference = "reports/public/data-startup-stack.json", result = "Four startup stages, 84 objects, 30 scheduler sanitizer cases, 43 CPU paths and 24 rejection controls pass. Packed Data/ADT/FAT/Android readback passes; no phone or original Data mount qualification.", command = ".venv-uefi/bin/python scripts/build_data_startup_stack.py --check-only", revision = "4be2d7eb05ef5a98126c91e0302c149140c0e3e1"},
@@ -507,6 +519,7 @@ limits = [
   "The native candidate is separate from the default kernel. Its development container has no original userspace/root image and retains opt-in graphics/Data startup.",
 ]
 next_action = [
+  "Review the newer mainline tile-pipeline, shared shader-cache and retired-buffer sweep changes against this pinned A830 interface before backporting them.",
   "After the source-only preparation phase, validate original-family startup, the first native fence, surface ownership across reset and known shader outputs using device logs.",
 ]
 evidence = [
