@@ -36,9 +36,29 @@ class SeedApfsDiscoveryTest(unittest.TestCase):
         self.now += seconds
 
     def test_ready_container_does_not_sleep(self):
-        with patch.object(grow.subprocess, 'check_output', return_value=listing()):
+        with patch.object(grow.subprocess, 'check_output', return_value=listing()) as query:
             self.assertEqual(grow.wait_for_container('disk99', UUID), 'disk100')
+        self.assertEqual(query.call_args.args[0], ['diskutil', 'apfs', 'list', '-plist', 'disk99'])
         self.sleep.assert_not_called()
+
+    def test_synthesized_device_is_only_used_as_query_target(self):
+        with patch.object(grow.subprocess, 'check_output', return_value=listing()) as query:
+            self.assertEqual(grow.wait_for_container('disk99', UUID, reference='disk100'), 'disk100')
+        self.assertEqual(query.call_args.args[0][-1], 'disk100')
+
+    def test_attachment_order_at_decimal_boundary(self):
+        attached = {'system-entities': [
+            {'dev-entry': '/dev/disk10', 'content-hint': 'EF57347C-0000-11AA-AA11-00306543ECAC'},
+            {'dev-entry': '/dev/disk10s1', 'content-hint': '41504653-0000-11AA-AA11-00306543ECAC'},
+            {'dev-entry': '/dev/disk9'}]}
+        self.assertEqual(grow.attached_devices(attached), ('disk9', 'disk10'))
+
+    def test_attachment_without_synthesized_device(self):
+        self.assertEqual(grow.attached_devices({'system-entities': [{'dev-entry': '/dev/disk99'}]}), ('disk99', None))
+
+    def test_ambiguous_attachment_is_refused(self):
+        with self.assertRaisesRegex(SystemExit, 'Unexpected raw image attachment'):
+            grow.attached_devices({'system-entities': [{'dev-entry': '/dev/disk7'}, {'dev-entry': '/dev/disk8'}]})
 
     def test_waits_for_delayed_publication(self):
         with patch.object(grow.subprocess, 'check_output', side_effect=[

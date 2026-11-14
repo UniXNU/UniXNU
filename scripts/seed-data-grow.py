@@ -80,7 +80,24 @@ def run(*args):
         raise
 
 
-def wait_for_container(store, expected_uuid, timeout=30):
+def attached_devices(attached):
+    """Identify raw media by entity type, independent of hdiutil's device ordering."""
+    container_hint = 'EF57347C-0000-11AA-AA11-00306543ECAC'
+    physical, containers = set(), set()
+    for entry in attached.get('system-entities', []):
+        device = entry.get('dev-entry', '')
+        if not re.fullmatch(r'/dev/disk\d+', device):
+            continue
+        if entry.get('content-hint', '').upper() == container_hint:
+            containers.add(device.removeprefix('/dev/'))
+        else:
+            physical.add(device.removeprefix('/dev/'))
+    if len(physical) != 1 or len(containers) > 1:
+        sys.exit(f'Unexpected raw image attachment: physical={sorted(physical)}, containers={sorted(containers)}')
+    return physical.pop(), next(iter(containers), None)
+
+
+def wait_for_container(store, expected_uuid, timeout=30, reference=None):
     """Wait for APFS publication and bind only to the attached image's physical store."""
     deadline = time.monotonic() + timeout
     observed = 'none'
@@ -88,7 +105,8 @@ def wait_for_container(store, expected_uuid, timeout=30):
     while True:
         try:
             listing = plistlib.loads(subprocess.check_output(
-                ['diskutil', 'apfs', 'list', '-plist'], timeout=min(10, max(0.1, deadline - time.monotonic()))))
+                ['diskutil', 'apfs', 'list', '-plist', reference or store],
+                timeout=min(10, max(0.1, deadline - time.monotonic()))))
             containers = listing.get('Containers', [])
             matches = [entry for entry in containers if any(
                 physical.get('DeviceIdentifier') == store for physical in entry.get('PhysicalStores', []))]
@@ -149,10 +167,11 @@ def main():
         if header[32:36] != b'NXSB':
             sys.exit('The seed does not start with an APFS container')
         container_uuid = str(uuid.UUID(bytes=header[72:88]))
-        attached = run('hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage', '-nomount', '-nobrowse', str(raw))
-        store = re.match(r'(/dev/disk\d+)', attached).group(1).split('/')[-1]
+        attached = plistlib.loads(run('hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage',
+                                     '-nomount', '-nobrowse', '-plist', str(raw)).encode())
+        store, reference = attached_devices(attached)
         try:
-            container = wait_for_container(store, container_uuid)
+            container = wait_for_container(store, container_uuid, reference=reference)
             print(f'Growing APFS container - {container} - target {gib} GiB', flush=True)
             run('diskutil', 'apfs', 'resizeContainer', container, '0')
         finally:
