@@ -21,6 +21,8 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,7 +72,46 @@ def auto_gib(userdata, reserve_mib):
 
 
 def run(*args):
-    return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+    try:
+        return subprocess.run(args, check=True, capture_output=True, text=True).stdout
+    except subprocess.CalledProcessError as error:
+        sys.stderr.write(error.stdout or '')
+        sys.stderr.write(error.stderr or '')
+        raise
+
+
+def wait_for_container(store, expected_uuid, timeout=30):
+    """Wait for APFS publication and bind only to the attached image's physical store."""
+    deadline = time.monotonic() + timeout
+    observed = 'none'
+    print(f'Waiting for APFS container - physical store {store} - UUID {expected_uuid}', flush=True)
+    while True:
+        try:
+            listing = plistlib.loads(subprocess.check_output(
+                ['diskutil', 'apfs', 'list', '-plist'], timeout=min(10, max(0.1, deadline - time.monotonic()))))
+            containers = listing.get('Containers', [])
+            matches = [entry for entry in containers if any(
+                physical.get('DeviceIdentifier') == store for physical in entry.get('PhysicalStores', []))]
+            if len(matches) > 1:
+                sys.exit(f'Multiple APFS containers claim the attached physical store {store}')
+            if matches:
+                entry = matches[0]
+                if entry.get('APFSContainerUUID', '').lower() != expected_uuid.lower():
+                    sys.exit(f'APFS UUID mismatch on {store}: expected {expected_uuid}, '
+                             f'found {entry.get("APFSContainerUUID", "missing")}')
+                container = entry['ContainerReference']
+                print(f'APFS container ready - {container} - physical store {store}', flush=True)
+                return container
+            observed = ', '.join(f'{entry.get("ContainerReference", "?")}:' + '/'.join(
+                physical.get('DeviceIdentifier', '?') for physical in entry.get('PhysicalStores', []))
+                for entry in containers) or 'none'
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            observed = f'diskutil query failed ({type(error).__name__})'
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            sys.exit(f'No APFS container found on attached physical store {store} after {timeout}s; '
+                     f'expected UUID {expected_uuid}; observed {observed}')
+        time.sleep(min(0.5, remaining))
 
 
 def main():
@@ -103,22 +144,24 @@ def main():
             for offset, data in extents:
                 handle.seek(offset)
                 handle.write(data)
+        with raw.open('rb') as handle:
+            header = handle.read(4096)
+        if header[32:36] != b'NXSB':
+            sys.exit('The seed does not start with an APFS container')
+        container_uuid = str(uuid.UUID(bytes=header[72:88]))
         attached = run('hdiutil', 'attach', '-imagekey', 'diskimage-class=CRawDiskImage', '-nomount', '-nobrowse', str(raw))
         store = re.match(r'(/dev/disk\d+)', attached).group(1).split('/')[-1]
         try:
-            listing = plistlib.loads(subprocess.check_output(['diskutil', 'apfs', 'list', '-plist']))
-            container = None
-            for entry in listing['Containers']:
-                if any(s['DeviceIdentifier'] == store for s in entry.get('PhysicalStores', [])):
-                    container = entry['ContainerReference']
-            if not container:
-                sys.exit('No APFS container found on the attached seed')
+            container = wait_for_container(store, container_uuid)
+            print(f'Growing APFS container - {container} - target {gib} GiB', flush=True)
             run('diskutil', 'apfs', 'resizeContainer', container, '0')
         finally:
             subprocess.run(['hdiutil', 'detach', store, '-force'], capture_output=True)
         header = raw.open('rb').read(4096)
         if header[32:36] != b'NXSB':
             sys.exit('The grown image does not start with an APFS container')
+        if str(uuid.UUID(bytes=header[72:88])) != container_uuid:
+            sys.exit('The grown image has a different APFS container UUID')
         block_size = int.from_bytes(header[36:40], 'little')
         blocks = int.from_bytes(header[40:48], 'little')
         if block_size != 4096 or blocks * block_size > target or blocks * block_size < target - 64 * MIB:
