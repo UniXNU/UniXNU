@@ -15,6 +15,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 import sys
 import tempfile
 import zlib
@@ -55,7 +56,14 @@ def os_mount(image, work):
     try:
         yield mount
     finally:
-        run('hdiutil', 'detach', device)
+        # A file watcher (Spotlight, an editor's file pane) can hold the read-only mount for a moment: retry, then force (nothing
+        # is written to this image, so a forced detach loses nothing).
+        for attempt in range(6):
+            if subprocess.run(['hdiutil', 'detach', device] + (['-force'] if attempt == 5 else []), capture_output=True).returncode == 0:
+                break
+            time.sleep(2)
+        else:
+            raise SystemExit(f'could not detach {device}')
 
 
 def checkout(path, pin):
