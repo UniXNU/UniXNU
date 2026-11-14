@@ -12,6 +12,7 @@ import io
 import json
 import platform
 import plistlib
+import shutil
 import struct
 import subprocess
 import time
@@ -198,8 +199,9 @@ class Ipsw:
 def decrypt_aea(path):
     """Decrypt an AEA archive beside it (name without .aea), cached with the sha256 of both files.
 
-    The key is fetched by `ipsw fw aea --key` from the key URL in the archive header and passed to macOS aea;
-    it is not written to disk or the log.
+    On macOS the key is fetched by `ipsw fw aea --key` from the key URL in the archive header and passed to
+    macOS aea; it is not written to disk or the log. Other hosts have no aea: there `ipsw fw aea` fetches the
+    key and decrypts the archive itself (decrypt_aea_ipsw).
     """
     out = path.with_suffix('')
     record = out.with_suffix(out.suffix + '.json')
@@ -209,7 +211,7 @@ def decrypt_aea(path):
                 and data.get('size') == out.stat().st_size:
             return out
     if platform.system() != 'Darwin':
-        raise Error(f'{path.name} is AEA encrypted; decrypting it needs macOS /usr/bin/aea')
+        return decrypt_aea_ipsw(path, out, record)
     tool('aea', 'macOS /usr/bin/aea decrypts AEA disk images')
     ipsw = tool('ipsw', 'the ipsw tool fetches the AEA key (brew install blacktop/tap/ipsw)')
     log(f'ipsw: fetching the AEA key of {path.name}')
@@ -225,6 +227,32 @@ def decrypt_aea(path):
         partial.unlink(missing_ok=True)
         raise Error(f'aea decrypt of {path.name} failed: {result.stderr.strip()[-300:]}')
     partial.rename(out)
+    return write_aea_record(path, out, record)
+
+
+def decrypt_aea_ipsw(path, out, record):
+    """Decrypt an AEA archive with the ipsw tool's own AEA implementation, for hosts without macOS aea.
+
+    `ipsw fw aea ARCHIVE -o DIR` fetches the key from the key URL in the archive header and writes the
+    plain file, named without .aea, into DIR. Decrypting into a private directory and renaming at the end
+    keeps a failed or interrupted run from leaving a plain image that looks complete.
+    """
+    ipsw = tool('ipsw', 'the ipsw tool decrypts AEA disk images on this host (https://github.com/blacktop/ipsw/releases)')
+    partial = out.with_name(out.name + '.partial.d')
+    shutil.rmtree(partial, ignore_errors=True)
+    partial.mkdir(parents=True)
+    log(f'ipsw: decrypting {path.name} with ipsw fw aea (no macOS aea on this host)')
+    result = subprocess.run([ipsw, 'fw', 'aea', str(path), '-o', str(partial)], capture_output=True, text=True)
+    produced = partial / out.name
+    if result.returncode or not produced.is_file():
+        shutil.rmtree(partial, ignore_errors=True)
+        raise Error(f'ipsw fw aea of {path.name} failed: {(result.stderr or result.stdout).strip()[-300:]}')
+    produced.rename(out)
+    shutil.rmtree(partial, ignore_errors=True)
+    return write_aea_record(path, out, record)
+
+
+def write_aea_record(path, out, record):
     source = json.loads(path.with_suffix(path.suffix + '.json').read_text())
     record.write_text(json.dumps({'member': source.get('member'), 'aea_sha256': source.get('sha256'),
                                   'size': out.stat().st_size, 'sha256': sha256_file(out)}, indent=2) + '\n')
