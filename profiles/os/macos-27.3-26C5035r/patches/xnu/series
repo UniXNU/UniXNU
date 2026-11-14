@@ -54,3 +54,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/window-outside-memory-adoption.patch
 ../xnu-12377/contig-search-report.patch
 ../xnu-12377/kmem-alloc-failure-report.patch
+../xnu-12377/macos-4k-zone-va-budget.patch
