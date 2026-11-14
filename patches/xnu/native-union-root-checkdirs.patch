@@ -1,0 +1,27 @@
+--- a/bsd/vfs/vfs_syscalls.c
++++ b/bsd/vfs/vfs_syscalls.c
+@@ -2517,6 +2517,24 @@
+ 		return PROC_RETURNED;
+ 	}
+ 	proc_fdunlock(p);
++
++	/*
++	 * kernproc's current directory is rootvnode and has no usecount of its own
++	 * (set_rootvnode takes none for it). checkdirs() moves rootvnode with its
++	 * usecount, so kernproc's directory follows without taking or dropping one.
++	 * Dropping one here released the old root twice for a mount over the root
++	 * vnode (a union over /), and its last release panicked at unmount.
++	 */
++	if (p == kernproc) {
++		proc_dirs_lock_exclusive(p);
++		proc_fdlock(p);
++		if (fdp->fd_cdir == olddp && rootvnode == olddp) {
++			fdp->fd_cdir = newdp;
++		}
++		proc_fdunlock(p);
++		proc_dirs_unlock_exclusive(p);
++		return PROC_RETURNED;
++	}
+ 
+ 	/*
+ 	 * Ok, we will have to do some work.  Always take two refs
