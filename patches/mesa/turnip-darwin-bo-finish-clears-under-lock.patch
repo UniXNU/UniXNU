@@ -1,0 +1,39 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -1150,6 +1150,14 @@
+ 
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+    pthread_mutex_lock(&retire->lock);
++   /* The BO structs live in a sparse array indexed by the handle: the entry is zeroed (marked free) here, before anything can hand the
++    * handle on. A reap below may put it in the BO cache, where another thread's darwin_bo_init takes it (darwin_cache_get) and fills
++    * this same entry once retire->lock goes, or release it to the kernel (darwin_release_native), whose next BoAlloc on any thread may
++    * return the same handle. Zeroed after the unlock, the entry could already be that live BO, whose command stream then sent the GPU
++    * to address 0 + offset (allocations on one thread overlapping frees on another). tu_knl_drm.cc clears its GEM handle's entry under
++    * the VMA mutex for the same reason. */
++   const struct tu_bo gone = *bo;
++   memset(bo, 0, sizeof(*bo));
+    darwin_reap_locked(dev, retire);
+    if (retire->count == retire->capacity && retire->failure == VK_SUCCESS) {
+       /* The ring grows, its records in order from the head. */
+@@ -1169,8 +1177,8 @@
+       uint32_t fence = dw.last_fence;
+       pthread_mutex_unlock(&dw.lock);
+       unsigned slot = (retire->head + retire->count) % retire->capacity;
+-      retire->entries[slot] = {bo->darwin_handle, bo->iova, bo->darwin_alloc_size ? bo->darwin_alloc_size : bo->size, bo->map,
+-                               bo->darwin_token, fence, bo->darwin_alloc_size != 0, bo->darwin_read_only};
++      retire->entries[slot] = {gone.darwin_handle, gone.iova, gone.darwin_alloc_size ? gone.darwin_alloc_size : gone.size, gone.map,
++                               gone.darwin_token, fence, gone.darwin_alloc_size != 0, gone.darwin_read_only};
+       ++retire->count;
+       ++retire->enqueued;
+       darwin_reap_locked(dev, retire);
+@@ -1181,9 +1189,6 @@
+    }
+    pthread_mutex_unlock(&retire->lock);
+ 
+-   /* The BO structs live in a sparse array: zero the entry to mark it free. */
+-   memset(bo, 0, sizeof(*bo));
+-
+    u_rwlock_rdunlock(&dev->dma_bo_lock);
+ }
+ 
