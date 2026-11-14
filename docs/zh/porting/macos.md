@@ -161,7 +161,9 @@ sudo python3 scripts/make-macos-data-seed.py \
 | --- | --- |
 | `--skip-setup` | 把设置助理标记为已完成 |
 | `--user NAME:PASSWORD` | 添加本地管理员及其主目录 |
-| `--auto-login` | 开机自动登录 `--user` 指定的账户。供无人值守测试使用，需要 `--user` |
+| `--real-name NAME` | 设置管理员的显示名称，短用户名与 `/Users/NAME` 路径保持不变 |
+| `--user-stdin` | 从标准输入读取 `{"name":"unixnu","password":"..."}`，代替 `--user` |
+| `--auto-login` | 开机自动登录指定账户。供无人值守测试使用，需要 `--user` 或 `--user-stdin` |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | 记录键盘布局类型，键盘设置助理不再询问 |
 | `--volume-uuid UUID` | 为 Data 卷指定固定 UUID，新 seed 可以替换旧 seed 而无需重新构建内核 |
 
