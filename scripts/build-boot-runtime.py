@@ -71,6 +71,44 @@ def checkout(path, pin):
     return False
 
 
+def make_prime_list(request, work, os_root):
+    paths, counts = set(), {}
+
+    def failed(error):
+        raise error
+
+    def collect(mount, prefix):
+        found = set()
+        for directory, dirs, files in os.walk(mount, followlinks=False, onerror=failed):
+            if Path(directory) == mount:
+                dirs[:] = [name for name in dirs if name not in ('.Trashes', '.Spotlight-V100', '.fseventsd')]
+            for name in files:
+                if name.endswith('.metallib'):
+                    relative = (Path(directory) / name).relative_to(mount).as_posix()
+                    found.add(prefix.rstrip('/') + '/' + relative)
+        return found
+
+    for image in request['prime_images']:
+        if Path(image['image']).resolve() == Path(request['os_image']).resolve():
+            found = collect(os_root, image['prefix'])
+        else:
+            directory = work / ('prime-' + image['name'])
+            directory.mkdir()
+            with os_mount(image['image'], directory) as mount:
+                found = collect(mount, image['prefix'])
+        counts[image['name']] = len(found)
+        paths.update(found)
+    if not paths:
+        raise SystemExit('No Metal libraries in the selected runtime images')
+    output = ROOT / 'build/prime-list.txt'
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text('\n'.join(sorted(paths)) + '\n')
+    output.with_suffix('.json').write_text(json.dumps(dict(images=request['prime_images'], counts=counts,
+                                                        libraries=len(paths)), indent=2) + '\n')
+    print(f'Metal priming inventory: {len(paths)} paths, {counts}', flush=True)
+    return output
+
+
 def build_plugin(target):
     pins = json.loads((ROOT / 'scripts/data/adreno-compiler-inputs.json').read_text())
     mesa = ROOT / '.cache/mesa-work'
@@ -247,8 +285,11 @@ def main():
                     script('make-data-seed.py', mount, seed, '--gib', str(request['data_gib']),
                            '--build', request['build'], *(['--skip-setup'] if request.get('skip_setup') else []))
                 if addon is None and want_addon:
+                    prime_list = make_prime_list(request, work, mount) if request['target'] == 'macos27' else None
                     plugin = build_plugin(request['target'])
                     extra = []
+                    if prime_list is not None:
+                        extra += ['--prime-list', prime_list]
                     for profile in request.get('wallpapers', []):
                         destination = work / profile
                         script('make-wallpaper-overlay.py', mount, destination, profile)

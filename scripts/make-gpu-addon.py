@@ -57,7 +57,7 @@ def main():
         at = args.index('--prime-list')
         prime_list = Path(args[at + 1])
         del args[at:at + 2]
-        lines = prime_list.read_text().split()
+        lines = prime_list.read_text().splitlines()
         if not lines or any(not line.startswith('/') or not line.endswith('.metallib') for line in lines):
             sys.exit('--prime-list takes a file of absolute .metallib paths')
     # --prefix DIR: the directory below the install root the plugin files go to (addons/ on iPadOS, below /private/var/ngpu;
