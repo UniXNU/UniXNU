@@ -350,6 +350,24 @@ def new_volume(path, size):
         subprocess.run(['hdiutil', 'detach', attached['system-entities'][0]['dev-entry']], check=True)
 
 
+def prepare_output_directory(directory, owner):
+    """Return newly created output directories to sudo's caller without changing existing paths."""
+    missing = []
+    current = directory
+    while not current.exists():
+        missing.append(current)
+        current = current.parent
+    for path in reversed(missing):
+        try:
+            path.mkdir()
+        except FileExistsError:
+            if not path.is_dir():
+                raise
+            continue
+        if owner[0] is not None and owner[1] is not None:
+            os.chown(path, int(owner[0]), int(owner[1]))
+
+
 def build(parser, args, os_mount):
     template = os_mount / TEMPLATE
     if not (os_mount / 'sbin/launchd').is_file() or not (os_mount / 'usr/share/firmlinks').is_file():
@@ -361,7 +379,7 @@ def build(parser, args, os_mount):
     if not 3 <= args.gib <= 1024:
         parser.error('--gib must be in 3..1024')
     owner = os.environ.get('SUDO_UID'), os.environ.get('SUDO_GID')
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    prepare_output_directory(args.output.parent, owner)
     with tempfile.TemporaryDirectory(prefix='new-macos-data-', dir=args.output.parent) as td:
         work = Path(td)
         raw = work / 'seed.cdr'
