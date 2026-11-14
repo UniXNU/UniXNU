@@ -141,18 +141,35 @@ command, including the OS image, output path and `data_gib`.
 
 ### Create an account and skip Setup {#account}
 
-Run from the UniXNU checkout. Use the paths and size printed by the build,
-and replace `unixnu:YOUR_PASSWORD` with the account name and password:
+Run from the UniXNU checkout with the paths and size printed by the build.
+Prompt for a short login name, display name and hidden password:
 
 ```sh
 sudo python3 scripts/make-macos-data-seed.py \
   "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
-  --skip-setup --user 'unixnu:YOUR_PASSWORD'
+  --skip-setup --interactive-user --auto-login
 ```
 
 The script creates a local administrator and its home, preserves template
 owners, and skips both initial and first-login Setup. The output seed must be
 new.
+
+The prompts use `admin` and `Admin` as defaults. `sudo` authenticates the build
+host account; the interactive password is assigned to the new macOS administrator.
+
+For automation, replace `--interactive-user` with `--user NAME:PASSWORD` and
+`--real-name NAME`, or read credentials from a private JSON file:
+
+```sh
+sudo -v
+sudo -n python3 scripts/make-macos-data-seed.py \
+  "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
+  --skip-setup --user-stdin --auto-login < account.json
+```
+
+`account.json` contains `name`, `password` and an optional `real_name` string.
+`--real-name` overrides the JSON display name. Supplied credentials do not open
+an account input prompt.
 
 Build and pack using that seed:
 
@@ -173,8 +190,9 @@ Seed creation options:
 | `--skip-setup` | Marks Setup Assistant done |
 | `--user NAME:PASSWORD` | Adds a local administrator and its home |
 | `--real-name NAME` | Sets the displayed administrator name; the short account name and `/Users/NAME` remain unchanged |
-| `--user-stdin` | Reads `{"name":"unixnu","password":"..."}` from standard input instead of `--user` |
-| `--auto-login` | Logs the account in at boot. For unattended tests; requires `--user` or `--user-stdin` |
+| `--user-stdin` | Reads `name`, `password` and optional `real_name` from a JSON object on standard input |
+| `--interactive-user` | Prompts for the account name, display name and password |
+| `--auto-login` | Logs the selected account in at boot. For unattended tests |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | Records a keyboard layout type, so Keyboard Setup Assistant does not ask |
 | `--volume-uuid UUID` | Gives the Data volume a fixed UUID, so a new seed replaces an older one without a kernel build |
 
