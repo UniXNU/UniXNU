@@ -15,6 +15,7 @@ import re
 import shutil
 import struct
 import subprocess
+import time
 import sys
 import tempfile
 import zlib
@@ -55,7 +56,14 @@ def os_mount(image, work):
     try:
         yield mount
     finally:
-        run('hdiutil', 'detach', device)
+        # A file watcher (Spotlight, an editor's file pane) can hold the read-only mount for a moment: retry, then force (nothing
+        # is written to this image, so a forced detach loses nothing).
+        for attempt in range(6):
+            if subprocess.run(['hdiutil', 'detach', device] + (['-force'] if attempt == 5 else []), capture_output=True).returncode == 0:
+                break
+            time.sleep(2)
+        else:
+            raise SystemExit(f'could not detach {device}')
 
 
 def checkout(path, pin):
@@ -340,6 +348,23 @@ def main():
             addon = out / 'bluetooth-addon.bin'
             candidate.replace(addon)
             (out / 'bluetooth-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
+        elif request.get('launchd_job_environment'):
+            # A board without the Wi-Fi or Bluetooth runtime that still selects environment values for OS jobs (asteroids: CoreImage
+            # on the CPU for iconservicesagent): the merged cache alone, as above. Without this branch the values were ignored.
+            daemons = work / 'empty-daemons'
+            daemons.mkdir()
+            cache_work = work / 'environment-cache'
+            cache_work.mkdir()
+            cache = work / 'environment-xpc/launchd.plist'
+            with os_mount(request['os_image'], cache_work) as mount:
+                cache_report = merge_launchd_cache(mount / 'System/Library/xpc/launchd.plist',
+                    daemons, cache, request.get('launchd_job_environment'))
+            cache_report.update(sign_launchd_cache(cache))
+            candidate = work / 'environment-cache-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'xpc', cache.parent)
+            addon = out / 'environment-addon.bin'
+            candidate.replace(addon)
+            (out / 'environment-launchd-cache.json').write_text(json.dumps(cache_report, indent=2) + '\n')
         # Firmware tools stage device firmware the board extracted beforehand (data, not executables) under one firmware/ prefix
         # of the Data addon; they read local inputs only.
         for tool in request.get('firmware_tools', []):
