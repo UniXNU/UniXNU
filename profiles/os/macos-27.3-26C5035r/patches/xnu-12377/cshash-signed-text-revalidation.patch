@@ -1,0 +1,137 @@
+Signed-text fixups leave resident vnode pages different from their signed bytes. Hash exact configured
+replacements as their original bytes during eager and lazy 16 KiB authentication and derived 4 KiB
+validation. The live page is never restored, and unrelated modifications still fail signature checks.
+
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+index ca0e00e..3fa697c 100644
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -5869,6 +5869,11 @@ ubc_get_cs_mtime(
+ 	cs_mtime->tv_nsec = uip->cs_mtime.tv_nsec;
+ }
+ 
++/* The pager owns the vnode while code signing examines its resident pages. */
++extern struct vnode *vnode_pager_lookup_vnode(memory_object_t pager);
++static void cs_text_fixup_hash(struct vnode *vp, memory_object_offset_t offset, const void *data,
++    size_t length, const struct cs_hash *md, union cs_hash_union *ctx);
++
+ unsigned long cs_validate_page_no_hash = 0;
+ unsigned long cs_validate_page_bad_hash = 0;
+ #if defined(XNU_NATIVE_CS_HASH_CACHE) && XNU_NATIVE_CS_HASH_CACHE
+@@ -6010,7 +6015,8 @@ cs_native4k_pass_run(struct cs_native4k_pass *pass)
+ 			struct cs_native4k_clock clock;
+ 			cs_native4k_clock_start(&clock);
+ 			md->cs_init(&ctx);
+-			md->cs_update(&ctx, data, length);
++			cs_text_fixup_hash(pass->vp, (memory_object_offset_t)blob->csb_base_offset + offset,
++			    data, length, md, &ctx);
+ 			md->cs_final(digest, &ctx);
+ 			if (bcmp(expected, digest, md->cs_size)) {
+ 				cs_native4k_clock_stop(&clock, (uint64_t)length);
+@@ -6023,7 +6029,8 @@ cs_native4k_pass_run(struct cs_native4k_pass *pass)
+ 				size_t bytes = MIN((size_t)PAGE_SIZE, length - sub);
+ 				vm_size_t index = (offset + sub) >> PAGE_SHIFT;
+ 				md->cs_init(&ctx);
+-				md->cs_update(&ctx, data + sub, bytes);
++				cs_text_fixup_hash(pass->vp, (memory_object_offset_t)blob->csb_base_offset + offset + sub,
++				    data + sub, bytes, md, &ctx);
+ 				md->cs_final(digest, &ctx);
+ 				memcpy((void *)(pass->storage + index * md->cs_size), digest, md->cs_size);
+ 			}
+@@ -6591,14 +6598,15 @@ cs_native4k_lazy_block(struct vnode *vp, const struct cs_blob *blob, uint32_t bl
+ 			struct cs_native4k_clock clock;
+ 			cs_native4k_clock_start(&clock);
+ 			md->cs_init(&ctx);
+-			md->cs_update(&ctx, buffer, length);
++			cs_text_fixup_hash(vp, position, buffer, length, md, &ctx);
+ 			md->cs_final(digest, &ctx);
+ 			matches = bcmp(expected, digest, md->cs_size) == 0;
+ 			if (matches) {
+ 				bzero(derived, sizeof(derived));
+ 				for (size_t sub = 0; sub < length; sub += PAGE_SIZE) {
+ 					md->cs_init(&ctx);
+-					md->cs_update(&ctx, buffer + sub, MIN((size_t)PAGE_SIZE, length - sub));
++					cs_text_fixup_hash(vp, position + sub, buffer + sub,
++					    MIN((size_t)PAGE_SIZE, length - sub), md, &ctx);
+ 					md->cs_final(digest, &ctx);
+ 					memcpy(derived[sub >> PAGE_SHIFT], digest, md->cs_size);
+ 				}
+@@ -6950,7 +6958,8 @@ cs_validate_hash(
+ 				size_t partial_size = MIN(size - i, (1U << blob->csb_hash_firstlevel_pageshift));
+ 
+ 				hashtype->cs_init(&partialctx);
+-				hashtype->cs_update(&partialctx, partial_data, partial_size);
++				cs_text_fixup_hash(pager != NULL ? vnode_pager_lookup_vnode(pager) : NULL,
++				    page_offset + i, partial_data, partial_size, hashtype, &partialctx);
+ 				hashtype->cs_final(partial_digest, &partialctx);
+ 
+ 				/* Update cumulative multi-level hash */
+@@ -6959,7 +6968,8 @@ cs_validate_hash(
+ 				i += partial_size;
+ 			}
+ 		} else {
+-			hashtype->cs_update(&mdctx, data, size);
++			cs_text_fixup_hash(pager != NULL ? vnode_pager_lookup_vnode(pager) : NULL,
++			    page_offset, data, size, hashtype, &mdctx);
+ 		}
+ 		hashtype->cs_final(actual_hash, &mdctx);
+ 
+@@ -7131,6 +7141,58 @@ cs_text_fixup_init(void)
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, cs_text_fixup_init);
+ 
++/*
++ * Hash the signed bytes of a resident page without undoing its executable fixups. The same vnode pages can be
++ * fetched again for a 16 KiB authentication or a 4 KiB revalidation. Only exact, configured replacement bytes
++ * are substituted; every other byte still has to match the original signature. No allocation or vnode I/O is
++ * permitted here: page validation holds VM object locks. The small snapshot also bounds kernel stack use.
++ */
++static void
++cs_text_fixup_hash(struct vnode *vp, memory_object_offset_t offset, const void *data,
++    size_t length, const struct cs_hash *md, union cs_hash_union *ctx)
++{
++	const uint8_t *source = data;
++	uint8_t snapshot[256];
++	bool affected = false;
++
++	for (uint32_t i = 0; i < cs_text_fixup_count; i++) {
++		const struct cs_text_fixup *f = &cs_text_fixups[i];
++		if (vp == NULLVP || vp->v_name == NULL || strcmp(vp->v_name, f->name) != 0 ||
++		    f->offset < offset || f->offset - offset > length ||
++		    f->length > length - (f->offset - offset)) {
++			continue;
++		}
++		if (memcmp(source + (f->offset - offset), f->replacement, f->length) == 0) {
++			affected = true;
++			break;
++		}
++	}
++	if (!affected) {
++		md->cs_update(ctx, source, length);
++		return;
++	}
++	for (size_t start = 0; start < length;) {
++		const size_t part = MIN(sizeof(snapshot), length - start);
++		memcpy(snapshot, source + start, part);
++		for (uint32_t i = 0; i < cs_text_fixup_count; i++) {
++			const struct cs_text_fixup *f = &cs_text_fixups[i];
++			if (strcmp(vp->v_name, f->name) != 0 || f->offset < offset ||
++			    f->offset - offset > length || f->length > length - (f->offset - offset)) {
++				continue;
++			}
++			const size_t at = (size_t)(f->offset - offset);
++			if (at >= start + part || at + f->length <= start ||
++			    memcmp(source + at, f->replacement, f->length) != 0) {
++				continue;
++			}
++			const size_t first = MAX(at, start), last = MIN(at + f->length, start + part);
++			memcpy(snapshot + first - start, f->original + first - at, last - first);
++		}
++		md->cs_update(ctx, snapshot, part);
++		start += part;
++	}
++}
++
+ /*
+  * Applies the fixups that fall in this validated page of vp. kva is a writable kernel address of the page. Returns the
+  * number of fixups written, so the caller makes the instruction cache coherent.
