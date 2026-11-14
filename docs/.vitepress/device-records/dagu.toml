@@ -1,0 +1,494 @@
+schema_version = 1
+
+[device]
+name = "dagu"
+soc = "SM8250-AC"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Source and porting skeleton for the Xiaomi Pad 5 Pro 12.4 (dagu, China-region Wi-Fi, 22081281AC). Inputs collected from public DTS and device trees; not booted. Cannot be flashed until the bootloader is unlocked."
+
+[[area]]
+id = "configuration"
+status = "planned"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", "porting.toml", ".github/**", ".gitignore", "local.toml.example"]
+inputs = [
+  "Board identity: Xiaomi Pad 5 Pro 12.4, China-region Wi-Fi, codename dagu, model 22081281AC.",
+  "SoC: Qualcomm SM8250-AC (Snapdragon 870), Adreno 650, octa-core Kryo 585.",
+  "Intended OS profile: ipados-17.7.11-21H461 (iPadOS 17 / arm64). iPadOS 27 and macOS 27 / arm64e are not selected.",
+  "SoC feed: FFT-infra/UniXNU-sm8250-common commit 166235ec2480ff0992627b7aafa15c65ce6b4efa (community SM8250 common; no UniXNU-org SM8250 repository).",
+  "Closest software cousins: elish (Pad 5 Pro 11-inch Wi-Fi) and enuma (Pad 5 Pro 5G). umi is a farther SM8250 phone reference; SoC-level items only.",
+]
+configuration = [
+  "board.toml schema_version = 2, board.name = dagu, board.soc = SM8250-AC, board.soc_source = sm8250, board.os_profile = ipados-17.7.11-21H461, board.kit = dagu.",
+  "feeds.toml pins source sm8250 to https://github.com/FFT-infra/UniXNU-sm8250-common at 166235ec2480ff0992627b7aafa15c65ce6b4efa.",
+  "kernel.defconfig = dagu_defconfig; device_tree.source = device:dts/dagu.dts; include_dirs = [soc:dts].",
+  "config_fragments = [arch:configs/common.config, soc:configs/sm8250.config, os:configs/ipados.config].",
+  "patch_series = [arch:patches/xnu/series, soc:patches/xnu/series, os:patches/xnu/series, device:patches/xnu/series].",
+  "components.include = [ArmDTPlatform, ArmCpu, SoftwareAES, XnuPrelink, DarwinBoot]. Storage, display, input and GPU components are not selected.",
+]
+procedure = [
+  "Copy UniXNU/examples/device, rename the defconfig and DTS to dagu, then retarget board.toml and feeds.toml from SM8550 to SM8250-AC and the iPadOS 17.7.11 profile.",
+  "Fill hardware comments from opened public DTS and device trees. Leave DRAM size and userdata LBA as TODO.",
+  "From the UniXNU checkout: ./unixnu defconfig dagu_defconfig -D ../UniXNU-dagu, then ./unixnu fetch -D ../UniXNU-dagu and python3 scripts/porting-record.py check --device ../UniXNU-dagu when the Linux host can run them.",
+]
+findings = [
+  "On this Linux host, ./unixnu defconfig dagu_defconfig -D ../UniXNU-dagu and ./unixnu fetch -D ../UniXNU-dagu resolved arch/arm64, FFT-infra/UniXNU-sm8250-common at 166235ec2480ff0992627b7aafa15c65ce6b4efa, ipados-17.7.11-21H461 and the dagu board, then wrote unixnu.lock. status showed the intended component set and the SoC SMP patches in the series.",
+  "Official UniXNU does not ship a SM8250 common repository. Nearby format 2 ports pin FFT-infra/UniXNU-sm8250-common at 166235ec, which provides dts/sm8250.dtsi, soc/configs/sm8250.config and the two SMP patch series.",
+  "The official template defaults to SM8550 and iPadOS 17.7.11. This board keeps the same OS profile and arm64 path and only changes the SoC layer.",
+  "board.example is omitted because identity, the SoC pin and sourced DTS facts are filled. Unknown measured values are explicit TODOs rather than invented numbers.",
+]
+completion = [
+  "unixnu defconfig and fetch resolve the intended ARM64, SM8250, iPadOS 17.7.11 and dagu profiles with the pinned SoC commit.",
+  "status --json shows the complete fragment and patch order, and every selected component has a record area.",
+]
+limits = [
+  "This is a source skeleton produced on a Linux build box. It has not been host-verified with a full image build and has not been booted.",
+  "A uefi-dagu firmware repository does not exist yet.",
+]
+next_action = [
+  "After publication, confirm the Porting record workflow on the default branch. A full image build remains macOS/firmware-blocked.",
+]
+evidence = [
+  { kind = "source", reference = "https://unixnu.com/porting/device-repository", result = "Official format 2 layout, publication topic and array-replacement rules used for this skeleton." },
+  { kind = "source", reference = "https://github.com/FFT-infra/UniXNU-sm8250-common/commit/166235ec2480ff0992627b7aafa15c65ce6b4efa", result = "Pinned SM8250 common commit used by nearby SM8250-AC community ports." },
+  { kind = "source", reference = "https://github.com/hpadmx/UniXNU-elish", result = "Closest Wi-Fi family cousin (elish). Used for SoC/OS profile comparison only; board wiring was not copied." },
+  { kind = "source", reference = "https://github.com/wh1stl3/UniXNU-enuma", result = "Closest format 2 SM8250-AC iPadOS 17 port structure. Used as a layout reference; unique enuma values were not copied." },
+]
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = []
+paths = ["proprietary-files.txt", "board.toml"]
+inputs = [
+  "Target firmware checkout would be a future uefi-dagu Mu-Silicium package (Platforms/Xiaomi/daguPkg/dagu.dsc). It is not published.",
+  "Stock software on the user's unit was last recorded as official HyperOS 2 OS2.0.10.0.ULZCNXM. Official bind/unlock is currently closed.",
+  "PSCI method smc is provided by soc:dts/sm8250.dtsi.",
+]
+configuration = [
+  "firmware.config = dagu, firmware.dsc = Platforms/Xiaomi/daguPkg/dagu.dsc, firmware.fd = Build/daguPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd.",
+  "firmware.defines.DEVICE_MODEL = dagu.",
+  "payload.loader = firmware, payload.volume = DAGU, payload.size_mib = 192, payload.kernel_args = [-v, serial=3].",
+  "No [bootimg.image] or splash [[bootimg.dtb_node]] is set; those need a dagu bootloader and firmware DTB contract.",
+]
+procedure = [
+  "Keep proprietary inputs out of git. List each extracted file in proprietary-files.txt only after a measured SHA-256 exists.",
+  "Do not assemble or flash a boot image until an official unlock is available and userdata/DRAM inputs are measured.",
+]
+findings = [
+  "Rinko-Studio BoardConfig.mk uses Android boot header version 3 and pagesize 4096 for the stock Linux kernel. That is not evidence for UniXNU's mkbootimg layout on this board.",
+  "A splash reserved region was not present in the opened dagu overlay or dagu-sm8250.dtsi. elish numbers were not copied.",
+]
+completion = [
+  "A board firmware package exists, builds, and documents framebuffer and memory handoff for dagu.",
+  "Every required firmware member is listed with a measured hash in proprietary-files.txt.",
+]
+limits = [
+  "No uefi-dagu tree, no hashed firmware members, and no device firmware log exist yet.",
+  "The bootloader is locked; this repository must not be treated as a flashable image source.",
+]
+next_action = [
+  "Create a dagu UEFI package only after the required firmware archive can be imported into .cache/firmware and hashed.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/Rinko-Studio/android_device_xiaomi_dagu/blob/66695faea165da63e7a8eac781ea2241df06a6dd/BoardConfig.mk", result = "Stock Linux boot header version 3 is recorded; UniXNU boot image parameters remain TODO." },
+]
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts", "feeds.toml"]
+inputs = [
+  "SoC include dts/sm8250.dtsi: eight Kryo 585 cores, cpu@0..@300 Cortex-A55, cpu@400..@700 Cortex-A77, timebase-frequency 19200000, psci method smc.",
+  "GICv3 at 0x17a00000 (distributor 64 KiB) and 0x17a60000 (redistributors), compatible arm,gic-v3, from the same SoC include.",
+  "qcom,msm-id family 356 from kona.dtsi / kona-v2.dtsi / kona-v2.1.dtsi; board-id 51 0 from the dagu overlay.",
+]
+configuration = [
+  "dagu.dts includes sm8250.dtsi and does not override CPU status; all eight SoC CPU nodes remain enabled.",
+  "payload.adt.chip_id = 356, derived from the kona qcom,msm-id, with unique_chip_id required.",
+]
+procedure = [
+  "Keep CPU affinities and GIC ranges in the SoC repository. Record any dagu-specific enable or disable decisions in dts/dagu.dts.",
+  "Confirm the live msm-id revision (0x10000 / 0x20000 / 0x20001) from a dagu firmware DTB or sysfs once the device can be read.",
+]
+findings = [
+  "The dagu overlay is built against kona.dtb, kona-v2.dtb and kona-v2.1.dtb, so the running msm-id revision depends on silicon and the selected base DTB. SM8250-AC corresponds to kona v2.1 (356 0x20001).",
+  "payload.adt.chip_id is a software identity, not an ECID.",
+]
+completion = [
+  "Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU.",
+]
+limits = [
+  "No dagu host or device CPU bring-up has been run. cpu_regs is not pinned in board.toml.",
+]
+next_action = [
+  "After a firmware package exists, confirm MPIDR / enabled cores from a dagu DTB or live FDT.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/FFT-infra/UniXNU-sm8250-common/blob/166235ec2480ff0992627b7aafa15c65ce6b4efa/dts/sm8250.dtsi", result = "Eight-core map, PSCI smc, GICv3 0x17a00000/0x17a60000 and 19.2 MHz timebase." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250-overlay.dts", result = "dagu qcom,board-id = <51 0>." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/kona-v2.1.dtsi", result = "kona v2.1 qcom,msm-id = <356 0x20001>." },
+]
+
+[[area]]
+id = "memory"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts", "board.toml"]
+inputs = [
+  "Public device documentation lists RAM SKUs of 6 GB, 8 GB and 12 GB paired with 128 GB, 256 GB and 512 GB UFS.",
+  "The opened dagu overlay and dagu-sm8250.dtsi do not publish a /memory reg. Stock kona.dtsi uses a zero placeholder.",
+  "Family-common reserved nodes inherited through xiaomi-sm8250-common.dtsi: xbl_aop_mem at 0x80600000 size 0x260000, disp_rdump_memory at 0xb0400000 size 0x01000000. These are not a complete dagu memory map.",
+]
+configuration = [
+  "dts/dagu.dts memory@0 currently has reg = <0 0 0 0> as an explicit placeholder.",
+  "payload.dram_size is intentionally unset so a single SKU is not pinned.",
+]
+procedure = [
+  "On the target SKU, record the live /memory ranges and reserved holes, then set a single memory node and payload.dram_size for that SKU only.",
+]
+findings = [
+  "Inventing a dram_size would silently exclude the other shipping SKUs. The skeleton records the variants and leaves a TODO.",
+  "A conventional SM8250 DRAM base of 0x80000000 appears in other ports and in Linux board practice, but it is not written into this DTS as a measured dagu range.",
+]
+completion = [
+  "The ADT DRAM range matches the measured SKU, and reserved regions used at handoff are accounted for.",
+]
+limits = [
+  "No on-device memory map or firmware DTB memory node for dagu has been read in this work.",
+]
+next_action = [
+  "Measure the target unit's DRAM banks and reserved holes; do not copy elish or enuma sizes.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/Rinko-Studio/android_device_xiaomi_dagu/blob/66695faea165da63e7a8eac781ea2241df06a6dd/README.md", result = "Documents Memory SKUs 128GB/6GB, 256GB/8GB and 512GB/12GB RAM." },
+]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts", "board.toml", "proprietary-files.txt"]
+inputs = [
+  "SoC UFS host ufshc@1d84000 and phy@1d87000 from UniXNU-sm8250-common dts/sm8250.dtsi, currently disabled until a storage component is selected.",
+  "xiaomi-sm8250-common.dtsi enables &ufsphy_mem as qcom,ufs-phy-qmp-v4 and &ufshc_mem with regulator supplies. dagu-sm8250.dtsi adds only an hsg4_synclength override.",
+  "Userdata first_lba, last_lba and lba_bytes are not filled. A published ArrowOS BOARD_USERDATAIMAGE_PARTITION_SIZE of 114755874816 is a size, not GPT geometry, and storage SKUs differ.",
+]
+configuration = [
+  "No ShengUfs or other storage component is selected.",
+  "board.toml omits [userdata] rather than inventing LBA numbers. configs/dagu_defconfig leaves CONFIG_XNU_NATIVE_UFS unset.",
+]
+procedure = [
+  "After an official unlock, read the userdata GPT entry and logical block size on the target unit and only then fill [userdata].",
+  "Select a UFS component only after clocks, PHY, ICE, SMMU and LUNs for this board are inventoried.",
+]
+findings = [
+  "elish and enuma userdata LBA values must not be reused. Official porting rules require partition geometry from the target board.",
+]
+completion = [
+  "Host register, clock, link and SMMU facts match the dagu inventory, and OS/SystemOS windows stay within the measured userdata partition.",
+]
+limits = [
+  "No dagu GPT dump or on-device partition table is available in this skeleton.",
+]
+next_action = [
+  "Measure userdata first_lba, last_lba and lba_bytes on the target SKU; do not copy another board.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/FFT-infra/UniXNU-sm8250-common/blob/166235ec2480ff0992627b7aafa15c65ce6b4efa/dts/sm8250.dtsi", result = "UFS host 0x1d84000 and PHY 0x1d87000 documented at SoC scope." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250.dtsi", result = "dagu enables the common UFS nodes and only overrides hsg4_synclength." },
+]
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts"]
+inputs = [
+  "Panel dtsi dsi-panel-l81a-42-04-0a-video.dtsi: dual DSI DPHY video panel, 800 x 2560 per DSI (1600 x 2560 total), 120 Hz, 4 lanes, bpp 24, DSC 8 bpc / 8 bpp, HDR enabled.",
+  "Backlight: two KTZ8866 I2C devices at address 0x11 on qupv3_se11_i2c and qupv3_se9_i2c, hwen GPIO tlmm 139.",
+  "dagu-sm8250.dtsi sets &sde_dp { status = ok } and panel supplies enp/enn plus vddio L7A at 1.832 V.",
+  "Rinko-Studio README describes an IPS LCD, 120 Hz, HDR10, Dolby Vision, 500 nits. Dolby Vision is not separately named in the opened panel timing node.",
+]
+configuration = [
+  "No display or GOP component is selected. CONFIG_XNU_NATIVE_MOBILE_DISPLAY and CONFIG_XNU_NATIVE_LEGACY_DISPLAY are unset.",
+  "Panel geometry and the L81A identifier are recorded in dts/dagu.dts comments for later wiring.",
+]
+procedure = [
+  "Choose a handoff path (inherit ABL framebuffer versus re-initialize DPU/DSI) only after a firmware package can preserve or program the L81A panel.",
+]
+findings = [
+  "The 1600 x 2560 geometry is confirmed by both the panel timing (800+800) and Himax display-coords in dagu-sm8250.dtsi.",
+  "DSC bit-per-component 8 matches an 8-bit panel pipeline in the opened timing node.",
+]
+completion = [
+  "A known frame appears with the documented 1600 x 2560 geometry and color format, and backlight control works.",
+]
+limits = [
+  "No framebuffer handoff, stride or pixel format has been measured on device. No display component is selected.",
+]
+next_action = [
+  "Confirm the live panel variant and stride from a firmware DTB or a future UEFI GOP log.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dsi-panel-l81a-42-04-0a-video.dtsi", result = "L81A dual DSI 800x2560@120Hz, bpp 24, DSC 8 bpc, HDR enabled." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250.dtsi", result = "KTZ8866 backlight at I2C 0x11, sde_dp enabled, panel supplies and Himax 1600x2560 coords." },
+]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts"]
+inputs = [
+  "Primary touch node himax_ts@0 on &qupv3_se4_spi, compatible himax,hxcommon, 4 MHz, spi-cpha, IRQ tlmm 39, reset tlmm 100, coords 0 1600 0 2560.",
+  "vendor/xiaomi/dagu.config enables CONFIG_TOUCHSCREEN_HIMAX_IC_HX83121 and also CONFIG_TOUCHSCREEN_NT36523_HOSTDL_SPI. No NT36523 node was found in the opened dagu dtsi.",
+  "Keyboard dock: nanosic,803 at &qupv3_se2_i2c address 0x4c, IRQ tlmm 83, reset tlmm 141.",
+  "Volume up comes from the shared xiaomi-sm8250-common gpio_keys (pm8150 GPIO 6). Hall sensors are on tlmm 110 and 121. Volume down and power key nodes were not found in the opened dagu dtsi.",
+]
+configuration = [
+  "No touch or HID component is selected. Wiring is documented in dts/dagu.dts comments only.",
+]
+procedure = [
+  "Confirm the touch IC actually present on the target unit before selecting a driver. Do not assume elish's NT36523 wiring.",
+]
+findings = [
+  "dagu's opened board DTS wires Himax on SE4 SPI, which is a different controller and bus setup from elish's Novatek NT36523 description. The extra NT36523 Kconfig flag is recorded as an unresolved SKU question, not as a second wired device.",
+]
+completion = [
+  "Touches map to the 1600 x 2560 panel, contacts keep stable IDs, and buttons produce expected HID reports.",
+]
+limits = [
+  "No touch firmware file name or hash is present in the opened DTS. Volume-down and power key locations remain TODO.",
+]
+next_action = [
+  "On the target unit, confirm the touch compatible string and firmware name; then decide whether a Himax or NT36523 driver applies.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250.dtsi", result = "Himax SPI touch and nanosic,803 keyboard nodes as cited in inputs." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/configs/vendor/xiaomi/dagu.config", result = "Enables Himax HX83121 and also NT36523_HOSTDL_SPI." },
+]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts", "feeds.toml"]
+inputs = [
+  "SoC include describes Adreno 650: gpu@3d00000 compatible qcom,adreno-650.2, gmu@3d6a000, gpu_smmu@3da0000, all disabled until a GPU component with A650 scope is selected.",
+  "soc/configs/sm8250.config leaves CONFIG_XNU_NATIVE_ADRENO unset, noting that the A650 path is not provided by a catalog component yet.",
+]
+configuration = [
+  "No Adreno or Metal component is selected in board.toml. dagu_defconfig leaves CONFIG_XNU_NATIVE_ADRENO unset.",
+]
+procedure = [
+  "Reuse SoC-level A650 addresses from UniXNU-sm8250-common when a catalog component exists. Do not copy phone-board GPU policy from umi.",
+]
+findings = [
+  "Nearby SM8250 ports also leave native Adreno off at the skeleton stage. Firmware names and hashes are not yet listed.",
+]
+completion = [
+  "A selected A650 component completes submissions and presents a known image on this board.",
+]
+limits = [
+  "No dagu GPU firmware hash, vote or SMMU stream inventory beyond the SoC include is recorded.",
+]
+next_action = [
+  "Wait for an A650-capable catalog component, then list firmware members from a verified official package.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/FFT-infra/UniXNU-sm8250-common/blob/166235ec2480ff0992627b7aafa15c65ce6b4efa/dts/sm8250.dtsi", result = "Adreno 650, GMU and SMMU register windows at SoC scope, disabled by default." },
+]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts", "proprietary-files.txt"]
+inputs = [
+  "Wi-Fi device in kona.dtsi: wlan: qcom,cnss-qca6390@b0000000, compatible qcom,cnss-qca6390, wlan-en GPIO tlmm 20.",
+  "Bluetooth in xiaomi-sm8250-common.dtsi: bt_qca6390, compatible qca,qca6390, reset GPIO tlmm 21, sw-ctrl GPIO tlmm 124.",
+  "dagu-sm8250.dtsi overrides &wlan and &bluetooth regulator supplies (pm8150_s6 digital, pm8150_s5 rfa1 at 2.0 V).",
+]
+configuration = [
+  "No Wi-Fi component is selected. Chip identity and board regulator overrides are recorded in dts/dagu.dts comments.",
+]
+procedure = [
+  "List QCA6390 firmware members and hashes from a verified official package before selecting a network component.",
+]
+findings = [
+  "The wireless combo is QCA6390 (CNSS + BT) at SoC/family scope, with dagu-specific regulator overrides. This is a Wi-Fi-only board; see the cellular area.",
+]
+completion = [
+  "Scanning, association and sustained traffic pass with the selected QCA6390 firmware.",
+]
+limits = [
+  "No firmware file names or SHA-256 values are pinned. No association test has been run.",
+]
+next_action = [
+  "Import official QCA6390 firmware into .cache/firmware and record measured hashes.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250.dtsi", result = "dagu overrides &wlan and &bluetooth supplies for the QCA6390 combo." },
+]
+
+[[area]]
+id = "cellular"
+status = "not-applicable"
+components = []
+paths = ["board.toml", "dts/dagu.dts", "README.md"]
+inputs = [
+  "This repository targets the China-region Wi-Fi model (22081281AC). There is no onboard cellular modem in scope.",
+]
+configuration = [
+  "No modem, QRTR/QMI, SIM or IPA/QMAP component is selected, and none will be selected for this Wi-Fi model.",
+]
+procedure = [
+  "Leave this area as not-applicable unless a different dagu SKU with a modem is explicitly targeted later.",
+]
+findings = [
+  "enuma is the 5G cousin in the same tablet family and is not this board. Cellular work belongs on enuma, not on this Wi-Fi dagu skeleton.",
+]
+completion = [
+  "The record continues to mark cellular as outside the scope of the Wi-Fi model.",
+]
+limits = [
+  "not-applicable: Wi-Fi-only China-region dagu (22081281AC) has no modem to bring up in this repository.",
+]
+next_action = [
+  "No cellular measurement is planned for this model.",
+]
+evidence = [
+  { kind = "source", reference = "https://unixnu.com/porting/records", result = "Boards without a modem use not-applicable for the cellular area." },
+]
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts"]
+inputs = [
+  "dagu-sm8250.dtsi describes four Cirrus CS35L41 amplifiers on I2C (addresses 0x40, 0x41, 0x43 appear in the opened file) and includes dagu-audio-overlay.dtsi.",
+]
+configuration = [
+  "No DSP or audio component is selected. Amplifier compatible strings are recorded only as inventory.",
+]
+procedure = [
+  "Inventory ADSP firmware and routes after the platform and display stages have a recorded baseline.",
+]
+findings = [
+  "Audio hardware is present in the stock DTS but has no UniXNU implementation in this skeleton.",
+]
+completion = [
+  "Each declared route carries the selected format through playback or capture.",
+]
+limits = [
+  "No codec clock, firmware or route map has been turned into board configuration yet.",
+]
+next_action = [
+  "Leave audio unselected until a driver with satisfied inputs is chosen from the catalog.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/boot/dts/vendor/qcom/dagu-sm8250.dtsi", result = "CS35L41 amplifier nodes and dagu-audio-overlay include are present in the stock board DTSI." },
+]
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["dts/dagu.dts"]
+inputs = [
+  "Rinko-Studio README: Li-Po 10000 mAh, non-removable battery.",
+  "dagu.config enables QPNP SMB5 dagu, dual BQ27Z561 fuel gauge and BQ2597X charge-pump support.",
+  "dagu-sm8250.dtsi sets mi,pd-power-max = <67> (67 W) on &pm8150b_pdphy.",
+]
+configuration = [
+  "No battery or platform-power component is selected in this skeleton.",
+]
+procedure = [
+  "Record regulator ownership and supported transitions after firmware handoff exists.",
+]
+findings = [
+  "The 10000 mAh figure comes from public device documentation, not from a fuel-gauge dump on the target unit.",
+]
+completion = [
+  "Declared power controls and battery readings match observations on this board.",
+]
+limits = [
+  "No on-device charge or capacity log is recorded here.",
+]
+next_action = [
+  "Leave power components unselected until a firmware package can report regulators and the fuel gauge.",
+]
+evidence = [
+  { kind = "source", reference = "https://github.com/Rinko-Studio/android_device_xiaomi_dagu/blob/66695faea165da63e7a8eac781ea2241df06a6dd/README.md", result = "Documents a non-removable Li-Po 10000 mAh battery." },
+  { kind = "source", reference = "https://github.com/LineageOS/android_kernel_xiaomi_sm8250/blob/6b34d24765327d746074c8e53b5ad0d24a51acc7/arch/arm64/configs/vendor/xiaomi/dagu.config", result = "Enables dagu SMB5, dual BQ27Z561 and BQ2597X charge-pump Kconfig." },
+]
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["scripts/package.sh", "patches/**", "package/**", "board.toml", ".github/workflows/package.yml"]
+inputs = [
+  "OS profile ipados-17.7.11-21H461 supplies the IPSW URL, product iPad7,1, build 21H461 and prelink roots.",
+  "scripts/package.sh is the official unmodified packaging script and reads [package] unixnu = ../UniXNU.",
+  "This skeleton was produced on a Linux build box. Kernel and skip-setup steps that need Xcode or hdiutil require macOS or the official macOS GitHub runner.",
+]
+configuration = [
+  "package.defconfig maps ipados-17.7.11-21H461 to dagu_defconfig.",
+  "payload.adt sets ipad_identity and requires --unique-chip-id. root_match_volume_uuid is unset until a userdata image exists.",
+]
+procedure = [
+  "From UniXNU: ./unixnu defconfig dagu_defconfig -D ../UniXNU-dagu && ./unixnu fetch -D ../UniXNU-dagu.",
+  "Do not run bootimg as a flashable release until DRAM, userdata, firmware and an official unlock are available.",
+]
+findings = [
+  "The official OS profile already pins the iPadOS 17.7.11 IPSW member hashes. This board does not duplicate them, and it does not select a 27-series profile.",
+]
+completion = [
+  "Kernel and prelink succeed for the iPadOS 17.7.11 profile, the payload contains the declared inputs, and the boot image matches a verified dagu bootloader contract.",
+]
+limits = [
+  "Linux hosts cannot run hdiutil or the iphoneos SDK path. A failed full image build on this box is not a repository-format failure.",
+  "The official package.yml firmware checkout is blocked until uefi-dagu exists.",
+]
+next_action = [
+  "Resolve sources with unixnu fetch when network and the driver allow it; record host evidence only for commands that actually succeed.",
+]
+evidence = [
+  { kind = "source", reference = "https://unixnu.com/building", result = "Documents Linux versus macOS host limits and the official defconfig/fetch/status sequence." },
+]
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["scripts/package.sh", "unixnu.lock", ".github/workflows/porting-record.yml"]
+inputs = [
+  "The official device-documentation workflow is retained and calls UniXNU/UniXNU/.github/workflows/porting-record.yml@main.",
+  "Log transport, recovery commands and image revisions will be needed during bring-up; none have been captured from a dagu unit.",
+]
+configuration = [
+  "No board-specific probe scripts are shipped in this skeleton beyond the official package.sh.",
+]
+procedure = [
+  "Run python3 scripts/porting-record.py check --device ../UniXNU-dagu from the UniXNU checkout after record edits.",
+  "Record the last confirmed checkpoint only from actual host or device logs.",
+]
+findings = [
+  "The bootloader is locked and official unlock is closed, so device evidence cannot be collected until that changes. This repository must stay a source skeleton until then.",
+]
+completion = [
+  "Each claimed milestone has a reproducible command, a full source revision and an accessible result.",
+]
+limits = [
+  "unixnu.lock was written by a successful fetch on this Linux host and is committed with the skeleton. There is still no device log and no bring-up checkpoint.",
+]
+next_action = [
+  "Enable and watch the Porting record workflow on the published default branch after the initial push.",
+]
+evidence = [
+  { kind = "source", reference = "https://unixnu.com/porting/records", result = "Record schema, completion levels and the official checker command used to validate this file." },
+]

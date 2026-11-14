@@ -4,5 +4,6 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
+| [bozibz/UniXNU-muyu-17-build](https://github.com/bozibz/UniXNU-muyu-17-build) | [Xiaomi Pad 7 Pro \(bozibz\)](/zh/devices/muyu-bozibz) | 仓库链接 | SM8635 |
 | [is-qian/UniXNU-muyu](https://github.com/is-qian/UniXNU-muyu) | [Xiaomi Pad 7 Pro \(is-qian\)](/zh/devices/muyu-is-qian) | 仓库链接 | SM8635 |
 | [yehua123-oos/UniXNU-muyu](https://github.com/yehua123-oos/UniXNU-muyu) | [Xiaomi Pad 7 Pro](/zh/devices/muyu) | 适配记录 | SM8635 |

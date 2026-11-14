@@ -105,14 +105,20 @@ procedure = [
 ]
 findings = [
   "SM8150 Cortex-A76 and A55 do not implement ARMv8.3 FEAT_PAuth, which is why arm64e is excluded",
+  "xnu-11417.140.69 (Darwin 24) dropped the BCM2837 machine configuration entirely: 'grep -r BCM2837' over the tree returns nothing, pexpert/pexpert/arm64/BCM2837.h and config/MASTER.arm64.bcm2837 no longer exist, and the supported list is now T6000..T8132 VMAPPLE. Apple added config/MASTER.arm64.iPhoneOS in their place",
+  "the shared arch patch series (profiles/arch/arm64/patches/xnu/series, 56 patches) was written against xnu-10063.141.1 / Darwin 23 and does not survive the move: 15 of the 56 fail 'git apply --check' against xnu-11417, 41 still apply. Two of the 15 (native-arm-pan, source-machine-layer) fail because their target file is gone, not merely shifted; the other 13 fail on hunk context alone",
+  "the prelink path still names DEVELOPMENT_ARM64_BCM2837 (profile.toml [kernel.prelink] kernel), so the machine configuration has to be settled before any kernel link can be trusted",
+  "pong (SM8475, /tmp/pong18) resolved the same problem by dropping BCM2837 rather than reviving it: it adds config/MASTER.arm64.pong, registers PONG in SUPPORTED_ARM64_MACHINE_CONFIGS, builds DEVELOPMENT_ARM64_PONG, and leaves profiles/arch/arm64's own series out of its patch_series behind an effectively empty migration/format2/arch-darwin24.series. Its Darwin24 work rides in a single 480 KB device aggregate (patches/xnu-ipados18/0001-pong-darwin24.patch, 97 files) that is SoC-specific and not reusable here",
 ]
 completion = [
   "All eight CPUs come up and the interrupt controller delivers timer interrupts",
 ]
 limits = [
   "No device log exists yet; the CPU area is unverified on hardware",
+  "The Darwin 23 -> 24 arch adaptation is not started: nothing yet replaces the 15 failing arch patches or names the machine configuration the kernel will actually be built with",
 ]
 next_action = [
+  "Decide the machine configuration: drop BCM2837 for a raphael one (pong's path) or regenerate the arch series against xnu-11417",
   "Boot the arm64 kernel and record the per-CPU startup log",
 ]
 

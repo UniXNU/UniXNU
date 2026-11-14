@@ -16,11 +16,12 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | --- | --- | --- | --- |
 | [Benesse TAB-A04-BR3](/devices/models/a04br3) | a04br3 | MT8167 | 1 |
 | [OnePlus Ace 6 PLQ110 \(OP6113L1\): SM8750 Sun v1, 12 GiB, AA605 panel, S3910 touch](/devices/models/ace6) | ace6 | SM8750 | 1 |
-| [Redmi K40](/devices/models/alioth) | alioth | SM8250 | 5 |
+| [Redmi K40](/devices/models/alioth) | alioth | SM8250 | 6 |
 | [LG G8 ThinQ \(LM-G820, alphalm\)](/devices/models/alphaplus) | alphaplus | SM8150 | 1 |
 | [Redmi Note 14 Pro+ 5G](/devices/models/amethyst) | amethyst | SM7635 | 2 |
 | [Xiaomi Mi Mix 3 5G](/devices/models/andromeda) | andromeda | SM8150 | 2 |
-| [Nothing Phone \(3a\)](/devices/models/asteroids) | asteroids | SM7635 | 1 |
+| [Xiaomi Mi 10T / Mi 10T Pro / Redmi K30S Ultra \(apollo\), SM8250](/devices/models/apollo) | apollo | SM8250 | 2 |
+| [Nothing Phone \(3a\)](/devices/models/asteroids) | asteroids | SM7635 | 2 |
 | [OnePlus Ace 3 PJE110](/devices/models/aston) | aston | SM8550 | 1 |
 | [Xiaomi MIX Fold 3](/devices/models/babylon) | babylon | SM8550 | 1 |
 | [BBK/EEBBK A2, X2 and X2P tablet \(ums512\_1h190, Unisoc T610 / UMS512 SharkL5Pro\)](/devices/models/bbk-a2) | bbk-a2 | UMS512 | 1 |
@@ -38,11 +39,12 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Samsung Galaxy Note10+ 5G \(SM-N9760\)](/devices/models/d2xq) | d2xq | SM8150 | 1 |
 | [Xiaomi 15](/devices/models/dada) | dada | SM8750 | 1 |
 | [Redmi K80 Pro](/devices/models/dada2) | dada2 | SM8750 | 2 |
+| [Xiaomi Pad 5 Pro 12.4 \(dagu\), China-region Wi-Fi model 22081281AC, SM8250-AC, iPadOS 17.7.11 / arm64 target](/devices/models/dagu) | dagu | SM8250-AC | 1 |
 | [Redmi K80 Ultra](/devices/models/dali) | dali | MT6991 | 1 |
 | [Redmi 9A](/devices/models/dandelion) | dandelion | MT6765 | 1 |
 | [Huawei MatePad 11](/devices/models/dby-w09) | dby-w09 | SM8250 | 1 |
 | [Xiaomi Mi 8](/devices/models/dipper) | dipper | SDM845 | 1 |
-| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/devices/models/diting) | diting | SM8475 | 2 |
+| [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/devices/models/diting) | diting | SM8475 | 3 |
 | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/devices/models/dizi) | dizi | SM7435 | 1 |
 | [OnePlus 13 CPH2653: iPhone iOS 16 source preparation](/devices/models/dodge) | dodge | SM8750 | 1 |
 | [DroidVM guest \(crosvm on Gunyah\)](/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
@@ -57,7 +59,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [OnePlus 15T](/devices/models/fairlady) | fairlady | SM8850 | 1 |
 | [OnePlus 6T](/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/devices/models/flashlm) | flashlm | SM8150 | 1 |
-| [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 15 |
+| [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 16 |
 | [Gree G0245D \(格力手机 / 色界\)](/devices/models/g0245d) | g0245d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/devices/models/garnet) | garnet | SM7435 | 1 |
 | [Motorola Moto G 5G](/devices/models/gauguin) | gauguin | SM7225 | 1 |
@@ -66,14 +68,15 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Samsung Galaxy Tab A7 10.4](/devices/models/gta4l) | gta4l | SM6115 | 3 |
 | [Samsung Galaxy Tab S7 FE Wi-Fi \(SM-T733\)](/devices/models/gts7fewifi) | gts7fewifi | SM7325 | 1 |
 | [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\): iPadOS desktop, 8 cores, GPU, touch, USB console, battery](/devices/models/gts7xlwifi) | gts7xlwifi | SM8250 | 1 |
+| [Samsung Galaxy Tab S9 Ultra 5G](/devices/models/gts9u) | gts9u | SM8550 | 1 |
 | [Samsung Galaxy Tab S9 Ultra Wi-Fi](/devices/models/gts9uwifi) | gts9uwifi | SM8550 | 1 |
 | [OnePlus 7 Pro](/devices/models/guacamole) | guacamole | SM8150 | 1 |
 | [Motorola Moto G9 Play](/devices/models/guamp) | guamp | SM6115 | 1 |
 | [Redmi K40 Pro](/devices/models/haydn) | haydn | SM8350 | 3 |
 | [Samsung Galaxy S7 Edge](/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
-| [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 3 |
+| [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 4 |
 | [OnePlus Ace 5 Pro](/devices/models/hummer) | hummer | SM8750 | 1 |
-| [OnePlus 8 Pro](/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 2 |
+| [OnePlus 8 Pro](/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [Xiaomi 13 Ultra](/devices/models/ishtar) | ishtar | SM8550 | 3 |
 | [Lenovo Xiaoxin Pad Pro 2021](/devices/models/j716f) | j716f | SM8250 | 2 |
 | [OnePlus 8T](/devices/models/kebab) | kebab | SM8250 | 2 |
@@ -84,11 +87,11 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [OnePlus 9R](/devices/models/lemonades) | lemonades | SM8250 | 1 |
 | [Xiaomi Pad 6 Pro](/devices/models/liuqin) | liuqin | SM8475 | 1 |
 | [Redmi K30 Pro Zoom Edition](/devices/models/lmipro) | lmipro | SM8250 | 2 |
-| [Microsoft Lumia 950](/devices/models/lumia950) | lumia950 | MSM8992 | 3 |
+| [Microsoft Lumia 950](/devices/models/lumia950) | lumia950 | MSM8992 | 4 |
 | [Xiaomi Civi 5 Pro](/devices/models/luming) | luming | SM8735 | 2 |
 | [Meizu 20 Classic](/devices/models/m2381) | m2381 | SM8550 | 2 |
 | [POCO X7 / Redmi Note 14 Pro 5G](/devices/models/malachite) | malachite | MT6878 | 1 |
-| [Redmi Note 12 Turbo / POCO F5](/devices/models/marble) | marble | SM7475 | 3 |
+| [Redmi Note 12 Turbo / POCO F5](/devices/models/marble) | marble | SM7475 | 4 |
 | [Meizu 15 \(M8810, eMMC, 4 GB DRAM, 1080x1920 AMOLED panel\)](/devices/models/meizu15) | meizu15 | SDM660 | 1 |
 | [Meizu 21 \(M461Q\)](/devices/models/meizu21) | meizu21 | SM8650 | 2 |
 | [Xiaomi Redmi Note 9](/devices/models/merlinx) | merlinx | MT6768 | 2 |
@@ -97,9 +100,9 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Redmi K80 Pro](/devices/models/miro) | miro | SM8750 | 1 |
 | [Redmi K60 \(mondrian/SM8475\): UniXNU UEFI bring-up](/devices/models/mondrian) | mondrian | SM8475 | 6 |
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/devices/models/munch) | munch | SM8250 | 3 |
-| [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 2 |
+| [Xiaomi Pad 7 Pro](/devices/models/muyu) | muyu | SM8635 | 3 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/devices/models/myron) | myron | SM8850 | 2 |
-| [Xiaomi Pad 5](/devices/models/nabu) | nabu | SM8150 | 6 |
+| [Xiaomi Pad 5](/devices/models/nabu) | nabu | SM8150 | 7 |
 | [Motorola Moto Z2 Force](/devices/models/nash) | nash | MSM8998 | 1 |
 | [OnePlus 10 Pro 5G](/devices/models/negroni) | negroni | SM8450 | 1 |
 | [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/devices/models/nio) | nio | SM8250 | 1 |
@@ -109,6 +112,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ \(NX769J\)](/devices/models/nx769j) | nx769j | SM8650 | 2 |
 | [Xiaomi Mi MIX 4 \(odin, Snapdragon 888+ / SM8350\)](/devices/models/odin) | odin | SM8350 | 3 |
 | [AYN Odin 3 \(Dragonwing Q8, SM8750\), 16 GiB](/devices/models/odin3) | odin3 | SM8750 | 1 |
+| [Xiaomi Redmi 7 / Redmi Y3 \(onclite\), Qualcomm MSM8953 Snapdragon 632, 3 GiB RAM](/devices/models/onclite) | onclite | MSM8953 | 1 |
 | [OnePlus 13T](/devices/models/oneplus13t) | oneplus13t | SM8750 | 2 |
 | [Redmi Turbo 4 Pro](/devices/models/onyx) | onyx | SM8735 | 1 |
 | [OPPO Pad mini 5G \(OPD2515, SM8845P / Alor\)](/devices/models/opd2515) | opd2515 | SM8845 | 1 |
@@ -123,7 +127,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [OPPO Find X7 Ultra \(PHY120\)](/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [Xiaomi Pad 8 Pro](/devices/models/piano) | piano | SM8750 | 4 |
 | [Redmi K30 5G](/devices/models/picasso) | picasso | SM7250 | 8 |
-| [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 4 |
+| [Xiaomi Pad 6](/devices/models/pipa) | pipa | SM8250 | 5 |
 | [OnePlus Ace 3 \(PJE110\)](/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/devices/models/pma120) | pma120 | SM8850 | 1 |
 | [Xiaomi Mi MIX 2S](/devices/models/polaris) | polaris | SDM845 | 4 |
@@ -142,7 +146,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 47 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 50 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |

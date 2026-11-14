@@ -1,0 +1,18 @@
+Reserve kernel VA for native APFS and shared I/O on the small 4 KiB layout.
+
+--- a/osfmk/kern/zalloc.c
++++ b/osfmk/kern/zalloc.c
+@@ -172,7 +172,13 @@
+ #define ZONE_MAP_VA_SIZE        (128ULL << 30)
+ #else
+ #define ZONE_MAP_MAX            (8ULL << 30)
++#if defined(__arm64__) && !defined(ARM_LARGE_MEMORY) && XNU_TARGET_OS_OSX
++/* The small address layout also holds the compressor and shared I/O heaps.
++ * Keep their VA available without changing the zone wired-memory limit. */
++#define ZONE_MAP_VA_SIZE        (16ULL << 30)
++#else
+ #define ZONE_MAP_VA_SIZE        (24ULL << 30)
++#endif
+ #endif
+ 
+ __enum_closed_decl(zm_len_t, uint16_t, {
