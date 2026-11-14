@@ -172,7 +172,9 @@ Seed creation options:
 | --- | --- |
 | `--skip-setup` | Marks Setup Assistant done |
 | `--user NAME:PASSWORD` | Adds a local administrator and its home |
-| `--auto-login` | Logs the `--user` account in at boot. For unattended tests; requires `--user` |
+| `--real-name NAME` | Sets the displayed administrator name; the short account name and `/Users/NAME` remain unchanged |
+| `--user-stdin` | Reads `{"name":"unixnu","password":"..."}` from standard input instead of `--user` |
+| `--auto-login` | Logs the account in at boot. For unattended tests; requires `--user` or `--user-stdin` |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | Records a keyboard layout type, so Keyboard Setup Assistant does not ask |
 | `--volume-uuid UUID` | Gives the Data volume a fixed UUID, so a new seed replaces an older one without a kernel build |
 
