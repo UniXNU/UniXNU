@@ -13,13 +13,16 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output', type=Path, default=ROOT / 'build/owner-data-fixture')
+# The OS whose var tree seeds Data, identified by its launchd (default: iPad7,1 iPadOS 17.7.11 21H461; iPhone17,4 iOS 27.0.1 24A446 is
+# c640246d38aaeb2d2372aff1e5aa0de59dec267f53c0dfc155f7837e717af68b).
+parser.add_argument('--launchd-sha256', default='8cec9a3c44a443b08e977ccc5d577850316ad428c575dc01f09b018dbd5b6a25')
 args = parser.parse_args()
 fixture = args.output.resolve()
 image = fixture / 'owner-data-32.cdr'
 if image.exists():
     raise SystemExit('Refuse to overwrite an existing Data seed')
 source = ROOT / '.cache/firmware/target-volumes/os-mount'
-if hashlib.sha256((source / 'sbin/launchd').read_bytes()).hexdigest() != '8cec9a3c44a443b08e977ccc5d577850316ad428c575dc01f09b018dbd5b6a25':
+if hashlib.sha256((source / 'sbin/launchd').read_bytes()).hexdigest() != args.launchd_sha256:
     raise SystemExit('Require the unchanged supplied original OS mount')
 fixture.mkdir(parents=True, exist_ok=True)
 subprocess.run(['hdiutil', 'create', '-size', '32m', '-layout', 'NONE', '-fs', 'APFS',
