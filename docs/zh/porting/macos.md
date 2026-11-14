@@ -169,7 +169,10 @@ sudo -n python3 scripts/make-macos-data-seed.py \
   --data-ramdisk "<output>/runtime/data.dbr"
 ```
 
-启动后用该账户登录即可进入桌面。`--skip-setup` 在制作 seed 时传入。
+sheng 刷入全新 userdata 后，选择 **Initialize macOS Data and boot**，
+再确认 **Initialize Data and boot**。这会清空 macOS Data，并从 seed 初始化持久存储。
+后续开机选择 **Boot**，保留 Data。账户和设置助理配置来自 seed；
+`--skip-setup` 在制作 seed 时传入。
 
 sheng 的 macOS 配置使用固定 SHA-256 的固件模板完成 ABL 封装。
 `unixnu bootimg` 只替换本次固件构建生成的 DarwinBoot，保留已验证的 BootShim、

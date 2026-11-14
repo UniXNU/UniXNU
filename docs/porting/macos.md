@@ -180,8 +180,11 @@ Build and pack using that seed:
   --data-ramdisk "<output>/runtime/data.dbr"
 ```
 
-Boot and sign in with that account to reach the desktop. `--skip-setup` is a
-seed creation option.
+After flashing fresh userdata on sheng, select **Initialize macOS Data and boot**
+and confirm **Initialize Data and boot**. This erases macOS Data and initializes
+its persistent store from the seed. Use **Boot** on subsequent starts to retain
+Data. The account and Setup settings come from the seed; `--skip-setup` is a seed
+creation option.
 
 The sheng macOS profile uses a SHA-256-pinned firmware template for its ABL
 transport. `unixnu bootimg` replaces only DarwinBoot with the loader from the
