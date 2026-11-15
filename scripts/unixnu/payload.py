@@ -27,6 +27,21 @@ def paths(ctx):
     return out, out / 'payload.img', out / 'payload.json'
 
 
+def begin_build(ctx):
+    out = paths(ctx)[0]
+    out.mkdir(parents=True, exist_ok=True)
+    (out / '.build-pending').write_text('The latest payload build has not completed\n')
+
+
+def finish_build(ctx):
+    (paths(ctx)[0] / '.build-pending').unlink(missing_ok=True)
+
+
+def require_complete(ctx):
+    if (paths(ctx)[0] / '.build-pending').exists():
+        raise Error('the latest payload build did not complete; rerun unixnu build payload successfully before bootimg')
+
+
 def check_args(arguments):
     for value in arguments:
         # A value may hold ':' and '=' (exec-env=NAME:VAR=VALUE); no space, quote or shell character.
