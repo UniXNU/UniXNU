@@ -26,7 +26,7 @@ python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK
 python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27
 ```
 
-The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It compiles and partially links an arm64e object with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for this invocation. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
+The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It uses the exported compiler to generate an arm64e object, then partially links it with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for both tool discovery and execution. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
 
 ## Source and tree
 
