@@ -32,12 +32,24 @@ def function(source: str, name: str) -> str:
 def compile_probe(source: str, directory: Path) -> ctypes.CDLL:
     prefix = Path(__file__).with_name("text_fixup_probe.h").read_text()
     functions = ["cs_text_fixup_page", "cs_validate_hash", "cs_native4k_lazy_block", "cs_native4k_pass_run"]
+    signed_copy = "\ncs_text_fixup_signed_copy(" in source
+    if signed_copy:
+        functions.insert(0, "cs_text_fixup_signed_copy")
     if "\ncs_text_fixup_hash(" in source:
         functions.insert(0, "cs_text_fixup_hash")
     program = directory / "probe.c"
     pass_start = source.index("struct cs_native4k_pass {")
     pass_end = source.index("\n};", pass_start) + 3
-    program.write_text(prefix + source[pass_start:pass_end] + "\n".join(function(source, name) for name in functions) + r'''
+    adapters = r'''
+int original_copy(const char *name, uint64_t offset, const void *data, size_t length, void *output) {
+    struct vnode vp = { .v_name = name };
+    void *copy = cs_text_fixup_signed_copy(&vp, offset, data, length);
+    memcpy(output, copy ? copy : data, length);
+    free(copy);
+    return copy != NULL;
+}
+''' if signed_copy else ''
+    program.write_text(prefix + '#define kalloc_data(size, flags) malloc(size)\n' + source[pass_start:pass_end] + "\n".join(function(source, name) for name in functions) + adapters + r'''
 void configure(const char *name, uint64_t offset, const void *original, const void *replacement, uint32_t length) {
     assert(length && length <= CS_TEXT_FIXUP_BYTES);
     cs_text_fixup_count = 1;
@@ -114,6 +126,8 @@ int authenticate_eager(const char *name, uint64_t offset, const void *data, size
     lib.authenticate.argtypes = [ctypes.c_char_p, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_size_t,
                                 ctypes.c_void_p, ctypes.c_void_p]
     lib.authenticate_eager.argtypes = lib.authenticate.argtypes
+    if signed_copy:
+        lib.original_copy.argtypes = [ctypes.c_char_p, ctypes.c_uint64, ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p]
     return lib
 
 
@@ -192,6 +206,19 @@ class TextFixupTest(unittest.TestCase):
         self.assertEqual(self.lib.apply(self.name, high + 4096, ctypes.byref(value, 4096)), 1)
         self.check_page(value, True, base=high + 4096)
         self.check_block(value, True, base=high)
+
+    def test_compressed_verification_preserves_resident_text(self):
+        if not hasattr(self.lib, "original_copy"):
+            self.skipTest("Compressed verification snapshot is absent")
+        value = self.modified()
+        live = value.raw
+        output = ctypes.create_string_buffer(16384)
+        self.assertEqual(self.lib.original_copy(self.name, self.base, value, 16384, output), 1)
+        self.assertEqual(output.raw[:16384], self.original)
+        self.assertEqual(value.raw, live)
+        value[0] = bytes([value.raw[0] ^ 1])
+        self.lib.original_copy(self.name, self.base, value, 16384, output)
+        self.assertNotEqual(hashlib.sha256(output.raw[:16384]).digest(), hashlib.sha256(self.original).digest())
 
     def test_snapshot_boundary_and_partial_last_page(self):
         for at in (0, 255, 4096 - 16, 8192, 16384 - 16):
