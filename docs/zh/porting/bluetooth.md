@@ -111,7 +111,7 @@ bluetooth_target = "ios27"
 
 ```sh
 python3 UniXNU-<device>/scripts/check-bluetooth-platform.py
-python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
+python3 UniXNU-<device>/scripts/check-bluetooth-shared.py --tree <resolved-tree>
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
@@ -126,6 +126,20 @@ fastboot boot boot.img
 **预期结果：** [抓取日志](/zh/porting/log-capture)后，`[bluetooth]` 显示 `state=2 error=0`，
 `[bluetooth proc]` 显示 `bluetoothd` 只启动一次。在“设置”中打开蓝牙，配对配件并播放音频。
 重启后确认无需重新配对即可回连。
+
+排查 sheng 的设备发现失败时，使用 `log-bluetooth=3`。持久启动日志中的
+`[bluetooth hci]` 行记录时间戳、命令字节、控制器回复和 Inquiry 结果。
+`TX_UART` 表示 UART 已接收完整帧，`RX_CONTROLLER` 表示收到控制器事件。
+`missed` 和 `dropped` 记录跟踪丢失数量。让配件保持配对模式，再打开蓝牙设置；
+测试后从 Recovery 导出日志。跟踪不包含 ACL、音频和配对密钥。
+
+sheng 的 macOS 配置从组件目录选择 `QcaBluetooth`，内核与运行时使用同一份设备子模块。
+使用标准命令构建诊断镜像：
+
+```sh
+./unixnu build kernel payload --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng --kernel-arg=log-bluetooth=3
+./unixnu bootimg --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng
+```
 
 | 现象 | 检查 |
 | --- | --- |

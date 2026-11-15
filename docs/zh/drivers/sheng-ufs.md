@@ -15,6 +15,9 @@ ShengUfs 提供 SM8550 UFS 存储路径，管理主机控制器、SMMU 映射、
 
 组件目录提供内核 archive 构建命令。设备配置启用 `CONFIG_XNU_NATIVE_UFS` 并提供板级输入。
 
+已校验的 userdata 窗口发布为内部虚拟存储。Disk Arbitration 可在控制台用户登录前
+保留启动挂载，包括 `/System/Volumes/Preboot/Cryptexes/App` 下的 App cryptex。
+
 ```sh
 ./unixnu build kernel -D /path/to/device
 ```

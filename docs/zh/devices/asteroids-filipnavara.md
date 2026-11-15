@@ -6,7 +6,7 @@
 
 Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from its UFS userdata partition to the home screen, with touch, buttons, the GPU add-on \(Turnip and Metal on the Adreno 810\), system apps, icons and the wallpaper \(2026-11-11\); iPadOS 17.7.11 \(21H461\) remains the board's default profile. Shared SM7635 support and board-owned storage, GPU, input and power integration. Wi-Fi \(WCN6750, Linux ath11k on the WPSS\) joins a WPA2 network, gets an address over DHCP and passes traffic, with interrupts, wifid and Settings \(join from the Wi-Fi page, 2026-11-13\). Bring-up runs as numbered staged tests.
 
-源记录: [porting.toml](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/porting.toml), `74b23efd0bdf8e973c666a012c7d459e514f1f5c`.
+源记录: [porting.toml](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/porting.toml), `9f07af3b0bb431a01de12ab92f531619a7104083`.
 
 本页按设备记录自动生成。
 
@@ -88,7 +88,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/board.toml)
+- `source`: [Format 2 board configuration with the SM7635 SoC and 21H461 OS profiles.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -128,7 +128,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/board.toml)
+- `source`: [\[bootimg\] and \[firmware\] select uefi-asteroids and the payload in the kernel image.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/board.toml)
 
 ## CPU 与中断 {#cpu}
 
@@ -173,7 +173,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/CpuFreqProbe.cpp)
+- `source`: [EPSS CPU governor with touch boost and frame floor.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/CpuFreqProbe.cpp)
 
 ## 内存与 DMA {#memory}
 
@@ -212,7 +212,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/dts/asteroids.dts)
+- `source`: [Memory node for the XNU window's DRAM bank.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/dts/asteroids.dts)
 
 ## 存储与根卷 {#storage}
 
@@ -258,7 +258,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/board.toml)
+- `device`: [T29 booted iPadOS 17.7.11 from the UFS root with persistent Data to the first picture.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 显示 {#display}
@@ -337,7 +337,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/board.toml)
+- `device`: [T34b: GPU copy to the panel, no tearing or stale patches, stable.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## 输入 {#input}
@@ -386,7 +386,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/AsteroidsTouchProbe.cpp)
+- `device`: [Touch input works on the desktop \(stage 6\).](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/AsteroidsTouchProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## GPU {#gpu}
@@ -538,7 +538,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/GpuPowerProbe.cpp)
+- `device`: [GPU compositing and the GPU panel copy run stable.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t34b-boot.img</code>. Revision: `e022e84a9721ea6408ea12665b5a23e9b89fc5f6`.
 
 ## clock {#clock}
@@ -579,7 +579,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/board.toml)
+- `device`: [T39e: the time set in Settings survived a restart; Settings &gt; Date &amp; Time opens.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/board.toml)
   Command: <code>fastboot boot local/unixnu-asteroids-t39e-boot.img</code>. Revision: `e4d1092cc3d051617ee88858b153ed2ba0d456fd`.
 
 ## 网络 {#network}
@@ -627,7 +627,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [wifi91 \(2026-11-13\): Settings shows the Wi-Fi row and page, lists networks and joins one; web pages load. Log in logs/wifi91.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/AsteroidsWifi.cpp)
+- `device`: [wifi91 \(2026-11-13\): Settings shows the Wi-Fi row and page, lists networks and joins one; web pages load. Log in logs/wifi91.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/AsteroidsWifi.cpp)
   Command: <code>fastboot boot images/boot-wifi91.img (buildboot.sh with wifi=5, wifi-aj=1, wifi-idle-ps=1)</code>. Revision: `c6feecc86720dcd4024cfb7a3e6f07f32e60dd46`.
 
 ## 音频 {#audio}
@@ -708,7 +708,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/scripts/check-audioreach-host.py)
+- `host`: [PASS: 207 AudioReach packet checks, including the 3a's primary MI2S port and the 32-bit speaker device format.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py</code>. Revision: `b1621b32a2513ba8e2c4c599d4f4baf602a7369a`.
 - `device`: [T40k-spk-sd1: the boot tone and iOS sounds played through both speakers; \[amps\] showed the boost converters active and \[audio-io\] 8.3 M frames without gaps in 494 s.](https://github.com/rootstockos/UniXNU-asteroids/commit/b1621b32a2513ba8e2c4c599d4f4baf602a7369a)
   Command: <code>fastboot boot with boot args sheng-audio=3 asteroids-audio-i2s=0x200200 sheng-audio-tone-ms=4000</code>. Revision: `49ec1ccb18fd6b7ddd23b25b2c4ae96cd084ad1a`.
@@ -753,7 +753,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/KeyStoreProbe.cpp)
+- `device`: [T29: with the stand-in, SpringBoard boots to the first picture.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/KeyStoreProbe.cpp)
   Command: <code>fastboot boot local/unixnu-asteroids-t29-boot.img</code>. Revision: `adf900cf453a6b318864913757f588c9f661596f`.
 
 ## 镜像组装 {#packaging}
@@ -793,7 +793,7 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/patches/xnu/series)
+- `source`: [Board patch series after the arch, SoC and OS series.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/patches/xnu/series)
 
 ## 诊断 {#diagnostics}
 
@@ -852,6 +852,6 @@ Nothing Phone \(3a\) boots iPadOS 27.0.1 \(24A446, the iPad17,3 images\) from it
 
 ### 证据
 
-- `source`: [Live page and banner rows.](https://github.com/filipnavara/UniXNU-asteroids/blob/74b23efd0bdf8e973c666a012c7d459e514f1f5c/package/BootProgress.c)
+- `source`: [Live page and banner rows.](https://github.com/filipnavara/UniXNU-asteroids/blob/9f07af3b0bb431a01de12ab92f531619a7104083/package/BootProgress.c)
 
 </div>

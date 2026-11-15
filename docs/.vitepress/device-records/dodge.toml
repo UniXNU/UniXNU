@@ -5,7 +5,7 @@ schema_version = 1
 name = "dodge"
 soc = "SM8750"
 os_profile = "ios-16.7.16-20H392"
-summary = "OnePlus 13 CPH2653: native A830 iPhone development payload and local QEMU boot through keybag/persona initialization, with Data preserved across a forced VM stop and cold resume."
+summary = "OnePlus 13 CPH2653: native A830 iPhone development payload and local QEMU execution of original system services including the SpringBoard process, with Data preserved across a forced VM stop and cold resume. Graphical interface and full system boot remain open."
 
 [[area]]
 id = "configuration"
@@ -34,6 +34,11 @@ paths = [
   "scripts/validate_prelinked_kernel.py",
   "scripts/test_bootimg.py",
   "scripts/check_ios16_patches.py",
+  "scripts/check_percpu_iteration.py",
+  "tests/DodgePerCpuIterationTest.c",
+  "patches/xnu/**",
+  "reports/public/ios16-percpu-iteration-host.json",
+  "reports/public/upstream-review.json",
   "scripts/fetch_ios_inputs.py",
   "scripts/test_ios_profile.py",
   ".gitignore",
@@ -57,10 +62,12 @@ procedure = [
   "Run ./unixnu status --json, scripts/test_ios_profile.py and scripts/check_ios16_patches.py with the local Python 3.12 environment.",
 ]
 findings = [
-  "61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.",
+  "62 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.",
   "Public reports use separate original and publication hashes. Builds inherit host memory settings and use four jobs.",
-  "Reviewed the porting guide through UniXNU 2366e33e4934696424bb9f5aa7598df925fbc0c1 on 2026-11-12; the prior review covered both 13T ports. The native route backports calling-thread compilation and Vulkan device retention after recovery. New mainline tile-pipeline, shared shader-cache and retired-buffer sweep changes are pending integration. Source revisions and the iPhone profile remain pinned; the standard package check resolves 61 patches.",
+  "Reviewed the porting guide through UniXNU dff276535db3ac394f628cec58a718cd46c20ac2 on 2026-11-12 and both 13T ports. The native route backports calling-thread compilation, Vulkan device retention after recovery, tile pipeline forwarding, shared shader caches and retired-buffer collection on allocation misses. Source revisions and the iPhone profile remain pinned; the standard package check resolves 62 patches.",
+  "Unsigned per-CPU range checks prevent the mbuf statistics path from entering the empty secondary range on a single-CPU kernel. The actual macros pass 304 C/C++ sanitizer cases at O0 through O3.",
   "The native prelink derives normal and explicit security startup from the original iPhone module records. Sandbox uses its existing module start; AMFI keeps its explicit early initializer. The shared source profile and original component code remain pinned.",
+  "The 2026-11-14 upstream snapshot checks 32 repositories and 33 branch references. UniXNU main 0c1bac3 has 16 commits beyond the last dff2765 review, with no component gitlink/catalog changes in that range. Native A830 remains at 1a132105. Later CPU/platform, loader, SMMU and RamBlock interfaces need targeted Darwin 22 adaptation; source pins and the firmware memory patch are retained.",
 ]
 completion = [
   "All selected sources and patch series resolve and the iPhone profile stays distinct from iPadOS.",
@@ -72,7 +79,9 @@ next_action = [
   "Audit original component layouts, crypto lifecycle and runtime initialization; strict static prelink and both reviewed security entries now pass.",
 ]
 evidence = [
-  {kind = "host", reference = "reports/public/ios16-rebased-patches.json", result = "61 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.", command = "python3 scripts/check_ios16_patches.py", revision = "3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7"},
+  {kind = "host", reference = "reports/public/ios16-rebased-patches.json", result = "62 patches apply strictly on clean pinned Apple source. The original KC is 8796.142.1.703.8, a different minor revision.", command = "python3 scripts/check_ios16_patches.py", revision = "3fa5ff5f409398c0555a9561d6437ce5d4c3b3b7"},
+  {kind = "host", reference = "reports/public/ios16-percpu-iteration-host.json", result = "304 tests of the production per-CPU macros in C and C++ at O0 through O3, including high sentinel empty ranges and iteration control.", command = "python3 scripts/check_percpu_iteration.py", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+  {kind = "host", reference = "reports/public/upstream-review.json", result = "32 remote repositories and 33 branch refs checked with targeted commit/file differences, branch divergence and iPhone adaptation decisions; selected source pins unchanged.", command = "git ls-remote --symref https://github.com/UniXNU/UniXNU HEAD", revision = "0c1bac3d51a3009dca1708b15a5198f4b43d057a", revision_scope = "Reviewed upstream main; the build remains at the source revision in upstream.lock.json"},
 ]
 
 [[area]]
@@ -195,8 +204,11 @@ paths = [
   "scripts/build_qemu_store.py",
   "scripts/check_qemu_store.py",
   "scripts/check_qemu_store_host.py",
+  "scripts/build_qemu_services.py",
+  "scripts/check_qemu_services.py",
   "scripts/qemu_store_image.py",
   "reports/public/ios16-qemu-store*.json",
+  "reports/public/ios16-qemu-services*.json",
   "scripts/prepare_qemu_root_policy.py",
   "scripts/build_qemu_owner_root.py",
   "scripts/check_qemu_owner_root.py",
@@ -262,6 +274,25 @@ paths = [
   "scripts/check_ramblock_start_kernel.py",
   "scripts/ramblock_live_*.py",
   "reports/public/ios16-ramblock-start-kernel.json",
+  "scripts/build_native_system.py",
+  "scripts/build_native_system_stack.py",
+  "scripts/prepare_native_root_policies.py",
+  "scripts/check_root_policy_source_host.py",
+  "tests/DodgeRootPolicyFormatTest.cpp",
+  "tests/DodgeRootPolicySourceTest.cpp",
+  "tests/root_policy_include/**",
+  "hardware/dodge-boot-storage.json",
+  "profiles/os/ios-16.7.16-20H392/external-root-policies.json",
+  "patches/oneplus13/0027-ios16-external-root-policies.patch",
+  "reports/public/ios16-native-root-policies.json",
+  "reports/public/ios16-root-policy-source-host.json",
+  "scripts/check_native_system.py",
+  "scripts/check_native_store_host.py",
+  "tests/DodgeNativeStoreTest.cpp",
+  "profiles/os/ios-16.7.16-20H392/native-store-window.json",
+  "patches/oneplus13/0026-ios16-native-store-window.patch",
+  "reports/public/ios16-native-system*.json",
+  "reports/public/ios16-native-store-host.json",
 ]
 inputs = [
   "Captured UFS 0x1d84000, interrupt 265, SMMU stream 0x60; pinned iPhone OS/SystemOS and NativeUfs reference.",
@@ -291,6 +322,8 @@ findings = [
   "The native Darwin 22 KeyStore state service retains all 168 service and 186 user-client dispatch slots. Original launchd executes its first main instruction and all 20 userspace crypto self-tests pass. Original keybagd accepts selector 0 and two selector-14 queries; a closed service refuses the original client. The separate fixture has no passcode or hardware data protection.",
   "A separate reproducible 2 GiB RAM Data seed retains all 198 initial installation entries and adds a root-owned empty development keybag-state plist. Original APFS mounts it read-write at /private/var and the actual RamBlock records successful I/O. Both system disks remain read-only. Original keybagd completes MKB_INIT and usermanagerd creates kernel personas and completes UMD_INIT. A mismatched seed hash is refused before the mount syscall.",
   "The persistent QEMU candidate redirects RamBlock store calls to a separately marked VirtIO flat file. Every write waits for FLUSH completion. Two fresh VMs complete the original keybag/persona tasks, with an actual SIGKILL between them and no overlay reset on resume. Independent APFS readback confirms preserved persona identifiers. Wrong device identity and a valid-CRC foreign-seed header are refused before mounting without changing the rejected files. All 23 transport sanitizer cases pass. Physical UFS remains disabled.",
+  "The current persistent VM kernel completes launchd early boot through its signed configuration cache and executes original SpringBoard, logd, notifyd and amfid in EL0. SpringBoard's UUID matches the pinned executable. Across 30001 checkpoints the actual mbuf statistics function returns four times over the empty secondary CPU range; the old-header consumer reproduces its data abort without returning. Both verified system mounts and writable Data retain zero transport errors. The sampler reads kernel globals only at kernel syscall checkpoints. The original display client still reports an unavailable IOMFB; no graphical interface or complete system boot is qualified.",
+  "Native owner-system source now connects verified UFS OS/SystemOS, the original SystemOS union/ignition/decompressor and seed-checked Data mount. Both 124-object kernels retain 29 original components and 64635 pointer readbacks. The separate persistent-capable variant opens only explicit Data windows; actual root write-protection instructions still return true. One-quarter capacity, reversed/overflowing geometry, root/end reserves, FUA, sync and write refusals pass 135 production-source host cases across six modes. No physical storage was written.",
 ]
 completion = [
   "Qualified storage ABI, read transport, authenticated root policy and original launchd execution.",
@@ -299,8 +332,7 @@ limits = [
   "Storage runtime results cover QEMU with local OS/SystemOS and Data files. Physical UFS controller/SMMU/DMA ownership, IOStorageCompletion behavior, power and persistence have not been tested on the phone. The development boot.img contains the packed Data seed; original system images remain separate. Hardware root trust and rollback protection remain open.",
 ]
 next_action = [
-  "Qualify the implemented full read-only transport, original storage matching/completion and root publication; qualify authenticated-root, the implemented PID 1 Data mount route, original media matching, full parent/registry and crypto/power lifecycle. The default-off init route is wired and modeled; physical qualification remains outstanding.",
-  "Continue beyond the completed keybag/persona tasks into later system services using the persistent VM Data candidate.",
+  "Complete transport reset/recovery and persistent-installation/seed lifecycle policy. Qualify original filesystem/client lifetime and physical Data behavior after the remaining source integrations. Native root/SystemOS/Data packages are built locally; hardware functionality remains separate.",
 ]
 evidence = [
   {kind = "host", reference = "reports/public/ufs-source-probe.json", result = "The iOS 16 source probe compiles, 212 public native imports match by name, and the real local UBSAN runtime dependency is recorded for static linking. Eight existing read-only host suites pass ASan/UBSan.", command = ".venv-uefi/bin/python scripts/build_ufs_probe.py --partition unixnu", revision = "f5017376415268fd39dcf0b3fd68a94661cee078"},
@@ -311,11 +343,14 @@ evidence = [
   {kind = "host", reference = "reports/public/ios16-qemu-keystore-entry.json", result = "Original userspace crypto POST and keybagd handshake pass in QEMU; the closed-client control refuses access. ASan/UBSan checks state, encoding and partial outputs with IOKit peers.", command = ".venv-gpu/bin/python scripts/check_qemu_keystore.py --check-only", revision = "6ff4f11d8fdf853351f8d98e1bbe1373fb8da2e6", revision_scope = "Pinned AppleKeyStoreState with a local output/identity overlay, compiled against Darwin 22"},
   {kind = "host", reference = "reports/public/ios16-qemu-data-entry.json", result = "Original APFS volatile Data writes, all userspace crypto POST tests, keybag/persona boot tasks and wrong-seed refusal execute in QEMU.", command = ".venv-gpu/bin/python scripts/check_qemu_data.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 and the original iPhone closure; separate local Data seed and owner-VM source hashes are recorded"},
   {kind = "host", reference = "reports/public/ios16-qemu-store-entry.json", result = "Original Data survives actual QEMU SIGKILL and cold resume with the same persona identifiers. Both boots complete userspace crypto POST and keybag/persona tasks. Wrong device identity and a foreign-seed header are refused without writes.", command = ".venv-gpu/bin/python scripts/check_qemu_store.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 with a local VirtIO overlay backend; original iPhone inputs and source hashes are recorded"},
+  {kind = "host", reference = "reports/public/ios16-qemu-services-entry.json", result = "30001 QEMU service checkpoints, original SpringBoard UUID, signed launchd cache and early boot, four completed mbuf calls and an old-consumer kernel fault; verified system roots and writable Data retained.", command = ".venv-gpu/bin/python scripts/check_qemu_services.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22; separate persistent VM and actual original iPhone processes, without graphical or hardware qualification"},
+  {kind = "host", reference = "reports/public/ios16-qemu-services-stack.json", result = "One entry validates the 304 per-CPU host cases, original exec, both rebuilt kernel consumers, Data crash/cold resume and complete service regression.", command = ".venv-gpu/bin/python scripts/build_qemu_services.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin 22 and measured iPhone closure; sources and local stage artifacts are identified by report hashes"},
   {kind = "host", reference = "reports/public/ios16-ufs-root.json", result = "Complete read-only root publisher, original iPhone ABI, 32 lifecycle and 25 combined startup host cases; strict 68-object/208-alias source and original-component prelink, no runtime activation", command = ".venv-uefi/bin/python scripts/build_ufs_root.py", revision = "f5017376415268fd39dcf0b3fd68a94661cee078"},
   {kind = "host", reference = "reports/public/data-stack.json", result = "Six Data stages pass: two exact original-content APFS seeds, 77 sanitizer cases, 30 ARM64 paths, 43 rejection controls and an 83-object/28-component strict prelink. Original Data matching/mount and writable runtime remain unqualified.", command = ".venv-uefi/bin/python scripts/build_data_stack.py --check-only", revision = "4be2d7eb05ef5a98126c91e0302c149140c0e3e1"},
   {kind = "host", reference = "reports/public/data-startup-stack.json", result = "Four startup stages, 84 objects, 30 scheduler sanitizer cases, 43 CPU paths and 24 rejection controls pass. Packed Data/ADT/FAT/Android readback passes; no phone or original Data mount qualification.", command = ".venv-uefi/bin/python scripts/build_data_startup_stack.py --check-only", revision = "4be2d7eb05ef5a98126c91e0302c149140c0e3e1"},
   {kind = "host", reference = "reports/public/data-mount-stack.json", result = "Exact iPhone ordinary Data requests, 87-object/91-entry init hook, 19 original-program and 80 source/original-prefix CPU paths, 32 rejection controls and container readback pass; no real APFS mount/root authentication.", command = ".venv-uefi/bin/python scripts/build_data_mount_stack.py --check-only", revision = "244c76b2610adc6bbfceceea7028665be6df560e"},
   {kind = "host", reference = "reports/public/ios16-ramblock-start-kernel.json", result = "28 actual start, 26 subsequent I/O and 68 selector ARM64 paths; four rejection controls, no state reconstruction or original APFS/runtime qualification", command = ".venv-gpu/bin/python scripts/check_ramblock_start_kernel.py --check-only", revision = "4be2d7eb05ef5a98126c91e0302c149140c0e3e1"},
+  {kind = "host", reference = "reports/public/ios16-native-system-stack.json", result = "Thirteen local stages, two 124-object native kernels and boot/root packages; 29 original components, 64635 pointers, 135 store-window cases and real root write-protection/startup instruction paths. No hardware qualification.", command = ".venv-gpu/bin/python scripts/build_native_system_stack.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
 ]
 
 [[area]]
@@ -415,7 +450,7 @@ completion = [
   "A verified framebuffer can display diagnostics and the original mobile display client can present.",
 ]
 limits = [
-  "GOP geometry and actual display-family ABI are unqualified.",
+  "GOP geometry and actual display-family ABI are unqualified. Original client/IOSurface lifecycle, board framebuffer/panel power and Metal discovery integration still require source work; this area is not waiting only for hardware tests.",
 ]
 next_action = [
   "Qualify real original loader and full parent/user-client/IOSurfaceRoot lifetime, physical mapping and power. The real-class GOP factory and IOBSD opt-in worker are implemented and linked; actual publication, producer fences/cache visibility and GPU failure quiescence remain unqualified.",
@@ -474,6 +509,8 @@ paths = [
   "tests/DodgeSurface*.cpp",
   "tests/DodgeMappedLeaseTest.cpp",
   "tests/DodgeMapWaitTest.cpp",
+  "tests/DodgeTurnip*.cpp",
+  "tests/DodgeMetalTilePassTest.cpp",
   "tests/native_surface_include/**",
   "tests/surface_*_include/**",
   "requirements-gpu.in",
@@ -509,21 +546,24 @@ findings = [
   "Fifteen backend sanitizer suites, 24 native runtime cases, 12 map-wait cases and the VM concurrency suite pass. The strict prelink contains 28 original executables and seven interfaces; 63,889 pointer readbacks, four surface hooks and 17 original sync ARM64 cases pass. Prelink rebuilds validate a temporary candidate before replacing the current output.",
   "Turnip, Rust and Metal compile for ordinary arm64 iOS 16. Surface-ID hints reach the native import selector, with unconsumed or mismatched imports refused. The latest official calling-thread compilation policy is backported with its 2 MiB stack guard.",
   "GetStatus returns Busy during recovery and NotResponding after permanent loss. Turnip retains its Vulkan device after counter changes and exposes the restart count. Failed writers block only their surfaces after recovery drains; successful later writers restore visibility. Unconfirmed original completion retains tickets and callback context. Eleven actual Turnip status calls and two rejected old behaviors pass host tests.",
+  "Turnip shares compiled shaders through the device cache while preserving application hit reporting and references. Buffer allocation checks its cache before collecting retired buffers. Nineteen production-function sanitizer cases and 800 concurrent cache lookups pass.",
+  "The Metal frontend forwards tile pipeline creation, resource binding, pass memory and dispatch to the existing pinned runtime. Device-family and tile-capability answers are unchanged. The offline translator validates seven pipelines and eight SPIR-V modules, including two public tile AIR fixtures, and rejects nine invalid inputs. Forty-three production frontend cases check attachment sample selection and tile dimensions under sanitizers.",
   "The official-format addon contains five files. Its trust bundle holds three local executable hashes and both unchanged iPhone 20H392 trust modules. Actual EFI addon/trust handoff, fresh seed consumption, original 18-test crypto POST and FAT/Android v4 readback pass in local models.",
 ]
 completion = [
   "The original iPhone graphics clients render known outputs through the target GPU with correct producer fences, reset and cache visibility.",
 ]
 limits = [
-  "Local builds and software controllers leave GPU power, physical DMA/cache visibility, reset quiescence, Metal discovery and rendering for hardware bring-up. Actual QEMU startup reaches bsd_init with AppleImage4, AMFI and Sandbox registered once, then stops at the absent root device. iOS userspace is not started.",
+  "GPU power, physical DMA/cache visibility, reset quiescence, Metal discovery and rendering remain for hardware bring-up. The native payload entry fixture stops at the absent root device; the separate owner-root VM runs original iPhone userspace as described in the storage area.",
   "The native candidate is separate from the default kernel. Its development container has no original userspace/root image and retains opt-in graphics/Data startup.",
 ]
 next_action = [
-  "Review the newer mainline tile-pipeline, shared shader-cache and retired-buffer sweep changes against this pinned A830 interface before backporting them.",
-  "After the source-only preparation phase, validate original-family startup, the first native fence, surface ownership across reset and known shader outputs using device logs.",
+  "Complete the original Metal discovery and display/client integration with the native root/userspace path. After source integration and local checks, validate original-family startup, the first native fence, surface ownership across reset and known shader outputs using device logs.",
 ]
 evidence = [
-  {kind = "host", reference = "reports/public/native-a830-stack.json", result = "Fifteen native build/test stages form one development payload with matching kernel, firmware and userspace identities, including actual QEMU entry.", command = ".venv-gpu/bin/python scripts/build_native_a830_stack.py --check-only", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
+  {kind = "host", reference = "reports/public/native-a830-stack.json", result = "Seventeen native build/test stages form one development payload with matching kernel, firmware and userspace identities, including actual QEMU entry.", command = ".venv-gpu/bin/python scripts/build_native_a830_stack.py --check-only", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
+  {kind = "host", reference = "reports/public/native-a830-cache-host.json", result = "19 production Turnip shader-cache and retired-buffer cases plus 800 lookups over eight threads pass with ASan/UBSan.", command = "python3 scripts/check_native_a830_cache.py --restore-source", revision = "85fda3b36405bcaea8bffc64aa4f2651dc90770d"},
+  {kind = "host", reference = "reports/public/metal-translation-tests.json", result = "Seven offline Metal pipelines, eight validated SPIR-V modules, nine rejected inputs and 43 production frontend tile-pass cases.", command = ".venv-gpu/bin/python scripts/check_metal_translation.py", revision = "624bab3918de5b978e1101517abca2b4fa426565"},
   {kind = "host", reference = "reports/public/native-a830-runtime-host.json", result = "Three ASan/UBSan suites: 24 runtime cases, 12 map-wait cases and production VM tests including 600 concurrent transactions.", command = "python3 scripts/check_native_a830_host.py --runtime", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
   {kind = "host", reference = "reports/public/native-a830-recovery-host.json", result = "11 actual Turnip status calls, two rejected old recovery behaviors and 136 native display cases pass under sanitizers.", command = ".venv-gpu/bin/python scripts/check_native_a830_recovery.py --check-only", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
   {kind = "host", reference = "reports/public/native-a830-board-host.json", result = "181 stock-firmware board checks, six real level selections and a 16-way startup-entry test.", command = ".venv-uefi/bin/python scripts/check_native_a830_board.py --firmware-dir build/cph2653-gpu-firmware", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
@@ -562,29 +602,123 @@ evidence = []
 id = "power"
 status = "planned"
 components = []
-paths = ["hardware/**", "dts/**", "configs/**", "scripts/prepare_ios16_pmgr.py", "scripts/check_ios16_pmgr_kernel.py", "profiles/os/ios-16.7.16-20H392/pmgr-contract.json", "reports/public/ios16-pmgr-*.json"]
+paths = [
+  "hardware/**",
+  "dts/**",
+  "configs/**",
+  "scripts/prepare_ios16_pmgr.py",
+  "scripts/check_ios16_pmgr_kernel.py",
+  "profiles/os/ios-16.7.16-20H392/pmgr-contract.json",
+  "reports/public/ios16-pmgr-*.json",
+  "drivers/DodgePlatform/**",
+  "scripts/build_platform_calendar.py",
+  "tests/DodgeCalendarTest.cpp",
+  "profiles/os/ios-16.7.16-20H392/platform-calendar.json",
+  "patches/oneplus13/0025-ios16-platform-calendar.patch",
+  "reports/public/ios16-platform-calendar.json",
+]
 inputs = ["SM8750 PSCI SMC and pinned SoC operations; original iPhone AMFI declares a PMGR dependency."]
 configuration = ["sleep-disabled=1 for bring-up; no battery or thermal values are fabricated."]
 procedure = ["Audit original AMFI/PMGR entry points and the captured PMIC/RPMh board resources."]
-findings = ["PMGR compatibility is a specific ABI dependency and does not imply a complete power manager.", "Exact iPhone PMGR classes and AMFI slots 312/313 are derived. The T8015 target performs real 32-bit read/OR-4/write at region 1/bank 0/offset 0xd0030; its base/null fallback and the iPad slots are not a replacement. Twelve original CPU paths reach actual loads/stores on synthetic resources or original failure boundaries, with seven input/code rejection controls. Qualcomm security-state semantics remain unresolved."]
+findings = [
+  "PMGR compatibility is a specific ABI dependency and does not imply a complete power manager.",
+  "Exact iPhone PMGR classes and AMFI slots 312/313 are derived. The T8015 target performs real 32-bit read/OR-4/write at region 1/bank 0/offset 0xd0030; its base/null fallback and the iPad slots are not a replacement. Twelve original CPU paths reach actual loads/stores on synthetic resources or original failure boundaries, with seven input/code rejection controls. Qualcomm security-state semantics remain unresolved.",
+  "A separate Darwin 22 ArmDTPlatform source backport publishes IORTC only without an RTC node, uses a registered valid board clock when present, and otherwise starts calendar time at the parsed kernel build date minus one day. Bounded parsing and actual clock callback bodies pass 598 sanitizer cases. This is not a battery-backed RTC or PMGR/power implementation.",
+]
 completion = ["Dependency lifecycle, safe shutdown and each enabled power transition are independently qualified."]
 limits = ["Power, charging, sleep, thermal and battery services are not implemented for this board."]
 next_action = ["Derive the SM8750 security-state and power-provider contract before implementing PMGR; preserve the exact iPhone register semantics and do not install a constant-success or null-provider substitute."]
-evidence = [{kind = "host", reference = "reports/public/ios16-pmgr-contract.json", result = "Exact iPhone classes, slots and real T8015 register path; three altered-input controls", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-uefi/bin/python scripts/prepare_ios16_pmgr.py"}, {kind = "host", reference = "reports/public/ios16-pmgr-kernel.json", result = "12 original ARM64 subpaths and four instruction-corruption controls; synthetic resources and explicit IOKit peers, no Qualcomm provider or hardware qualification", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-gpu/bin/python scripts/check_ios16_pmgr_kernel.py --check-only"}]
+evidence = [
+  {kind = "host", reference = "reports/public/ios16-pmgr-contract.json", result = "Exact iPhone classes, slots and real T8015 register path; three altered-input controls", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-uefi/bin/python scripts/prepare_ios16_pmgr.py"},
+  {kind = "host", reference = "reports/public/ios16-pmgr-kernel.json", result = "12 original ARM64 subpaths and four instruction-corruption controls; synthetic resources and explicit IOKit peers, no Qualcomm provider or hardware qualification", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-gpu/bin/python scripts/check_ios16_pmgr_kernel.py --check-only"},
+  {kind = "host", reference = "reports/public/ios16-platform-calendar.json", result = "Pinned Darwin 22 platform source compiles with the upstream calendar/missing-RTC policy; 598 parsing, truncation and callback/range cases pass. No hardware RTC is claimed.", command = ".venv-gpu/bin/python scripts/build_platform_calendar.py --check-only", revision = "417ff95d6a6e8607ddea9309ec45c3bfd4a67c60"},
+]
 
 [[area]]
 id = "security"
 status = "implemented"
 components = []
-paths = ["drivers/DodgeSecurity/**", "scripts/prepare_ios16_crypto.py", "scripts/prepare_crypto_execution.py", "scripts/original_crypto_execution.py", "scripts/check_original_crypto_kernel.py", "scripts/crypto_bootstrap_overlay.py", "scripts/build_crypto*.py", "scripts/check_crypto*.py", "profiles/os/ios-16.7.16-20H392/crypto-*.json", "profiles/os/ios-16.7.16-20H392/security/**", "patches/oneplus13/0011-ios16-single-crypto-owner.patch", "tests/DodgeCryptoOnceTest.cpp", "reports/public/ios16-crypto-*.json", "reports/public/ios16-original-crypto-kernel.json", "reports/public/crypto-stack.json", "drivers/DodgeBoot/**", "scripts/boot_entropy_overlay.py", "scripts/build_boot_entropy.py", "scripts/check_boot_entropy_host.py", "scripts/boot_entropy_execution.py", "scripts/check_boot_entropy_kernel.py", "scripts/build_entropy_payload.py", "tests/DodgeBootEntropyTest.c", "reports/public/ios16-boot-entropy*.json", "reports/public/ios16-entropy-payload.json", "scripts/image4_boot_policy.py", "scripts/test_image4_boot_policy.py", "profiles/os/ios-16.7.16-20H392/image4-boot.json", "scripts/prepare_qemu_root_policy.py", "scripts/build_qemu_owner_root.py", "scripts/check_qemu_owner_root.py", "patches/oneplus13/0014-ios16-verified-virtio.patch", "reports/public/ios16-qemu-root-policy.json", "reports/public/ios16-qemu-owner-root*.json"]
+paths = [
+  "drivers/DodgeSecurity/**",
+  "scripts/prepare_ios16_crypto.py",
+  "scripts/prepare_crypto_execution.py",
+  "scripts/original_crypto_execution.py",
+  "scripts/check_original_crypto_kernel.py",
+  "scripts/crypto_bootstrap_overlay.py",
+  "scripts/build_crypto*.py",
+  "scripts/check_crypto*.py",
+  "profiles/os/ios-16.7.16-20H392/crypto-*.json",
+  "profiles/os/ios-16.7.16-20H392/security/**",
+  "patches/oneplus13/0011-ios16-single-crypto-owner.patch",
+  "tests/DodgeCryptoOnceTest.cpp",
+  "reports/public/ios16-crypto-*.json",
+  "reports/public/ios16-original-crypto-kernel.json",
+  "reports/public/crypto-stack.json",
+  "drivers/DodgeBoot/**",
+  "scripts/boot_entropy_overlay.py",
+  "scripts/build_boot_entropy.py",
+  "scripts/check_boot_entropy_host.py",
+  "scripts/boot_entropy_execution.py",
+  "scripts/check_boot_entropy_kernel.py",
+  "scripts/build_entropy_payload.py",
+  "tests/DodgeBootEntropyTest.c",
+  "reports/public/ios16-boot-entropy*.json",
+  "reports/public/ios16-entropy-payload.json",
+  "scripts/image4_boot_policy.py",
+  "scripts/test_image4_boot_policy.py",
+  "profiles/os/ios-16.7.16-20H392/image4-boot.json",
+  "scripts/prepare_qemu_root_policy.py",
+  "scripts/build_qemu_owner_root.py",
+  "scripts/check_qemu_owner_root.py",
+  "patches/oneplus13/0014-ios16-verified-virtio.patch",
+  "reports/public/ios16-qemu-root-policy.json",
+  "reports/public/ios16-qemu-owner-root*.json",
+  "scripts/build_native_entropy.py",
+  "scripts/build_user_entropy.py",
+  "scripts/prepare_ios16_prng.py",
+  "scripts/check_native_prng.py",
+  "profiles/os/ios-16.7.16-20H392/prng-sysctl.json",
+  "scripts/check_owner_system_host.py",
+  "tests/DodgeTrngTest.cpp",
+  "tests/DodgeUserEntropyTest.cpp",
+  "tests/DodgeOwnerBootPolicyTest.cpp",
+  "tests/entropy_include/**",
+  "hardware/dodge-entropy.json",
+  "reports/public/ios16-native-entropy.json",
+  "reports/public/ios16-user-entropy.json",
+  "reports/public/ios16-native-prng-check.json",
+  "reports/public/ios16-owner-system-host.json",
+]
 inputs = ["Exact iPhone10,3/20H392 original corecrypto 12.0, packed kmod record 1.0.0d1, actual Darwin 22 source and existing 87-object candidate."]
 configuration = ["An isolated 89-object candidate uses a single original crypto/PRNG owner at SYSCTL LAST and actual OSKext loading; default source provider/candidates remain preserved."]
 procedure = ["Run .venv-uefi/bin/python scripts/build_crypto_stack.py; --check-only validates current source/dependencies/artifacts. The portable check_crypto_once_host.py is included in CI.", "Run .venv-gpu/bin/python scripts/check_original_crypto_kernel.py for actual original initialization/full default POST and native consumers; --check-only validates the preserved evidence and pins.", "Run the boot entropy source/EFI, linked EFI/native seed and separate full-firmware/container checks; physical entropy quality remains a distinct qualification."]
-findings = ["Seven original inputs and 196-byte packing/48-byte PRNG callbacks are measured. Actual early/OSKext calls share one initialization result and reject conflicting or incomplete ownership. Eighteen sanitizer and 33 ARM64 ownership/startup paths pass with explicit original-initializer/POST/private-PRNG peers. Strict prelink preserves 339 aliases, 28 original components and 63889 pointer sites; independent source provider entry/POST field is absent. Loader/packed seed/FAT/Android v4 readback and 25 rejection controls pass.", "A separate ARM64 model executes the actual original initializer, all 18 full default POST tests, native PRNG/table registration, all six original callbacks and real readiness/context checks. Eighteen native SHA vectors, four fully written native PRNG transfers and one cached loader span pass; four damaged-code/answer/skipped-POST/missing-ready controls are rejected. Platform services and entropy collection remain explicit peers; no positive entropy estimate is supplied.", "Sixteen native memory-random cases and the actual 14-class EARLY_BOOT kmem callback also pass with explicit CPU0/per-CPU allocation and post-VM page constants. Actual firmware Boot C emits an ADT that native SecureDT/PE/early PRNG consume: the first 64 bytes are cleared and hashed to the bootseed, original 18-test POST and PRNG registration then pass, and registration clears that bootseed. Two zero/short native seed inputs panic before registration. The actual embedded full-firmware EFI repeats this chain.", "The native A830 payload runs fresh EFI seed consumption and all 18 original iPhone crypto POST tests in the ARM64 model. Its addon trust bundle preserves both pinned 20H392 modules and adds only the three locally built executable hashes; runtime trust remains untested.", "The original Image4 getter and security start wrappers are measured from the pinned iPhone kernelcache. The owner development boot set provides strict no-mixing policy, BNCH and a SHA-384 manifest bound to the selected kernel, trust cache, addon, Data seed and normalized ADT. Its nonce is generated per payload build; hardware fuse state, Apple personalization and the persistent nonce lifecycle remain separate work.", "Sandbox's original module start already forwards to its policy initializer. Omitting the duplicate early hook fixes its EEXIST panic while preserving the original wrapper, slot and initializer bytes. Actual QEMU execution reaches bsd_init with AppleImage4, AMFI and Sandbox each registered once. Missing policy, nonce and manifest inputs still fail in original Image4; missing entropy is refused by the EFI loader. Twelve owner boot-policy host cases pass.", "The separate owner-root VM kernel retains the original Apple EAUTH result and authorizes the matching read-only mounted root through signed block policy. Native Darwin 22 RSA layout is compiled, the two original callback registrations are derived from the pinned kernelcache, and actual QEMU execution reaches the init loader. Three runtime refusal controls preserve signature, DMA and UUID boundaries; the original component instructions remain unchanged."]
+findings = [
+  "Seven original inputs and 196-byte packing/48-byte PRNG callbacks are measured. Actual early/OSKext calls share one initialization result and reject conflicting or incomplete ownership. Eighteen sanitizer and 33 ARM64 ownership/startup paths pass with explicit original-initializer/POST/private-PRNG peers. Strict prelink preserves 339 aliases, 28 original components and 63889 pointer sites; independent source provider entry/POST field is absent. Loader/packed seed/FAT/Android v4 readback and 25 rejection controls pass.",
+  "A separate ARM64 model executes the actual original initializer, all 18 full default POST tests, native PRNG/table registration, all six original callbacks and real readiness/context checks. Eighteen native SHA vectors, four fully written native PRNG transfers and one cached loader span pass; four damaged-code/answer/skipped-POST/missing-ready controls are rejected. Platform services and entropy collection remain explicit peers; no positive entropy estimate is supplied.",
+  "Sixteen native memory-random cases and the actual 14-class EARLY_BOOT kmem callback also pass with explicit CPU0/per-CPU allocation and post-VM page constants. Actual firmware Boot C emits an ADT that native SecureDT/PE/early PRNG consume: the first 64 bytes are cleared and hashed to the bootseed, original 18-test POST and PRNG registration then pass, and registration clears that bootseed. Two zero/short native seed inputs panic before registration. The actual embedded full-firmware EFI repeats this chain.",
+  "The native A830 payload runs fresh EFI seed consumption and all 18 original iPhone crypto POST tests in the ARM64 model. Its addon trust bundle preserves both pinned 20H392 modules and adds only the three locally built executable hashes; runtime trust remains untested.",
+  "The original Image4 getter and security start wrappers are measured from the pinned iPhone kernelcache. The owner development boot set provides strict no-mixing policy, BNCH and a SHA-384 manifest bound to the selected kernel, trust cache, addon, Data seed and normalized ADT. Its nonce is generated per payload build; hardware fuse state, Apple personalization and the persistent nonce lifecycle remain separate work.",
+  "Sandbox's original module start already forwards to its policy initializer. Omitting the duplicate early hook fixes its EEXIST panic while preserving the original wrapper, slot and initializer bytes. Actual QEMU execution reaches bsd_init with AppleImage4, AMFI and Sandbox each registered once. Missing policy, nonce and manifest inputs still fail in original Image4; missing entropy is refused by the EFI loader. Twelve owner boot-policy host cases pass.",
+  "The separate owner-root VM kernel retains the original Apple EAUTH result and authorizes the matching read-only mounted root through signed block policy. Native Darwin 22 RSA layout is compiled, the two original callback registrations are derived from the pinned kernelcache, and actual QEMU execution reaches the init loader. Three runtime refusal controls preserve signature, DMA and UUID boundaries; the original component instructions remain unchanged.",
+  "Native owner development startup checks the iPhone/SM8750 board, explicit selection and compiled owner-anchor identity before loading the original-ABI software AES/KeyStore and scheduling physical storage. Disabled/foreign identity, failed security and repeated initialization are refused in the actual kernel instruction model. Native Data entry also checks security readiness. No hardware keys or protected Data are supplied.",
+  "The exact original iPhone prng_seedctl shows a read-only 8-byte user reseed counter, AppleVirtIOEntropy class search, open type 0 and selector-0/32-byte request. The new counter records actual completed nonempty original-PRNG reseeds; its original hash/reseed/clear instructions remain byte-identical and 4000 concurrent source calls pass. The independent native TRNG service consumes only the captured qcom,trng register resource, performs no clock/configuration writes, restricts client opens to root and refuses partial/stuck output. 364 sanitizer cases and actual original client instructions pass. Hardware quality and native dispatch remain unqualified.",
+  "Native PRNG observation source shares the original child list and preserves all 99 original counters across 32 pools. The original iPhone client queries pool0 while corecrypto exports pool_0; source read-only aliases expose both names through the same actual lists. Native early/dynamic registration, OID allocation, installed handlers and 228 path lookups execute together with full original POST. Forty model entropy requests exercise genuine original scheduled/pool accounting; one actual user reseed increments only its own counter. Output errors are propagated. Platform services and synthetic model entropy remain explicit peers.",
+]
 completion = ["Original initialization and full POST execute once with correct entropy/PRNG and used KPI ABIs, before policy registration and root authentication."]
 limits = ["The frozen five-stage CPU evidence retains initializer/POST/private-PRNG peers. The separate real-original execution report removes those peers within a CPU0 ARM64 model with private host boot seed and explicit platform services. Full provider/448-byte table/appended APIs, full OSKext/C++ loading, target entropy quality, hardware policy behavior, PMGR, root/Data and hardware remain unqualified. No cryptographic result or source fallback is installed in production."]
-next_action = ["Qualify the actual target entropy/PRNG lifecycle and remaining used KPI consumers; finish PMGR/security-state, policy and authenticated-root integration."]
-evidence = [{kind = "host", reference = "reports/public/crypto-stack.json", result = "Five isolated original-owner stages, 89 objects, 97 entries, 18 sanitizer paths, 33 ARM64 paths and 25 rejection controls; initializer/POST peers explicit", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-uefi/bin/python scripts/build_crypto_stack.py --check-only"}, {kind = "host", reference = "reports/public/ios16-original-crypto-kernel.json", result = "Actual original initializer/full 18-test POST/native PRNG/table registration in ARM64 model; 18 SHA vectors, four native PRNG transfers, one cached loader span and four rejection controls; explicit platform/entropy peers, no hardware qualification", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-gpu/bin/python scripts/check_original_crypto_kernel.py --check-only"}, {kind = "host", reference = "reports/public/ios16-boot-entropy-kernel.json", result = "Actual EFI Boot C/parser/entropy/cleanup instructions, two successful and six refused paths, two instruction controls; actual native DT/PE/early DRBG consumption followed by original 18-test POST and native registration; two missing/short seed refusals", command = ".venv-gpu/bin/python scripts/check_boot_entropy_kernel.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin22 source base; exact firmware/kernel/local sources identified by report SHA256"}, {kind = "host", reference = "reports/public/native-a830-entry.json", result = "Original AppleImage4, AMFI and Sandbox register once before bsd_init in QEMU. Three Image4 missing-input controls and one EFI entropy refusal pass.", command = ".venv-gpu/bin/python scripts/check_native_a830_entry.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"}]
+next_action = [
+  "Derive the SM8750 PMGR/security-state mapping, hardware keys and persistent nonce/rollback semantics. Preserve the original iPhone hardware register meaning and refuse constant-success substitutes.",
+  "Complete saved-seed lifecycle policy. Original scheduled/per-pool statistics now share the original PRNG tree with the user reseed counter; read-only pool-name aliases retain the actual iPhone counter lists. Native registration, 228 path lookups, 99 counter reads and genuine original accounting execute in an instruction model. Native TRNG quality and actual board dispatch remain unqualified.",
+]
+evidence = [
+  {kind = "host", reference = "reports/public/crypto-stack.json", result = "Five isolated original-owner stages, 89 objects, 97 entries, 18 sanitizer paths, 33 ARM64 paths and 25 rejection controls; initializer/POST peers explicit", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-uefi/bin/python scripts/build_crypto_stack.py --check-only"},
+  {kind = "host", reference = "reports/public/ios16-original-crypto-kernel.json", result = "Actual original initializer/full 18-test POST/native PRNG/table registration in ARM64 model; 18 SHA vectors, four native PRNG transfers, one cached loader span and four rejection controls; explicit platform/entropy peers, no hardware qualification", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Darwin 22 source base; local preparation changes are identified by report source SHA256", command = ".venv-gpu/bin/python scripts/check_original_crypto_kernel.py --check-only"},
+  {kind = "host", reference = "reports/public/ios16-boot-entropy-kernel.json", result = "Actual EFI Boot C/parser/entropy/cleanup instructions, two successful and six refused paths, two instruction controls; actual native DT/PE/early DRBG consumption followed by original 18-test POST and native registration; two missing/short seed refusals", command = ".venv-gpu/bin/python scripts/check_boot_entropy_kernel.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789", revision_scope = "Pinned Darwin22 source base; exact firmware/kernel/local sources identified by report SHA256"},
+  {kind = "host", reference = "reports/public/native-a830-entry.json", result = "Original AppleImage4, AMFI and Sandbox register once before bsd_init in QEMU. Three Image4 missing-input controls and one EFI entropy refusal pass.", command = ".venv-gpu/bin/python scripts/check_native_a830_entry.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+  {kind = "host", reference = "reports/public/ios16-native-entropy.json", result = "Captured native TRNG resource and original iPhone seedctl interface derived; actual source compiles and 364 bounded transaction/refusal cases pass. No entropy rate or hardware functionality is claimed.", command = ".venv-gpu/bin/python scripts/build_native_entropy.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+  {kind = "host", reference = "reports/public/ios16-user-entropy.json", result = "Actual nonempty reseed accounting, 4000 concurrent requests and unchanged original PRNG implementation instructions; no new entropy source.", command = ".venv-gpu/bin/python scripts/build_user_entropy.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+  {kind = "host", reference = "reports/public/ios16-native-prng-check.json", result = "One original PRNG tree, 32 pool aliases, 228 actual native path lookups and 99 real counter reads; full original POST, genuine accounting transitions and output-error controls in an ARM64 model. No physical entropy qualification.", command = ".venv-gpu/bin/python scripts/check_native_prng.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+]
 
 [[area]]
 id = "packaging"
@@ -612,6 +746,9 @@ paths = [
   "scripts/build_native_a830_addon.py",
   "reports/public/native-a830-payload.json",
   "reports/public/native-a830-addon.json",
+  "scripts/build_native_system_payload.py",
+  "reports/public/ios16-native-system-payload*.json",
+  "reports/public/ios16-native-system-stack.json",
 ]
 inputs = [
   "The native A830 iPhone prelink, entropy/logger firmware, Metal addon, original iPhone trust inputs and preserved packed Data seed.",
@@ -625,21 +762,25 @@ procedure = [
 ]
 findings = [
   "The native 170569728-byte Android v4 container passes shim, FD, DTB and FAT readback. All files are extracted and hashed; the original iPhone identity, packed 2 GiB Data seed and boot arguments are retained.",
-  "The actual EFI loader installs the addon and trust bundle at the final ADT memory-map addresses in an ARM64 model. The standard packaging template still resolves the 61-patch iPhone profile.",
+  "The actual EFI loader installs the addon and trust bundle at the final ADT memory-map addresses in an ARM64 model. The standard packaging template resolves the 62-patch iPhone profile.",
   "The native FAT includes the owner development Image4 boot-set inputs. Twelve host cases and the actual EFI handoff check the selected component hashes, normalized ADT, nonce binding and unchanged static properties. The boot-set nonce changes on rebuild; kernel entropy is still refreshed on every handoff.",
+  "The separate native owner-system packages include the original iPhone OS/SystemOS in an 8445685760-byte SHNGROOT regular file with appended authenticated policies alongside the local Android v4 boot image. Both variants retain exact firmware memory policy, iPhone identity and 4 GiB ownership; FAT/container, compiled owner guard, EFI addon/trust/Data handoff and all 18 original crypto POST tests pass local CPU/readback checks. The persistent-capable package requests an existing-seed overlay without resetting foreign or existing Data. No phone, partition or GPT operation occurs.",
+  "Captured boot slots are 96 MiB. Moving policy hash tables out of the boot kernel into a kernel-digest-pinned root-image suffix reduces each new Android boot image to 95072256 bytes, within 100663296-byte slots. The original owner RSA and per-block checks remain. 4117 format and 13 actual loader/snapshot/failure-latch host cases pass. The capture contains no unixnu root partition; no GPT or physical partition was changed.",
 ]
 completion = [
   "Firmware, kernel and payload identities agree and every handoff extent and container component reads back correctly.",
 ]
 limits = [
-  "The development payload excludes original userspace and root images. Complete kernel startup, root authentication and iOS boot remain untested.",
+  "The original native A830 development payload still excludes original userspace. The new owner-system packages carry separate exact original root files, not userspace inside the boot image. Full native boot/UI, protected Data and physical persistence remain unqualified; source integration is incomplete for the subsystems listed in the native-system stack report.",
 ]
 next_action = [
-  "Keep original system inputs local and qualify whole-kernel startup and root/Data integration before assembling a system payload.",
+  "Keep all originals and generated boot/root packages local. Complete remaining PMGR/security, graphics/input lifetime and peripheral source work before device testing; preserve the default payload and source pins.",
 ]
 evidence = [
   {kind = "host", reference = "reports/public/native-a830-payload.json", result = "Native kernel, entropy/logger firmware, addon/trust handoff and every FAT/container component pass local readback and ARM64 loader models.", command = ".venv-gpu/bin/python scripts/build_native_a830_payload.py --check-only", revision = "6b3d90b79e191e08171bfedd3980234a7e49d340"},
   {kind = "host", reference = "reports/public/native-a830-addon.json", result = "Five addon files decompress to the built binaries; three owner hashes and both pinned iPhone trust modules read back unchanged.", command = ".venv-uefi/bin/python scripts/build_native_a830_addon.py --check-only", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},
+  {kind = "host", reference = "reports/public/ios16-native-system-payload.json", result = "Separate native verified boot/root package, exact original OS/SystemOS windows, compiled owner guard and actual EFI/18-test crypto POST model. No hardware boot claim.", command = ".venv-gpu/bin/python scripts/build_native_system_payload.py --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
+  {kind = "host", reference = "reports/public/ios16-native-system-payload-persistent.json", result = "Separate persistent-capable native boot/root package; read-only OS/SystemOS and explicit bounded Data window, no automatic reset and no physical writes.", command = ".venv-gpu/bin/python scripts/build_native_system_payload.py --persistent-data --check-only", revision = "1b191cb58250d0705d8a51287127505aa4bc0789"},
 ]
 
 [[area]]
@@ -677,7 +818,7 @@ limits = [
   "No OnePlus hardware logs or runtime observations have been collected in this task.",
 ]
 next_action = [
-  "Continue from load_init_program into the original iPhone user process and Data paths. Keep hardware security-state and persistent nonce policy as separate target work.",
+  "Keep the reproducible VM service/per-CPU regression and persistent Data entry current while completing native system integration. Hardware security-state and persistent nonce policy remain separate target work.",
 ]
 evidence = [
   {kind = "host", reference = "reports/public/native-a830-stack.json", result = "The native route records each build/test stage and verifies the exact combined kernel, Metal userspace and firmware inputs.", command = ".venv-gpu/bin/python scripts/build_native_a830_stack.py --check-only", revision = "1a1321056ffc5428ae925f4680093718b46ca7c2"},

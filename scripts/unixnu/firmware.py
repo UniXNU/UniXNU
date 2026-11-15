@@ -51,7 +51,8 @@ def build(ctx, modules, uefi, edk2, target='DEBUG'):
     env = dict(os.environ, WORKSPACE=str(uefi), EDK_TOOLS_PATH=str(tools), CONF_PATH=str(conf), PACKAGES_PATH=packages,
                PYTHON_COMMAND='python3',
                PATH=os.pathsep.join([str(tools / 'BinWrappers/PosixLike'), str(tools / 'Source/C/bin'), os.environ['PATH']]))
-    env.setdefault('CLANG_BIN', clang_bin(ctx.work / 'toolchain'))
+    if 'CLANG_BIN' not in env:
+        env['CLANG_BIN'] = clang_bin(ctx.work / 'toolchain')
     # EDK II embeds the build time; pin it to the commit time so the same sources give the same firmware.
     env.setdefault('SOURCE_DATE_EPOCH', git(uefi, 'log', '-1', '--format=%ct').strip())
     applied = []

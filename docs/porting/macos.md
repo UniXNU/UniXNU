@@ -27,6 +27,8 @@ configuration and the patch series: the Darwin 26 system calls and kernel
 interfaces, the macOS machine options, the Data firmlinks, the VM and Hardware
 volumes on Data, and the application cryptex mount.
 
+Signed-text fixups retain their original bytes for verification. Code-signing checks use a bounded snapshot; APFS compressed-block checks use a private copy while resident executable pages keep the configured instructions.
+
 ## 1. Check the host and inputs {#inputs}
 
 A macOS build runs on a Mac with Xcode. In addition to the
@@ -141,18 +143,35 @@ command, including the OS image, output path and `data_gib`.
 
 ### Create an account and skip Setup {#account}
 
-Run from the UniXNU checkout. Use the paths and size printed by the build,
-and replace `unixnu:YOUR_PASSWORD` with the account name and password:
+Run from the UniXNU checkout with the paths and size printed by the build.
+Prompt for a short login name, display name and hidden password:
 
 ```sh
 sudo python3 scripts/make-macos-data-seed.py \
   "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
-  --skip-setup --user 'unixnu:YOUR_PASSWORD'
+  --skip-setup --interactive-user --auto-login
 ```
 
 The script creates a local administrator and its home, preserves template
 owners, and skips both initial and first-login Setup. The output seed must be
 new.
+
+The prompts use `admin` and `Admin` as defaults. `sudo` authenticates the build
+host account; the interactive password is assigned to the new macOS administrator.
+
+For automation, replace `--interactive-user` with `--user NAME:PASSWORD` and
+`--real-name NAME`, or read credentials from a private JSON file:
+
+```sh
+sudo -v
+sudo -n python3 scripts/make-macos-data-seed.py \
+  "<OS image>" "<output>/runtime/data.dbr" --gib "<data_gib>" \
+  --skip-setup --user-stdin --auto-login < account.json
+```
+
+`account.json` contains `name`, `password` and an optional `real_name` string.
+`--real-name` overrides the JSON display name. Supplied credentials do not open
+an account input prompt.
 
 Build and pack using that seed:
 
@@ -163,8 +182,21 @@ Build and pack using that seed:
   --data-ramdisk "<output>/runtime/data.dbr"
 ```
 
-Boot and sign in with that account to reach the desktop. `--skip-setup` is a
-seed creation option.
+After flashing fresh userdata on sheng, select **Initialize macOS Data and boot**
+and confirm **Initialize Data and boot**. This erases macOS Data and initializes
+its persistent store from the seed. Use **Boot** on subsequent starts to retain
+Data. The account and Setup settings come from the seed; `--skip-setup` is a seed
+creation option.
+
+The sheng macOS profile uses a SHA-256-pinned firmware template for its ABL
+transport. `unixnu bootimg` replaces only DarwinBoot with the loader from the
+current firmware build, preserving the qualified shim, board firmware, DTB and
+Android header settings. The payload is 187 MiB; packing stops above the
+193 MiB boot-image limit. The menu waits for a key.
+
+The template is cached under `out/downloads`. For an offline build, set
+`UNIXNU_BOOT_TEMPLATE` to the matching `.img.xz`; its checksum is still checked.
+`boot/boot.json` records the template, loader and selected firmware hashes.
 
 Seed creation options:
 
@@ -173,8 +205,9 @@ Seed creation options:
 | `--skip-setup` | Marks Setup Assistant done |
 | `--user NAME:PASSWORD` | Adds a local administrator and its home |
 | `--real-name NAME` | Sets the displayed administrator name; the short account name and `/Users/NAME` remain unchanged |
-| `--user-stdin` | Reads `{"name":"unixnu","password":"..."}` from standard input instead of `--user` |
-| `--auto-login` | Logs the account in at boot. For unattended tests; requires `--user` or `--user-stdin` |
+| `--user-stdin` | Reads `name`, `password` and optional `real_name` from a JSON object on standard input |
+| `--interactive-user` | Prompts for the account name, display name and password |
+| `--auto-login` | Logs the selected account in at boot. For unattended tests |
 | `--keyboard-type PRODUCT-VENDOR-COUNTRY=TYPE` | Records a keyboard layout type, so Keyboard Setup Assistant does not ask |
 | `--volume-uuid UUID` | Gives the Data volume a fixed UUID, so a new seed replaces an older one without a kernel build |
 

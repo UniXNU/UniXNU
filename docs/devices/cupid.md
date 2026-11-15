@@ -6,7 +6,7 @@
 
 Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhone17,2 / D94AP identity. The kernel reaches BSD init; the active milestone is SM8450 UFS storage and the root volume.
 
-Source record: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/porting.toml), `f77f2c52fa53576194c3bf29ab0fa7afd20a4328`.
+Source record: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/porting.toml), `ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb`.
 
 This page is generated from the device record.
 
@@ -83,8 +83,8 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/.github/workflows/macos.yml)
-- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/.github/workflows/macos.yml)
+- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'getprop | grep ro.boot'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## Firmware and boot {#firmware}
@@ -138,11 +138,11 @@ Components: `DarwinBoot`.
 - `host`: [macOS 26 DEBUG/CLANGPDB build of Platforms/Xiaomi/cupidPkg/cupid.dsc with FD\_BASE=0xa7100000 FD\_SIZE=0x300000 FD\_BLOCKS=768; output uefi-cupid/Build/cupidPkg/DEBUG\_CLANGPDB/FV/SILICIUM\_UEFI.fd. The Gic-Spurious edk2 patch applied.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42371720139)
   Command: <code>./unixnu build firmware -D ../device --uefi ../uefi-cupid</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
 - `source`: [Documents the ingres-derived memory map, the missing stock uefiplat.cfg replacement, and the vendor-hardware import that Binaries/cupid needs.](https://github.com/obaosp/uefi-cupid/blob/bce96f77d07ec90a516432df466b8cd3af7272fc/Platforms/Xiaomi/cupidPkg/README.md)
-- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-boot-2026-11-07.md)
+- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/first-boot-2026-11-07.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b83e634bd63489b7c7ff3f976ca732ea80c98c03`.
-- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## CPU and interrupts {#cpu}
@@ -187,11 +187,11 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/dts/cupid.dts)
+- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/dts/cupid.dts)
 - `source`: [Mainline CPU nodes, GIC windows, UFS host and PHY addresses used by dts/sm8450.dtsi.](https://github.com/torvalds/linux/blob/f1586048fb1dabb91c82fbe11557e505587973d3/arch/arm64/boot/dts/qcom/sm8450.dtsi)
-- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'grep -E "Features|CPU part" /proc/cpuinfo'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/pac-trap-2026-11-07.md)
+- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/pac-trap-2026-11-07.md)
   Command: <code>fastboot boot boot-v4-win2g.img</code>. Revision: `d093c5c1292400209634b7b82c78cd39fd9faa98`.
 
 ## Memory and DMA {#memory}
@@ -230,7 +230,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## Storage and root {#storage}
@@ -283,10 +283,10 @@ Components: `ShengUfs`, `RamBlock`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/package/Sm8450Ufs/Sm8450UfsRegs.h)
-- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/package/Sm8450Ufs/Sm8450UfsRegs.h)
+- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [boot-v4-ios27-ufsread.img on cupid: with SMMU stream 0xe0, SSU/TUR complete ocs=0 resp=00 scsi=00; READ\(10\) LBA 1 returns the GPT header \(sig 20494645 54524150, 64 entries\), hcs=0x10f, rsr=1, UTRLBA=0xff130000; READ\(10\) at userdata LBA 3170304 returns ocs=0. The stream-0x60 build SErrors.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/UFS-PROBE-2026-11-13.md)
+- `device`: [boot-v4-ios27-ufsread.img on cupid: with SMMU stream 0xe0, SSU/TUR complete ocs=0 resp=00 scsi=00; READ\(10\) LBA 1 returns the GPT header \(sig 20494645 54524150, 64 entries\), hcs=0x10f, rsr=1, UTRLBA=0xff130000; READ\(10\) at userdata LBA 3170304 returns ocs=0. The stream-0x60 build SErrors.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/UFS-PROBE-2026-11-13.md)
   Command: <code>fastboot boot boot-v4-ios27-ufsread.img (panic-screen report)</code>. Revision: `484b9524a210075aac59aef81b17af231a1e0957`.
 
 ## Display {#display}
@@ -327,7 +327,7 @@ Components: `ShengUfs`, `RamBlock`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### Evidence
 
-- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## Input {#input}
@@ -572,7 +572,7 @@ Components: `XnuPrelink`.
 
 - `host`: [Pre-pivot iOS 27 run: rebuilt arm64e XNU and built the EDK II package \(DEBUG/CLANGPDB, UniXNU.efi and the shared drivers\). This evidence is kept as packaging history, not as the current profile.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42371720139)
   Command: <code>./unixnu build kernel -D ../device &amp;&amp; ./unixnu build package -D ../device</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
-- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
+- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/ab8d7e9e7e93aa05febc059a6916cbdfbfcab5cb/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## Diagnostics {#diagnostics}

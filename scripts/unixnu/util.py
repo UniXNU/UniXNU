@@ -1,6 +1,7 @@
 """Small helpers shared by the build driver."""
 import hashlib
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -83,9 +84,20 @@ def clang_bin(directory):
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
+    llvm_compiler = Path(tool('llvm-lib', 'brew install llvm')).resolve().parent / 'clang'
+    compiler = str(llvm_compiler) if llvm_compiler.is_file() else tool('clang', 'brew install llvm')
+    linker = tool('lld-link', 'brew install lld')
+    versions = []
+    for binary in (compiler, linker):
+        text = run([binary, '--version'], capture=True)
+        match = re.search(r'\b(\d+\.\d+\.\d+)\b', text)
+        versions.append(match.group(1) if match else '')
+    if not versions[0] or versions[0] != versions[1]:
+        raise Error(f'CLANGPDB requires matching LLVM and LLD releases (clang {versions[0]}, LLD {versions[1]}); '
+                    'set CLANG_BIN to a directory containing matching clang, lld-link, llvm-lib and llvm-rc')
     for name in CLANGPDB_TOOLS:
         link = directory / name
-        target = tool(name, 'brew install llvm lld')
+        target = compiler if name == 'clang' else linker if name == 'lld-link' else tool(name, 'brew install llvm lld')
         if link.is_symlink() or link.exists():
             link.unlink()
         link.symlink_to(target)

@@ -19,6 +19,10 @@ also gives the display bank (`dpu-scanout`) and the WiFi endpoint
 The component catalog supplies its kernel archive recipe. The selected device
 profile enables `CONFIG_XNU_NATIVE_UFS` and supplies the board inputs.
 
+Verified userdata windows publish internal virtual-storage characteristics.
+Disk Arbitration can retain their boot-time mounts before a console user logs in,
+including the App cryptex at `/System/Volumes/Preboot/Cryptexes/App`.
+
 ```sh
 ./unixnu build kernel -D /path/to/device
 ```
