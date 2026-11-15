@@ -67,16 +67,19 @@ Run each command after the preceding one succeeds. [Kernel preparation](/guide/b
 explains archive/ABI requirements and prelink. [Firmware integration](/porting/uefi-firmware#required-integration)
 explains the required DSC/FDF modules.
 
-To color status prefixes and save the command's output to a plain-text log:
+Standard `unixnu` commands color status prefixes in a terminal. Blue marks
+progress, green completion, yellow warnings and red failures. This includes pip,
+CMake and compiler diagnostics. Redirected output, `--json`, `NO_COLOR` and
+`TERM=dumb` remain uncolored. Per-step log files remain plain text.
+
+To also save the complete command output:
 
 ```sh
 python3 scripts/build-log.py --log out/build.log -- ./unixnu build kernel
 ```
 
-Blue marks progress, green completion, yellow warnings and red failures. The
-wrapper also recognizes pip, CMake and compiler diagnostics. Colors are enabled
-for terminals; `NO_COLOR` or `--color never` disables them. `--color always`
-enables them in redirected output. The wrapper returns the command's exit status.
+The optional wrapper returns the command's exit status. `--color never` disables
+colors; `--color always` enables them in redirected output unless `NO_COLOR` is set.
 
 | Step | Expected output |
 | --- | --- |

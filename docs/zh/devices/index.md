@@ -83,13 +83,13 @@
 | [小米 13 Ultra](/zh/devices/models/ishtar) | ishtar | SM8550 | 3 |
 | [联想小新 Pad Pro 2021](/zh/devices/models/j716f) | j716f | SM8250 | 2 |
 | [LG V35 ThinQ](/zh/devices/models/judyp) | judyp | SDM845 | 1 |
-| [一加 8T](/zh/devices/models/kebab) | kebab | SM8250 | 2 |
+| [一加 8T](/zh/devices/models/kebab) | kebab | SM8250 | 3 |
 | [Xiaomi Redmi Note 3 \(Kenzo\) Snapdragon 650](/zh/devices/models/kenzo) | kenzo | MSM8956 | 1 |
 | [Google Pixel 9 Pro XL](/zh/devices/models/komodo) | komodo | zumapro | 1 |
 | [realme GT8 Pro \(lafa\) RMX5200: UniXNU bring-up](/zh/devices/models/lafa) | lafa | SM8850 | 1 |
 | [Xiaomi Redmi Note 7 \(eMMC, 4 GB DRAM, 1080x2340 panel\)](/zh/devices/models/lavender) | lavender | SDM660 | 1 |
 | [一加 9R](/zh/devices/models/lemonades) | lemonades | SM8250 | 1 |
-| [小米平板 6 Pro](/zh/devices/models/liuqin) | liuqin | SM8475 | 2 |
+| [小米平板 6 Pro](/zh/devices/models/liuqin) | liuqin | SM8475 | 3 |
 | [Redmi K30 Pro 变焦版](/zh/devices/models/lmipro) | lmipro | SM8250 | 2 |
 | [Microsoft Lumia 950](/zh/devices/models/lumia950) | lumia950 | MSM8992 | 4 |
 | [小米 Civi 5 Pro](/zh/devices/models/luming) | luming | SM8735 | 2 |
@@ -106,7 +106,7 @@
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/zh/devices/models/munch) | munch | SM8250 | 3 |
 | [Xiaomi Pad 7 Pro](/zh/devices/models/muyu) | muyu | SM8635 | 3 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/zh/devices/models/myron) | myron | SM8850 | 2 |
-| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 7 |
+| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 8 |
 | [摩托罗拉 Moto Z2 Force](/zh/devices/models/nash) | nash | MSM8998 | 1 |
 | [一加 10 Pro 5G](/zh/devices/models/negroni) | negroni | SM8450 | 1 |
 | [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/zh/devices/models/nio) | nio | SM8250 | 1 |
@@ -125,12 +125,13 @@
 | [小米 17 Pro](/zh/devices/models/pandora) | pandora | SM8850 | 1 |
 | [Google Pixel 7 \(Tensor G2\)](/zh/devices/models/panther) | panther | gs201 | 1 |
 | [OPPO Reno Ace \(PCLM10 / Project 19081, Snapdragon 855+ SM8150-AC\)](/zh/devices/models/pclm10) | pclm10 | SM8150 | 1 |
+| [vivo iQOO Neo 855 \(V1936A, PD1936\), SM8150 v2, 1080x2340 AMOLED @62Hz, UFS 3.x](/zh/devices/models/pd1936) | pd1936 | SM8150 | 1 |
 | [vivo iQOO 7 V2049A early XNU bring-up](/zh/devices/models/pd2049) | pd2049 | SM8350 | 1 |
 | [Sony Xperia 1 II](/zh/devices/models/pdx203) | pdx203 | SM8250 | 2 |
 | [Redmi Turbo 3 / Poco F6](/zh/devices/models/peridot) | peridot | SM8635 | 3 |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 4 |
-| [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 8 |
+| [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 9 |
 | [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 5 |
 | [一加 Ace 3（PJE110）](/zh/devices/models/pje110) | pje110 |  | 1 |
 | [OPPO Find X9 Ultra](/zh/devices/models/pma120) | pma120 | SM8850 | 1 |
@@ -151,7 +152,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 53 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 54 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
@@ -169,7 +170,7 @@
 | [小米 10S](/zh/devices/models/thyme) | thyme | SM8250 | 2 |
 | [Motorola moto s30 pro](/zh/devices/models/tundra) | tundra | SM8350 | 1 |
 | [一加 Ace 2 / 11R](/zh/devices/models/udon) | udon | SM8475 | 1 |
-| [小米平板 7 / POCO Pad X1](/zh/devices/models/uke) | uke | SM7675 | 6 |
+| [小米平板 7 / POCO Pad X1](/zh/devices/models/uke) | uke | SM7675 | 7 |
 | [小米 10](/zh/devices/models/umi) | umi | SM8250 | 5 |
 | [Xiaomi 12S Pro \(unicorn, SM8475\): UniXNU UEFI bring-up](/zh/devices/models/unicorn) | unicorn | SM8475 | 2 |
 | [Unisoc 设备](/zh/devices/models/unisoc) | unisoc | Unisoc | 1 |

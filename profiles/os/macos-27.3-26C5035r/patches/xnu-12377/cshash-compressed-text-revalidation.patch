@@ -1,0 +1,68 @@
+Verify compressed executable blocks using a private snapshot of their signed bytes.
+Resident pages retain executable fixups while APFS authenticates the complete block.
+
+diff --git a/bsd/kern/ubc_subr.c b/bsd/kern/ubc_subr.c
+--- a/bsd/kern/ubc_subr.c
++++ b/bsd/kern/ubc_subr.c
+@@ -7219,6 +7219,38 @@
+ 	}
+ }
+ 
++/* Return signed bytes for filesystem verification while resident text remains executable. */
++void *
++cs_text_fixup_signed_copy(struct vnode *vp, off_t offset, const void *data, size_t length)
++{
++	if (vp == NULLVP || vp->v_name == NULL || offset < 0) {
++		return NULL;
++	}
++	uint8_t *snapshot = NULL;
++	for (uint32_t i = 0; i < cs_text_fixup_count; i++) {
++		const struct cs_text_fixup *f = &cs_text_fixups[i];
++		if (strcmp(vp->v_name, f->name) != 0 || f->offset < (uint64_t)offset ||
++		    f->offset - (uint64_t)offset > length ||
++		    f->length > length - (f->offset - (uint64_t)offset)) {
++			continue;
++		}
++		const size_t at = (size_t)(f->offset - (uint64_t)offset);
++		const uint8_t *source = snapshot ? snapshot : data;
++		if (memcmp(source + at, f->replacement, f->length) != 0) {
++			continue;
++		}
++		if (snapshot == NULL) {
++			snapshot = kalloc_data(length, Z_WAITOK);
++			if (snapshot == NULL) {
++				return NULL;
++			}
++			memcpy(snapshot, data, length);
++		}
++		memcpy(snapshot + at, f->original, f->length);
++	}
++	return snapshot;
++}
++
+ /*
+  * Applies the fixups that fall in this validated page of vp. kva is a writable kernel address of the page. Returns the
+  * number of fixups written, so the caller makes the instruction cache coherent.
+diff --git a/bsd/kern/decmpfs.c b/bsd/kern/decmpfs.c
+--- a/bsd/kern/decmpfs.c
++++ b/bsd/kern/decmpfs.c
+@@ -1596,7 +1596,18 @@
+ 	if (!err && verify_block_size) {
+ 		size_t cur_verify_block_size = verify_block_size;
+ 
+-		if ((err = VNOP_VERIFY(vp, uplPos, vec.buf, rounded_uplSize, &cur_verify_block_size, NULL, 0, NULL, NULL))) {
++		extern void *cs_text_fixup_signed_copy(struct vnode *, off_t, const void *, size_t);
++		void *signed_data = cs_text_fixup_signed_copy(vp, uplPos, vec.buf, rounded_uplSize);
++		if (signed_data) {
++			printf("decmpfs: signed-text verification snapshot %s offset=%lld bytes=%u\n",
++			    vp->v_name, (long long)uplPos, (unsigned)rounded_uplSize);
++		}
++		err = VNOP_VERIFY(vp, uplPos, signed_data ? signed_data : vec.buf, rounded_uplSize,
++		    &cur_verify_block_size, NULL, 0, NULL, NULL);
++		if (signed_data) {
++			kfree_data(signed_data, rounded_uplSize);
++		}
++		if (err) {
+ 			ErrorLogWithPath("Verification failed with error %d, uplPos = %lld, uplSize = %d, did_read = %d, valid_pages = %d, invalid_pages = %d, tail_page_valid = %d\n",
+ 			    err, (long long)uplPos, (int)rounded_uplSize, (int)did_read, num_valid_pages, num_invalid_pages, file_tail_page_valid);
+ 		}

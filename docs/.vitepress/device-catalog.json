@@ -560,6 +560,11 @@
     "title_zh": "pclm10"
   },
   {
+    "name": "models/pd1936",
+    "title": "pd1936",
+    "title_zh": "pd1936"
+  },
+  {
     "name": "models/pd2049",
     "title": "pd2049",
     "title_zh": "pd2049"
