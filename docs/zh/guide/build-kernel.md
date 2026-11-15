@@ -16,14 +16,14 @@
 
 ## 使用导出输入在本机构建
 
-sheng macOS lab 的 `export_build_inputs=true` 导出 XNU 目标文件、内核头文件、iPhoneOS SDK、`migcom` 和 `iig`。将缓存解压到选定构建树，修正路径后在本机编译：
+sheng macOS lab 的 `export_build_inputs=true` 导出 XNU 目标文件、内核头文件、iPhoneOS SDK 和 Xcode 26.6 编译工具。解压 `compiler-toolchain.tar.zst`，得到包含 `bin` 和 `lib` 的 `TOOLCHAIN`。将缓存解压到选定构建树，修正路径后在本机编译：
 
 ```sh
-python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE
-python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLS -- build kernel prelink -D DEVICE --os macos-27
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27
 ```
 
-本地运行器为本次调用选择导出的 SDK 和工具。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
+本地运行器为本次调用选择导出的 SDK、编译器、链接器和内核工具。`build-paths.json` 记录编译器与 Xcode 版本。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
 
 ## 源码与构建树
 

@@ -19,14 +19,14 @@ The kernel step builds Apple's XNU source with UniXNU patches, then prelinks the
 
 ## Local builds with exported inputs
 
-The sheng macOS lab exports its cached XNU objects, kernel headers, iPhoneOS SDK, `migcom` and `iig` with `export_build_inputs=true`. Extract the cache into the selected resolved tree, then relocate its paths and build locally:
+The sheng macOS lab exports its cached XNU objects, kernel headers, iPhoneOS SDK and Xcode 26.6 compiler tools with `export_build_inputs=true`. Extract `compiler-toolchain.tar.zst` to obtain `TOOLCHAIN`, containing `bin` and `lib`. Extract the cache into the selected resolved tree, then relocate its paths and build locally:
 
 ```sh
-python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE
-python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLS -- build kernel prelink -D DEVICE --os macos-27
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27
 ```
 
-The local runner selects the exported SDK and tools for this invocation. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
+The local runner selects the exported SDK, compiler, linker and kernel tools for this invocation. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
 
 ## Source and tree
 
