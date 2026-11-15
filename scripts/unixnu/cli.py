@@ -1,3 +1,4 @@
+from pathlib import Path
 """Command line of the UniXNU build driver."""
 import argparse
 import json
@@ -168,6 +169,8 @@ def cmd_build(ctx):
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
     if 'payload' in steps or 'runtime' in steps:
         runtime.prepare(ctx, kernel_build='kernel' in steps)
+    elif 'kernel' in steps and ctx.args.data_ramdisk:
+        runtime.bind_seed(ctx, Path(ctx.args.data_ramdisk).expanduser().resolve(), kernel_build=True)
     if 'kernel' in steps:
         kernel.build(ctx, modules)
         kernel.prelink(ctx)
