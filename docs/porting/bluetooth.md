@@ -140,6 +140,15 @@ and Inquiry results. `TX_UART` records a complete frame accepted by the UART;
 losses. Keep the accessory in pairing mode while opening Bluetooth Settings,
 then capture the log from Recovery. ACL, audio and pairing keys are excluded.
 
+The macOS sheng profile selects `QcaBluetooth` through the component catalog.
+The kernel and runtime use the same device submodule. Build the diagnostic image
+with the standard commands:
+
+```sh
+./unixnu build kernel payload --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng --kernel-arg=log-bluetooth=3
+./unixnu bootimg --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng
+```
+
 | Symptom | Check |
 | --- | --- |
 | Settings item stays gray | `bluetoothd` launchd job and the `[bluetooth proc]` restart count |

@@ -133,6 +133,14 @@ fastboot boot boot.img
 `missed` 和 `dropped` 记录跟踪丢失数量。让配件保持配对模式，再打开蓝牙设置；
 测试后从 Recovery 导出日志。跟踪不包含 ACL、音频和配对密钥。
 
+sheng 的 macOS 配置从组件目录选择 `QcaBluetooth`，内核与运行时使用同一份设备子模块。
+使用标准命令构建诊断镜像：
+
+```sh
+./unixnu build kernel payload --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng --kernel-arg=log-bluetooth=3
+./unixnu bootimg --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng
+```
+
 | 现象 | 检查 |
 | --- | --- |
 | 设置项保持灰色 | `bluetoothd` 的 launchd 任务和 `[bluetooth proc]` 的重启次数 |
