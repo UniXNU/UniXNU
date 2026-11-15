@@ -15,16 +15,16 @@ def main():
     parser.add_argument('--tools', type=Path, required=True)
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    if not (args.sdk / 'SDKSettings.plist').exists() or not all((args.tools / name).is_file() for name in ('migcom', 'iig')):
-        parser.error('require the exported SDK and migcom/iig tools')
+    required = ('clang', 'clang++', 'ld', 'migcom', 'iig')
+    if not (args.sdk / 'SDKSettings.plist').exists() or not all((args.tools / name).is_file() for name in required):
+        parser.error('require the exported SDK, compiler, linker and kernel tools')
     for tool in args.tools.iterdir():
         if tool.is_file():
             tool.chmod(0o755)
     libraries = args.tools.resolve().parent / 'lib'
     clang_library = libraries / 'libclang.dylib'
-    if not clang_library.exists():
-        libraries.mkdir(parents=True, exist_ok=True)
-        clang_library.symlink_to('/Library/Developer/CommandLineTools/usr/lib/libclang.dylib')
+    if not clang_library.is_file():
+        parser.error('require the exported toolchain lib/libclang.dylib')
     arguments = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
     if not arguments:
         parser.error('pass unixnu build arguments after --')
@@ -58,7 +58,7 @@ os.execv('/usr/bin/xcrun',['/usr/bin/xcrun']+args)
         environment = dict(os.environ, UNIXNU_LOCAL_SDK=str(args.sdk.resolve()),
                            UNIXNU_LOCAL_TOOLS=str(args.tools.resolve()), XNU_SDKROOT=str(args.sdk.resolve()),
                            MIGCOM=str((args.tools / 'migcom').resolve()), IIG=str((args.tools / 'iig').resolve()),
-                           PLATFORM='iPhoneOS', DYLD_LIBRARY_PATH='/Library/Developer/CommandLineTools/usr/lib')
+                           PLATFORM='iPhoneOS', DYLD_LIBRARY_PATH=str(libraries))
         environment['PATH'] = directory + os.pathsep + str(args.tools.resolve()) + os.pathsep + environment.get('PATH', '')
         subprocess.run([str(ROOT / 'unixnu'), *arguments], env=environment, cwd=ROOT, check=True)
 

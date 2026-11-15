@@ -14,7 +14,7 @@ def main():
     parser.add_argument('--metadata', type=Path, required=True)
     parser.add_argument('--sdk', type=Path, required=True)
     parser.add_argument('--device', type=Path, required=True)
-    parser.add_argument('--toolchain', type=Path, help='exported toolchain usr directory')
+    parser.add_argument('--toolchain', type=Path, required=True, help='exported toolchain usr directory')
     args = parser.parse_args()
     tree = args.tree.resolve()
     record = json.loads(args.metadata.read_text())
@@ -22,7 +22,7 @@ def main():
     if not separator:
         parser.error('exported tree must belong to a UniXNU out directory')
     old_developer = record['sdk'].split('/Platforms/', 1)[0]
-    toolchain = str(args.toolchain.resolve()) if args.toolchain else '/Library/Developer/CommandLineTools/usr'
+    toolchain = str(args.toolchain.resolve())
     replacements = [(record['tree'], str(tree)), (record['sdk'], str(args.sdk.resolve())),
                     (record.get('toolchain', old_developer + '/Toolchains/XcodeDefault.xctoolchain/usr'), toolchain),
                     ('/Library/Developer/CommandLineTools/usr', toolchain),
