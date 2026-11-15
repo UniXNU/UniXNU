@@ -96,6 +96,10 @@ Call these from the board's charger driver:
 | `qcom_dwc3_vbus(int)` | The charger's USB online value |
 | `qcom_ucsi_start`, `qcom_ucsi_receive`, `qcom_ucsi_tick` | Send each returned message on the GLINK channel |
 | `qcom_ucsi_polling` | True while the driver needs the 20 ms timer |
+| `qcom_ucsi_request_data_host`, `qcom_ucsi_data_host` | Request and observe the host data role for a compatible charger |
+| `qcom_ucsi_connection` | Read connector status and its attachment generation |
+
+MiPPS authentication requests the host data role with UCSI `SET_UOR`. The DSP owns the power role and PD/PPS contract. The connector generation advances on connection changes, including coalesced reconnect notifications; the charger retires authentication from the previous attachment before starting another exchange. See [sheng charging](/porting/power#sheng-charging).
 
 A host on the cable selects the device role and a peripheral selects the host role. With
 no answer from either source, the device role runs. Check the UCSI client from
