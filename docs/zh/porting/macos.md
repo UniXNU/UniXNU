@@ -171,6 +171,14 @@ sudo -n python3 scripts/make-macos-data-seed.py \
 
 启动后用该账户登录即可进入桌面。`--skip-setup` 在制作 seed 时传入。
 
+sheng 的 macOS 配置使用固定 SHA-256 的固件模板完成 ABL 封装。
+`unixnu bootimg` 只替换本次固件构建生成的 DarwinBoot，保留已验证的 BootShim、
+设备固件、DTB 和 Android 头参数。payload 为 187 MiB；启动镜像超过 193 MiB 时停止打包。
+菜单等待按键。
+
+模板缓存在 `out/downloads`。离线构建时，将 `UNIXNU_BOOT_TEMPLATE` 指向对应的
+`.img.xz`，仍会核对校验值。`boot/boot.json` 记录模板、加载器和实际固件的哈希。
+
 制作 seed 的参数：
 
 | 参数 | 作用 |
