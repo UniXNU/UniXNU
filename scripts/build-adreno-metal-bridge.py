@@ -122,6 +122,8 @@ if prebuilt:
     if archive != final.resolve():
         shutil.copyfile(archive, final)
     final.with_suffix('.a.json').write_text(json.dumps(record, indent=2) + '\n')
+    (out / ('build-%s.log' % args.target)).write_text('Reused the prebuilt archive with matching source and target identity.\n'
+                                                  + json.dumps(record, indent=2) + '\n')
     print('PASS: qualified prebuilt Metal bridge for %s; runtime %s' % (args.target, runtime_id))
     raise SystemExit(0)
 env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
