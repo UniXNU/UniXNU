@@ -25,6 +25,7 @@
 | [OnePlus Ace 3 PJE110](/zh/devices/models/aston) | aston | SM8550 | 1 |
 | [Xiaomi MIX Fold 3](/zh/devices/models/babylon) | babylon | SM8550 | 1 |
 | [BBK/EEBBK A2, X2 and X2P tablet \(ums512\_1h190, Unisoc T610 / UMS512 SharkL5Pro\)](/zh/devices/models/bbk-a2) | bbk-a2 | UMS512 | 1 |
+| [Google Pixel 6a \(Tensor G1\)](/zh/devices/models/bluejay) | bluejay | GS101 | 1 |
 | [Brave Ark 平板](/zh/devices/models/braveark) | braveark | SM8635 | 1 |
 | [一加平板 Pro](/zh/devices/models/caihong) | caihong | SM8650 | 3 |
 | [Redmi Note 10 5G](/zh/devices/models/camellia) | camellia | MT6833 | 1 |
@@ -40,7 +41,7 @@
 | [小米 15](/zh/devices/models/dada) | dada | SM8750 | 1 |
 | [Redmi K80 Pro](/zh/devices/models/dada2) | dada2 | SM8750 | 2 |
 | [Xiaomi Pad 5 Pro 12.4 \(dagu\), China-region Wi-Fi model 22081281AC, SM8250-AC, iPadOS 17.7.11 / arm64 target](/zh/devices/models/dagu) | dagu | SM8250-AC | 1 |
-| [Redmi K80 Ultra](/zh/devices/models/dali) | dali | MT6991 | 1 |
+| [Redmi K80 Ultra](/zh/devices/models/dali) | dali | MT6991 | 2 |
 | [Redmi 9A](/zh/devices/models/dandelion) | dandelion | MT6765 | 1 |
 | [Huawei MatePad 11](/zh/devices/models/dby-w09) | dby-w09 | SM8250 | 1 |
 | [小米 8](/zh/devices/models/dipper) | dipper | SDM845 | 1 |
@@ -59,13 +60,14 @@
 | [一加 15T](/zh/devices/models/fairlady) | fairlady | SM8850 | 1 |
 | [一加 6T](/zh/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/zh/devices/models/flashlm) | flashlm | SM8150 | 1 |
-| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 16 |
+| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 17 |
 | [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/zh/devices/models/garnet) | garnet | SM7435 | 1 |
 | [摩托罗拉 Moto G 5G](/zh/devices/models/gauguin) | gauguin | SM7225 | 1 |
 | [一加 Ace 5](/zh/devices/models/giulia) | giulia | SM8650 | 2 |
 | [Xiaomi Mi 9 SE](/zh/devices/models/grus) | grus | SDM710 | 1 |
 | [三星 Galaxy Tab A7 10.4](/zh/devices/models/gta4l) | gta4l | SM6115 | 3 |
+| [Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\)](/zh/devices/models/gtaxllte) | gtaxllte | Exynos 7870 | 1 |
 | [三星 Galaxy Tab S7 FE Wi-Fi（SM-T733）](/zh/devices/models/gts7fewifi) | gts7fewifi | SM7325 | 1 |
 | [Samsung Galaxy Tab S7+ Wi-Fi \(SM-T970, gts7xlwifi\): iPadOS desktop, 8 cores, GPU, touch, USB console, battery](/zh/devices/models/gts7xlwifi) | gts7xlwifi | SM8250 | 1 |
 | [Samsung Galaxy Tab S9 Ultra 5G](/zh/devices/models/gts9u) | gts9u | SM8550 | 1 |
@@ -74,18 +76,20 @@
 | [摩托罗拉 Moto G9 Play](/zh/devices/models/guamp) | guamp | SM6115 | 1 |
 | [Redmi K40 Pro](/zh/devices/models/haydn) | haydn | SM8350 | 3 |
 | [三星 Galaxy S7 Edge](/zh/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
+| [OnePlus 7T Pro \(HD1910/HD1911/HD1913\)](/zh/devices/models/hotdog) | hotdog | SM8150 | 1 |
 | [小米 14](/zh/devices/models/houji) | houji | SM8650 | 4 |
 | [一加 Ace 5 Pro](/zh/devices/models/hummer) | hummer | SM8750 | 1 |
 | [一加 8 Pro](/zh/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [小米 13 Ultra](/zh/devices/models/ishtar) | ishtar | SM8550 | 3 |
 | [联想小新 Pad Pro 2021](/zh/devices/models/j716f) | j716f | SM8250 | 2 |
+| [LG V35 ThinQ](/zh/devices/models/judyp) | judyp | SDM845 | 1 |
 | [一加 8T](/zh/devices/models/kebab) | kebab | SM8250 | 2 |
 | [Xiaomi Redmi Note 3 \(Kenzo\) Snapdragon 650](/zh/devices/models/kenzo) | kenzo | MSM8956 | 1 |
 | [Google Pixel 9 Pro XL](/zh/devices/models/komodo) | komodo | zumapro | 1 |
 | [realme GT8 Pro \(lafa\) RMX5200: UniXNU bring-up](/zh/devices/models/lafa) | lafa | SM8850 | 1 |
 | [Xiaomi Redmi Note 7 \(eMMC, 4 GB DRAM, 1080x2340 panel\)](/zh/devices/models/lavender) | lavender | SDM660 | 1 |
 | [一加 9R](/zh/devices/models/lemonades) | lemonades | SM8250 | 1 |
-| [小米平板 6 Pro](/zh/devices/models/liuqin) | liuqin | SM8475 | 1 |
+| [小米平板 6 Pro](/zh/devices/models/liuqin) | liuqin | SM8475 | 2 |
 | [Redmi K30 Pro 变焦版](/zh/devices/models/lmipro) | lmipro | SM8250 | 2 |
 | [Microsoft Lumia 950](/zh/devices/models/lumia950) | lumia950 | MSM8992 | 4 |
 | [小米 Civi 5 Pro](/zh/devices/models/luming) | luming | SM8735 | 2 |
@@ -142,11 +146,12 @@
 | [Realme 5 Pro](/zh/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/zh/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
 | [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/zh/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |
+| [Redmi Turbo 4 / POCO X7 Pro \(rodin\): Dimensity 8400-Ultra, 8/12/16 GiB LPDDR5X, 6.67" AMOLED 1220x2712, UFS](/zh/devices/models/rodin) | rodin | MT6899, mt6899 | 2 |
 | [Xiaomi Redmi K70 Ultra \(rothko, MediaTek Dimensity 9300\)](/zh/devices/models/rothko) | rothko | MT6989 | 1 |
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 50 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 53 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
@@ -159,6 +164,7 @@
 | [Lenovo Xiaoxin Pad 12.1 \(2025\), Lenovo TB365FC \(board cava\_prc\_consumer\_wifi\)](/zh/devices/models/tb365fc) | tb365fc | MT6835 | 1 |
 | [Lenovo Xiaoxin Pad Pro 12.7 \(2023\) / TB371FC](/zh/devices/models/tb371fc) | tb371fc | SM8250 | 1 |
 | [Lenovo TB375FC \(MT6897 / MT8792\)](/zh/devices/models/tb375fc) | tb375fc | MT6897 | 1 |
+| [Lenovo Xiaoxin Pad Pro GT \(TB710FU\)](/zh/devices/models/tb710fu) | tb710fu | SM8650 | 1 |
 | [Xiaomi 12S Ultra \(thor\): UniXNU UEFI bring-up](/zh/devices/models/thor) | thor | SM8475 | 1 |
 | [小米 10S](/zh/devices/models/thyme) | thyme | SM8250 | 2 |
 | [Motorola moto s30 pro](/zh/devices/models/tundra) | tundra | SM8350 | 1 |

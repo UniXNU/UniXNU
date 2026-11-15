@@ -4,16 +4,16 @@
 
 <div v-pre>
 
-Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port. Target build is ipados-18.7.12-22H390 \(Darwin 24.6.0\): the root image comes from the iOS 18.7.12 restore of iPhone11,2, the arm64 kernelcache from the iPadOS 18.7.12 restore of iPad7,11. Configuration and image-assembly tooling are in place; kernel, firmware and every hardware area still need device verification.
+Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipados-18.7.12-22H390 \(Darwin 24.6.0\).
 
-Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/b7330140ffcf98b3d997e72088e9ffaa11b089d4/porting.toml), `b7330140ffcf98b3d997e72088e9ffaa11b089d4`.
+Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/porting.toml), `89da54cf9325c23565351af1dfc61f311adffbc8`.
 
 This page is generated from the device record.
 
 | Area | Status |
 | --- | --- |
 | [Configuration](#configuration) | `implemented` |
-| [Firmware and boot](#firmware) | `planned` |
+| [Firmware and boot](#firmware) | `device-verified` |
 | [CPU and interrupts](#cpu) | `planned` |
 | [Memory and DMA](#memory) | `planned` |
 | [Storage and root](#storage) | `planned` |
@@ -23,7 +23,7 @@ This page is generated from the device record.
 | [Network](#network) | `planned` |
 | [Audio](#audio) | `planned` |
 | [Power](#power) | `planned` |
-| [Image assembly](#packaging) | `planned` |
+| [Image assembly](#packaging) | `host-verified` |
 | [Diagnostics](#diagnostics) | `planned` |
 
 ## Configuration {#configuration}
@@ -60,6 +60,9 @@ Components: `ArmDTPlatform`.
 - iPadOS and iOS share the 22H390 build ID, so the staged kernelcache needs its own output path or the two would overwrite each other in out/ipsw/22H390/
 - both 22H390 dmgs are AEA encrypted, so building the root image needs macOS /usr/bin/aea
 - status resolves arch=arm64, soc=sm8150, os=ipados-18.7.12-22H390 and the device board.toml
+- board.toml \[firmware\] and \[bootimg.image\] describe the Mu-Silicium route only \(config raphael, Platforms/Xiaomi/raphaelPkg/raphael.dsc, SILICIUM\_UEFI.fd, header\_version 1 with base 0x10000000 and pagesize 2048\); ./unixnu build firmware and ./unixnu bootimg read those paths, and that route has never produced an image that booted on this device
+- the shipping firmware route is Project Aloha instead: build\_cfg/sm8150.json uses header\_version 0 with base 0 and pagesize 4096, and PythonLibs/PostBuild.py is the packer, so the Mu-Silicium values in \[bootimg.image\] are deliberately not applied to it
+- board.toml \[payload\] is what makes the Aloha image bootable: volume UNIXNU, 192 MiB, loader firmware, carrying Payloads/kernel.macho, its ADT and EFI/UniXNU/unixnu.toml
 
 ### Completion criteria
 
@@ -75,47 +78,77 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/b7330140ffcf98b3d997e72088e9ffaa11b089d4/board.toml)
-- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/b7330140ffcf98b3d997e72088e9ffaa11b089d4/feeds.toml)
+- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/board.toml)
+- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/feeds.toml)
 
 ## Firmware and boot {#firmware}
 
-`planned`
+`device-verified`
 
 Components: `DarwinBoot`.
 
 ### Hardware and dependencies
 
-- Mu-Silicium platform support for SM8150
-- Device memory map and reserved regions for the firmware volume
+- Project Aloha platforms checkout \(Project-Aloha/mu\_aloha\_platforms\), which lists xiaomi-raphael and builds the SurfaceDuo1Pkg platform
+- Aloha's own packer: build\_uefi.py drives Platforms/SurfaceDuo1Pkg/PlatformBuildNoSb.py, and PythonLibs/PostBuild.py writes the Android boot image from BootShim.bin + FV/SM8150\_EFI.fd + the device DTB
+- build\_cfg/sm8150.json for the boot geometry \(header\_version 0, base 0, pagesize 4096\) and Device/xiaomi-raphael/\*.inc for the module set
 
 ### Configuration
 
-- package/firmware is a placeholder: no DSC, FDF or platform code exists yet
+- board.toml \[firmware\] still names the Mu-Silicium layout \(config raphael, Platforms/Xiaomi/raphaelPkg/raphael.dsc, FD Build/raphaelPkg/&\#123;target&\#125;\_CLANGPDB/FV/SILICIUM\_UEFI.fd\); ./unixnu build firmware and ./unixnu bootimg read exactly those paths, which is why the Aloha route does not go through them
+- the Aloha route is driven by scripts/stage-aloha-unixnu.py: it writes Include/UniXNU.dsc.inc, Include/UniXNU.fdf.inc and Include/UniXNULLib.dsc.inc, sets BUILD\_UNIXNU in both SurfaceDuo1.dsc and SurfaceDuo1NoSb.dsc, packages those includes after DXE.dsc.inc / DXE.inc, and appends ALOHA\_EXTRA\_PACKAGES to the hard-coded PACKAGES\_PATH tuple in both PlatformBuild\*.py
+- the disk stack is not added again: Device/xiaomi-raphael/APRIORI.inc embeds DiskIoDxe and PartitionDxe as fixed-GUID PE32 images and SurfaceDuo1.fdf already lists FatPkg, so the script only verifies them
+- BUILD\_UNIXNU=1 compiles UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD; BUILD\_UNIXNU=0 leaves a byte-identical stock Aloha build
 
 ### Procedure
 
-- Add UniXNU, UniXNUDxe, DarwinBoot, UniXNURamDiskDxe, DiskIoDxe and FatPkg to the DSC and FDF, then run ./unixnu build firmware --uefi ../uefi-raphael
+- python3 scripts/stage-aloha-unixnu.py --aloha &lt;mu\_aloha\_platforms&gt; --unixnu &lt;UniXNU&gt; --payload &lt;payload.img&gt;
+- cd &lt;mu\_aloha\_platforms&gt; &amp;&amp; python3 build\_uefi.py --init, then ALOHA\_EXTRA\_PACKAGES=&lt;UniXNU&gt;/package:&lt;UniXNU&gt;/drivers/DarwinBoot python3 build\_uefi.py -d xiaomi-raphael
+- fastboot flash boot &lt;aloha&gt;/Build/SurfaceDuo1Pkg/xiaomi-raphael.img
 
 ### Development findings
 
-- Firmware integration is documented upstream but no raphael platform port exists in this repository
+- the Mu-Silicium raphael platform never booted on hardware; Project Aloha lists xiaomi-raphael as supported and is what produced the working image
+- ./unixnu build firmware and ./unixnu bootimg only understand the Mu-Silicium layout \(Resources/Configs/&lt;config&gt;.toml with \[uefi\_fd\], Resources/Scripts/mkbootimg.py, BootShim.S built with -DFD\_BASE/-DFD\_SIZE\), so an Aloha checkout cannot be passed to --uefi; Aloha packs its own boot image instead
+- build\_uefi.py drives EDK II through os.system and ignores the child's exit status, so a failed build still exits 0; the workflow verifies FV/SM8150\_EFI.fd and the .img exist rather than trusting the exit code
+- the boot geometry that boots on this device is build\_cfg/sm8150.json as-is \(kernel\_addr 0x8000, ramdisk\_addr 0x1000000, tags 0x100, pagesize 4096, i.e. base 0\). board.toml \[bootimg.image\] pins base 0x10000000 for the Mu-Silicium route; forcing that here would move the shim to 0x10008000 for no benefit
+- PostBuild.py:99-100 emits --ramdisk ./PythonLibs/emptyramdisk whenever emptyramdisk is true, and that file is a six-byte placeholder \(b'dummy\\n'\). Copying the payload over it is the one seam Aloha exposes without patching PythonLibs
+- with the placeholder ramdisk the menu still renders but falls back to the built-in configuration, which has no bootable entry: Config.c reads \\EFI\\UniXNU\\unixnu.toml from any SimpleFileSystem volume and UniXNURamDiskDxe publishes the payload volume as BlockIo from the FDT /chosen initrd range
+- the kernel and the firmware are built in one workflow run \(jobs build on macos-26 and firmware on ubuntu-24.04, joined by needs\), so the payload can only carry the kernel that run compiled; the firmware job re-checks kernel.macho's sha256 against the build job's output before packing it
+- the firmware job runs on a plain push to main as well as on dispatch: the platform seed comes from the UNIXNU\_UNIQUE\_CHIP\_ID repository variable, and only an explicit dispatch with build\_firmware=false turns the job off
+- the payload volume is sized for the boot partition, not for comfort: kernel.macho plus its ADT and unixnu.toml take about 20 MiB, and a 192 MiB volume produced a 195 MiB boot image that cannot be flashed, so size\_mib is 48 and the boot image is about 51 MiB
+- the payload image itself is byte-correct: the boot image header reports ramdisk\_size 50331648 at ramdisk\_addr 0x1000000, and check-bootimg-ramdisk.py confirms the ramdisk is the payload. The problem is that the ramdisk is never published as a UEFI volume
+- UniXNURamDiskDxe reads the DTB address from the Mu-Silicium entry-argument HOB \(0xDAEE82E6...\), which only that platform's SEC emits. Searching the whole tree shows no producer of that HOB at all, so on Aloha the driver returns at 'no entry argument HOB' and publishes nothing
+- a fallback to the FDT configuration table \(gFdtTableGuid\) alone is not enough: Aloha installs the Android board tree, whose /chosen names the MIUI boot's initrd \(0x84518000\) rather than this handoff's ramdisk, so the driver read a valid tree and still published the wrong range; the UniXNU FV entries were moved after DtPlatformDxe and its FDT freefile because a configuration table is not a protocol and cannot be expressed as a Depex
+- the driving fix is a fallback that does not depend on a tree at all: UniXNURamDiskDxe scans the HOB system-memory ranges for the payload's FAT32 boot sector \(mformat OEM MTOO4043, volume label UNIXNU, 0x55AA signature, BPB geometry check\) and publishes whatever it finds, so the volume is reachable even though Aloha publishes neither the Mu-Silicium HOB nor a /chosen that points at the payload
+- the driver change is shipped as a patch applied by .github/workflows/build.yml \(patches/unixnu/ramdisk-scan-fat-volume.patch, applied right after the UniXNU checkout\). Editing the local UniXNU copy had no effect at all: the workflow checks out UniXNU/UniXNU@main, so only a patch in this repository reaches the firmware; the earlier 'fallback' had never been in any built image, which is why flashing still showed the built-in configuration
+- the firmware job log is the evidence that the patch is in the image: 'Applied patch .../UniXNURamDiskDxe.c cleanly.', then 'Building ... UniXNURamDiskDxe.inf \[AARCH64\]' under -Wall -Werror, with 'Build total time: 00:01:39' and a 3145728-byte FV
+- the Aloha EDK II chain is Linux-only: build\_setup.sh is an apt script and CLANGPDB uses aarch64-linux-gnu-gcc, so the macOS runner cannot host it; the XNU kernel conversely needs Xcode, cctools and lzfse
 
 ### Completion criteria
 
-- A firmware volume builds and UniXNU draws its boot menu on raphael
+- A firmware volume builds, and the boot image carries the UniXNU payload volume as its ramdisk
+- UniXNU draws its boot menu on raphael
+- UniXNURamDiskDxe compiles into the firmware together with the system-memory scan patch, so the payload volume has a path to BlockIo that does not need the Mu-Silicium HOB or a /chosen that names it
 
 ### Current limits
 
-- Without a firmware volume only kernel, EFI package and boot image can be produced
+- Verified on the handset \(images built before this patch\): the menu renders with working UI, fonts and input, but the footer reads "built-in configuration", so no unixnu.toml was found. On those images the driver had no path to the volume at all, which is why the DTB swap and the FDF reorder changed nothing on screen
+- The scan fallback only makes the volume reachable; whether the menu then lists the xnu entry and hands off to DarwinBoot is still an on-device question. The 48 MiB payload \(kernel.macho, its ADT and unixnu.toml, about 20 MiB used\) keeps the boot image at about 51 MiB
+- DarwinBoot has not handed off to XNU on this device: the payload kernel is the native Mach-O \(build kernel --skip-prelink\), and a prelinked kernelcache needs macOS AEA + hdiutil
 
 ### Next action
 
-- Create the uefi-raphael Mu-Silicium platform with the required DSC and FDF modules
+- Flash the image built with the scan patch \(xiaomi-raphael-v4.img\) and confirm the menu lists the xnu entry instead of "built-in configuration", then capture the DarwinBoot handoff
 
 ### Evidence
 
-Collect evidence using the next action.
+- `source`: [jobs.build runs on macos-26 \(Xcode, cctools, lzfse\) and produces kernel.macho; jobs.firmware runs on ubuntu-24.04 with needs: build, packs that run's kernel into the payload volume, installs it as Aloha's ramdisk and verifies the result with scripts/check-bootimg-ramdisk.py.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/.github/workflows/build.yml)
+- `source`: [Patches both Aloha DSC variants and the FDF to compile UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD, teaches PlatformBuild\*.py about ALOHA\_EXTRA\_PACKAGES, and with --payload installs the volume over PythonLibs/emptyramdisk.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/scripts/stage-aloha-unixnu.py)
+- `device`: [UniXNU draws its menu on raphael: blue title, Input/Tools on the right, and the footer reads "built-in configuration", which is Config.c:1595 falling back because no \\EFI\\UniXNU\\unixnu.toml volume was present.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/docs/evidence/2026-11-14-aloha-unixnu-menu.md)
+  Command: <code>fastboot flash boot aloha-unixnu.img, then photograph the UniXNU boot menu on the handset</code>. Revision: `dc881bab4a5c44206ecb6802ef2cb8a58349169c`.
+- `host`: [Both jobs pass in one run: build compiles the kernel on macos-26, firmware installs device-tree-compiler and mtools, builds the 192 MiB payload volume, stages it over PythonLibs/emptyramdisk, builds Aloha, and asserts in step 17 that the boot image ramdisk is the payload. The artifact aloha-raphael-bootimg carries SM8150\_EFI.fd \(3145728 B\), payload.img \(201326592 B\) and xiaomi-raphael.img \(204840960 B\); scripts/check-bootimg-ramdisk.py reports the ramdisk is the payload volume at offset 0x35a000.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
+  Command: <code>gh api -X POST repos/Aruvelut-123/UniXNU-raphael/actions/workflows/build.yml/dispatches -f ref=main -f 'inputs[build_kernel]=true' -f 'inputs[build_firmware]=true' -f 'inputs[unique_chip_id]=0123456789ABCDEF'</code>. Revision: `43803ea568627dd054c7ae5a3ade9d446f4e2d7d`.
 
 ## CPU and interrupts {#cpu}
 
@@ -456,42 +489,53 @@ Collect evidence using the next action.
 
 ## Image assembly {#packaging}
 
-`planned`
+`host-verified`
 
 ### Hardware and dependencies
 
-- Kernel, payload and device tree produced by the build steps
-- IPSW disk image or a raw root image to convert
+- Kernel Mach-O from the macOS job, the payload volume built from it, and the Aloha firmware volume built from the staged boot chain
+- IPSW disk image or a raw root image to convert into the flashable unixnu/userdata image
 
 ### Configuration
 
-- scripts/build.sh runs defconfig, fetch, status, kernel, package, firmware and bootimg in order
+- jobs.build \(macos-26\) runs defconfig, fetch, status, kernel --skip-prelink, package and uploads kernel.macho; jobs.firmware \(ubuntu-24.04, needs: build\) builds the payload from that kernel and then the firmware, so the two artifacts of one run cannot disagree
+- scripts/stage-aloha-unixnu.py --payload installs payload.img over PythonLibs/emptyramdisk, which PostBuild.py hands to mkbootimg as --ramdisk; scripts/check-bootimg-ramdisk.py then fails the run unless the boot image ramdisk is byte-identical to the payload volume
+- scripts/report-payload.py reads payload.json rather than parsing log text, and reports the kernel, ADT and volume hashes
 - scripts/ipsw\_to\_sparse.py converts a raw image to libsparse chunks and self-verifies the result
 
 ### Procedure
 
+- gh workflow run build.yml -f build\_kernel=true -f build\_firmware=true -f unique\_chip\_id=&lt;HEX&gt;
 - python3 scripts/ipsw\_to\_sparse.py --raw-image userdata-root.img --output unixnu.sparse
-- scripts/build.sh for the full artifact chain
+- fastboot flash boot xiaomi-raphael.img and fastboot flash unixnu unixnu.sparse
 
 ### Development findings
 
-- Sparse output is produced only from a raw image; AEA-encrypted IPSW payloads need macOS tooling and the script reports that instead of emitting a bad image
+- the two products of a run are the boot image and the root image; they are independent. Flashing the sparse root image does not supply the payload, because the payload is the boot image ramdisk and is read through UniXNURamDiskDxe, not from the root partition
+- the boot image and the payload have to come from one run: pulling kernel.macho out of an older build.yml run silently pairs a firmware with a stale kernel, so jobs.firmware both depends on jobs.build and re-checks the artifact's sha256
+- the kernel cannot be built on the Linux runner: setup-toolchain.py compiles a patched LLVM and cctools-port from source, and the kernel step dies on the first missing host tool \(unifdef, then lzfse\) long before that finishes
+- Sparse output is produced only from a raw image; AEA-encrypted IPSW payloads need macOS tooling and the script reports that instead of emitting a bad image. root-image.yml handles that case on macos-26
+- the boot image ramdisk is 192 MiB by board.toml \[payload\] size\_mib, so the packed .img grows by that much; Aloha's own emptyramdisk placeholder is six bytes, which is why a stock build looks small
 
 ### Completion criteria
 
-- boot.img and UniXNU.efi are produced and published as separate artifacts
+- One run produces a boot image whose ramdisk is the payload volume, plus the UniXNU.efi and kernel.macho artifacts
 
 ### Current limits
 
-- No boot.img or UniXNU.efi has been built from this device configuration on hardware
+- The firmware and payload jobs run green in CI; the image they produce has not been flashed, so the packed-ramdisk path is host-verified only
 
 ### Next action
 
-- Produce both artifacts in CI and attach the resulting log as host evidence
+- Flash the packed boot image and record the menu result as device evidence, then move this area to device-verified
 
 ### Evidence
 
-Collect evidence using the next action.
+- `source`: [Parses the v0-v2 boot image header, locates the ramdisk by page-aligned kernel size and exits non-zero unless those bytes equal the payload volume. Against the baseline image it reports a 6-byte ramdisk holding b'dummy\\n', which is exactly the placeholder that produced the built-in configuration menu.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/89da54cf9325c23565351af1dfc61f311adffbc8/scripts/check-bootimg-ramdisk.py)
+- `host`: [The Aloha workflow on ubuntu-24.04 reached the XNU kernel step and failed there with 'unifdef not found on PATH', which is the measurement that moved the kernel build back to the macOS job.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577)
+  Command: <code>gh api repos/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577/jobs --jq '.jobs[].steps[] | &#123;name,conclusion&#125;'</code>. Revision: `8dd26ff2a7fc82e8ae3aae13645a8d3d22ea1f7c`.
+- `host`: [The folded workflow completes end to end: jobs.build \(macos-26\) compiles the kernel and records its sha256, jobs.firmware \(ubuntu-24.04\) downloads that artifact, refuses to continue on a hash mismatch, and produces aloha-raphael-bootimg. Downloaded and re-checked locally, the boot image's ramdisk is byte-identical to payload.img \(201326592 bytes at offset 0x35a000\).](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
+  Command: <code>gh run download 43620004865 -R Aruvelut-123/UniXNU-raphael -n aloha-raphael-bootimg -D /tmp/art; python3 scripts/check-bootimg-ramdisk.py /tmp/art/xiaomi-raphael.img /tmp/art/payload.img</code>. Revision: `43803ea568627dd054c7ae5a3ade9d446f4e2d7d`.
 
 ## Diagnostics {#diagnostics}
 

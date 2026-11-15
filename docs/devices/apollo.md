@@ -6,7 +6,7 @@
 
 Migrated from HakiOS, where iOS 16.5 reaches the home screen with touch, GPU, audio, Wi-Fi and battery. Format 2 configuration and hardware description in place; no UniXNU build and no UniXNU device boot yet.
 
-Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/984455d0e6fda13facdeb63e39fd059200b38756/porting.toml), `984455d0e6fda13facdeb63e39fd059200b38756`.
+Source record: [porting.toml](https://github.com/Pistachio-Project/UniXNU-apollo/blob/a7efc0c292d341772ee8d30072ce11b3fe2dafb4/porting.toml), `a7efc0c292d341772ee8d30072ce11b3fe2dafb4`.
 
 This page is generated from the device record.
 

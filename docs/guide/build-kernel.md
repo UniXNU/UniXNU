@@ -17,6 +17,27 @@ The kernel step builds Apple's XNU source with UniXNU patches, then prelinks the
 5. Continue with [package, firmware and payload](/building#build-artifacts).
 
 
+## Local builds with exported inputs
+
+The sheng macOS lab exports its cached XNU objects, kernel headers, iPhoneOS SDK and Xcode 26.6 compiler tools with `export_build_inputs=true`. Extract `compiler-toolchain.tar.zst` to obtain `TOOLCHAIN`, containing `bin` and `lib`. Extract the cache into the selected resolved tree, then relocate its paths and build locally:
+
+```sh
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27 --data-ramdisk SEED
+```
+
+The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It uses the exported compiler to generate an arm64e object, then partially links it with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for both tool discovery and execution. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
+
+`SEED` is the preserved Data seed from the installed boot payload. The kernel-only build reads its APFS UUID and binds the compiled Data lookup to that installation.
+
+From the device checkout, run the sheng RAM image helper with the resolved tree and matching kernel and root policies. It applies the configured entry and panic probes and seals the source POST field before inserting the kernel:
+
+```sh
+python3 scripts/repack-sheng-boot.py INPUT OUTPUT --kernel-tree TREE --uefi UEFI \
+  --payload-file KERNEL=EFI/UniXNU/Payloads/kernel.macho \
+  --payload-file POLICIES=EFI/UniXNU/Payloads/kernel.macho.vroot
+```
+
 ## Source and tree
 
 | Path | Contents |
@@ -61,7 +82,7 @@ ARM64_PLKSEG_ADDR=0xfffffff004004000
 DEPLOYMENT_TARGET_FLAGS="-miphoneos-version-min=17.0 -DXNU_TARGET_OS_IOS"
 ```
 
-`BCM2837` is the XNU machine configuration that carries the 4 KiB page layout. The arm64 kernel targets iOS 17 so the prelink ABI matches the iOS 16 or iPadOS 17 kernelcache; both arm64 targets use the same arm64 patch series.
+`BCM2837` selects the 4 KiB page layout. The OS profile selects the architecture, deployment version and ABI. macOS 27 uses arm64e, a 27.0 deployment target and `-DXNU_TARGET_OS_OSX`; prelink uses the selected macOS kernelcache.
 
 ## Defconfig flags
 

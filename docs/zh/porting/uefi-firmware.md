@@ -215,6 +215,28 @@ patches = ["Resources/MuPatches/Gic-Spurious.patch"]
 fd = "Build/<device>Pkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 ```
 
+板级设置 `bootimg.image.ramdisk_compression = "uefi-chunks"` 时，`bootimg` 将 FAT 按 1 MiB 块独立编码为 UEFI 压缩流。配套的 `UniXNURamDiskDxe` 通过 1 MiB 缓存读取该格式。`ramdisk_max_bytes` 限制编码后的传输大小；`boot.json` 记录编码格式及逻辑 FAT 容量。
+
+## sheng 看门狗交接
+
+sheng 配置选择 `SHENG_BOOT_GUARD=1`，preflight 将设备仓库的 `BootResetCore.h` 导入固件仓库。SEC 验证 PMIC 中的 bootloader 重启原因，并启动 30000 毫秒的 Gunyah 看门狗。DXE 每两秒发送一次 ping，固件阶段预算为 180 秒；ExitBootServices 发送最后一次固件 ping。
+
+配套 XNU 内核使用 `uefi-watchdog=1`，在 `EARLY_BOOT` 接续看门狗，每十秒发送一次 ping。`autoreset=<秒数>` 限定运行时间，零截止时间使内核持续发送 ping。固件与内核配置需要配套。sheng lab 使用 LLVM 和 LLD 22.1.8 构建 COFF 固件，`CLANG_BIN` 指向包含该工具链 `clang`、`lld-link`、`llvm-lib` 和 `llvm-rc` 的目录。
+
+验证早期返回路径时，将已知可启动的 header-v0 XNU 镜像与选定固件组合，并加入内核入口等待：
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-sheng-watchdog-probe.py \
+  /path/to/known-boot.img /path/to/watchdog-probe.img \
+  --uefi ../uefi-sheng --fd /path/to/SILICIUM_UEFI.fd \
+  --dtb /path/to/sheng.dtb
+fastboot -s SERIAL boot /path/to/watchdog-probe.img
+```
+
+探针在 `EARLY_BOOT` 前等待，并设有 120 秒的 PSCI 重启后备路径。固件 `fb2b2ae1` 的设备验证中，从启动命令到 fastboot 返回共 70.503 秒，早于后备重启。该时间包含固件启动；硬件看门狗配置为 30 秒。
+
+内核继承路径对固件已运行的计时器发送 ping，并启动心跳线程。`patch-sheng-inherited-watchdog.py INPUT OUTPUT --kernel-args "uefi-watchdog=1"` 可在指令序列匹配的已构建源码内核上验证该路径；输出内核配合继承 watchdog 的启动配置使用。
+
 ## 外部固件构建
 
 通过 `./unixnu bootimg --fd <file>` 传入的固件需要与所选 `[firmware]` 配置一致的

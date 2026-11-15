@@ -11,6 +11,7 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 | Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
 | Copies and raster state | Blits cover the requested mip and slice ranges. Viewport and scissor setters forward every entry, up to 16. |
 | Compressed input | A zero-length no-copy compressed texture infers its DroidVM layout size and retains the owner's deallocator through use. |
+| Source compilation | `mathMode` selects safe, relaxed or fast arithmetic. `mathFloatingPointFunctions` independently selects fast or precise FP32 functions. Older option objects use `fastMathEnabled`. |
 | Functions | Function constant dictionaries expose names, indices and types. Function and compute-pipeline completion selectors report results. `specializedName` is the exported name; source lookup retains the original definition. |
 | Constant tables | Dynamically indexed constant tables larger than 4 KiB use shared constant storage. Constant pointer casts and GEP expressions retain their offsets. |
 | Memory accounting | Device allocation totals include pooled, dedicated and imported backing. Texture sizes come from their backing allocation. The recommended working set is RAM / 4, capped at 2 GiB. |
@@ -20,6 +21,12 @@ A render pass that fails encoding returns an encoder and reports a command-buffe
 
 
 Unused owned image backing is reused by pooled and dedicated images. Extra spares have no byte limit, expire after ten seconds, and go sooner under memory pressure or when a new block cannot be made. Blocks are freed off the releasing thread on the runtime's free thread, and on the releasing thread once its queue is full. An allocation failure releases kept spares and waits for posted frees before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
+
+## Native half arithmetic
+
+On A740, half FMA uses float32 multiply-add followed by conversion to half, with a one-half-ULP bound for normal half operands and results. Half division scales both operands by the same power of two to keep the native divisor in `[2^-14, 2^14]`: large divisors use `2^-2`, small divisors use `2^10`. Normal operands and results follow Vulkan's 2.5-half-ULP bound; the device's float controls determine denormal behavior.
+
+Other eligible half operations use `RelaxedPrecision` with `HalfChainPolicy::AtExits`. The source-derived arithmetic inventory records each operation's `PrecisionNote`; the runtime policy log records the selected device capabilities.
 
 ## Cache and priority
 
@@ -37,6 +44,39 @@ Turnip chooses tile memory or system memory for each render pass, and concurrent
 
 Logical Metal queues share one Vulkan queue and kernel queue per process. The frontend forwards the most urgent **current** request among live queues. Lowering or destroying a queue removes its boost. Getters report each queue's own request; setters report backend acceptance. The kernel chooses foreground or background priority from the task's GPU role. Priority policy does not use process names.
 
+## Shader priming and diagnostics
+
+The render server primes default compute and vertex pipeline variants while idle. Function reflection supplies zero-valued constants and packed vertex inputs; container stage tags select executable entry points. Universal archives containing only Apple GPU machine-code slices are listed separately from AIR inputs. Failed entries carry input revision 3, while successful checkpoints retain their translator and driver build identity. Successful and refused entry points have separate, build-specific checkpoints. A library enters `prime-done` once all its selected variants compile. `PR` reports successful libraries over eligible libraries; `PRc` reports state (`0` running, `1` complete, `2` incomplete), failed libraries, refused functions, interrupted functions and missing inventory paths.
+
+The macOS runtime build inventories `.metallib` files from the OS, SystemOS and App images. It embeds `build/prime-list.txt` in the plugin and includes the list in its bundle. The inventory accepts paths containing spaces; missing or invalid inventory produces an incomplete pass. Planned lab returns record `prime-resume`, so an interrupted compile can resume after reboot. Unexpected interruptions retain their entry in `prime-bad`.
+
+On macOS, WindowServer writes `prime.log`, `prime-done`, `prime-fn2`, `prime-refused2`, `prime-bad` and `prime-current` under `/private/var/tmp/NativeAdrenoMetal.cache`. Inspect a captured directory with:
+
+```sh
+python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
+```
+
+`FP` reports grouped submissions and batches, command pools made and reused, linear passes rendered in place and through copies, and region pipelines evicted. `CM` reports commit calls and cumulative microseconds in total, lowering, recording, pipeline waits, lock waits, scheduler passes and submission. Compare counter differences within the same controlled workload.
+
+With `diag=1` or `gpu-trace=1`, the system cache also holds bounded `timing.log` (512 KiB) and `runtime-policy.log` (64 KiB). The timing log contains per-encoder timings and command buffers taking at least 8 ms. The policy log records the actual device policy, float controls and runtime path checks. Both files are included in sheng's diagnostic export.
+
+Imported surfaces and padded textures take the runtime's in-place route after its device check accepts the layout and usage. The runtime selects submission grouping and queue sharing from the device's supported capabilities and its submission checks. Idle resource cleanup waits for the next expiration deadline.
+
+## Performance acceptance
+
+Use a fixed scene, display mode, battery range and temperature range. Record the source revisions and window state with the capture. The performance target has these checks:
+
+| Area | Target |
+| --- | --- |
+| Shader coverage | This boot's whole-system pass reports complete, with every eligible library finished and no failed or missing entry. The warmed scene adds no compilation misses. |
+| Fast paths | Every policy field has a recorded device-capability decision. Supported native approximate operations retain their required precision semantics. |
+| Frame cadence | During continuous animation, the 99th-percentile display interval fits one scan period, allowing timestamp resolution. At 120 Hz the period is 8.333 ms. |
+| Scheduling | GPU-ready work has at most 0.25 ms of avoidable scheduling delay at the 99th percentile. Every larger interval has a trace identifying its dependency or bottleneck. |
+| Hardware throughput | Isolated arithmetic and bandwidth probes reach at least 95 percent of the same device's calibrated native throughput with matching formats, precision, clocks and temperature. |
+| Correctness | The scene completes with matching output, no GPU faults or recovery, and no client crashes. |
+
+Compare CPU and GPU durations within their own clock domains. Calibrate timestamps before combining them. Retain the capture for each unmet target and use it to select the next change.
+
 ## Build and checks
 
 From the resolved iOS 27 target tree:
@@ -46,6 +86,8 @@ python3 scripts/build-turnip-darwin.py --target ios27
 python3 scripts/build-adreno-metal-plugin.py --target ios27
 python3 scripts/check-native-metal-frontend-host.py
 ```
+
+`NMB_PREBUILT_BRIDGE` selects a bridge archive metadata file. The builder checks its target, translator tree, component, wrapper, fixtures, manifest and archive digest against the selected sources before reuse. Source builds retain a two-hour Cargo budget. `python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` packages the current archive, its identity and tracked component sources for CI reuse.
 
 The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. Host checks cover rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Hardware qualification covers frame pacing and preemption under concurrent clients.
 

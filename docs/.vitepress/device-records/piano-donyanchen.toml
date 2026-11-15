@@ -87,7 +87,7 @@ evidence = []
 id = "storage"
 status = "implemented"
 components = ["ShengUfs", "VirtioMmioBlock", "RamBlock", "VerifiedRoot"]
-paths = ["scripts/prepare-ufs-policies.py", "scripts/build-ufs-storage-bindings.py", "scripts/build-verified-root-probe.py", "configs/**"]
+paths = ["scripts/prepare-ufs-policies.py", "scripts/build-ufs-storage-bindings.py", "scripts/build-verified-root-probe.py", "scripts/prepare-shengufs-*.py", "configs/**"]
 inputs = ["iPadOS 17.7.11 (21H461) IPSW, the signed verified-root policies from 044-76040-038.dmg and 044-76034-038.dmg, and the original kernelcache as the ABI reference."]
 configuration = ["CONFIG_XNU_NATIVE_UFS, CONFIG_XNU_NATIVE_VIRTIO_BLOCK, CONFIG_XNU_NATIVE_RAM_BLOCK and CONFIG_XNU_VERIFIED_ROOT_PROBE.", "CONFIG_XNU_NATIVE_UFS_ARCHIVE, CONFIG_XNU_NATIVE_VIRTIO_BLOCK_ARCHIVE, CONFIG_XNU_NATIVE_RAM_BLOCK_ARCHIVE and CONFIG_XNU_VERIFIED_ROOT_ARCHIVE point at the archives the kernel step builds.", "[payload].kernel_args carries native-ufs-root=1; [payload.adt].root_match_volume_uuid names the APFS volume 04769D26-2CA0-4825-B443-E2E5F88300F2 of 044-76040-038.dmg."]
 procedure = ["Run ./unixnu ipsw fetch -D ../device to place the IPSW under out/ipsw/21H461.", "Run python3 scripts/prepare-ufs-policies.py --tree <tree> --inputs <ipsw> --openssl-prefix $(brew --prefix openssl@3).", "Run ./unixnu build kernel -D ../device, which builds ShengUfs, VirtioMmioBlock and RamBlock and their bindings against kernelcache.decompressed."]

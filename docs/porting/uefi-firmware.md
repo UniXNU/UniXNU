@@ -218,6 +218,28 @@ The output path comes from `[firmware] fd`:
 fd = "Build/<device>Pkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd"
 ```
 
+For boards selecting `bootimg.image.ramdisk_compression = "uefi-chunks"`, `bootimg` encodes the FAT in independent 1 MiB UEFI-compressed chunks. The matching `UniXNURamDiskDxe` reads this format with a 1 MiB cache. `ramdisk_max_bytes` limits the encoded transfer; `boot.json` records both the encoding and logical FAT size.
+
+## sheng watchdog handoff
+
+The sheng profile selects `SHENG_BOOT_GUARD=1`. Its preflight imports the device's `BootResetCore.h` into the firmware checkout. SEC verifies the PMIC bootloader reboot reason and arms Gunyah's 30000 ms watchdog. DXE pings every two seconds for a 180-second firmware budget; ExitBootServices sends the final firmware ping.
+
+The matching XNU kernel uses `uefi-watchdog=1` and takes over at `EARLY_BOOT`, pinging every ten seconds. `autoreset=<seconds>` bounds the run; a zero deadline keeps the watchdog serviced. Keep the firmware and kernel configuration together. The sheng lab builds COFF firmware with LLVM and LLD 22.1.8. `CLANG_BIN` points to a directory containing that toolchain's `clang`, `lld-link`, `llvm-lib` and `llvm-rc`.
+
+To qualify the early return path, pack a known header-v0 XNU image with the selected firmware and a kernel-entry wait:
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-sheng-watchdog-probe.py \
+  /path/to/known-boot.img /path/to/watchdog-probe.img \
+  --uefi ../uefi-sheng --fd /path/to/SILICIUM_UEFI.fd \
+  --dtb /path/to/sheng.dtb
+fastboot -s SERIAL boot /path/to/watchdog-probe.img
+```
+
+The probe waits before `EARLY_BOOT` and has a 120-second PSCI reset fallback. With firmware `fb2b2ae1`, fastboot returned 70.503 seconds after the boot command, before that fallback. The elapsed time includes firmware startup; the configured hardware timeout is 30 seconds.
+
+The inherited kernel path pings the already running firmware timer and starts its service thread. `patch-sheng-inherited-watchdog.py INPUT OUTPUT --kernel-args "uefi-watchdog=1"` qualifies that path on an existing source-built kernel with the matching instruction sequence; boot the result with the inherited-watchdog profile.
+
 ## External firmware builds
 
 A firmware supplied with `./unixnu bootimg --fd <file>` needs the same DSC/FDF

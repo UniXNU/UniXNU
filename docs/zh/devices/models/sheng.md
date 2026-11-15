@@ -26,6 +26,7 @@
 | [fan-ziqi/UniXNU-sheng](https://github.com/fan-ziqi/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(fan-ziqi\)](/zh/devices/sheng-fan-ziqi) | 适配记录 | SM8550 |
 | [FFT-infra/UniXNU-alioth-sheng-template](https://github.com/FFT-infra/UniXNU-alioth-sheng-template) | [Xiaomi Pad 6S Pro \(FFT-infra\)](/zh/devices/sheng-fft-infra) | 适配记录 | SM8550 |
 | [gkxqh/UniXNU-sheng](https://github.com/gkxqh/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(gkxqh\)](/zh/devices/sheng-gkxqh) | 适配记录 | SM8550 |
+| [gnimaijil11/UniXNU-sheng-build](https://github.com/gnimaijil11/UniXNU-sheng-build) | [Xiaomi Pad 6S Pro \(gnimaijil11\)](/zh/devices/sheng-gnimaijil11) | 适配记录 | SM8550 |
 | [ht94911/UniXNU-sheng](https://github.com/ht94911/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(ht94911\)](/zh/devices/sheng-ht94911) | 适配记录 | SM8550 |
 | [hxzbaka/UniXNU-sheng](https://github.com/hxzbaka/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(hxzbaka\)](/zh/devices/sheng-hxzbaka) | 适配记录 | SM8550 |
 | [HYL0924/UniXNU-sheng](https://github.com/HYL0924/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(HYL0924\)](/zh/devices/sheng-hyl0924) | 适配记录 | SM8550 |
@@ -44,6 +45,7 @@
 | [Murderd1/UniXNU-sheng](https://github.com/Murderd1/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Murderd1\)](/zh/devices/sheng-murderd1) | 适配记录 | SM8550 |
 | [QianFengMax/UniXNU-sheng](https://github.com/QianFengMax/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(QianFengMax\)](/zh/devices/sheng-qianfengmax) | 适配记录 | SM8550 |
 | [RamstorageAI/UniXNU-sheng](https://github.com/RamstorageAI/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(RamstorageAI\)](/zh/devices/sheng-ramstorageai) | 适配记录 | SM8550 |
+| [shanggeshijidefeng/UniXNU-sheng](https://github.com/shanggeshijidefeng/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(shanggeshijidefeng\)](/zh/devices/sheng-shanggeshijidefeng) | 适配记录 | SM8550 |
 | [Soneoylys/UniXNU-sheng](https://github.com/Soneoylys/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Soneoylys\)](/zh/devices/sheng-soneoylys) | 适配记录 | SM8550 |
 | [TheArchitectEngineer/UniXNU-sheng](https://github.com/TheArchitectEngineer/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(TheArchitectEngineer\)](/zh/devices/sheng-thearchitectengineer) | 适配记录 | SM8550 |
 | [tkings4chan/UniXNU-sheng](https://github.com/tkings4chan/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(tkings4chan\)](/zh/devices/sheng-tkings4chan) | 适配记录 | SM8550 |
@@ -52,5 +54,6 @@
 | [vanzhang329/UniXNU-sheng](https://github.com/vanzhang329/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(vanzhang329\)](/zh/devices/sheng-vanzhang329) | 适配记录 | SM8550 |
 | [wzc35418/UniXNU-sheng](https://github.com/wzc35418/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(wzc35418\)](/zh/devices/sheng-wzc35418) | 适配记录 | SM8550 |
 | [yeyingjun-codes/UniXNU-sheng](https://github.com/yeyingjun-codes/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yeyingjun-codes\)](/zh/devices/sheng-yeyingjun-codes) | 记录待补齐 | SM8550 |
+| [yuchengl326-ship-it/UniXNU-sheng](https://github.com/yuchengl326-ship-it/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yuchengl326-ship-it\)](/zh/devices/sheng-yuchengl326-ship-it) | 适配记录 | SM8550 |
 | [yuyaukong/UniXNU-sheng](https://github.com/yuyaukong/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yuyaukong\)](/zh/devices/sheng-yuyaukong) | 仓库链接 | SM8550 |
 | [zy-xyz/UniXNU-sheng](https://github.com/zy-xyz/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(zy-xyz\)](/zh/devices/sheng-zy-xyz) | 适配记录 | SM8550 |

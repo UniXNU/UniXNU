@@ -220,12 +220,18 @@ The panic screen writes the formatted panic message and registers to the framebu
 
 ### Green bar at handoff {#green-bar}
 
-The top green bar is drawn by DarwinBoot's `DarwinEnter` after `ExitBootServices`, before cache maintenance, MMU shutdown, and the branch to XNU. A screen that stays there requires an entry probe or serial log to locate the next stage. The cause is undetermined from the green bar alone.
+The top green bar is drawn by DarwinBoot's `DarwinEnter` after `ExitBootServices`, before cache maintenance, MMU shutdown, and the branch to XNU. Persistent kernel logs identify later checkpoints, including `Darwin Kernel Version` and `SourceStorage: Data disk started`. Use the latest recorded kernel checkpoint when the framebuffer retains the loader screen.
+
+For a failure at kernel entry:
 
 1. Record the last `DARWINBOOT:` lines, including kernel entry address, video geometry, command line, and CPU state. Confirm the selected kernel and ADT belong to the same device and OS profile.
 2. For a kernel supported by `scripts/patch-xnu-entry-probe.py`, set `[payload] panic_screen = true` in the device profile. Rebuild with `./unixnu payload`, then `./unixnu bootimg`, and boot the new image. Check `logs/payload-patch.log` for successful probe installation.
 3. Look for the blue and magenta bars below the green band. Blue marks the MMU-off kernel entry; magenta marks the point before enabling the MMU. Check the recorded framebuffer base and stride when probe output is absent.
 4. Use `entry_probe_reset_delay = 6` for a timed reset checkpoint after MMU enable. Record the observed bars, reset timing, serial output, and `payload.json` in the device's porting record.
+
+On sheng, `storage-probe=1 log=1` records BSD initialization, the following bootstrap calls and PID 1 execution stages. Separate rings in the spare UFS log blocks retain the bootstrap and PID 1 paths. Records include sequence, PID, thread, build tag, stage, counters, virtual timer state, DAIF, pending interrupt and caller. `read-sheng-log.py --expected-tag TAG` exports matching records to `startup-checkpoints.txt` and the latest record to `startup-checkpoint.txt`. The timed runner supplies the expected tag and records header and checkpoint freshness. Keep the qualified firmware watchdog and automatic fastboot return enabled.
+
+Startup persistence includes PID 1 stages in headless builds, mount and launch-policy return codes, and the first formatted panic message before debugger entry. The log reader retains the panic message buffer under header state `5`.
 
 See [applying boot arguments](/xnu/boot-arguments#apply-arguments) when a configuration change is missing from the booted image.
 

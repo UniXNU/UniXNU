@@ -14,6 +14,27 @@
 5. 继续[构建 package、固件和 payload](/zh/building)。
 
 
+## 使用导出输入在本机构建
+
+sheng macOS lab 的 `export_build_inputs=true` 导出 XNU 目标文件、内核头文件、iPhoneOS SDK 和 Xcode 26.6 编译工具。解压 `compiler-toolchain.tar.zst`，得到包含 `bin` 和 `lib` 的 `TOOLCHAIN`。将缓存解压到选定构建树，修正路径后在本机编译：
+
+```sh
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
+python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27 --data-ramdisk SEED
+```
+
+导出任务收集工具依赖的非系统动态库，运行导出目录中的编译器、IIG 和链接器，用导出的编译器生成 arm64e 对象，再通过 classic 链接器执行部分链接。本地运行器在工具查找和执行时均选择导出的 SDK、编译器、链接器和内核工具。`build-paths.json` 记录编译器与 Xcode 版本。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
+
+`SEED` 是现有启动 payload 中保留的 Data seed。仅构建内核时也会读取其 APFS UUID，将编译后的 Data 查找绑定到该安装。
+
+sheng RAM 镜像使用设备仓库中的脚本，传入解析后的构建树及配套内核、根验证策略。脚本应用已配置的入口和 panic 探针，封装源码 POST 字段，再写入内核：
+
+```sh
+python3 scripts/repack-sheng-boot.py INPUT OUTPUT --kernel-tree TREE --uefi UEFI \
+  --payload-file KERNEL=EFI/UniXNU/Payloads/kernel.macho \
+  --payload-file POLICIES=EFI/UniXNU/Payloads/kernel.macho.vroot
+```
+
 ## 源码与构建树
 
 | 路径 | 内容 |

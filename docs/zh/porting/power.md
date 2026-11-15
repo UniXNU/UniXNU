@@ -34,7 +34,7 @@
 3. 调用 `sheng_adsp_channel(name, intent_size, intent_count, initiator, callbacks, context)`
    注册目标通道。通道名、接收缓冲大小和打开方向采用目标服务协议的定义。
 4. 处理 `sheng_adsp_send` 返回值：`0` 表示已入队，`-1` 表示队列已满或消息过长，`-2` 表示参数错误。
-   参考 API 的消息上限是 `SHENG_ADSP_MAX_MESSAGE`，即 512 字节。
+   参考 API 的消息上限是 `SHENG_ADSP_MAX_MESSAGE`，即 560 字节。
    更大消息的服务需要相应的传输和接收缓冲支持。
 5. 断开时取消请求，使远端句柄失效；重连后重新协商通道并恢复订阅，再恢复消费者。
 
@@ -141,6 +141,58 @@ Linux 提供协议和流生命周期参考。使用选定 XNU 的接口实现其
 **结果：** OS 收到单位明确、及时更新的测量值。
 固件负责充电控制时保留其所有权，驱动实现测量值发布。
 主机控制的充电器需要独立的控制协议、限值和温控策略。
+
+### sheng 的 PD、PPS 和 MiPPS {#sheng-charging}
+
+Sheng 的 DSP 电池管理器负责 PD/PPS 合约、充电泵、电流限制和温度调节。`package/ShengChargeAuth.c` 使用 HMAC-SHA256 认证两个电量计，再认证提供 SVID `0x2717` 和有效 PDO2 的小米充电器。USB 请求将数据角色切换为 host。认证在每次连接时运行一次，与电池管理器共用串行请求队列。
+
+Linux 工具通过小米 `qcom-battery` sysfs 接口运行同一份 C 状态机。在匹配的 Linux 内核中准备 Python 3、C 编译器和 C 头文件，从 sheng 设备仓库运行：
+
+```sh
+python3 scripts/charge-sheng-linux.py --out charge-before.json
+sudo python3 scripts/charge-sheng-linux.py --authenticate --out charge-auth.json
+```
+
+采集内容包括充电器标识、认证状态、PD/PPS 属性、两个充电泵和电池测量值。使用相同充电器、线缆、电量和温度，与 macOS `log-power=1` 的充电日志比较。主机协议检查覆盖认证和连接变化，实际协商功率需要连接充电器测量。
+
+### sheng Linux 充电读取镜像
+
+充电读取镜像包含 Linux 7.3.4、静态程序 `sheng-charge`、ADSP 固件和驱动模块依赖。
+在主机上构建：
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-linux-charge-reader.py \
+  --unixnu . --busybox /path/to/static-aarch64-busybox \
+  --out /path/to/sheng-linux-charge.img
+```
+
+平板进入 fastboot 后，在主机启动充电器测试：
+
+```sh
+python3 ../UniXNU-sheng/scripts/run-sheng-charge-test.py \
+  --serial SERIAL --reader /path/to/sheng-linux-charge.img \
+  --out /path/to/charge-capture
+```
+
+加入 `--snapshot` 可保持电脑连接，采集当前电源和电池读数。
+
+主机启动读取镜像，显式运行 `/bin/sheng-charge-setup` 加载充电模块，并等待电池管理服务
+成功响应属性读取，最长 30 秒。认证使用与 macOS
+相同的 `ShengChargeAuth.c` 状态机，在独立会话中忽略 SIGHUP，标准输入重定向到
+`/dev/null`，输出写入 RAM 文件。按照主机提示接入 PD 充电器，保持 140 秒，再于提示的
+时限内接回电脑。
+
+主机读取 `charge.log`、`charge-console.log`、内核日志及程序退出状态，执行 `rebootbl`
+并确认 fastboot。`result.json` 记录认证和设备返回结果。主机总时限为 270 秒，读取镜像
+在加载充电模块之前启动独立的 300 秒返回定时器。
+
+加载 ADSP 模块前，`/bin/sheng-charge --arm-fastboot` 通过当前设备树定位 SDAM 重启原因
+单元，将偏移 `0x48` 的位 7:1 写为 bootloader 值 2，保留位 0，并读回验证。验证失败时
+执行 `rebootbl`。内核使用 `panic=5` 和 `qcom_scm.download_mode=off`，panic 重启路径
+保留预先写入的 bootloader 原因。
+
+采集内容包含燃料计、适配器和充电泵读数。小米属性位于 `pmic_glink.power-supply` 辅助
+设备的 `xiaomi` 目录，工具自动查找该路径。
 
 ## 5. 实现调频与电源操作 {#power}
 

@@ -12,6 +12,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+from unixnu.util import tool
 import shutil
 import struct
 import subprocess
@@ -222,7 +223,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
     if latency:
         sources.append(latency)
     objects, inputs = [], {}
-    objcopy = shutil.which('llvm-objcopy') or '/opt/homebrew/opt/llvm/bin/llvm-objcopy'
+    objcopy = tool('llvm-objcopy')
     for source in sources:
         record = (bsd if source.name in bsd_sources else c) if source.suffix == '.c' else cpp
         output = out / (source.stem + '.o')
