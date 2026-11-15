@@ -3,6 +3,7 @@
 import gzip
 import hashlib
 import lzma
+import os
 from pathlib import Path
 import struct
 import sys
@@ -15,6 +16,8 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from unixnu import boot_template as template
 from unixnu import bootimg
+from unixnu import cli
+from unixnu.config import Context
 from unixnu.util import Error
 
 LOADER = '1b64af87-8415-4b57-9b16-680d70913b9f'
@@ -67,6 +70,72 @@ def boot_image(fd, ramdisk=b'payload'):
 
 
 class BootTemplate(unittest.TestCase):
+    def test_template_boot_image_needs_no_external_device_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'Resources/Scripts').mkdir(parents=True)
+            (root / 'Resources/Scripts/mkbootimg.py').touch()
+            source = root / 'source.fd'
+            source.write_bytes(firmware(b'MZcurrent'))
+            archive = root / 'template.xz'
+            archive.write_bytes(lzma.compress(boot_image(firmware())))
+            spec = {'sha256': hashlib.sha256(archive.read_bytes()).hexdigest(), 'loader_guid': LOADER}
+            ctx = SimpleNamespace(board={'bootimg': {'template': spec}}, work=root)
+
+            def pack(command, **kwargs):
+                kernel = Path(command[command.index('--kernel') + 1]).read_bytes()
+                ramdisk = Path(command[command.index('--ramdisk') + 1]).read_bytes()
+                header = bytearray(4096)
+                header[:8] = b'ANDROID!'
+                struct.pack_into('<10I', header, 8, len(kernel), 0x8000, len(ramdisk), 0x1000000,
+                                 0, 0, 0x1e00000, 4096, 0, 0x220001a8)
+                Path(command[command.index('-o') + 1]).write_bytes(
+                    bytes(header) + kernel + b'\0' * (template.align(len(kernel), 4096) - len(kernel)) + ramdisk)
+
+            with patch.dict('os.environ', UNIXNU_BOOT_TEMPLATE=str(archive)), \
+                 patch.object(bootimg, 'settings', return_value=({}, 0, source.stat().st_size, True, {})), \
+                 patch.object(bootimg, 'run', side_effect=pack):
+                for dtb in (None, root / 'missing.dtb'):
+                    with self.subTest(dtb=dtb):
+                        output = bootimg.build(ctx, root, source, dtb)
+                        _, selected, tree, _ = template.parse_boot_image(output.read_bytes())
+                        self.assertEqual(template.loader_pe(selected, LOADER), b'MZcurrent')
+                        self.assertEqual(tree, template.parse_boot_image(boot_image(firmware()))[2])
+
+    def test_native_boot_image_still_requires_a_device_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'Resources/Scripts').mkdir(parents=True)
+            (root / 'Resources/Scripts/mkbootimg.py').touch()
+            source = root / 'source.fd'
+            source.write_bytes(b'F')
+            ctx = SimpleNamespace(board={}, work=root)
+            with patch.object(bootimg, 'settings', return_value=({}, 0, 1, True, {})):
+                for dtb in (None, root / 'missing.dtb'):
+                    with self.subTest(dtb=dtb), self.assertRaisesRegex(Error, r'device tree \(--dtb\) not found'):
+                        bootimg.build(ctx, root, source, dtb)
+
+    def test_bootimg_device_tree_option_precedence(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for explicit, environment, configured, expected in (
+                ('flag.dtb', 'env.dtb', 'board.dtb', Path('flag.dtb').resolve()),
+                (None, 'env.dtb', 'board.dtb', Path('env.dtb').resolve()),
+                (None, None, 'board.dtb', root / 'board.dtb'),
+                (None, None, None, None),
+            ):
+                args = SimpleNamespace(fd='source.fd', dtb=explicit, ramdisk='none', output=None, target='DEBUG')
+                ctx = SimpleNamespace(args=args, board={'bootimg': {'dtb': configured}}, tree=root)
+                ctx.refuse_example = lambda: None
+                ctx.option = lambda flag, env=None: Context.option(ctx, flag, env)
+                env = {'UNIXNU_DTB': environment} if environment else {}
+                with self.subTest(explicit=explicit, environment=environment, configured=configured), \
+                     patch.dict(os.environ, env, clear=True), \
+                     patch.object(cli, 'need_uefi', return_value=root), \
+                     patch.object(bootimg, 'build') as build:
+                    cli.cmd_bootimg(ctx)
+                    self.assertEqual(build.call_args.args[3], expected)
+
     def test_larger_loader_preserves_every_other_module(self):
         source = firmware()
         updated, report = template.replace_loader(source, b'MZ' + b'new' * 4000, LOADER)
