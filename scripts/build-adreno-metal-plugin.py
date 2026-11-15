@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--target', choices=('ios', 'ios27', 'macos27'), default='ios')
 parser.add_argument('--no-replay', action='store_true', help='omit the optional host simulation capture used by diagnostic probes')
+parser.add_argument('--translator-source', type=Path, help='use an existing pinned and patched translator checkout')
 args = parser.parse_args()
 MACOS = args.target == 'macos27'
 # IOS27 marks the arm64e builds (iPadOS 27 and macOS 27): pointer authentication, the PAC bridge and the arm64e checks.
@@ -41,7 +42,7 @@ base = ['xcrun', 'clang', '-target', {'ios': 'arm64-apple-ios17.0', 'ios27': 'ar
         '-fstack-protector-strong']
 source_hash = hashlib.sha256()
 for path in sorted((ROOT / 'drivers/AdrenoMetal').rglob('*')):
-    if path.is_file() and '.git' not in path.parts and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
+    if path.is_file() and '.git' not in path.parts and path.relative_to(ROOT / 'drivers/AdrenoMetal').parts[0] != 'tools' and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
         source_hash.update(str(path.relative_to(ROOT / 'drivers/AdrenoMetal')).encode())
         source_hash.update(path.read_bytes())
 metal_build_id = source_hash.hexdigest()
@@ -63,7 +64,10 @@ if args.no_replay:
 else:
     subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
 BRIDGE_TARGET = args.target
-subprocess.run(['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET], check=True)
+bridge_command = ['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
+if args.translator_source:
+    bridge_command += ['--source', args.translator_source]
+subprocess.run([str(value) for value in bridge_command], check=True)
 BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'
 # arm64e: the Rust objects' imports that take a callback go through the signing wrappers of RustPacBoundary.c, and their indirect branches
 # are routed through its stripping trampolines after the link (scripts/rust-pac-rewrite.py).

@@ -18,9 +18,11 @@ PIN = json.loads((ROOT / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text(
 SOURCE = ROOT / '.cache/gpu-reference/metal2vulkan'
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--target', choices=['ios', 'ios27', 'macos27', 'host'], default='ios')
+parser.add_argument('--source', type=Path, default=SOURCE, help='Use an exact pinned translator checkout and reuse its Cargo cache')
 parser.add_argument('--manifest-only', action='store_true',
                     help='write build/adreno-metal-bridge/Cargo.toml (patched source, fixtures) and stop before cargo, for `cargo fetch`')
 args = parser.parse_args()
+SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
