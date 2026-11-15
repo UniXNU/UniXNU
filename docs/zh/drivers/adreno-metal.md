@@ -10,6 +10,7 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 | --- | --- |
 | MSAA 策略 | 所有客户端的纹理、管线和渲染通道默认使用单采样。resolve 目标接收渲染结果，load 和 store-and-resolve 保留源内容。`NATIVE_METAL_SINGLE_SAMPLE=0` 让进程保留请求的采样数，`1` 强制单采样。 |
 | Heap 资源 | buffer 和 texture 的 `makeAliasable` 归还 heap 区间。 |
+| 纹理布局 | 创建纹理、查询 heap 大小和创建 view 时保留调用方的 `allowGPUOptimizedContents` 设置。 |
 | 纹理通道 | 纹理描述符和 view 保留全部四个 swizzle，包括显式零和一。 |
 | 复制和光栅状态 | blit 覆盖指定 mip 和 slice 范围。viewport、scissor 传递完整数组，最多 16 项。 |
 | 压缩纹理输入 | 长度为零的 no-copy 压缩纹理按 DroidVM 布局推导大小，使用结束后调用所有者的 deallocator。 |
