@@ -185,6 +185,16 @@ Build and pack using that seed:
 Boot and sign in with that account to reach the desktop. `--skip-setup` is a
 seed creation option.
 
+The sheng macOS profile uses a SHA-256-pinned firmware template for its ABL
+transport. `unixnu bootimg` replaces only DarwinBoot with the loader from the
+current firmware build, preserving the qualified shim, board firmware, DTB and
+Android header settings. The payload is 187 MiB; packing stops above the
+193 MiB boot-image limit. The menu waits for a key.
+
+The template is cached under `out/downloads`. For an offline build, set
+`UNIXNU_BOOT_TEMPLATE` to the matching `.img.xz`; its checksum is still checked.
+`boot/boot.json` records the template, loader and selected firmware hashes.
+
 Seed creation options:
 
 | Argument | Effect |
