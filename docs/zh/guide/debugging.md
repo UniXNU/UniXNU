@@ -228,7 +228,7 @@ panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并�
 3. 查看绿色条下方的蓝色和品红色条。蓝色表示进入 MMU 关闭状态下的内核入口，品红色表示到达开启 MMU 前的位置。缺少探针画面时，检查记录的 framebuffer 基址和行跨度。
 4. 使用 `entry_probe_reset_delay = 6` 设置开启 MMU 后的定时复位检查点。在设备移植记录中保存色条、复位时间、串口输出和 `payload.json`。
 
-sheng 使用 `storage-probe=1 log=1`，在 APFS、mobile graphics 和 IOGPU 加载调用前后记录 BSD 启动检查点。每个检查点把构建标签、阶段、计数器、虚拟定时器状态、DAIF、待处理中断和调用地址写入 UFS 日志区的空闲块。`read-sheng-log.py` 导出 `startup-checkpoint.txt`，自动循环核对其标签与日志文件头标签。保持已验证的固件 watchdog 和自动返回 fastboot 功能启用。
+sheng 使用 `storage-probe=1 log=1` 记录 BSD 初始化、后续 bootstrap 调用和 PID 1 执行阶段。UFS 日志区的空闲块分别保留 bootstrap 和 PID 1 的环形记录，包含序号、PID、线程、构建标签、阶段、计数器、虚拟定时器状态、DAIF、待处理中断和调用地址。`read-sheng-log.py --expected-tag TAG` 将匹配记录导出为 `startup-checkpoints.txt`，并将最新记录保存为 `startup-checkpoint.txt`。自动循环传入预期标签，并记录日志文件头和检查点是否属于本次启动。保持已验证的固件 watchdog 和自动返回 fastboot 功能启用。
 
 配置修改未体现在启动镜像中时，按[应用启动参数](/zh/xnu/boot-arguments#apply-arguments)检查。
 

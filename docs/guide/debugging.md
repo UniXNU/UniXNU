@@ -229,7 +229,7 @@ For a failure at kernel entry:
 3. Look for the blue and magenta bars below the green band. Blue marks the MMU-off kernel entry; magenta marks the point before enabling the MMU. Check the recorded framebuffer base and stride when probe output is absent.
 4. Use `entry_probe_reset_delay = 6` for a timed reset checkpoint after MMU enable. Record the observed bars, reset timing, serial output, and `payload.json` in the device's porting record.
 
-On sheng, `storage-probe=1 log=1` records BSD startup checkpoints before and after the APFS, mobile graphics and IOGPU loader calls. Each checkpoint writes its build tag, stage, counters, virtual timer state, DAIF, pending interrupt and caller to a spare block in the UFS log window. `read-sheng-log.py` exports `startup-checkpoint.txt`; the timed runner checks its tag and the log header tag. Keep the qualified firmware watchdog and automatic fastboot return enabled.
+On sheng, `storage-probe=1 log=1` records BSD initialization, the following bootstrap calls and PID 1 execution stages. Separate rings in the spare UFS log blocks retain the bootstrap and PID 1 paths. Records include sequence, PID, thread, build tag, stage, counters, virtual timer state, DAIF, pending interrupt and caller. `read-sheng-log.py --expected-tag TAG` exports matching records to `startup-checkpoints.txt` and the latest record to `startup-checkpoint.txt`. The timed runner supplies the expected tag and records header and checkpoint freshness. Keep the qualified firmware watchdog and automatic fastboot return enabled.
 
 See [applying boot arguments](/xnu/boot-arguments#apply-arguments) when a configuration change is missing from the booted image.
 
