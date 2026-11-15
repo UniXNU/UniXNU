@@ -115,7 +115,7 @@ From the workspace root:
 
 ```sh
 python3 UniXNU-<device>/scripts/check-bluetooth-platform.py
-python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
+python3 UniXNU-<device>/scripts/check-bluetooth-shared.py --tree <resolved-tree>
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
