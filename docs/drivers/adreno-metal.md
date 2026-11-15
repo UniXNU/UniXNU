@@ -8,6 +8,7 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 | --- | --- |
 | MSAA policy | All clients use one sample for textures, pipelines and render passes by default. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves a process's requested sample counts; `1` forces single-sample rendering. |
 | Heap resources | Buffer and texture `makeAliasable` release their heap ranges. |
+| Texture layout | Creation, heap size queries and texture views retain the caller's `allowGPUOptimizedContents` setting. |
 | Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
 | Copies and raster state | Blits cover the requested mip and slice ranges. Viewport and scissor setters forward every entry, up to 16. |
 | Compressed input | A zero-length no-copy compressed texture infers its DroidVM layout size and retains the owner's deallocator through use. |
