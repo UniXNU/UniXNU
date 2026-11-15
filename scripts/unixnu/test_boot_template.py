@@ -87,7 +87,7 @@ class BootTemplate(unittest.TestCase):
                 ramdisk = Path(command[command.index('--ramdisk') + 1]).read_bytes()
                 header = bytearray(4096)
                 header[:8] = b'ANDROID!'
-                struct.pack_into('<10I', header, 8, len(kernel), 0x8000, len(ramdisk), 0x1000000,
+                struct.pack_into('<10I', header, 8, len(kernel), 0x8000, len(ramdisk), 0x1000000 if ramdisk else 0,
                                  0, 0, 0x1e00000, 4096, 0, 0x220001a8)
                 Path(command[command.index('-o') + 1]).write_bytes(
                     bytes(header) + kernel + b'\0' * (template.align(len(kernel), 4096) - len(kernel)) + ramdisk)
