@@ -181,7 +181,8 @@ def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
             raise Error('boot image header does not match the requested parameters')
         if kernel_address != image['base'] + image['kernel_offset'] or tags != image['base'] + image['tags_offset']:
             raise Error('boot image load addresses do not match the requested offsets')
-        if ramdisk_address != image['base'] + image.get('ramdisk_offset', 0x1000000):
+        expected_ramdisk_address = image['base'] + image.get('ramdisk_offset', 0x1000000) if ramdisk_size else 0
+        if ramdisk_address != expected_ramdisk_address:
             raise Error('boot image ramdisk address does not match the requested offset')
         if 'encoded_os_version' in image and encoded_os != image['encoded_os_version']:
             raise Error('boot image OS metadata differs from the qualified template')
