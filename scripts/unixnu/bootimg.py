@@ -14,6 +14,7 @@ import zlib
 from pathlib import Path
 
 from .config import load_toml
+from . import ramdisk as ramdisk_codec
 from .util import Error, log, run, sha256_file, tool
 
 DEFAULTS = {'header_version': 0, 'base': 0, 'kernel_offset': 0x8000, 'tags_offset': 0x1e00000, 'pagesize': 4096}
@@ -111,12 +112,24 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         else:
             ramdisk_path = scratch / 'ramdisk'
             ramdisk_path.write_bytes(b'')
+        decoded_size = ramdisk_path.stat().st_size
+        encoding = image.get('ramdisk_compression', 'none')
+        if encoding == 'uefi-chunks' and decoded_size:
+            packed_ramdisk = scratch / 'ramdisk.packed'
+            ramdisk_codec.encode(ramdisk_path, packed_ramdisk, uefi, ctx.tree if hasattr(ctx, 'tree') else ctx.work)
+            ramdisk_path = packed_ramdisk
+        elif encoding not in ('none', 'uefi-chunks'):
+            raise Error(f'unsupported ramdisk_compression: {encoding}')
+        maximum = image.get('ramdisk_max_bytes')
+        if maximum and ramdisk_path.stat().st_size > maximum:
+            raise Error(f'encoded ramdisk exceeds the board limit of {maximum} bytes')
         command = ['python3', mkbootimg, '--kernel', kernel_path, '--ramdisk', ramdisk_path, '-o', out]
         for key in MKBOOTIMG_FLAGS:
             if key in image:
                 command += [f'--{key}', str(image[key])]
         run(command, capture=True)
         report = verify(out, combined, tree, ramdisk_path, image, compression)
+        report.update(ramdisk_encoding=encoding, ramdisk_decoded_bytes=decoded_size)
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
                   dtb_sha256=sha256_file(dtb), shim_bytes=len(shim), hardware_tested=False)
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
