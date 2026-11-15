@@ -13,12 +13,19 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 | 纹理通道 | 纹理描述符和 view 保留全部四个 swizzle，包括显式零和一。 |
 | 复制和光栅状态 | blit 覆盖指定 mip 和 slice 范围。viewport、scissor 传递完整数组，最多 16 项。 |
 | 压缩纹理输入 | 长度为零的 no-copy 压缩纹理按 DroidVM 布局推导大小，使用结束后调用所有者的 deallocator。 |
+| 源码编译 | `mathMode` 选择 safe、relaxed 或 fast 算术模式，`mathFloatingPointFunctions` 独立选择 fast 或 precise FP32 函数。旧版选项对象使用 `fastMathEnabled`。 |
 | 函数 | 函数常量字典提供名称、索引和类型。函数及计算管线的完成回调返回结果。`specializedName` 用作导出名称，源码查找保留原函数名。 |
 | 常量表 | 超过 4 KiB 的动态索引常量表使用共享常量存储。常量指针转换和 GEP 表达式保留偏移。 |
 | 内存统计 | 设备用量统计池、独立和导入分配。纹理大小来自实际 backing allocation。建议工作集为 RAM / 4，上限 2 GiB。 |
 | 队列容量 | `newCommandQueueWithMaxCommandBufferCount:` 使用 runtime 的未完成缓冲数量限制。未提交缓冲销毁时释放名额，已提交缓冲在完成回调返回后释放名额。 |
 
 渲染通道编码失败时仍返回 encoder，通过 command buffer 报错，支持缓存 encoder 方法的调用方。
+
+## 原生 half 运算
+
+A740 的 half FMA 使用 float32 乘加后转换为 half，正常 half 操作数和结果的误差不超过一个 half ULP。half 除法先将两个操作数按相同的二次幂缩放，使原生除数位于 `[2^-14, 2^14]`：大除数使用 `2^-2`，小除数使用 `2^10`。正常操作数和结果遵循 Vulkan 的 2.5 half ULP 界限，非正规数行为由设备浮点控制决定。
+
+其他适用的 half 运算通过 `RelaxedPrecision` 和 `HalfChainPolicy::AtExits` 使用原生精度。源码枚举的算术清单记录每项运算的 `PrecisionNote`，runtime 策略日志记录实际选用的设备能力。
 
 ## 缓存和优先级
 
@@ -38,6 +45,39 @@ Turnip 为每个渲染通道选择瓦片内存或系统内存，并发分箱默�
 
 
 已空闲的自有图像内存可供池化和独立图像复用。额外缓存没有字节上限，十秒后过期，遇到内存压力或无法分配新块时提前释放。内存块在 runtime 的释放线程上释放，不占用发起释放的线程，超过队列上限时由发起线程释放。分配失败时先释放保留内存并等待已提交的释放完成，再重试。导入内存和外部所有者回调保留原有释放顺序。首次使用仍可能需要准备新内存页。
+
+## 着色器预编译和诊断
+
+渲染服务在空闲时预编译默认的计算和顶点管线变体。函数反射提供零值常量与紧凑排列的顶点输入，容器中的阶段标签选择可执行入口。仅含 Apple GPU 机器码切片的通用归档与 AIR 输入分别列出。失败条目使用输入版本 3，成功条目保留其翻译器与驱动构建标识。成功和被拒绝的函数分别保存到按构建区分的 checkpoint。一个库的适用变体全部编译成功后，才写入 `prime-done`。`PR` 显示成功库数量与适用库总数；`PRc` 显示状态（`0` 进行中，`1` 已完成，`2` 未完成）、失败库数量、被拒绝函数数量、中断函数数量和缺失路径数量。
+
+macOS runtime 构建会枚举 OS、SystemOS 和 App 镜像中的 `.metallib`，将 `build/prime-list.txt` 嵌入插件并放入 bundle。清单支持带空格的路径；清单缺失或无效时，pass 为未完成。lab 计划返回时记录 `prime-resume`，中断的编译可在重启后继续。意外中断的条目保留在 `prime-bad`。
+
+macOS 的 WindowServer 将 `prime.log`、`prime-done`、`prime-fn2`、`prime-refused2`、`prime-bad` 和 `prime-current` 写入 `/private/var/tmp/NativeAdrenoMetal.cache`。读取导出的目录：
+
+```sh
+python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
+```
+
+`FP` 记录合并提交与批次数量、创建与复用的 command pool 数量、原位渲染与经过复制的线性通道数量，以及被淘汰的区域管线数量。`CM` 记录 commit 调用次数，以及总耗时、lowering、命令记录、管线等待、锁等待、调度和提交的累计微秒数。在相同受控工作负载内比较计数差值。
+
+使用 `diag=1` 或 `gpu-trace=1` 时，系统缓存还保存有大小限制的 `timing.log`（512 KiB）和 `runtime-policy.log`（64 KiB）。前者记录各 encoder 耗时和至少 8 ms 的 command buffer，后者记录实际设备策略、浮点控制能力和 runtime 路径检查。sheng 的诊断导出包含这两个文件。
+
+导入的 surface 和带行间距的纹理，在设备检查接受其布局与用途后使用 runtime 的原位路径。提交合并与队列共享根据设备支持的能力和提交检查结果选择。空闲资源清理线程等待下一次过期时间。
+
+## 性能验收
+
+固定场景、显示模式、电量范围和温度范围，在采集中记录源码版本和窗口状态。性能目标按以下条件验收：
+
+| 范围 | 目标 |
+| --- | --- |
+| 着色器覆盖 | 本次启动的全系统 pass 显示完成，全部适用库成功，失败和缺失条目均为零。预热后的场景没有新增编译 miss。 |
+| Fast path | 每个策略字段都有设备能力判断记录，支持的原生近似运算保留其精度语义。 |
+| 帧间隔 | 持续动画期间，显示间隔的第 99 百分位不超过一个扫描周期，允许时间戳分辨率误差。120 Hz 对应 8.333 ms。 |
+| 调度 | GPU 任务就绪后，可消除的调度延迟第 99 百分位不超过 0.25 ms。更长的区间都有标明依赖或瓶颈的 trace。 |
+| 硬件吞吐 | 独立算术和带宽探测在相同格式、精度、时钟和温度下，达到本机校准原生吞吐的至少 95%。 |
+| 正确性 | 场景完成、输出一致、GPU 故障和恢复次数为零、客户端崩溃次数为零。 |
+
+CPU 和 GPU 时长各自在其时钟域内比较，合并时间戳前先校准。保留每项未达目标的采集结果，据此确定下一项修改。
 
 ## 构建和检查
 
@@ -60,3 +100,5 @@ python3 scripts/check-native-metal-frontend-host.py
 `wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
 
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。
+
+`python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` 将当前静态库、构建标识和组件源码打包，供 CI 复用。

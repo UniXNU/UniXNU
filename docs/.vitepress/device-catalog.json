@@ -60,6 +60,11 @@
     "title_zh": "bbk-a2"
   },
   {
+    "name": "models/bluejay",
+    "title": "bluejay",
+    "title_zh": "bluejay"
+  },
+  {
     "name": "models/braveark",
     "title": "braveark",
     "title_zh": "braveark"
@@ -265,6 +270,11 @@
     "title_zh": "gta4l"
   },
   {
+    "name": "models/gtaxllte",
+    "title": "gtaxllte",
+    "title_zh": "gtaxllte"
+  },
+  {
     "name": "models/gts7fewifi",
     "title": "gts7fewifi",
     "title_zh": "gts7fewifi"
@@ -305,6 +315,11 @@
     "title_zh": "hero2lte"
   },
   {
+    "name": "models/hotdog",
+    "title": "hotdog",
+    "title_zh": "hotdog"
+  },
+  {
     "name": "models/houji",
     "title": "houji",
     "title_zh": "houji"
@@ -328,6 +343,11 @@
     "name": "models/j716f",
     "title": "j716f",
     "title_zh": "j716f"
+  },
+  {
+    "name": "models/judyp",
+    "title": "judyp",
+    "title_zh": "judyp"
   },
   {
     "name": "models/kebab",
@@ -645,6 +665,11 @@
     "title_zh": "rmx3823"
   },
   {
+    "name": "models/rodin",
+    "title": "rodin",
+    "title_zh": "rodin"
+  },
+  {
     "name": "models/rothko",
     "title": "rothko",
     "title_zh": "rothko"
@@ -728,6 +753,11 @@
     "name": "models/tb375fc",
     "title": "tb375fc",
     "title_zh": "tb375fc"
+  },
+  {
+    "name": "models/tb710fu",
+    "title": "tb710fu",
+    "title_zh": "tb710fu"
   },
   {
     "name": "models/thor",

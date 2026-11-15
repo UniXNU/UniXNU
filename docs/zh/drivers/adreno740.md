@@ -23,6 +23,8 @@ Metal → AdrenoMetal → metal2vulkan → Turnip → Darwin KMD → Adreno740 �
 
 参考实现用 `gpu-preempt=2` 启用模式 2。模式 1 仅将 low/background 请求送往 ring 1，模式 0 使用单环。由 CPU 切换页表时也仅使用 ring 0。切环超时为 1 秒。切换失败后停止抢占，恢复流程在 ring 0 重放待执行任务，诊断记录保留失败信息。
 
+调度恢复从最早未完成的 fence 开始重放。捕获到 SMMU 故障时，按故障作业策略恢复，并在复位前记录故障。每次失败切换累计一次超时。GPU trace 事件 70 保存恢复 fence、已完成前缀、重放数量、策略标志和 SMMU 寄存器。
+
 ## 构建和验证
 
 在解析后的 iOS 27 目标构建树中设置 `UNIXNU_XNU_ARCH=arm64e`、`UNIXNU_IOS_VERSION=27.0` 后执行：

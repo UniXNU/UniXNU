@@ -88,7 +88,7 @@ the measurement needed to resolve them in `next_action`.
 3. Update the implementation and each affected area's findings or evidence.
 4. Update configuration, procedure and completion criteria when the interface changes.
 5. Run the record checker and the existing checks for the changed implementation.
-6. Submit code and documentation in separate commits in the same pull request.
+6. Publish code and documentation through the repository's workflow. Separately published records include host or device evidence for the source revision they validate.
 7. Publish the device change. The catalog workflow refreshes its source revision and generated page.
 
 ```sh
@@ -98,7 +98,7 @@ python3 scripts/porting-record.py check --device /path/to/device --base origin/m
 
 Run the second command on the proposed device branch. It compares committed
 changes against the base. Every changed code path needs an owning area;
-each matching area needs updated findings or evidence. Markdown edits use the
+each matching area needs updated findings or evidence, or published validation from an ancestor revision whose affected source files match the proposed branch. Markdown edits use the
 documentation review workflow. `porting.toml` is the authoritative device record.
 
 The device template includes `.github/workflows/porting-record.yml`. Official

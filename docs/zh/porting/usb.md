@@ -89,6 +89,10 @@ inner shareable 块。
 | `qcom_dwc3_vbus(int)` | 充电器的 USB 在线值 |
 | `qcom_ucsi_start`、`qcom_ucsi_receive`、`qcom_ucsi_tick` | 把每条返回的消息发到 GLINK 通道 |
 | `qcom_ucsi_polling` | 驱动需要 20 ms 定时器时为 true |
+| `qcom_ucsi_request_data_host`、`qcom_ucsi_data_host` | 为兼容的充电器请求并读取 host 数据角色 |
+| `qcom_ucsi_connection` | 读取连接状态和连接代次 |
+
+MiPPS 认证通过 UCSI `SET_UOR` 请求 host 数据角色，DSP 负责供电角色和 PD/PPS 合约。连接变化时递增连接代次，包括合并的重连通知；充电器先结束上次连接的认证，再开始下一次交换。参见 [sheng 充电](/zh/porting/power#sheng-charging)。
 
 线缆对端是主机时选择设备角色，是外设时选择主机角色。两个来源都没有回答时运行设备角色。
 在 `drivers/QcomDwc3/tests` 中检查 UCSI 客户端：

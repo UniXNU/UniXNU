@@ -172,3 +172,5 @@ For the 24A446 fileset, `regression_policy` bounds the unresolved references by
 original kernel address and importing component. New gaps fail packaging even
 with `--allow-missing`; this check does not qualify the remaining experimental
 paths or replace a device boot test.
+
+Kernel updates retain the selected profile's signed root headers and public anchor. `scripts/import-root-policies.py BOOT.img --policies PROFILE_POLICY_DIRECTORY` authenticates and imports them from a verified boot image. The sheng macOS lab uses these inputs when `root_storage=false`. A replacement kernel travels with its matching `kernel.macho.vroot` policy bundle.
