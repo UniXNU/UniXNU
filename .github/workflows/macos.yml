@@ -113,6 +113,7 @@ jobs:
           GROW_GIB: ${{ inputs.grow_gib }}
           SKIP_SETUP: ${{ inputs.skip_setup }}
         run: |
+          python3 scripts/unixnu/test_boot_template.py
           # The URLs can carry access tokens and the logs of a public repository are public: read them from the
           # event payload, never from step environments, and mask them before any later step prints its env.
           trust_cache_url=$(jq -r '.inputs.trust_cache_url // ""' "$GITHUB_EVENT_PATH")
