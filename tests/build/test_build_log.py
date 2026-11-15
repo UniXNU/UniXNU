@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check prefix colors, raw logs, streaming prompts and command exit status."""
 import importlib.util
+import json
 import os
 from pathlib import Path
 import selectors
@@ -8,7 +9,9 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
+import pty
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location('build_log', ROOT / 'scripts/build-log.py')
@@ -17,6 +20,61 @@ SPEC.loader.exec_module(LOG)
 
 
 class BuildLogTest(unittest.TestCase):
+    def terminal(self, command, environment):
+        master, slave = pty.openpty()
+        child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=slave, stderr=slave, env=environment)
+        os.close(slave)
+        output = bytearray()
+        try:
+            deadline = time.monotonic() + 8
+            with selectors.DefaultSelector() as selector:
+                selector.register(master, selectors.EVENT_READ)
+                while time.monotonic() < deadline:
+                    if not selector.select(timeout=0.1):
+                        continue
+                    try:
+                        chunk = os.read(master, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    output.extend(chunk)
+            return child.wait(timeout=2), bytes(output)
+        finally:
+            os.close(master)
+            if child.poll() is None:
+                child.kill()
+                child.wait()
+
+    def test_standard_entry_colors_without_wrapper(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            device = root / 'device'
+            (device / 'configs').mkdir(parents=True)
+            (device / 'board.toml').write_text('[board]\nname = "fixture"\n')
+            (device / 'configs/fixture_defconfig').write_text('CONFIG_XNU_NATIVE_UFS=y\n')
+            command = [sys.executable, ROOT / 'unixnu', 'defconfig', 'fixture_defconfig',
+                       '-D', device, '--out', root / 'out']
+            environment = {key: value for key, value in os.environ.items() if key != 'NO_COLOR'}
+            environment['TERM'] = 'xterm-256color'
+            code, output = self.terminal(command, environment)
+            self.assertEqual(code, 0)
+            self.assertIn(b'\x1b[94m== configuration', output)
+            for changes in ({'NO_COLOR': '1'}, {'TERM': 'dumb'}):
+                with self.subTest(changes=changes):
+                    code, output = self.terminal(command, dict(environment, **changes))
+                    self.assertEqual(code, 0)
+                    self.assertNotIn(b'\x1b[', output)
+            result = subprocess.run(command, capture_output=True, env=environment)
+            self.assertEqual(result.returncode, 0)
+            self.assertNotIn(b'\x1b[', result.stdout + result.stderr)
+            code, output = self.terminal([sys.executable, ROOT / 'unixnu', 'status', '--json',
+                                          '-D', device, '--out', root / 'out'], environment)
+            self.assertEqual(code, 0)
+            self.assertNotIn(b'\x1b[', output)
+            record = json.loads(output[output.index(b'{'):])
+            self.assertEqual(record['name'], 'fixture')
+
     def test_prefix_colors_and_unchanged_text(self):
         for line, color in (('[INFO] Compiling', 'info'), ('[OK] Done', 'ok'),
                             ('[WARN] Retry', 'warning'), ('[FAILED] Compiler', 'error'),
