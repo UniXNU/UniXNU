@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -37,6 +38,21 @@ if not shutil.which('glslangValidator'):
     sys.exit('glslangValidator is required by the Vulkan runtime build (brew install glslang)')
 
 env = {k: v for k, v in os.environ.items() if not k.startswith(('IR3_', 'FD_MESA_', 'NIR_', 'MESA_SHADER_', 'TU_'))}
+tools = ROOT / '.cache/mesa-tools/bin'
+tools.mkdir(parents=True, exist_ok=True)
+for candidate in (shutil.which('bison'), '/opt/homebrew/opt/bison/bin/bison', '/usr/local/opt/bison/bin/bison'):
+    if not candidate or not Path(candidate).is_file():
+        continue
+    version = re.search(r'\b(\d+)\.(\d+)', read([candidate, '--version']))
+    if version and tuple(map(int, version.groups())) >= (3, 7):
+        link = tools / 'bison'
+        target = Path(candidate).resolve()
+        if link.resolve() != target:
+            link.unlink(missing_ok=True)
+            link.symlink_to(target)
+        break
+else:
+    sys.exit('Bison 3.7 or newer is required by the IR3 parser (brew install bison)')
 env['PATH'] = str(ROOT / '.cache/mesa-tools/bin') + ':' + str(ROOT / '.cache/mesa-venv/bin') + ':' + env['PATH']
 options = ['-Dgallium-drivers=', '-Dvulkan-drivers=freedreno', '-Dfreedreno-kmds=darwin',
            '-Dtu-darwin-abi-dir=' + str(ROOT / 'drivers/Adreno740'), '-Dplatforms=macos', '-Dglx=disabled',
@@ -105,8 +121,8 @@ build_id = hashlib.sha256(json.dumps(dict(mesa_revision=pins['mesa']['commit'], 
 options += ['-Dtu-build-id=' + build_id]
 log = LOGS / ('mesa-tu-%s-configure.log' % args.target)
 with log.open('w') as stream:
-    # An existing build directory takes the current options (meson configure), so an option added here reaches it.
-    command = setup + options if not (OUT / 'build.ninja').exists() else [ROOT / '.cache/mesa-venv/bin/meson', 'configure', OUT] + options
+    # Reconfigure with the current host programs and build options.
+    command = setup + options if not (OUT / 'build.ninja').exists() else setup[:2] + ['--reconfigure', '--clearcache'] + setup[2:] + options
     if subprocess.run([str(c) for c in command], env=env, stdout=stream, stderr=subprocess.STDOUT).returncode:
         sys.exit('Configure failed; see ' + str(log) + '\n' + '\n'.join(log.read_text().splitlines()[-12:]))
 if args.configure_only:
