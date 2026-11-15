@@ -102,7 +102,7 @@ int authenticate_eager(const char *name, uint64_t offset, const void *data, size
     command = [os.environ.get("CC", "cc"), "-std=c11", "-shared", "-fPIC", "-O1", "-g",
                "-Wall", "-Wextra", "-Werror", "-Wno-deprecated-declarations",
                "-Wno-format", "-Wno-unused-parameter", "-Wno-unused-function",
-               "-fsanitize=undefined", str(program), "-o", str(library)]
+               "-fsanitize=undefined", "-fno-sanitize-recover=undefined", str(program), "-o", str(library)]
     if sys.platform != "darwin":
         command += ["-lcrypto"]
     subprocess.run(command, check=True)
