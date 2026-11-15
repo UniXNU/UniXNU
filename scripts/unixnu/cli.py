@@ -187,6 +187,9 @@ def cmd_bootimg(ctx):
     uefi = need_uefi(ctx)
     fd = expand(ctx.args.fd) if ctx.args.fd else firmware.fd_path(ctx, uefi, ctx.args.target)
     dtb = ctx.option('dtb', 'UNIXNU_DTB')
+    if dtb is None:
+        configured_dtb = ctx.board.get('bootimg', {}).get('dtb')
+        dtb = ctx.tree / configured_dtb if configured_dtb else None
     ramdisk = None
     if ctx.args.ramdisk and ctx.args.ramdisk != 'none':
         ramdisk = expand(ctx.args.ramdisk)
@@ -316,9 +319,7 @@ def cmd_release(ctx):
     cmd_build(ctx)
     log('step pack')
     args.fd = args.ramdisk = args.output = None
-    # The boot image's device tree is built by a firmware preflight script; [bootimg] dtb names it relative to the build tree.
-    dtb = ctx.board.get('bootimg', {}).get('dtb')
-    args.dtb = str(ctx.tree / dtb) if dtb else None
+    args.dtb = None
     cmd_bootimg(ctx)
     log('step verify')
     files = pipeline.outputs(ctx)
