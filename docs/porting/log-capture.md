@@ -255,6 +255,8 @@ python3 scripts/prepare-sheng-gpu-lab.py boot.img gpu-lab.img \
 
 For Actions builds, `scripts/fetch-actions-artifact.py OWNER/REPOSITORY RUN_ID ARTIFACT OUTPUT --file prime-list.txt --file prime-list.json` retrieves selected files through HTTP byte ranges. Omit `--file` to retrieve the artifact's files. Downloads stream directly to the output directory and verify ZIP integrity. Artifacts up to 1 MiB are buffered in memory for quick log retrieval. Rerun with `--file NAME` to resume an incomplete transfer; download links are refreshed automatically.
 
+For an installed root with unchanged OS images and policies, dispatch `macos-lab.yml` with `root_storage=false` to build boot, kernel and payload artifacts. The default also builds the userdata image.
+
 The preparer uses ICD metadata from the matching Turnip build and builds the native Core Animation scene with a 120 Hz preferred frame-rate range. It adds the signed tools and current lab scripts to the addon, appends their code identities to the owner trust bundle, and creates a 256 MiB RAM payload. Add `--preserve-data` when continuing an existing priming pass. After priming, the agent runs numeric and paired native-throughput checks with a 180-second process budget, then starts the fixed scene. Tool output is captured in `agent.log`.
 
 The logical FAT is 256 MiB. With matching firmware, sheng stores it as independently compressed 1 MiB UEFI chunks (`UNXNFAT1`); encoded ramdisks must fit the 190 MiB board limit. `UniXNURamDiskDxe` exposes the logical FAT through a 1 MiB read cache.
