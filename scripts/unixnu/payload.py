@@ -75,14 +75,25 @@ def check_native_root(kernel, arguments, vmm_present=False):
 
 
 def write_volume(stage, image, label, size_mib):
+    """Publish only a FAT volume whose complete file set was accepted by mtools."""
     for tool_name in ('mformat', 'mcopy'):
         tool(tool_name, 'brew install mtools')
-    image.unlink(missing_ok=True)
+    if size_mib < 1:
+        raise Error('payload size_mib must be positive')
+    image.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MTOOLS_SKIP_CHECK='1', TZ='UTC')
     sectors = size_mib * 2048
-    run(['mformat', '-C', '-F', '-T', str(sectors), '-v', label, '-N', '53484e47', '-i', image, '::'], env=env, capture=True)
-    for entry in sorted(stage.iterdir()):
-        run(['mcopy', '-i', image, '-s', '-Q', '-m', entry, '::/'], env=env, capture=True)
+    # Cluster rounding, long filenames and FAT metadata are accounted for by
+    # mtools. A percentage of logical file sizes is not a filesystem limit.
+    with tempfile.TemporaryDirectory(prefix='.payload-', dir=image.parent) as scratch:
+        candidate = Path(scratch) / image.name
+        run(['mformat', '-C', '-F', '-T', str(sectors), '-v', label, '-N', '53484e47', '-i', candidate, '::'], env=env, capture=True)
+        try:
+            for entry in sorted(stage.iterdir()):
+                run(['mcopy', '-i', candidate, '-s', '-Q', '-m', entry, '::/'], env=env, capture=True)
+        except Error as error:
+            raise Error(f'cannot populate the {size_mib} MiB payload FAT volume; previous image retained: {error}') from error
+        candidate.replace(image)
 
 
 def skip_setup_seed(ctx, base, tool_path, tool_args=()):
@@ -247,7 +258,7 @@ def build(ctx, kernel=None):
         os.utime(path, (EPOCH, EPOCH))
     size = int(spec.get('size_mib', 192))
     content = sum(p.stat().st_size for p in stage.rglob('*') if p.is_file())
-    if content > size * 1024 * 1024 * 0.95:
+    if content > size * 1024 * 1024:
         raise Error(f'the payload files take {content >> 20} MiB; raise size_mib (now {size}) in board.toml [payload]')
     write_volume(stage, image, spec.get('volume', 'UNIXNU')[:11], size)
     data_report = {'kernel_sha256': sha256_file(kernel), 'payload_kernel_sha256': sha256_file(payloads / 'kernel.macho'),
