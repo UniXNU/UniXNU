@@ -93,7 +93,8 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     with tempfile.TemporaryDirectory(prefix='unixnu-bootimg-') as scratch_name:
         scratch = Path(scratch_name)
         if template:
-            shim, firmware, tree, image, compatibility = boot_template.prepare(ctx, template, firmware)
+            shim, firmware, tree, template_image, compatibility = boot_template.prepare(ctx, template, firmware)
+            image.update(template_image)
             log('bootimg: using qualified firmware transport with the current DarwinBoot loader')
         else:
             shim = compile_shim(uefi, base, size, requires_header, scratch)
