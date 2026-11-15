@@ -12,6 +12,7 @@ Browse device documentation and porting records from each repository.
 | [ad1095445/UniXNU-sheng_bk](https://github.com/ad1095445/UniXNU-sheng_bk) | [Xiaomi Pad 6S Pro \(ad1095445\)](/devices/sheng-ad1095445) | Porting record | SM8550 |
 | [airalex002/UniXNU-sheng](https://github.com/airalex002/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(airalex002\)](/devices/sheng-airalex002) | Porting record | SM8550 |
 | [alghiffaryfa19/UniXNU-sheng](https://github.com/alghiffaryfa19/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(alghiffaryfa19\)](/devices/sheng-alghiffaryfa19) | Porting record | SM8550 |
+| [Arlong8823/UniXNU-sheng](https://github.com/Arlong8823/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Arlong8823\)](/devices/sheng-arlong8823) | Porting record | SM8550 |
 | [Ason-74/UniXNU-sheng](https://github.com/Ason-74/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(Ason-74\)](/devices/sheng-ason-74) | Porting record | SM8550 |
 | [bai805/UniXNU-sheng](https://github.com/bai805/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(bai805\)](/devices/sheng-bai805) | Porting record | SM8550 |
 | [chenjin1494/UniXNU-sheng](https://github.com/chenjin1494/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(chenjin1494\)](/devices/sheng-chenjin1494) | Porting record | SM8550 |

@@ -1,0 +1,290 @@
+# Device porting record for rodin (Redmi Turbo 4 / POCO X7 Pro).
+# schema_version = 1 (record) pairs with board.toml schema_version = 2.
+# Structure follows /porting/records. When the UniXNU checkout is available,
+# regenerate from examples/device/porting.toml and merge the content below.
+
+schema_version = 1
+
+[device]
+name = "rodin"
+soc = "mt6899"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Redmi Turbo 4 / POCO X7 Pro (rodin): MediaTek Dimensity 8400-Ultra (MT6899, 8x Cortex-A725 arm64), 12 GiB LPDDR5X, UFS storage. Porting target: UniXNU UEFI + XNU boot chain for the ipados-17.7.11-21H461 profile; configuration chain and UEFI scaffold are in place, drivers are in progress."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "XnuPrelink", "SoftwareAES"]
+paths = ["board.toml", "feeds.toml", "configs/", "patches/xnu/series"]
+inputs = [
+  "UniXNU-mt6899-common SoC repository (created, values unreviewed)",
+  "OS profile selected: ipados-17.7.11-21H461 (arm64, iPad7,1 identity; profile supplies [ipsw] and [kernel.prelink])",
+  "Kernel sources: MiCode/Xiaomi_Kernel_OpenSource bsp-rodin-v-oss @ 2cd69ee4193920840ee3c837384716a66b1faecd; MiCode/MTK_kernel_device_modules bsp-rodin-v-oss @ bc2dfc01f75b5fbc42d614c8c39700022cba9323 (board DTS)",
+]
+configuration = ["board.toml [board] os_profile = ipados-17.7.11-21H461; [ipsw] and [kernel.prelink] inherited from the profile"]
+procedure = [
+  "Choose the OS profile from UniXNU/profiles/os/",
+  "Pin UniXNU-mt6899-common with a reviewed commit in feeds.toml",
+  "Run ./unixnu defconfig, fetch, status --json, tree",
+  "Verify the resolver chain on CI (defconfig/fetch/status all passing)",
+]
+findings = [
+  "Scaffold created 2026-11-15; SoC pin da0f6103bd3529a78c4ce1a2818190a07a6734c1 now resolved in feeds.toml.",
+  "Board DTS sources identified in MTK_kernel_device_modules: arch/arm64/boot/dts/mediatek/rodin.dts and companions.",
+  "Resolver chain verified 2026-11-15: defconfig/fetch/status/tree exit 0 on Linux (aarch64 host, CI pending toolchain).",
+]
+completion = ["Resolved profiles and patch order confirmed by ./unixnu status --json"]
+limits = ["Toolchain build still running on CI; kernel/tree steps not yet end-to-end verified there."]
+next_action = ["Finish the cached UniXNU toolchain CI run, then verify build kernel and tree on the same host."]
+evidence = [
+  { kind = "source", reference = "feeds.toml", result = "mt6899 pinned to UniXNU-mt6899-common da0f6103bd3529a78c4ce1a2818190a07a6734c1" },
+]
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = []
+paths = ["board.toml", "proprietary-files.txt", "docs/hardware-notes.md"]
+inputs = [
+  "Stock boot.img and vendor_boot.img (header v4) dumped from the device",
+  "Mu-Silicium fork target for rodin (uefi-rodin), not created yet",
+]
+configuration = ["board.toml [bootimg.image]: base=0x40000000, pagesize=4096, header_version=4"]
+procedure = [
+  "Create uefi-rodin from uefi-sheng / Mu-Silicium",
+  "Describe the MTK boot chain handoff and PSCI method",
+]
+findings = [
+  "Stock images use Android boot image header version 4; kernel loads at 0x40000000, ramdisk at 0x66f00000, page size 4096.",
+  "Vendor ramdisk is ~41 MiB and lives in vendor_boot; boot.img carries only the kernel (~16.6 MiB).",
+  "The vendor DTB (~444 KiB, FDT v17) sits inside vendor_boot.img at 0x2965040, after the vendor ramdisk.",
+  "Vendor bootargs: console=tty0, androidboot.hardware=mt6899, vmalloc=400M, swiotlb=noforce.",
+]
+completion = ["Firmware builds and the stock bootloader jumps to BootShim"]
+limits = ["UEFI firmware for rodin does not exist; the bootimg v4 tool support is unverified."]
+next_action = ["Survey the Mu-Silicium base for an MTK reference and map the vendor DTB into the UEFI device-tree flow."]
+evidence = [
+  { kind = "source", reference = "docs/hardware-notes.md", result = "Boot headers parsed and one FDT blob extracted; hashes pinned in proprietary-files.txt" },
+]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["dts/rodin.dts", "docs/hardware-notes.md"]
+inputs = ["Vendor DTB extracted from the stock vendor_boot.img (rodin-vendor.dtb)"]
+configuration = [
+  "mt6899.dtsi: GIC v3 at 0xc400000 (dist 0x40000, redist 0xc440000/0x200000), 4 cells",
+  "mt6899.dtsi: armv8 timer, 13 MHz, vendor interrupt cells",
+  "rodin.dts: MPIDR 0x000-0x700, capacities 0x400/0x3bb/0x3cb",
+]
+procedure = [
+  "Extract the vendor DTB from vendor_boot.img and decompile it with dtc",
+  "Copy confirmed GIC, timer and CPU topology values into mt6899.dtsi",
+]
+findings = [
+  "8x Cortex-A725 with enable-method psci; vendor DTB groups cpu0-3, cpu4-6 and cpu7 into three cpufreq domains.",
+  "Timer clock is 13 MHz (0xc65d40) as declared by the vendor DTB.",
+  "PSCI 1.0 with method smc, matching psci_method = \"smc\" in board.toml.",
+]
+completion = ["All cores enumerate in the kernel with the correct timer rate"]
+limits = [
+  "Values are read from the blob but not yet verified on hardware.",
+  "Idle states and full CPU bindings not yet translated.",
+]
+next_action = ["Verify GIC/timer behavior during the first UEFI bring-up, then translate idle states."]
+evidence = [
+  { kind = "source", reference = "docs/hardware-notes.md", result = "Vendor DTB values transcribed into UniXNU-mt6899-common/dts/mt6899.dtsi and dts/rodin.dts" },
+]
+
+[[area]]
+id = "memory"
+status = "planned"
+components = ["ArmDTPlatform"]
+paths = ["board.toml", "dts/rodin.dts"]
+inputs = ["Installed RAM confirmed: 12 GiB (test device is the 12+256 variant)"]
+configuration = ["board.toml [payload] dram_size = \"0x300000000\" (12 GiB)"]
+procedure = ["Record DRAM size, reservations and DMA policy"]
+findings = [
+  "Test device: 12 GiB LPDDR5X + 256 GiB UFS.",
+  "Vendor DTB declares only a 1 GiB window at 0x40000000; the 12 GiB map spans 0x40000000..0x340000000 and must be confirmed against the bootloader memory map.",
+  "Reserved regions use MTK-specific \"mediatek,reserved\" nodes and need mapping to UniXNU reservations.",
+]
+completion = ["Kernel maps full DRAM with required reservations"]
+limits = ["Only the 1 GiB DTB window is known; the extended memory map is unconfirmed."]
+next_action = ["Survey the bootloader DRAM report and MTK DRAMC setup, then extend the memory description."]
+evidence = []
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["board.toml", "proprietary-files.txt"]
+inputs = ["Device GPT dump (userdata first/last LBA); UFS host and PHY details from vendor DTS"]
+configuration = ["board.toml [userdata]: first_lba=0x354300, last_lba=0x3d937f7, lba_bytes=4096 (from /dev/block/sdc GPT dump)"]
+procedure = ["Adapt UFS storage per /porting/ufs; fill [userdata] in board.toml"]
+findings = [
+  "GPT parsed from /dev/block/sdc: 4096-byte logical blocks, disk 246.32 GiB, 'userdata' at LBA 0x354300..0x3d937f7 (~233 GiB).",
+  "Full partition table recorded in docs/hardware-notes.md; MTK A/B scheme with boot_a/boot_b, lk_a/lk_b (LittleKernel), super (11 GiB dynamic).",
+]
+completion = ["APFS root and Data volumes mount from the device UFS"]
+limits = ["UFS host/PHY adaptation not started; no UniXNU UFS component selected yet."]
+next_action = ["Select a UFS component from the catalog and map the MTK UFS host controller (from mt6899.dts / vendor sources) onto it."]
+evidence = [
+  { kind = "source", reference = "docs/hardware-notes.md", result = "userdata first_lba/last_lba/lba_bytes filled into board.toml from the parsed GPT" },
+]
+
+[[area]]
+id = "display"
+status = "planned"
+components = ["GopFramebuffer"]
+paths = ["dts/rodin.dts", "docs/hardware-notes.md"]
+inputs = ["Panel driver and DSI configuration from the rodin kernel sources"]
+configuration = ["board.toml [components]: GopFramebuffer supplies the display component; panel timing from vendor DTS (resolution 1220x2712 AMOLED)"]
+procedure = ["Follow /porting/display: controller/GOP, panel, stride, backlight"]
+findings = ["Panel: 6.67\" AMOLED, 1220x2712, up to 120 Hz (vendor specs).", "DSI controller: mediatek,mt6899-dsi (disp1_dsi0) with mmsys0/1 and GCE disp events, read from the vendor DTB.", "Panel variants referenced in the touch node: rodin_42_02_0a_dsc_vdo and rodin_36_02_0b_dsc_vdo (DSC VDO).", "DTBO overlay confirms the two panel drivers: o10_42_02_0a_dsc_vdo,lcm (panel1@0) and o10_36_02_0b_dsc_vdo,lcm (panel2@1) — dual-source panel strategy."]
+completion = ["Framebuffer visible at every boot stage with working brightness"]
+limits = ["Panel driver sources live in MTK_kernel_modules (LCM driver table); not yet read."]
+next_action = ["Read the rodin LCM drivers in MTK_kernel_modules for the two panel variants, then design the display adaptation."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "implemented"
+components = []
+paths = ["dts/rodin.dts", "package/"]
+inputs = [
+  "Board DTS source: MTK_kernel_device_modules bsp-rodin-v-oss, arch/arm64/boot/dts/mediatek/xiaomi_rodin_mt6899_touch.dtsi",
+]
+configuration = [
+  "Touch IC: Goodix GT9916R (gtp), fallback Focaltech 3683g",
+  "Bus: SPI1 @ 15 MHz; CLK GPIO50, CSB GPIO51, MISO GPIO52, MOSI GPIO53; SCP SPI2 alternate mode",
+  "IRQ GPIO9, reset GPIO134, AVDD GPIO73 from mt6368_vtp (1.8 V)",
+]
+procedure = ["Follow /porting/input: bus, sensor protocol, interrupts, contact IDs"]
+findings = [
+  "Touch driver is not in the vendor DTB blob but in module sources: xiaomi,touch-spi on spi1, coordinates 1220x2712 (panel-max-x 121999, super-resolution factor 100).",
+  "Panels referenced by the touch node: rodin_42_02_0a_dsc_vdo and rodin_36_02_0b_dsc_vdo.",
+]
+completion = ["Touch, buttons and volume keys work"]
+limits = ["Goodix GT9916R SPI protocol needs driver work; no UniXNU touch component exists for this IC yet."]
+next_action = ["Read the Goodix SPI driver in MTK_kernel_modules (drivers/input/touchscreen/...) and design the UEFI/XNU touch adaptation."]
+evidence = [
+  { kind = "source", reference = "docs/hardware-notes.md", result = "Touch IC, bus, GPIO wiring and firmware names recorded" },
+]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = ["Mali-G720 driver design; no Mali driver exists in the UniXNU catalog"]
+configuration = ["board.toml [components]: input covered by the catalog HID components once selected"]
+procedure = ["Survey ArmMali userspace/kernelspace sources; define the smallest hardware-verifiable step"]
+findings = [
+  "UniXNU GPU components (Adreno740, AdrenoMetal) target Qualcomm Adreno; Mali-G720 requires a new driver from zero.",
+  "Vendor DTB: mali@13000000, compatible \"mediatek,mali\", \"arm,mali-valhall\" — Valhall CSF architecture confirmed.",
+]
+completion = ["Console-class rendering first; Metal acceleration later"]
+limits = ["No existing implementation to reuse; long lead time expected."]
+next_action = ["Write a driver plan against the Mali CSF architecture and decide the first verifiable milestone."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = [
+  "connsys_wifi.img (MT7902 Wi-Fi firmware, dumped, hash pinned)",
+  "connsys_bt.img (MT7902 BT firmware, dumped, hash pinned)",
+]
+configuration = ["Adreno 740 (MT6899 iGPU); GopFramebuffer is the display component in board.toml [components]"]
+procedure = ["Follow /porting/network and /porting/bluetooth"]
+findings = [
+  "Chip confirmed as MT7902: gen4-mt79xx WLAN driver in MTK_kernel_modules bsp-rodin-v-oss (connectivity/wlan/core/gen4-mt79xx/chips/mt7902); BT over SDIO ID 0x790A, firmware BT_RAM_CODE_MT7902_1_1_hdr.bin.",
+  "Vendor DTB: wifi@18000000, compatible \"mediatek,wifi\", emi-connac-ver 2 — Connac gen2 class silicon.",
+  "Community mt76 porting for MT7902 exists (built on this BSP) and can inform a UniXNU adaptation.",
+]
+completion = ["Association and packet transfer"]
+limits = ["No UniXNU Wi-Fi component for MT7902; firmware package must be extracted from the vendor image."]
+next_action = ["Extract the MT7902 firmware blobs from the rodin vendor image and review the gen4-mt79xx driver interfaces."]
+evidence = []
+
+[[area]]
+id = "cellular"
+status = "planned"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = ["Scope decision: modem bring-up is a large separate effort"]
+configuration = ["No network component selected yet; MTK connectivity handled via cellular/baseband scope"]
+procedure = ["Survey the vendor sources and map hardware onto a catalog component"]
+findings = ["Area not yet surveyed in depth"]
+completion = ["Component works on the device"]
+limits = ["Integrated MT6899 modem; no plan yet."]
+next_action = ["Decide whether cellular is in scope; otherwise mark not-applicable with a reason."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "implemented"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = [
+  "DTBO overlay: 2x awinic,aw882xx_smartpa on I2C 0x34/0x35",
+  "MTK_kernel_modules bsp-rodin-v-oss sound/ drivers for the DSP and routes",
+]
+configuration = ["No baseband component selected yet; vendor modem userspace remains required"]
+procedure = ["Follow /porting/power"]
+findings = [
+  "SmartPA: 2x AW882XX (stereo speakers) on I2C addresses 0x34 and 0x35.",
+  "Notification/RGB LED: AW21024 on I2C 0x30 (power/driver ownership overlap).",
+]
+completion = ["Playback and capture"]
+limits = ["Audio DSP (audio_dsp.img firmware present) not yet surveyed."]
+next_action = ["Map the audio DSP service model from the module sources and audio_dsp.img."]
+evidence = [
+  { kind = "source", reference = "docs/hardware-notes.md", result = "SmartPA addresses and LED controller read from dtbo.img" },
+]
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = ["Regulators, battery units, firmware ownership from vendor DTS"]
+configuration = ["No audio component selected yet"]
+procedure = ["Follow /porting/power"]
+findings = ["Area not yet surveyed in depth"]
+completion = ["Battery reporting and supported transitions"]
+limits = ["No plan yet."]
+next_action = ["Record the power tree from the vendor DTS."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = []
+paths = ["scripts/package.sh", "board.toml"]
+inputs = ["Original kernelcache, IPSW, firmware inputs"]
+configuration = ["board.toml carries no power section yet; PSCI method smc recorded for handoff"]
+procedure = ["Complete [kernel.prelink], [ipsw], [payload] in board.toml; implement scripts/package.sh"]
+findings = ["Area not yet surveyed in depth"]
+completion = ["./unixnu bootimg produces a flashable image from a clean checkout"]
+limits = ["All REQUIRED_ placeholders unfilled."]
+next_action = ["Supply the IPSW and kernelcache inputs and run the first ./unixnu build kernel attempt."]
+evidence = []
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["docs/hardware-notes.md", "proprietary-files.txt"]
+inputs = ["UART/USB console access plan"]
+configuration = ["boot image header v4: kernel 0x40000000, ramdisk 0x66f00000, pagesize 4096 (from stock boot/vendor_boot)"]
+procedure = ["Set up log capture per /porting/log-capture"]
+findings = ["Area not yet surveyed in depth"]
+completion = ["Boot logs captured from the first UEFI stage"]
+limits = ["Console method untested on rodin."]
+next_action = ["Confirm the debug UART pinout for rodin and wire the log capture procedure."]
+evidence = []

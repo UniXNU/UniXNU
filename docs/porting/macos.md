@@ -27,6 +27,8 @@ configuration and the patch series: the Darwin 26 system calls and kernel
 interfaces, the macOS machine options, the Data firmlinks, the VM and Hardware
 volumes on Data, and the application cryptex mount.
 
+Signed-text fixups retain their original bytes for verification. Code-signing checks use a bounded snapshot; APFS compressed-block checks use a private copy while resident executable pages keep the configured instructions.
+
 ## 1. Check the host and inputs {#inputs}
 
 A macOS build runs on a Mac with Xcode. In addition to the
@@ -185,6 +187,16 @@ and confirm **Initialize Data and boot**. This erases macOS Data and initializes
 its persistent store from the seed. Use **Boot** on subsequent starts to retain
 Data. The account and Setup settings come from the seed; `--skip-setup` is a seed
 creation option.
+
+The sheng macOS profile uses a SHA-256-pinned firmware template for its ABL
+transport. `unixnu bootimg` replaces only DarwinBoot with the loader from the
+current firmware build, preserving the qualified shim, board firmware, DTB and
+Android header settings. The payload is 187 MiB; packing stops above the
+193 MiB boot-image limit. The menu waits for a key.
+
+The template is cached under `out/downloads`. For an offline build, set
+`UNIXNU_BOOT_TEMPLATE` to the matching `.img.xz`; its checksum is still checked.
+`boot/boot.json` records the template, loader and selected firmware hashes.
 
 The sheng macOS profile uses a SHA-256-pinned firmware template for its ABL
 transport. `unixnu bootimg` replaces only DarwinBoot with the loader from the

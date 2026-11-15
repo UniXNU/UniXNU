@@ -24,6 +24,8 @@ UniXNU 的 `profiles/os/macos-27.3-26C5035r/profile.toml`：
 Darwin 26 系统调用与内核接口、macOS 机器选项、Data firmlink、位于 Data 上的 VM 与
 Hardware 卷，以及应用 cryptex 挂载。
 
+签名文本修补按原始字节校验。代码签名检查使用有界快照，APFS 压缩块检查使用私有副本，已驻留的可执行页面保留配置的指令。
+
 ## 1. 检查主机和输入 {#inputs}
 
 macOS 构建在装有 Xcode 的 Mac 上进行。除[通用前置条件](/zh/guide/requirements)外还需要：
@@ -173,6 +175,14 @@ sheng 刷入全新 userdata 后，选择 **Initialize macOS Data and boot**，
 再确认 **Initialize Data and boot**。这会清空 macOS Data，并从 seed 初始化持久存储。
 后续开机选择 **Boot**，保留 Data。账户和设置助理配置来自 seed；
 `--skip-setup` 在制作 seed 时传入。
+
+sheng 的 macOS 配置使用固定 SHA-256 的固件模板完成 ABL 封装。
+`unixnu bootimg` 只替换本次固件构建生成的 DarwinBoot，保留已验证的 BootShim、
+设备固件、DTB 和 Android 头参数。payload 为 187 MiB；启动镜像超过 193 MiB 时停止打包。
+菜单等待按键。
+
+模板缓存在 `out/downloads`。离线构建时，将 `UNIXNU_BOOT_TEMPLATE` 指向对应的
+`.img.xz`，仍会核对校验值。`boot/boot.json` 记录模板、加载器和实际固件的哈希。
 
 sheng 的 macOS 配置使用固定 SHA-256 的固件模板完成 ABL 封装。
 `unixnu bootimg` 只替换本次固件构建生成的 DarwinBoot，保留已验证的 BootShim、
