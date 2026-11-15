@@ -231,6 +231,8 @@ For a failure at kernel entry:
 
 On sheng, `storage-probe=1 log=1` records BSD initialization, the following bootstrap calls and PID 1 execution stages. Separate rings in the spare UFS log blocks retain the bootstrap and PID 1 paths. Records include sequence, PID, thread, build tag, stage, counters, virtual timer state, DAIF, pending interrupt and caller. `read-sheng-log.py --expected-tag TAG` exports matching records to `startup-checkpoints.txt` and the latest record to `startup-checkpoint.txt`. The timed runner supplies the expected tag and records header and checkpoint freshness. Keep the qualified firmware watchdog and automatic fastboot return enabled.
 
+Startup persistence includes PID 1 stages in headless builds, mount and launch-policy return codes, and the first formatted panic message before debugger entry. The log reader retains the panic message buffer under header state `5`.
+
 See [applying boot arguments](/xnu/boot-arguments#apply-arguments) when a configuration change is missing from the booted image.
 
 ### Color bars
