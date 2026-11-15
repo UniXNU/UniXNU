@@ -36,7 +36,7 @@ args=sys.argv[1:]
 for i,value in enumerate(args[:-1]):
     if value in ('--sdk','-sdk') and args[i+1]=='iphoneos':
         args[i+1]=os.environ['UNIXNU_LOCAL_SDK']
-if '--find' in args or '-find' in args:
+if any(value in args for value in ('--find','-find','-f')):
     name=args[-1]
     tool=os.path.join(os.environ['UNIXNU_LOCAL_TOOLS'],name)
     if os.path.isfile(tool):
