@@ -14,6 +14,17 @@
 5. 继续[构建 package、固件和 payload](/zh/building)。
 
 
+## 使用导出输入在本机构建
+
+sheng macOS lab 的 `export_build_inputs=true` 导出 XNU 目标文件、内核头文件、iPhoneOS SDK、`migcom` 和 `iig`。将缓存解压到选定构建树，修正路径后在本机编译：
+
+```sh
+python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE
+python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLS -- build kernel prelink -D DEVICE --os macos-27
+```
+
+本地运行器为本次调用选择导出的 SDK 和工具。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
+
 ## 源码与构建树
 
 | 路径 | 内容 |

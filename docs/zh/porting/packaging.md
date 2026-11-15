@@ -142,3 +142,5 @@ seed 备份下载；请自行长期保存，Actions 缓存不能作为永久备�
 
 24A446 的 `regression_policy` 按原内核地址和导入组件限制未解析引用；即使启用
 `--allow-missing`，新增缺口也会使打包失败。这不代表剩余实验路径已验证，仍需上机启动测试。
+
+内核更新复用选定 profile 的签名根策略头和公钥。`scripts/import-root-policies.py BOOT.img --policies PROFILE_POLICY_DIRECTORY` 从已验证的启动镜像认证并导入这些输入。sheng macOS lab 在 `root_storage=false` 时复用它们。替换内核时同时替换配套的 `kernel.macho.vroot` 策略包。
