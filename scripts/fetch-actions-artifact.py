@@ -36,12 +36,15 @@ def download_url(repository, artifact):
 
 class RangedZip(io.RawIOBase):
     def __init__(self, url):
-        self.url, self.position = url, 0
+        self.url, self.position, self.small = url, 0, None
         with urllib.request.urlopen(urllib.request.Request(url, headers={'Range': 'bytes=0-0'}), timeout=60) as response:
             match = re.fullmatch(r'bytes 0-0/(\d+)', response.headers.get('Content-Range', ''))
             if response.status != 206 or not match:
                 raise ValueError('Artifact storage must support HTTP byte ranges')
             self.size = int(match[1])
+        if self.size <= 1024 * 1024:
+            self.small = self.read(self.size)
+            self.position = 0
 
     def seekable(self):
         return True
@@ -63,6 +66,10 @@ class RangedZip(io.RawIOBase):
         size = min(self.size - self.position, size if size >= 0 else self.size)
         if size <= 0:
             return b''
+        if self.small is not None:
+            data = self.small[self.position:self.position + size]
+            self.position += size
+            return data
         start, end = self.position, self.position + size - 1
         for attempt in range(3):
             try:
