@@ -60,7 +60,7 @@ python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
 
 `FP` 记录合并提交与批次数量、创建与复用的 command pool 数量、原位渲染与经过复制的线性通道数量，以及被淘汰的区域管线数量。`CM` 记录 commit 调用次数，以及总耗时、lowering、命令记录、管线等待、锁等待、调度和提交的累计微秒数。在相同受控工作负载内比较计数差值。
 
-使用 `diag=1` 或 `gpu-trace=1` 时，系统缓存还保存有大小限制的 `timing.log`（512 KiB）和 `runtime-policy.log`（256 KiB）。前者记录各 encoder 耗时和至少 8 ms 的 command buffer，后者记录实际设备策略、浮点控制能力和 runtime 路径检查。sheng 的诊断导出包含这两个文件。
+使用 `diag=1` 或 `gpu-trace=1` 时，系统缓存还保存有大小限制的 `timing.log`（512 KiB）和 `runtime-policy.log`（64 KiB）。前者记录各 encoder 耗时和至少 8 ms 的 command buffer，后者记录实际设备策略、浮点控制能力和 runtime 路径检查。sheng 的诊断导出包含这两个文件。
 
 导入的 surface 和带行间距的纹理，在设备检查接受其布局与用途后使用 runtime 的原位路径。提交合并与队列共享根据设备支持的能力和提交检查结果选择。空闲资源清理线程等待下一次过期时间。
 

@@ -58,7 +58,7 @@ python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
 
 `FP` reports grouped submissions and batches, command pools made and reused, linear passes rendered in place and through copies, and region pipelines evicted. `CM` reports commit calls and cumulative microseconds in total, lowering, recording, pipeline waits, lock waits, scheduler passes and submission. Compare counter differences within the same controlled workload.
 
-With `diag=1` or `gpu-trace=1`, the system cache also holds bounded `timing.log` (512 KiB) and `runtime-policy.log` (256 KiB). The timing log contains per-encoder timings and command buffers taking at least 8 ms. The policy log records the actual device policy, float controls and runtime path checks. Both files are included in sheng's diagnostic export.
+With `diag=1` or `gpu-trace=1`, the system cache also holds bounded `timing.log` (512 KiB) and `runtime-policy.log` (64 KiB). The timing log contains per-encoder timings and command buffers taking at least 8 ms. The policy log records the actual device policy, float controls and runtime path checks. Both files are included in sheng's diagnostic export.
 
 Imported surfaces and padded textures take the runtime's in-place route after its device check accepts the layout and usage. The runtime selects submission grouping and queue sharing from the device's supported capabilities and its submission checks. Idle resource cleanup waits for the next expiration deadline.
 
