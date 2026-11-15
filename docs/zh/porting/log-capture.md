@@ -180,7 +180,7 @@ SERIAL=<serial> READER=<sheng-linux-log.img> OUT=<capture-directory> \
 
 首次安装时加入 `USERDATA=/path/to/userdata.sparse`。脚本核对 sheng 产品名与完整分区 sparse 容量，写入 userdata，再执行定时启动和日志采集。后续预编译使用保留 Data 的镜像，并保持 `USERDATA` 未设置。
 
-`cycle.json` 记录启动确认、测试及读取器耗时、读取器退出状态和最终可响应命令的 fastboot 状态。
+脚本生成以 `s` 开头的六字符 `build-tag`，并与采集文件头核对。字母前缀让 XNU 启动参数解析器按字符串读取。`cycle.json` 记录预期标签、采集匹配结果、启动确认、测试及读取器耗时、读取器退出状态和最终可响应命令的 fastboot 状态。
 
 主机脚本在采集期间保持 Mac 唤醒。镜像使用 `autoreset=7200 diag=1 diag-export=6900`。macOS lab agent 等待本次启动、全系统范围的 `prime.log` pass 出现 `complete=1`，再运行固定动画。root 任务采集内存、swap、挂载和电池状态，通过 `kern.unixnu_diag_request` 请求导出，在 `kern.unixnu_diag_status` 返回 `2` 后重启。agent 在预编译前清理 Finder 和系统设置的窗口恢复状态。六分钟动画覆盖 120 秒的导出预算，电量低时也请求采集并返回。Linux 读取器另有 300 秒返回定时器。
 

@@ -239,7 +239,7 @@ SERIAL=<serial> READER=<sheng-linux-log.img> OUT=<capture-directory> \
 
 For the first installation, add `USERDATA=/path/to/userdata.sparse`. The runner checks the sheng product and full-partition sparse geometry, writes userdata, then starts the timed boot and log capture. Subsequent priming runs use the preserved-Data image with `USERDATA` unset.
 
-`cycle.json` records boot acknowledgement, elapsed test and reader time, the reader exit status and the final command-responsive fastboot state.
+The runner assigns a six-character `build-tag` beginning with `s` and matches it against the captured header. The letter prefix keeps XNU's boot-argument parser in string mode. `cycle.json` records the expected tag, capture match, boot acknowledgement, elapsed test and reader time, the reader exit status and the final command-responsive fastboot state.
 
 The host runner keeps the Mac awake for the capture cycle. The image uses `autoreset=7200 diag=1 diag-export=6900`. Its macOS lab agent waits for this boot's whole-system `prime.log` pass with `complete=1`, then runs a fixed animation. The root job captures memory, swap, mounts and battery state, requests an export through `kern.unixnu_diag_request`, and reboots after `kern.unixnu_diag_status` reports `2`. The agent clears Finder and System Settings saved-window state before priming. The six-minute animation covers the 120-second export budget. A low battery also requests capture and return. The Linux reader has its own 300-second return timer.
 
