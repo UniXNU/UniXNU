@@ -6,7 +6,7 @@
 
 Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume builds and runs, the UniXNU menu appears, and the prelinked iPadOS 27 kernel enters on the phone and runs through IOKit and bsd\_init to the root-device lookup. The boot stops there because no storage driver is selected, so stage 6 \(root mount\) and stage 7 \(launchd\) are still ahead.
 
-源记录: [porting.toml](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/porting.toml), `5945dda0542b3c01ef6e8fe0b332ce1deb717cb7`.
+源记录: [porting.toml](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/porting.toml), `2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22`.
 
 本页按设备记录自动生成。
 
@@ -83,6 +83,9 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 - With the 256 MiB window the kernel passes arm\_vm\_init and then takes a same-EL data abort with DFSC 0x10, a synchronous external abort, at FAR 0x218f44000 \(about 8.4 GiB\). That address is a hole: the low extents end at 0x1c04b0000 and the high banks start at 0x880000000. \[payload\] entry\_probe\_reset\_delay is a diagnostic that answers whether the core reaches the MMU enable, because the fault address alone does not place the stage.
 - The stage-3 probe never fired, so the core faults before the MMU is enabled. That fault names the two values this board supplies: x9 = 0x10000000 \(owned\_memory\_size\) and x1 = 0x100000000 \(dram-base + dram-size\), with FAR 0xe8004000. The early walk covers the whole declared range, and the low 4 GiB is not contiguous: the stock device tree has holes at 0x80e00000..0x811d0000, 0xd8000000..0xd8140000 and 0xd8160000..0xe7cb0000. The DTS memory node therefore has to describe one contiguous range inside that map; it currently states 0x80000000 + 0x80000000 \(2 GiB\), which is the range the ADT and the boot page tables are built from.
 - The entry probe and the panic screen share one code cave and cannot be enabled together: the probe writes stage code into the zero padding after the kernel entry, and the panic screen is assembled after the last probe cave under a fixed PANIC\_CAVE\_END. With stage 3 on, the 0xa2f-byte panic screen did not fit the remaining padding and the payload step refused it. One diagnostic per run.
+- .github/workflows/package.yml uploads a logs artifact on failure: the orchestrator's logs/ directory and the sheng-source-storage build directory, whose per-source .log and .command.json files hold the exact compile command and full output. The images artifact only uploads on success, so before this step a failed run left no output at all and each diagnosis cost a full rebuild.
+- configs/vermeer\_defconfig dropped CONFIG\_XNU\_NATIVE\_UFS=y and gained CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES="-Wl,-force\_load,&\#123;tree&\#125;/build/sheng-source-storage/libShengSourceStorage.a", mirroring UniXNU-sheng's sheng\_ipados27\_defconfig for the same profile. The flag was copied from sheng's iPadOS 17 base config, where the UFS driver is a matched kext; here it also defines XNU\_NATIVE\_UFS for the personality table, so IOKit tried to instantiate the NativeUfs class at every matching platform node before SourceStorage's deferred registration had run - 36 'Couldn't alloc class "NativeUfs"' lines on the first boot, and a risk of a second unmanaged instance once the class does register. The archive still reaches the link through EXTRA\_LD\_ARCHIVES, the same route sheng-27 uses.
+- .github/workflows/package.yml gained two steps after package: 'root tables' runs scripts/build-vermeer-root-tables.py, which streams the profile's decrypted OS and SystemOS images through the unixnu IPSW machinery and writes the per-4096-block SHA-256 tables after checking the block count, the image digest and the table digest against the signed policy headers; 'root image' runs unixnu userdata with the tables as --object inputs and uploads userdata-27 \(the raw root image and its report\). The root image is a device-specific local input that the pinned UniXNU revision does not produce, which is why the steps live here and not upstream.
 
 ### 完成条件
 
@@ -102,10 +105,10 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Board, IPSW identity, component selection, firmware paths and payload inputs described in this area.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/board.toml)
-- `source`: [SoC source URL and commit pin.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/feeds.toml)
-- `source`: [Stock ABL device tree pulled from the device with adb pull /sys/firmware/fdt on HyperOS OS3.0.307.0.WNKCNXM; 808716 bytes, DTB version 17.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/firmware/dtb/vermeer.dtb)
-- `host`: [All source pins resolved: xnu ac9718fb1af618d5ce8678d0dc6e8a58f252216f, sm8550 a9f45dc60c035084b95463781538380f4c3606c9, edk2 cfb93724a06ff86ff5ba971413368a7809ee42a5.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/unixnu.lock)
+- `source`: [Board, IPSW identity, component selection, firmware paths and payload inputs described in this area.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
+- `source`: [SoC source URL and commit pin.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/feeds.toml)
+- `source`: [Stock ABL device tree pulled from the device with adb pull /sys/firmware/fdt on HyperOS OS3.0.307.0.WNKCNXM; 808716 bytes, DTB version 17.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
+- `host`: [All source pins resolved: xnu ac9718fb1af618d5ce8678d0dc6e8a58f252216f, sm8550 a9f45dc60c035084b95463781538380f4c3606c9, edk2 cfb93724a06ff86ff5ba971413368a7809ee42a5.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/unixnu.lock)
   Command: <code>./unixnu fetch -D ../UniXNU-vermeer</code>. Revision: `c8027115706c3ceac37e45c9b81db447bbc5ceba`.
 
 ## 固件与启动 {#firmware}
@@ -163,10 +166,10 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Firmware inputs and their consumers; the SecParti.cfg entry is a placeholder from another platform and nothing consumes it while VERMEER\_VENDOR\_HW = 0.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/proprietary-files.txt)
+- `source`: [Firmware inputs and their consumers; the SecParti.cfg entry is a placeholder from another platform and nothing consumes it while VERMEER\_VENDOR\_HW = 0.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/proprietary-files.txt)
 - `host`: [SILICIUM\_UEFI.fd built at 3145728 bytes; FVMAIN 5565584 of 5566464 bytes used, FVMAIN\_COMPACT 1056872 of 3145728.](https://github.com/UniXNU/UniXNU/blob/main/docs/porting/uefi-firmware.md)
   Command: <code>./unixnu build firmware --uefi ../uefi-vermeer -D ../UniXNU-vermeer</code>. Revision: `009f9f7b5b3ff59d3109fa6f5bce9911adbb2d62`.
-- `device`: [The bootloader sent 1788 KB and booted the image; the screen then showed the UniXNU menu with its UNIXNU: output. Image 1830912 bytes, SHA-256 4a2994d4792c41e72a3efc4da6484cde6289cd36f366faae0366e21eabc9c2a4, header v0, ramdisk none.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/reports/2026-11-09-uefi-menu.md)
+- `device`: [The bootloader sent 1788 KB and booted the image; the screen then showed the UniXNU menu with its UNIXNU: output. Image 1830912 bytes, SHA-256 4a2994d4792c41e72a3efc4da6484cde6289cd36f366faae0366e21eabc9c2a4, header v0, ramdisk none.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-09-uefi-menu.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b1c88c0808db7955a9ffd0e55ff35489e34bc25b`.
 
 ## CPU 与中断 {#cpu}
@@ -223,7 +226,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Cluster assignment for cpu0-7 and the enabled UFS, GPU, GMU and GPU SMMU nodes.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/dts/vermeer.dts)
+- `source`: [Cluster assignment for cpu0-7 and the enabled UFS, GPU, GMU and GPU SMMU nodes.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
 
 ## 内存与 DMA {#memory}
 
@@ -269,13 +272,13 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Stock ABL device tree: memory extents, 0xb8000000 splash carveout and reserved-memory entries.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/firmware/dtb/vermeer.dtb)
+- `source`: [Stock ABL device tree: memory extents, 0xb8000000 splash carveout and reserved-memory entries.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
 
 ## 存储与根卷 {#storage}
 
 `implemented`
 
-组件: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
+组件: `ShengUfs`, `RamBlock`, `VerifiedRoot`, `VirtioMmioBlock`.
 
 ### 硬件与依赖
 
@@ -285,12 +288,12 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 - Root volume: the OS and Cryptex1,SystemOS disk images of the target restore image, addressed through the OS profile \[userdata\] windows.
 - The apps SMMU context and clocks are shared with the display and WiFi windows the UFS driver owns on request.
 - The root image lives in this board's own GPT partition \(unixnu, sda30, start 927471616 x 512B, 67108864 sectors\), holding a SHNGROOT v1 image; Android's userdata is untouched.
-- ShengUfs from https://github.com/qusno1/ShengUfs.git at bf21739 in feeds.toml, a fork of the catalog component.
+- ShengUfs from https://github.com/qusno1/ShengUfs.git at 3475e76 in feeds.toml, a fork of the catalog component.
 
 ### 配置
 
 - \[userdata\] first\_lba = 2570304, last\_lba = 115936099, lba\_bytes = 4096; these are the OS profile window bounds, not the root partition's.
-- \[components\] includes ShengUfs, \[kernel\] archives includes component:ShengUfs, and configs/vermeer\_defconfig sets CONFIG\_XNU\_NATIVE\_UFS=y.
+- \[components\] includes ShengUfs and RamBlock, \[kernel\] archives includes component:ShengUfs and component:RamBlock, and configs/vermeer\_defconfig sets CONFIG\_XNU\_NATIVE\_UFS=y.
 - \[payload\] kernel\_args carries native-ufs-root=1 and vermeer-root-partition=unixnu.
 - feeds.toml pins the ShengUfs fork by commit, because that name is not in UniXNU's own feeds and the catalog points at the upstream repository.
 
@@ -308,6 +311,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 - On arm64e the driver is not a standalone kext. build-arm-driver.py routes ShengUfs to build-sheng-source-storage.py, which builds a deferred IOBlockStorageDevice adapter plus the SourceStorage runtime that loads the original IOStorageFamily and APFS and authenticates the root volumes against a signed policy bundle. The first build with the component selected stopped with FileNotFoundError on scripts/policies/ipados-27.0.1-24A446/OS/trusted-key.bin, so the bundle is a build input, not an optional extra.
 - scripts/policies/ipados-27.0.1-24A446 holds OS/ and SystemOS/, each with manifest.header.bin \(544 bytes\), trusted-key.bin \(395 bytes\) and verification.json. These are the same files sheng uses, and reusing them is correct rather than convenient: the OS profile pins the same restore image, so os\_image\_sha256 8a12cdad... and systemos\_image\_sha256 d5b4873d... match exactly, both trusted-key.bin files are the same 395-byte anchor \(sha256 73090c0a...\), and the volume UUIDs match the profile. The headers are the header-only form, which is what CONFIG\_XNU\_SOURCE\_STORAGE\_TABLES="userdata" wants: 544 bytes per volume in the boot image, block tables in the userdata image.
 - The CONFIG\_XNU\_OWNER\_\* family stays off for now. Those add the owner-signed root audit, the Data volume, the cache mount and the SystemOS union, each of which needs a matching Data seed. They are a separate step from publishing a block device, and enabling them together would make a transport failure indistinguishable from a policy failure.
+- Update on that decision, forced by the device: the third boot mounted the root and then panicked at 'rootvp not authenticated after mounting @bsd\_init.c:1137'. The gate is offline-owner-root-binding-audit.patch: Apple's FSIOC\_KERNEL\_ROOTAUTH seal check fails on a source-built root \(expected\), and the only tolerated override is the owner verdict, compiled only when XNU\_OWNER\_ROOT\_AUDIT and XNU\_OWNER\_ROOT\_TRUST are both set - owner = root mounted read-only AND native\_verified\_block\_root\_authorized\(root device\), which is SourceRootBinding.cpp's IOMedia walk into native\_ufs\_block\_authenticates. sheng-27 sets both for the same profile. The audit and trust flags are therefore part of the storage stage, not a separate step; the Data-volume, cache-mount and SystemOS-union members of the family stay off with their Data-seed requirement.
 - The runtime that starts the adapter is board code, not a prelinked kext. patches/xnu/vermeer-source-storage.patch calls native\_source\_storage\_start\(\) from bsd\_init right after vfsinit\(\), guarded by a weak import so a kernel without the runtime still links. That position is required, not convenient: the adapter subclasses the source IOBlockStorageDevice and registers its metaclasses at run time, which only works once the original IOStorageFamily is loaded and the platform expert is published.
 - package/SourceStorage.cpp is a reduced copy of sheng's. The sequence is identical - load IOStorageFamily, verify the base-class size against the source header, authenticate the policies, load APFS, register the three deferred metaclasses, then create and start the UFS service - but sheng's boot-log writer, UFS benchmark, process and UI trace probes, diagnostic export and WiFi and Bluetooth staging are left out. Those need a log window, a mounted root and drivers this board does not have yet; carrying them would add 300 KB of board-specific code whose hardware assumptions do not hold here.
 - The remaining board files the source-storage build requires are stubs that document what they replace: BootLog.c keeps the writer contract \(state 3 means no log\) so callers can still tell "not configured" from "stuck", and BootReset.c, BootProcessProbe.c, BootUiTraceProbe.c, BootProcessWorker.c, BootWatchdogPolicy.c, BootDiagExport.c, WifiFirmware.c and BluetoothFirmware.c are empty translation units. build-sheng-source-storage.py only checks that each file exists, so an empty one is honest where a fake implementation would not be.
@@ -315,6 +319,18 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 - One failure in the first storage run was not the blocker it looked like: the bootstrap pass reported "\_corecrypto\_kext\_start, referenced from \_sourcecrypto14\_bootstrap in prng\_random.o" and make exited 2, but build-xnu-4k-baseline.sh continues past that pass and the archive steps run afterwards. The real stop was the missing policy bundle.
 - build-sheng-source-storage.py hardcodes the assembled tree's device-package path as kits/sheng, but tree.py links the device package to kits/&lt;kit&gt; using the board's own kit name \("vermeer" here\), and build-arm-driver.py passes only --tree, so the script resolved the device to the tree itself and every device source was searched for in the wrong place. The build stopped with 'error: BootLog.c not found under the device or build tree'. The board overrides the script in scripts/, which the tree assembler copies last, and the override resolves the device from UNIXNU\_DEVICE \(which unixnu's kernel step already exports\) and derives the kit name from board.toml instead of assuming sheng.
 - package/BootLog.c could never have compiled: it wrapped its declarations in an extern "C" block, but the build compiles that file with the kernel's C recipe \(startup.o.json\), which runs clang as C, so the block is rejected with 'expected identifier or \('. sheng's own .c files carry no extern "C" for exactly that reason. The block is removed and the declarations keep the weak\_import shape that weak\_defaults\(\) scans for; the corrected file compiles clean under -Wall -Wextra -Werror as C and exports boot\_log\_tick and the four state words.
+- After the path fix the first pass links further and fails where the baseline design says it must: the kernel make exits 2 at mach.development.bcm2837.unstripped.noctf with \_corecrypto\_kext\_start \(prng\_random.o, the XNU\_SOURCE\_CORECRYPTO14 namespaced corecrypto built later by archive-01/02\) and \_native\_source\_storage\_start \(bsd\_init.o, our deferred adapter\) undefined, and the run continued into the archive and component steps afterwards, so that failure is the design and not a stop.
+- The real stop moved into the component build: NativeUfs.cpp compiles with one error among twelve warnings and the run dies there, before the second kernel pass that would link libShengSourceStorage.a and resolve the deferred adapter. The step log lost the error itself - the script raised SystemExit\(result.stdout\[-6000:\]\) and the printed tail carried only the last two \[-Wsign-conversion\] warnings - so the override now prints the exact compile command and the complete compiler output on failure. The tail also showed those warnings un-promoted while compile\_command appends -Werror after the kernel's own -W flags are stripped, which means the error is emitted earlier in the unit and the visible warnings are not the whole story.
+- The logs-27 artifact that package.yml now uploads on failure finally carried the whole component log, and the error was in the fork's own code: 'NativeUfs.cpp:2563:7: error: reference to 'gRootPartitionName' is ambiguous'. NativeUfs.cpp includes RootLayout.h inside the parser's anonymous namespace \(the namespace block above the include\), so the extern declaration there names \(anonymous namespace\)::gRootPartitionName; the fork's definition at global scope created a second variable and the first unqualified use in startRoot was ambiguous between them. The fix defines the name inside an unnamed-namespace brace pair at the same spot - every anonymous-namespace block in the file is the same unnamed namespace, so that is the entity the header declares - and the fork moves to 72d022f. The twelve \[-Wimplicit-int-conversion\] and \[-Wsign-conversion\] warnings are upstream code and did not block: the summary counted them as warnings beside the one error, with -Werror in the command, so they stay as they are.
+- With the ambiguity fixed the component advanced past NativeUfs.cpp and stopped on the next member of the source-storage archive: 'clang: error: no such file or directory: .../tree/drivers/RamBlock/NativeRamBlock.cpp'. build-sheng-source-storage.py compiles the main repository's RamBlock driver unconditionally - it is the Data-disk class SourceStorage registers third - but tree.py links tree/drivers/&lt;name&gt; only for components named in \[components\] include, and RamBlock was not selected. sheng's board.toml for the same profile selects RamBlock and keeps component:RamBlock in \[kernel.archives\], which the plan also requires for every selected component. Both are added here; at link time the standalone libNativeRamBlock.a members are not pulled because the .late.o in libShengSourceStorage.a \(mod\_init stripped, sub\_I globalized\) already defines the class and the deferred registration runs it.
+- The next stop was the board's own reduced runtime: 'SourceStorage.cpp:67:73: error: use of undeclared identifier 'gIODTPlane''. The minimal rewrite kept sheng's IORegistryEntry::fromPath\('/chosen/memory-map', gIODTPlane\) call but dropped the include that declares the plane: gIODTPlane lives in IOKit/IODeviceTreeSupport.h, which sheng's original carries at line 5 and the reduction left out. The include is restored; SourceRootPolicies.cpp, copied with its includes intact, already carried it and compiled.
+- First boot with the storage runtime \(v59, boot.img 0cb19c3f...\): the phone showed 'SourceStorage: UFS start failed \(root step 3: root window preparation failed\)' at SourceStorage.cpp:160. That is the fail-loud path working and it carries more good news than bad: root step 1 \(hostBringUp - clocks, controller map, SMMU, NOP OUT, LUN ready\) and step 2 \(findRootLayout - LUN 0 GPT, the unixnu partition, a manifest with status 0\) both passed, so the UFS transport works on this phone without a QMP-PHY sequence and the root image was read where it was flashed. Step 3 failed inside the per-window prepare, whose candidates are the window geometry check and configureVerification: capacity matching against the signed headers \(which expect exactly 9613344768 bytes for OS and 6016729088 for SystemOS\), the '&lt;window&gt;.vroot' table read from the manifest objects, and vr\_open against the owner anchor. The panic carried no diagnostic, so the driver now exports native\_ufs\_root\_diagnostics\(\) \(fork 3475e76\) and the SourceStorage panic formats the full UfsRootDiagnostics snapshot: stage, window, policy count and verify status.
+- The same boot log printed 'Couldn't alloc class "NativeUfs"' thirty-six times, interleaved from IOKit matching long before bsd\_init. The cause is CONFIG\_XNU\_NATIVE\_UFS=y: it both force-loads build/sheng-ufs/libShengUfs.a \(line 641 of build-xnu-4k-baseline.sh\) and defines XNU\_NATIVE\_UFS for the personality table \(native-aes-personality.patch\), which publishes NativeUfs personalities against IOPlatformDevice and IOPlatformExpertDevice. In the source-storage design the class registers late \(SourceStorage's preModLoad, after IOStorageFamily loads\), so IOKit matched the personalities against every platform node while the class did not exist yet. sheng's sheng\_ipados27\_defconfig for this same profile does not set the flag; its iPadOS 17 base config does, because there the driver really is a matched kext. The defconfig now mirrors sheng-27: the flag is gone and CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES force-loads build/sheng-source-storage/libShengSourceStorage.a, which is the same archive the script also copies to the catalog path.
+- The second boot \(v60, the diagnostic panic\) named the failure exactly: 'stage=no capacity-matching policy', WINDOWS found=2 prepared=0 bytes=0x16a408600 policies=2 verify=0xffffffff, GPT/read userdata=0x6e90300..0x76902ff with the SHNGROOT magic and manifest status 0. The transport, the GPT read, the partition match and the manifest validation are all proven on the device; policies=2 confirms the boot-image handoff authenticated. The root image on the phone is the blocker: its first window is 6,072,625,792 bytes, which equals neither signed header \(OS 9,613,344,768, SystemOS 6,016,729,088\), so configureVerification refuses it fail-closed. The image is an outdated build - likely version 1, windows only, without the .vroot objects the header-only policies need.
+- The root image has to be rebuilt from the profile's own disk images plus the two tables. The tables are not signed on their own: the 544-byte header commits to the table through its table\_hash \(header bytes 88..120\), and the table is the deterministic SHA-256 list of the image's 4096-byte blocks, so it can be computed from the decrypted images without any private key and vr\_open accepts exactly the result that matches. scripts/build-vermeer-root-tables.py streams each window through the unixnu IPSW machinery \(AEA decrypt, profile pins\), hashes the blocks and refuses unless the block count, the image digest and the table digest all match the signed headers. The tables land in &lt;work&gt;/vermeer-root/&lt;window&gt;.vroot and unixnu userdata places them as --object OS.vroot=... --object SystemOS.vroot=..., which also produces the v2 manifest. The image flashes to the unixnu partition \(fastboot flash unixnu\), never to userdata: Android's userdata stays untouched and the driver is pointed at the partition by vermeer-root-partition=unixnu.
+- Flashing the raw 15.7 GiB root image kills the flashing host's fastboot with std::bad\_alloc: fastboot loads a raw image into memory whole. The image is now converted to an Android sparse file \(scripts/make-sparse-root-image.py, verified against img2simg by decoding both back to the original byte for byte\), which fastboot streams chunk by chunk and which carries the APFS free space as four-byte FILL chunks. The workflow uploads the sparse file as the userdata-27 artifact.
+- The fourth boot passed the whole storage stack with the rebuilt image: capacity matching, table verification, window publication, IOMedia, the APFS mount and the owner root verdict all succeeded, and the panic moved into early bsd\_init with a data abort at far 0x8. Symbolized against that build's kernel: kernel\_bootstrap\_thread -&gt; bsd\_init+0x630 -&gt; memorystatus\_init+0x598 -&gt; kalloc\_large -&gt; kmem\_alloc\_guard\_internal -&gt; vm\_page\_alloc\_list -&gt; vm\_page\_grab\_options -&gt; vm\_page\_grab\_slow+0x198 -&gt; memorystatus\_update\_available\_page\_count+0x94, and the disassembly around the pc showed the inlined jetsam wake loading the global jetsam\_threads pointer \(still NULL - the array is zalloc\_permanent'ed later in the same function\) and then jetsam\_threads\[0\].thread at offset 8. memstat\_evaluate\_page\_shortage took the critical branch because memorystatus\_available\_pages sat one page under the threshold at that moment, so the wake fired before memorystatus\_init had created any jetsam thread. vermeer-jetsam-thread-wake-guard.patch guards memorystatus\_thread\_wake against the NULL array and NULL thread entries; waking a jetsam thread that does not exist yet is a no-op by definition.
+- The fifth boot reached launchd: the kernel panicked with 'unexpected SIGKILL of launchd with reason -- namespace 9 code 0x8' - namespace 9 is OS\_REASON\_EXEC and code 8 is EXEC\_EXIT\_REASON\_SECURITY\_POLICY, so AMFI rejected the launchd binary at exec. The cause is the missing trust cache: every boot log shows 'no external trust caches found \(segment length is zero\)', because the payload never carried one. The fix bundles the unchanged IPSW trust caches the profile's fetch list already names \(StaticTrustCache first, then Cryptex1,SystemTrustCache and Cryptex1,AppTrustCache\) with the main repository's bundle-ipsw-trust.py and passes the result through package.sh --trust-cache, which the payload step embeds as kernel.macho.trustcache for DarwinBoot to hand to the kernel. The runtime step with its Data seed stays out of scope: it couples the trust cache to the Data volume machinery this board has not reached yet.
 
 ### 完成条件
 
@@ -330,12 +346,16 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 下一步
 
-- Build with ShengUfs linked and read the boot log for the controller bring-up stages: cap/version, SMMU slot, NOP OUT, power mode, LUN ready.
+- Flash the rebuilt root image to the unixnu partition \(fastboot flash unixnu userdata-root.img from the userdata-27 artifact\) and boot the v60-or-newer boot.img again; the diagnostic panic now names the stage, so the next stop should be publication or the mount.
 
 ### 证据
 
-- `source`: [userdata geometry, the root-partition argument and the per-profile defconfig selection.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/board.toml)
-- `source`: [Pins https://github.com/qusno1/ShengUfs.git at bf21739416d3c28c77e371d5565652b876efe2ce, the fork that selects the root partition by name.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/feeds.toml)
+- `source`: [userdata geometry, the root-partition argument and the per-profile defconfig selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
+- `source`: [Pins https://github.com/qusno1/ShengUfs.git at 3475e76e3342ad6a5197347cebfb1f80e821534c, the fork that selects the root partition by name, defines it in the parser's unnamed namespace and exports the root diagnostic snapshot.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/feeds.toml)
+- `host`: [First package run with the storage runtime compiled: boot.img sha256 0cb19c3f3b862d44f3529a8a38e33d0c772e0f4595cc7d97d72d41b2ca6b1e92, kernel.macho 95797248 bytes \(65536 over v58\), strings NativeUfs 121, SourceStorage 17, VROOTB01 1, vermeer-root-partition 1.](https://github.com/qusno1/UniXNU-vermeer/actions/runs/43532882511)
+  Command: <code>gh run download 43532882511 -n images-27</code>. Revision: `4800b404c79cd21f17074f567d82faea932f047f`.
+- `device`: [UFS transport works on this phone: root step 1 \(host bring-up\) and step 2 \(LUN 0 GPT, unixnu partition, manifest status 0\) passed; the start failed in step 3 window preparation and the fail-loud panic reached the screen as 'SourceStorage: UFS start failed \(root step 3: root window preparation failed\)'. The boot log also showed 36 'Couldn't alloc class NativeUfs' lines from the XNU\_NATIVE\_UFS personalities, now removed from the defconfig.](https://github.com/qusno1/UniXNU-vermeer/actions/runs/43532882511)
+  Command: <code>fastboot boot v59 boot.img, photo of the panic screen</code>. Revision: `4800b404c79cd21f17074f567d82faea932f047f`.
 
 ## 显示 {#display}
 
@@ -386,7 +406,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [splash\_region reservation matching the stock device tree.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/dts/vermeer.dts)
+- `source`: [splash\_region reservation matching the stock device tree.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
 
 ## 输入 {#input}
 
@@ -428,7 +448,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [qcom,i2c-touch-active = goodix,gt9916 and the active touch node maxima.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/firmware/dtb/vermeer.dtb)
+- `source`: [qcom,i2c-touch-active = goodix,gt9916 and the active touch node maxima.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
 
 ## GPU {#gpu}
 
@@ -472,7 +492,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [qcom,gmu@3d69000, qcom,kgsl-3d0@3d00000 and qcom,kgsl-iommu@3da0000 with their interrupts and register ranges.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/firmware/dtb/vermeer.dtb)
+- `source`: [qcom,gmu@3d69000, qcom,kgsl-3d0@3d00000 and qcom,kgsl-iommu@3da0000 with their interrupts and register ranges.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
 
 ## 网络 {#network}
 
@@ -512,7 +532,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [wlan and bluetooth nodes with the WCN7850 compatible values.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/dts/vermeer.dts)
+- `source`: [wlan and bluetooth nodes with the WCN7850 compatible values.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
 
 ## 音频 {#audio}
 
@@ -550,7 +570,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Stock audio node names, which reference the kalama-mtp sound card.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/firmware/dtb/vermeer.dtb)
+- `source`: [Stock audio node names, which reference the kalama-mtp sound card.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
 
 ## 电源 {#power}
 
@@ -593,7 +613,7 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [AppleKeyStoreState selection and the absence of board power services.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/board.toml)
+- `source`: [AppleKeyStoreState selection and the absence of board power services.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
 
 ## 镜像组装 {#packaging}
 
@@ -650,8 +670,8 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Fixed packaging steps and the board.toml keys they read.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/scripts/package.sh)
-- `host`: [Profiles, component sources and patch order resolve; the kernel archive plan reported the missing Adreno740 and AppleKeyStoreState entries before this record.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/unixnu.lock)
+- `source`: [Fixed packaging steps and the board.toml keys they read.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/scripts/package.sh)
+- `host`: [Profiles, component sources and patch order resolve; the kernel archive plan reported the missing Adreno740 and AppleKeyStoreState entries before this record.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/unixnu.lock)
   Command: <code>./unixnu status --json -D ../UniXNU-vermeer</code>. Revision: `c8027115706c3ceac37e45c9b81db447bbc5ceba`.
 
 ## 诊断 {#diagnostics}
@@ -700,10 +720,10 @@ Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume 
 
 ### 证据
 
-- `source`: [Kernel arguments, panic screen setting and the serial console selection.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/board.toml)
-- `device`: [The UniXNU menu appeared after the bootloader sent 1788 KB, confirming the UEFI and UniXNU checkpoints of the bring-up order.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/reports/2026-11-09-uefi-menu.md)
+- `source`: [Kernel arguments, panic screen setting and the serial console selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
+- `device`: [The UniXNU menu appeared after the bootloader sent 1788 KB, confirming the UEFI and UniXNU checkpoints of the bring-up order.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-09-uefi-menu.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b1c88c0808db7955a9ffd0e55ff35489e34bc25b`.
-- `device`: [With the framebuffer console patch the panel scrolled the whole kernel boot: iBoot 7.0.0 task start, AMFI 'Booted in a VM', AMFI/Sandbox/vnguard, the MRC framework, zone\_init 164 MB, apfs successfully initialized, AppleFSCompressionTypeZlib load succeeded, then the serialised root match and the root-device panic. Image boot.img sha256 7078c8ca065827ee72aaf13eef6be557b45eee5c38beec2f864af450768238d2.](https://github.com/qusno1/UniXNU-vermeer/blob/5945dda0542b3c01ef6e8fe0b332ce1deb717cb7/reports/2026-11-10-framebuffer-console-and-apfs.md)
+- `device`: [With the framebuffer console patch the panel scrolled the whole kernel boot: iBoot 7.0.0 task start, AMFI 'Booted in a VM', AMFI/Sandbox/vnguard, the MRC framework, zone\_init 164 MB, apfs successfully initialized, AppleFSCompressionTypeZlib load succeeded, then the serialised root match and the root-device panic. Image boot.img sha256 7078c8ca065827ee72aaf13eef6be557b45eee5c38beec2f864af450768238d2.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-10-framebuffer-console-and-apfs.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `44c5e2579fd0b6a35b0bbbe3d6a1f5a0f4e0e6c3`.
 
 </div>

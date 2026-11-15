@@ -1,0 +1,217 @@
+schema_version = 1
+
+[device]
+name = "bluejay"
+soc = "GS101"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Google Pixel 6a (bluejay, Tensor G1) port scaffold. Hardware values come from the pixelios-kernel research port, which boots XNU 8796 with the iOS 16.7 userland on this phone; this repository restates them in UniXNU format. No UniXNU image has been built or booted for this board yet."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "XnuPrelink", "DarwinBoot", "GopFramebuffer"]
+paths = ["board.toml", "feeds.toml", "configs/**", "dts/**", ".github/**", ".gitignore"]
+inputs = ["Google Pixel 6a (bluejay), Tensor G1 (GS101), 8 GiB DRAM, 128 GiB UFS, 1080x2400 panel.", "pixelios-kernel hardware descriptions: soc/google/gs101/soc.json, device/google/bluejay/board.json, docs/research/05-fact-check.md."]
+configuration = ["board.soc_source = gs101 pins UniXNU-gs101-common; board.os_profile = ipados-17.7.11-21H461.", "config_fragments apply in order arch, soc, os; the resolved defconfig bluejay_defconfig applies last.", "patch_series is arch, soc, os, device; every series except device is inherited and currently empty for this SoC."]
+procedure = ["From a UniXNU checkout: ./unixnu defconfig bluejay_defconfig -D ../UniXNU-bluejay", "./unixnu fetch -D ../UniXNU-bluejay; ./unixnu status --json -D ../UniXNU-bluejay", "python3 scripts/porting-record.py check --device ../UniXNU-bluejay"]
+findings = ["UniXNU ships only iPadOS 17.7.11, iPadOS 26.5.2, iPadOS 27.0.1 and macOS 27.3 OS profiles. There is no iPhone/iOS 16.7-20H19 profile, so this scaffold selects the oldest shipped profile; a native iPhone profile is required before the result is a real phone port.", "pixelios boots XNU 8796 (iOS 16 generation). UniXNU pins a newer XNU and its own ordered patch series, so the pixelios patch stack is not reused as-is.", "The pixelios shim is a bare-metal EL2 loader, not UEFI. Its hardware facts (UFS cold re-init, HS-G4 link, memory map, device tree) are reusable; its code is not a UniXNU component.", "The SoC commit pinned in feeds.toml is the first commit of UniXNU-gs101-common and must be replaced with the reviewed published commit.", "The device owns no board driver submodules yet: Gs101Ufs, FTM5 touch and GS101 power are unassigned."]
+completion = ["Every source pin resolves; status shows the intended profiles, components and patch order; the porting record check passes."]
+limits = ["No component build has been attempted; UniXNU, uefi-bluejay and a working IPSW profile are missing."]
+next_action = ["Clone UniXNU beside this repository, run defconfig, fetch and status, and record the resolved output."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/device/google/bluejay/board.json", result = "Board hardware values (DRAM banks, framebuffer, userdata geometry, keys, touch)." }, { kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/soc/google/gs101/soc.json", result = "SoC register bases, GIC/timer, UFS, USB, UART, WLAN and GPU resources." }]
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = ["DarwinBoot"]
+paths = ["proprietary-files.txt", ".github/workflows/package.yml", "board.toml"]
+inputs = ["tuxmanxd/uefi-bluejay: the Mu-Silicium GS101/Pixel 6a platform (bluejayPkg + GS101Pkg), installed with scripts/apply.sh.", "Google Pixel 6a factory image for vendor firmware inputs.", "ABL hands over a linear framebuffer at 0xfac00000 and a live FDT."]
+configuration = ["[firmware] config = bluejay, dsc = Platforms/Google/bluejayPkg/bluejay.dsc, fd = Build/bluejayPkg/{target}_CLANGPDB/FV/SILICIUM_UEFI.fd.", "[firmware.defines] DEVICE_MODEL = bluejay. [bootimg.image] matches the pixelios shim image layout: base 0, kernel_offset 0x8000, tags_offset 0x100, pagesize 4096, header_version 0."]
+procedure = ["Install uefi-bluejay into a Mu-Silicium checkout with scripts/apply.sh, following https://unixnu.com/porting/uefi-firmware, then build the firmware volume with build_uefi.py -d bluejay.", "Run scripts/package.sh --check --os 17."]
+findings = ["The stock bootloader boots Android boot images only, so UniXNU must be packaged as a boot image first (layer 1) before the firmware volume is reachable; the pixelios fastboot boot flow proves this path on the phone.", "ABL sets up the panel framebuffer and provides no framebuffer node in its FDT; the address and size are measured (0xfac00000, 0x9e3400).", "The phone is read-only toward storage in the pixelios pre-kernel path; any UniXNU firmware must preserve that property until the userdata install is explicit."]
+completion = ["The firmware volume builds, UniXNU.efi runs from it, the menu appears on the panel and the memory map matches the DTS reservations."]
+limits = ["The platform package has never been compiled in a full Mu-Silicium checkout or run on hardware; no firmware archive pin and no proprietary file hashes yet."]
+next_action = ["Build uefi-bluejay in a full Mu-Silicium checkout, confirm the planned FD address, UFS link and framebuffer on hardware, then fill [firmware.image] and proprietary-files.txt."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/research/01-boot-path.md", result = "Boot chain, ABL handoff, framebuffer and boot image parameters." }]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu"]
+paths = ["dts/bluejay.dts", "configs/bluejay_defconfig"]
+inputs = ["8 cores: 4x Cortex-A55, 2x Cortex-A76, 2x Cortex-X1.", "GICD 0x10400000 (64 KiB), GICR 0x10440000 (1 MiB, 8 redistributors, stride 0x20000).", "CNTFRQ 24.576 MHz; virtual timer PPI 11 = INTID 27."]
+configuration = ["cpus/timebase-frequency = <24576000>; psci method smc.", "unixnu,cluster-type = E for cpu0-3 and P for cpu4-7 in the board DTS.", "CONFIG_XNU_ARMCPU=y and CONFIG_XNU_ARM_DT_PLATFORM=y."]
+procedure = ["Compile dts/bluejay.dts against soc:dts, boot, and read the CPU and interrupt bring-up lines from the kernel log."]
+findings = ["The big cluster mixes A76 and X1 cores; treating cpu4-7 as one P cluster is a scheduling policy choice, not a hardware boundary.", "GICv3 needs both the distributor and all eight redistributor frames; a truncated GICR size leaves secondary CPUs unable to start.", "pixelios boots all 8 CPUs with a custom boot-CPU driver (XNU patch 0018), which UniXNU ArmCpu replaces."]
+completion = ["All 8 CPUs come online, IPIs work, the timer ticks at 24.576 MHz and secondary CPUs survive idle."]
+limits = ["Not run on hardware in this configuration; cluster mapping has not been validated under UniXNU."]
+next_action = ["Boot the firmware and kernel and record the CPU startup and timer lines."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/research/05-fact-check.md", result = "GIC and timer values confirmed against the vendor DTS." }]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["dts/bluejay.dts", "board.toml"]
+inputs = ["DRAM banks measured: 0x80000000 (2 GiB, carve-outs), 0x880000000 and 0x900000000 (2 GiB each, contiguous, no reserved range inside).", "XNU range: 0x880000000 size 0x100000000.", "USB DMA carve-out: 0xf8800000 size 0x1000000 (ABL, no-map)."]
+configuration = ["One memory node for the high range only: reg = <0x8 0x80000000 0x1 0x0>.", "payload.adt.owned_memory_size = 0x100000000; dram_size = 0x100000000.", "reserved-memory/framebuffer@fac00000 is no-map."]
+procedure = ["Compare the firmware memory map with the DTS, then check that XNU boots with the full 4 GiB and no overlap."]
+findings = ["XNU maps [kernel, physBase+memSize) cacheable, so the range must contain no carve-out and its base and size must be multiples of 32 MiB (16K-granule L2 block). The high range satisfies both.", "The low bank cannot be handed over whole: ABL reserves several no-map ranges, including its 16 MiB USB event buffer. Its allocation moves between boots (0xF8B92000, 0xF8D12000 observed).", "The 0xfac00000 framebuffer is below the XNU range, so it needs a reservation for firmware/DarwinBoot but does not fragment owned memory."]
+completion = ["XNU sees 4 GiB of owned memory, boots past pmap setup, and the framebuffer and USB carve-outs stay untouched."]
+limits = ["The low bank is not adopted; memory outside the window is unavailable to the OS."]
+next_action = ["Measure the firmware memory map in the UniXNU boot log and confirm the DTS reservations."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/device/google/bluejay/board.json", result = "DRAM banks, XNU RAM range, framebuffer and USB DMA range with measurement notes." }]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts", "configs/bluejay_defconfig"]
+inputs = ["UFS host controller 0x14700000, vendor HCI +0x1100, UNIPRO 0x14780000, PHY/PMA 0x14704000.", "UFS LUN 0 GPT: userdata first 0x22F1E6, last 0x1DC03FA, 4096-byte LBAs.", "Cold re-init after the bootloader shuts the controller down, then HS-G4 link."]
+configuration = ["&ufs and &ufsphy status = okay; CONFIG_XNU_NATIVE_UFS=y.", "[userdata] first_lba/last_lba/lba_bytes in board.toml."]
+procedure = ["Implement a Gs101Ufs component (or a board driver) from the pixelios UFS cold-init sequence, then mount the iOS root read-only and verify the GPT geometry."]
+findings = ["The bootloader leaves the UFS controller off; a plain HCI reset is not enough and the pixelios shim reprograms vendor HCI, UNIPRO and the PHY before the link trains.", "The link is switched to HS-G4 (12x read throughput); the gear change is part of bring-up, not a later optimisation.", "The root lives in userdata, so the partition geometry is fixed by the phone GPT and is recorded in board.toml.", "No shared UniXNU UFS component supports Exynos/GS101 UFS yet; ShengUfs is Qualcomm-specific and cannot be reused."]
+completion = ["The kernel enumerates the UFS LUNs, reads the GPT and mounts the root; a full read of userdata completes without CRC errors."]
+limits = ["No driver code; the pixelios implementation is bare-metal C in the shim, not an XNU kext."]
+next_action = ["Port shim ufsinit.c to a UniXNU storage component and prove a read-only userdata read."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/soc/google/gs101/shim/ufsinit.c", result = "UFS cold re-init, vendor HCI/UNIPRO/PHY windows and HS-G4 sequence." }]
+
+[[area]]
+id = "display"
+status = "planned"
+components = ["GopFramebuffer"]
+paths = ["dts/bluejay.dts", "board.toml"]
+inputs = ["Framebuffer 0xfac00000, size 0x9e3400, 1080x2400, stride 4320, a8r8g8b8, set up by ABL.", "No framebuffer node in the firmware FDT."]
+configuration = ["reserved-memory/framebuffer@fac00000 label cont_splash_region, no-map.", "CONFIG_XNU_NATIVE_LEGACY_DISPLAY=y."]
+procedure = ["Describe the scanout buffer as the GOP handoff, boot, and check that the boot logo and the first frames appear."]
+findings = ["ABL programs the panel and leaves a linear buffer; there is no display controller driver in the pixelios pre-kernel path.", "1080x2400 with a 4320-byte stride is 4 bytes per pixel with no padding beyond the width.", "The pixelios kernel only patches an early framebuffer console (XNU patch 0003) and later hands off to a software-rendered UI."]
+completion = ["The firmware menu and the XNU boot text render, and the framebuffer is not reclaimed as free memory."]
+limits = ["No panel, backlight or DPU driver; brightness control is absent."]
+next_action = ["Map the measured buffer into GopFramebuffer and confirm the handoff on hardware."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/device/google/bluejay/board.json", result = "Framebuffer base, size, width, height and stride." }]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts", "board.toml"]
+inputs = ["STMicro FTM5 touch, chip ID bytes 0x36 0x48, SPI11 / USI11 at 0x10D40000, USI mode register 0x10C2100C, max 10 MHz.", "Pins: gpp23-0..2 SPI function 2, CS gpp23-3, IRQ gpa9-0 (XEINT_20), reset gpp26-0, TS_SPI_SEL gpp26-1.", "Power: S2MPG10 LDO25M/LDO26M. Keys: power gpa10, vol+ gpa8, vol- gpa7, all active low."]
+configuration = ["DTS touch node with st,max-coords and spi-max-frequency, currently disabled.", "[adt.buttons] button-names = hold, voldown, volup."]
+procedure = ["Implement the FTM5 SPI driver and pinctrl/rail setup, then verify contacts and the three buttons."]
+findings = ["Touch works on hardware under pixelios (2026-10-22): the lock screen and home screen respond, so the wiring and firmware protocol are proven.", "The touch controller is behind USI in SPI mode; the USI mode register must be programmed before the SPI transfers.", "GPIO keys are read directly through the pinctrl banks; uniXNU uses the ADT buttons node instead of the pixelios /sweet-keys node."]
+completion = ["Contacts reach the HID stack with correct coordinates and all three buttons generate events."]
+limits = ["No FTM5 driver or pinctrl component; the DTS node is disabled."]
+next_action = ["Write a board input driver from the pixelios touchpoke/touchprobe code and enable the DTS node."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/research/05-fact-check.md", result = "Touch chip, bus, pins, rails and key pins confirmed against vendor sources." }, { kind = "device", reference = "https://github.com/PixOS-Project/pixelios-site/blob/main/docs/STATUS.md", command = "fastboot boot shim-boot-avb.img", revision = "04457e5ddae2164778bd5e75c352a34dac916de9", result = "Touch reported working on the iOS 16.7 lock and home screen." }]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts"]
+inputs = ["Mali-G78 MP20 at 0x1C500000 size 0x5000, three SPIs (job 420, mmu 421, gpu 419).", "Power: PMU G3D 0x17461E00/0x17461E04, CMU_G3D 0x1C400000, S2MPU windows 0x20080000-0x200B0000.", "Firmware loaded by the shim/kbase; no Apple GPU stack."]
+configuration = ["gpu node present but status = disabled; no GPU component selected."]
+procedure = ["Decide between a native Mali component and no GPU, then enable the node only when a driver exists."]
+findings = ["UniXNU GPU components target Adreno (Adreno740/AdrenoMetal) and cannot drive Mali-G78.", "pixelios has substantial GS101 GPU power and job-submission research, but the UI is software-rendered and slow; this is not a working Metal stack.", "The framebuffer path does not depend on the GPU."]
+completion = ["Either a Mali component renders and presents, or the area stays not-applicable with the software path documented."]
+limits = ["No Mali driver component; GPU is not part of the first boot milestone."]
+next_action = ["Scope a Mali-G78 component or mark the area not-applicable for bring-up."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/research/17-gpu-kernel-gs101.md", result = "GPU MMIO, interrupts, power domains and clock resources." }]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts", "proprietary-files.txt"]
+inputs = ["Broadcom PCIe Wi-Fi behind the GS101 PCIe controller; firmware and NVRAM from the phone's vendor partition.", "pixelios shim WLAN bring-up: link training, PMU/CMU sequences, firmware container packing."]
+configuration = ["No wlan node or component selected yet."]
+procedure = ["Add a wlan node, port the PCIe link and firmware loader, then run the iOS Wi-Fi stack."]
+findings = ["pixelios implemented PCIe link bring-up and a USB network log path, but Wi-Fi association is still listed as outstanding.", "The WLAN register sequences are captured as data (soc/google/gs101/wlan_seq.json) with per-row citations; they are reusable facts, not a driver.", "GS101 has no UniXNU network component."]
+completion = ["The interface associates, obtains an address and passes traffic under the target OS."]
+limits = ["No driver, no firmware hashes, no association evidence."]
+next_action = ["Port the PCIe/WLAN sequence into a component and capture firmware inputs."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/soc/google/gs101/wlan_seq.json", result = "Cited PCIe/PMU/CMU/pin sequences for the GS101 WLAN block." }]
+
+[[area]]
+id = "cellular"
+status = "not-applicable"
+components = []
+paths = ["proprietary-files.txt"]
+inputs = ["GS101 modem and the Pixel 6a baseband are out of scope for the first UniXNU bring-up."]
+configuration = ["No modem node and no baseband component is selected."]
+procedure = ["Revisit only after storage, display, input and network work."]
+findings = ["pixelios lists the modem as outstanding; no QMI/QRTR or IPA path exists for this board.", "UniXNU has QcomBaseband for Qualcomm platforms; it does not cover the GS101 modem."]
+completion = ["Not applicable while the modem is outside the port scope."]
+limits = ["No cellular function; the area is deliberately empty."]
+next_action = ["Keep out of scope until the base platform boots."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/ROADMAP.md", result = "Modem listed as future work." }]
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts", "proprietary-files.txt"]
+inputs = ["GS101 audio subsystem: ACPM IPC, DSP firmware, S2MPG10/11 PMIC, speaker/headset codec paths.", "pixelios shim ACPM protocol work and DVFS notes."]
+configuration = ["No audio nodes or components selected."]
+procedure = ["Describe the DSP/IPC nodes, port the firmware loader, then enable the OS audio stack."]
+findings = ["pixelios has ACPM host-tested protocol code but no audio playback on the phone; audio remains on the roadmap.", "ACPM is the shared IPC transport for power and audio on GS101, so the power and audio areas share the same firmware interface."]
+completion = ["The OS audio server starts and produces playback through the speaker or headset."]
+limits = ["No DSP firmware, codec driver or mixer configuration."]
+next_action = ["Port ACPM transport first, then the codec path."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/shim/acpm.c", result = "Host-tested ACPM IPC implementation and message layout." }]
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts", "configs/bluejay_defconfig"]
+inputs = ["S2MPG10/S2MPG11 PMICs over ACPM Speedy; PMU alive 0x17460000, G3D 0x17461E00.", "pixelios regulator, DVFS and rail sequences, including the GPU rail suspend write."]
+configuration = ["No PMIC or regulator nodes selected; no XNU PMGR replacement."]
+procedure = ["Add PMIC/ACPM nodes, implement rail and clock control, then verify idle, suspend and thermal behaviour."]
+findings = ["GS101 has no Apple PMGR; the ADT reports vmm-present so AMFI does not wait for ApplePMGRNub.", "The GPU rail sequence in pixelios performs a single guarded FUNC_UPDATE and refuses on unexpected mode or voltage, a pattern to preserve in any driver.", "Charging, battery and thermal ownership are unresolved."]
+completion = ["Rails and clocks are owned deterministically; the OS boots without a PMGR timeout and can idle."]
+limits = ["No PMIC driver, no suspend/resume, no thermal policy."]
+next_action = ["Port the ACPM/PMIC rail layer and record the first idle-power measurement."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/AUTOMATION.md", result = "ACPM Speedy rail protocol and guarded GPU rail sequence." }]
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "scripts/package.sh", ".github/workflows/package.yml", "patches/**"]
+inputs = ["Target IPSW and its disk images; the pixelios port used iOS 16.7 (20H19).", "Android boot image geometry from the pixelios shim.", "GPT userdata geometry from the phone."]
+configuration = ["[userdata] first_lba 2290150, last_lba 31130618, lba_bytes 4096.", "[payload] volume BLUEJAY, 192 MiB, loader firmware, dram_size 0x100000000, kernel_args -v serial=3 debug=0x14e keepsyms=1.", "[bootimg.image] base 0, kernel_offset 0x8000, tags_offset 0x100, pagesize 4096, header_version 0."]
+procedure = ["scripts/package.sh --check --os 17", "scripts/package.sh --os 17 --uefi ../uefi-bluejay"]
+findings = ["The payload ADT uses chip id 0x8015, the Apple platform identity pixelios emits, not the GS101 id.", "The pixelios port stores the iOS root in userdata and mounts it read-only; the UniXNU payload must keep the same partition contract.", "No uefi-bluejay checkout exists, so package.yml names a repository placeholder and cannot run yet."]
+completion = ["A clean checkout produces boot.img, payload.img, kernel.macho and the manifest, and the images boot on the phone."]
+limits = ["The OS profile is iPadOS 17.7.11, not iOS 16.7; the IPSW pin and SHA-256 members are absent."]
+next_action = ["Create uefi-bluejay, then pin the IPSW, its member hashes and the payload runtime values."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/shim/build.sh", result = "Android boot image parameters used to load the shim." }]
+
+[[area]]
+id = "usb"
+status = "planned"
+components = []
+paths = ["dts/bluejay.dts"]
+inputs = ["DWC_usb31 at 0x11110000 size 0x10000, GSNPSID 0x33313130, global block at +0xC100.", "ABL USB DMA region 0xf8800000 size 0x1000000 with a moving event buffer."]
+configuration = ["usb node present but disabled; no USB component selected."]
+procedure = ["Enable the DWC3 node, port the XDCI/device mode path and verify enumeration as a network gadget."]
+findings = ["pixelios proves USB device mode on this phone: the running iOS appears as an Ethernet gadget and streams the kernel log over UDP.", "The event buffer address changes between boots and must be checked against the 16 MiB ABL region before DMA is enabled.", "UniXNU has QcomDwc3 for Qualcomm; a GS101 variant is not selected."]
+completion = ["The phone enumerates, a host sees the gadget, and the log transport works."]
+limits = ["No driver component; USB is not on the first boot path."]
+next_action = ["Port the DWC3 device-mode bring-up and reuse the USB log transport."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/research/09-xnu-usb-gs101.md", result = "DWC3 identity, base, event buffer behaviour and device-mode evidence." }]
+
+[[area]]
+id = "diagnostics"
+status = "planned"
+components = []
+paths = ["docs/**", ".github/workflows/package.yml"]
+inputs = ["pixelios log channels: on-screen console, RAM log, USB serial gadget, USB network log and QR-code log."]
+configuration = ["kernel_args include -v, serial=3, debug=0x14e, keepsyms=1."]
+procedure = ["Bring up one transport at a time, starting with the framebuffer console, then capture a full boot log with the image revision."]
+findings = ["The QR log channel exists because reading a phone screen by eye is unreliable; its encoder needed SHA3 removal because GS101 lacks those instructions.", "A software-driven test loop (build, boot, read log, reset) works without button presses and is the model to keep."]
+completion = ["A boot log survives a failed boot and identifies the image revision."]
+limits = ["No log transport is integrated into UniXNU for this board."]
+next_action = ["Enable the framebuffer console first, then add USB or QR capture."]
+evidence = [{ kind = "source", reference = "https://github.com/PixOS-Project/pixelios-kernel/blob/main/docs/QR_LOG.md", result = "QR log design, encoder constraints and camera decoder." }]

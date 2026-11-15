@@ -6,7 +6,7 @@
 
 Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhone17,2 / D94AP identity. The kernel reaches BSD init; the active milestone is SM8450 UFS storage and the root volume.
 
-源记录: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/porting.toml), `4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546`.
+源记录: [porting.toml](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/porting.toml), `f77f2c52fa53576194c3bf29ab0fa7afd20a4328`.
 
 本页按设备记录自动生成。
 
@@ -16,7 +16,7 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 | [固件与启动](#firmware) | `host-verified` |
 | [CPU 与中断](#cpu) | `implemented` |
 | [内存与 DMA](#memory) | `implemented` |
-| [存储与根卷](#storage) | `planned` |
+| [存储与根卷](#storage) | `device-verified` |
 | [显示](#display) | `planned` |
 | [输入](#input) | `planned` |
 | [GPU](#gpu) | `planned` |
@@ -50,6 +50,8 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 ### 开发经验
 
+- feeds.toml pins refer/IOStorageFamily at 7edb88fb: build-sheng-source-storage.py hardcodes that public-headers revision and prepare-storage-headers.py refuses any other checkout, while UniXNU main moved the base feed to e45fbe3. The source is only used for the storage ABI headers, not a binary.
+- board.kit is sheng, not cupid: build-sheng-source-storage.py looks for the device package at kits/sheng when it runs from the assembled tree \(its --device default is the tree\). The kit is only the package folder; board.name and all output paths stay cupid.
 - The upstream 24A446 fixture's data entries: the 13 vnodeop\_desc descriptors are retargeted to the iPhone 27 collection by their unique vnop\_\* name strings and vdesc\_name slots; the 8 metaclass slots and \_gIODTPHandleKey, \_audio\_active, \_tk\_rawcc, \_tk\_nin and \_gPESerialBaud remain to be retargeted by the reference data map/source consumers. notes/IOS27-SHENG.md records the fixture/recipe, the generic sheng 24A446 bring-up hunks and the relevant 4 KiB/arm64e/prelink/security/bring-up docs.
 - An iPhone profile is required for a phone: iPadOS presents iPad product identity, idiom and display assumptions that SpringBoard and UIKit read from /product.
 - Arrays replace inherited arrays: board.toml repeats every selected component, configuration fragment and patch series entry.
@@ -81,8 +83,8 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 ### 证据
 
-- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/.github/workflows/macos.yml)
-- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `source`: [Resolve, arm64e kernel build, iPhone17,2 prelink and EDK II package steps used by the host-verified runs.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/.github/workflows/macos.yml)
+- `device`: [ro.board.platform=taro, ro.boot.hardware.sku=cupid, dtb\_idx=10 \(Waipio v2\), dtbo\_idx=19, cpuid=0x0000043252a25a21, serialno=1cb22738; /sys/devices/soc0 revision 2.2.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'getprop | grep ro.boot'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## 固件与启动 {#firmware}
@@ -136,11 +138,11 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 - `host`: [macOS 26 DEBUG/CLANGPDB build of Platforms/Xiaomi/cupidPkg/cupid.dsc with FD\_BASE=0xa7100000 FD\_SIZE=0x300000 FD\_BLOCKS=768; output uefi-cupid/Build/cupidPkg/DEBUG\_CLANGPDB/FV/SILICIUM\_UEFI.fd. The Gic-Spurious edk2 patch applied.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42371720139)
   Command: <code>./unixnu build firmware -D ../device --uefi ../uefi-cupid</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
 - `source`: [Documents the ingres-derived memory map, the missing stock uefiplat.cfg replacement, and the vendor-hardware import that Binaries/cupid needs.](https://github.com/obaosp/uefi-cupid/blob/bce96f77d07ec90a516432df466b8cd3af7272fc/Platforms/Xiaomi/cupidPkg/README.md)
-- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `device`: [The live memory map and /sys/hypervisor \(gunyah, api 1, variant 81\) were read on the phone; the firmware has not been booted yet.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/first-boot-2026-11-07.md)
+- `device`: [fastboot OKAY: Sending 181676 KiB in 4.2 s, Booting OKAY. Black screen, no text or colour, device stayed in fastboot; fastboot reboot returned to PixelOS. Header, ramdisk and payload verified; pstore empty and no last\_kmsg. cupid stock uefi.img is an ELF with PT\_LOAD 0xA7000000 memsz 0x2A0000, while the FD was based at 0xA7100000 with size 0x300000, i.e. 1 MiB past the window.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-boot-2026-11-07.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b83e634bd63489b7c7ff3f976ca732ea80c98c03`.
-- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [BootShim and the cupidPkg UEFI run on the phone: console shows loading drivers and memory allocation, Project Silicium logo, then the UniXNU menu with four options. Header v4 was required; the v0 image stayed in fastboot. Payload missing, see packaging.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## CPU 与中断 {#cpu}
@@ -185,11 +187,11 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 ### 证据
 
-- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/dts/cupid.dts)
+- `source`: [Board CPU clusters and memory/splash regions.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/dts/cupid.dts)
 - `source`: [Mainline CPU nodes, GIC windows, UFS host and PHY addresses used by dts/sm8450.dtsi.](https://github.com/torvalds/linux/blob/f1586048fb1dabb91c82fbe11557e505587973d3/arch/arm64/boot/dts/qcom/sm8450.dtsi)
-- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `device`: [8 cores online; Features include paca and pacg on every core \(FEAT\_PAuth address and generic keys\); parts 0xd46/0xd47/0xd48.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'grep -E "Features|CPU part" /proc/cpuinfo'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
-- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/pac-trap-2026-11-07.md)
+- `device`: [XNU started on cupid for the first time and panicked on msr CNTP\_CTL\_EL0 \(word 0xd51be228 at pc=0xfffffff00ad881c0\): Gunyah leaves CNTHCTL\_EL2.EL1PCEN clear, so the EL1 physical-timer write traps. The earlier PAC-instr=d5 reading was a wrapped line; see the CORRECTION in notes/pac-trap-2026-11-07.md.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/pac-trap-2026-11-07.md)
   Command: <code>fastboot boot boot-v4-win2g.img</code>. Revision: `d093c5c1292400209634b7b82c78cd39fd9faa98`.
 
 ## 内存与 DMA {#memory}
@@ -228,12 +230,14 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 ### 证据
 
-- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `device`: [System RAM runs measured; largest contiguous 0x840000000-0x97fffffff \(5 GiB\) with the reserved tail from 0x96ef68000; owned\_memory\_size set to 0x12e000000.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'cat /proc/iomem'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## 存储与根卷 {#storage}
 
-`planned`
+`device-verified`
+
+组件: `ShengUfs`, `RamBlock`, `VirtioMmioBlock`, `VerifiedRoot`.
 
 ### 硬件与依赖
 
@@ -257,24 +261,33 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 - package/Sm8450Ufs/Sm8450UfsHci.h adds the UFSHCI command path: HCE 0x34, IS 0x20, UIC 0x90, doorbell 0x58, controller enable/disable, UIC DME\_GET/link-startup, UTRD and command-UPIU layouts \(READ CAPACITY\(10\)\), transfer-list base and doorbell ring/clear, exercised against a fake controller.
 - The UTRD keeps DW0-3 as raw words: the C bitfield header pads to 40 bytes, so the static asserts pin 32 bytes with the UCD base at 16 and PRDT at 28; the fake-controller test caught the padded layout.
 - Fixed the UPIU header field order \(LUN b1, task tag b2, IID/CS b3, CDB b12\) and added ResponseUpiu \(52 bytes, residual and sense fields\), PrdtEntry \(16 bytes\), 4-byte PRDT padding and the UCD layout at 0/512/1024; the host test pins every offset.
+- drivers/ShengUfs is the sheng UFS transport adapted to waipio: DT compatible qcom,sm8450-ufshc \(plus qcom,ufshc\), GCC window 0x87000, no SM8550 UFS\_MEM\_PHY\_GDSC at 0x9e000, and the SM8450 apps-SMMU stream 0xe0 \(mainline sm8450.dtsi; iommus &lt;&amp;apps\_smmu 0xe0&gt;\). The controller is adopted live: the firmware leaves GDSCR/AXI/AHB/UNIPRO on, HCE=1 and UTRLRSR=1, so the driver stops the firmware list, installs its own UTRD and never resets the link.
+- The device read test \(patches/xnu/ufs-probe.patch, ufs-smmu.patch, ufs-read.patch\) reports SSU/TUR ocs=0 with the 0xe0 stream; READ\(10\) of LUN 0 LBA 1 returns the GPT header \(sig 20494645 54524150, 64 entries, cur=1 ent=2\) and a userdata read at LBA 3170304 returns ocs=0. Block DMA is verified on the phone; the stream-0x60 attempt SErrors, so 0xe0 is required.
+- The window-publication runtime is sheng SourceStorage.cpp/SourceRootPolicies.cpp/SourceRootBinding.cpp plus BootLog/BootReset/BootProcess\*/BootDiagExport/WifiFirmware/BluetoothFirmware, built into libShengSourceStorage.a by build-sheng-source-storage.py. The kernel calls a weak native\_source\_storage\_start\(\) from bsd\_init after vfsinit\(\); patches/xnu-12377/source-storage-runtime.patch supplies that one hunk and must keep the context vfsinit\(\); followed by \#if DEVELOPMENT \|\| DEBUG.
+- The cupid source-storage archive is minimal: package/sheng-full keeps the full sheng BootLog/BootUiTraceProbe/BootDiagExport/BootProcess\*/Wifi/Bluetooth sources, and the top-level package files are stubs because those objects take addresses of weak imports from sheng components cupid does not select \(armcpu\_spi\_\*, sheng\_pmu\_fixup, native\_adreno\_\*, native\_gop\_\*, native\_legacy\_\*, native\_touch\_\*, cs\_\*, vt\_\*, sheng\_idle\_\*, ml\_static\_mfree\_prepare\). On arm64e an address of a weak import is a hard authenticated-pointer link error, so SourceStorage.cpp supplies a refusing armcpu\_spi\_mask \(the base ArmCpu already defines armcpu\_spi\_attach\) and ml\_static\_mfree\_prepare definitions and NativeUfs defines native\_ufs\_block\_authenticates for the unverified build. log=1 is unavailable until the log window and board pages are ported.
+- The first cupid root bring-up is unverified: scripts/policies/ipados-27.0.1-24A446/&\#123;OS,SystemOS&\#125; are dummy 544-byte manifests with the real image digest and a placeholder 395-byte anchor, only to satisfy the builder's digest/volume checks. NativeUfs.cpp and SourceRootPolicies.cpp force NATIVE\_VERIFIED\_BLOCK=0, so the signatures are never read and source windows publish without owner policy tables. Replace them with real owner-signed policies before treating verification as a security boundary.
+- Archive wiring: CONFIG\_XNU\_NATIVE\_UFS=y force-loads build/sheng-ufs/libShengUfs.a \(the source-storage script writes that path\); the board archives list needs component:ShengUfs and component:RamBlock \(the runtime compiles drivers/RamBlock/NativeRamBlock.cpp, so RamBlock must be selected for its tree link\); CONFIG\_XNU\_EXTRA\_LD\_ARCHIVES must stay unset or the same objects link twice. The policy directory is named ipados-27.0.1-24A446 because the builder globs scripts/policies/\*24A446 and the assembled tree already has UniXNU's own directory of that name; a second name would make the component build ambiguous. Boot args are native-source-storage=1 native-ufs-root=1.
 
 ### 完成条件
 
-- Host: register, clock and link facts match the board inventory. Reads: capacity, GPT and known blocks are correct. Root: the OS volume mounts and launchd starts.
+- Device: GCC and UFSHCI adopt the firmware state, SSU/TUR and READ\(10\) succeed with the 0xe0 SMMU stream, and the GPT/userdata LBA 3170304 is readable. Root: the SHNGROOT windows publish and the APFS OS volume mounts.
 
 ### 当前范围
 
-- No SM8450 UFS driver exists in the component catalog.
+- The userdata partition still holds Android /data; SourceStorage reports no valid SHNGROOT manifest until build/userdata-root.img is flashed \(owner-run fastboot, destroys Android data\).
+- Root policies are forced unverified for the first bring-up; the dummy manifests are not a security boundary.
 
 ### 下一步
 
-- Add UCD/PRDT allocation, response-UPIU parsing and a SCSI READ\(10\) transfer to the host model; then map MMIO in a kext and verify the SM8450 GCC clocks and link startup on the phone.
+- Boot boot-v4-ios27-ufsroot.img; expect GPT/read success and a manifest refusal with the current Android userdata. Then flash build/userdata-root.img and boot again to mount the OS volume UUID E3F4AED0-4454-4D5B-833C-E27E99C4F67B.
 
 ### 证据
 
-- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/package/Sm8450Ufs/Sm8450UfsRegs.h)
-- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `source`: [SM8450 UFS GCC branch table \(0x87018..0x870d4\), GDSC 0x87004, host 0x1d84000 and PHY 0x1d87000, with a read-only probe; no SM8550 0x77xxx/0x9e000 values.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/package/Sm8450Ufs/Sm8450UfsRegs.h)
+- `device`: [iomem confirms ufshc 0x1d84000 \(ufs\_mem, ufs\_ice 0x1d88000, ufs\_ice\_hwkm 0x1d90000\) and PHY 0x1d87000; userdata is sda38, start512 25362432, size512 466862040 \(LBA 3170304..61528058 at 4096 bytes\).](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
+- `device`: [boot-v4-ios27-ufsread.img on cupid: with SMMU stream 0xe0, SSU/TUR complete ocs=0 resp=00 scsi=00; READ\(10\) LBA 1 returns the GPT header \(sig 20494645 54524150, 64 entries\), hcs=0x10f, rsr=1, UTRLBA=0xff130000; READ\(10\) at userdata LBA 3170304 returns ocs=0. The stream-0x60 build SErrors.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/UFS-PROBE-2026-11-13.md)
+  Command: <code>fastboot boot boot-v4-ios27-ufsread.img (panic-screen report)</code>. Revision: `484b9524a210075aac59aef81b17af231a1e0957`.
 
 ## 显示 {#display}
 
@@ -314,7 +327,7 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 ### 证据
 
-- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/first-uefi-boot-2026-11-07.md)
+- `device`: [The firmware console and the UniXNU menu render on the 1080x2400 panel through SimpleFbDxe, so ABL scan-out and GOP handoff work on cupid. XNU display is still untested.](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/first-uefi-boot-2026-11-07.md)
   Command: <code>fastboot boot boot-v4.img</code>. Revision: `34134f4d1ee7a80cc67f940a08ae363b3904bce7`.
 
 ## 输入 {#input}
@@ -559,7 +572,7 @@ Xiaomi 12 \(cupid, SM8450\) running iOS 27.0.1 \(24A446, arm64e\) under an iPhon
 
 - `host`: [Pre-pivot iOS 27 run: rebuilt arm64e XNU and built the EDK II package \(DEBUG/CLANGPDB, UniXNU.efi and the shared drivers\). This evidence is kept as packaging history, not as the current profile.](https://github.com/obaosp/UniXNU-cupid/actions/runs/42371720139)
   Command: <code>./unixnu build kernel -D ../device &amp;&amp; ./unixnu build package -D ../device</code>. Revision: `14ab2c0527b2b808ac94afd66025fa56238b9168`.
-- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/4c3f077e77d35a8f410b5c6ccb35f4f3fcc02546/notes/device-2026-11-07.md)
+- `device`: [userdata geometry measured from the live GPT \(sda38, 3170304..61528058 at 4096-byte LBA\).](https://github.com/obaosp/UniXNU-cupid/blob/f77f2c52fa53576194c3bf29ab0fa7afd20a4328/notes/device-2026-11-07.md)
   Command: <code>adb shell su -c 'sh /data/local/tmp/collect2.sh'</code>. Revision: `4730e3b1fb52e1238a5d370bdc1f381622033de9`.
 
 ## 诊断 {#diagnostics}

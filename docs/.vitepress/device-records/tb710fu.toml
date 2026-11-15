@@ -1,0 +1,200 @@
+schema_version = 1
+
+[device]
+name = "tb710fu"
+soc = "SM8650"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Lenovo Xiaoxin Pad Pro GT (TB710FU) port. Board DTS generated from mainline Linux; UEFI built from the device's own firmware; boot and vendor_boot images built, not yet booted."
+
+[[area]]
+id = "configuration"
+status = "host-verified"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", ".gitmodules", ".github/**", ".gitignore", ".gitattributes", "local.toml.example", "unixnu.lock"]
+inputs = ["SM8650 shared support from loolooc/UniXNU-sm8650-common (pinned commit); arm64 iPadOS 17.7.11 profile as on houji and caihong."]
+configuration = ["board.toml: soc_source sm8650, os_profile ipados-17.7.11-21H461, defconfig tb710fu_defconfig (meizu21 values), payload 64 MiB, owned_memory_size 0x80000000."]
+procedure = ["./unixnu defconfig tb710fu_defconfig -D ../UniXNU-tb710fu; ./unixnu fetch; ./unixnu status --json; CI build.yml kernel job on macos-26."]
+findings = ["The configuration resolves and the XNU kernel (xnu-10063.141.1 with the SM8650 patch series) builds and prelinks against the iPadOS 17.7.11 kernelcache in about 10 minutes.", "The bootstrap pass ends in an expected link error (mockfs symbols) before the archives exist; the step result is the final build.", "payload.panic_screen = true (no UART on the tablet); CI runs the AVB selftest and syntax-checks every script.", "kernel_args add ramoops=0xac340000 and ramoops_reset_after=120; CI runs tests/run-ramoops-test.sh.", "logs/ (pulled ramoops/pstore logs) is ignored by git, like firmware-dump/ and images/."]
+completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
+limits = ["macOS needs a separate OS profile (macOS-ForSheng approach); no SM8650 macOS profile exists."]
+next_action = ["Boot the images on the unlocked device; switch the OS profile after storage and display work."]
+evidence = [
+  { kind = "host", reference = "https://github.com/bmk-mikufan/UniXNU-tb710fu/actions/runs/42738403553", result = "kernel job success; kernel.macho Mach-O sha256 edb98193a248...", command = "./unixnu build kernel -j $(sysctl -n hw.ncpu)", revision = "a28f8b97df73988506594c8ccca3c67f461b418c" }
+]
+
+[[area]]
+id = "firmware"
+status = "implemented"
+components = []
+paths = ["proprietary-files.txt", "uefi/**", "scripts/dump-firmware.sh", "scripts/extract-files.py", "scripts/gen-touch-firmware.py"]
+inputs = ["Device partitions dumped read-only over adb (uefi_a, xbl_a, xbl_config_a, abl_a, imagefv_a, uefisecapp_a, vendor_boot_a, boot_a, dtbo_a) with sizes checked against the block devices.", "uefi_a: ELF with one FV, BOOT.MXF.2.1-02000-LANAI-1; 100 DXE INFs extracted with UEFIReader (duplicate Ebl renamed instead of aborting)."]
+configuration = ["uefi/Platforms/Lenovo/tb710fuPkg from Mu-Silicium giulia (SM8650, LanaiPkg); Lenovo SMBIOS; framebuffer 3200x2000 (mainline NT36532 panel); SOC_TYPE only selects SMBIOS strings.", "UniXNU.inf, UniXNUDxe, UniXNURamDiskDxe, DarwinBoot in DSC and FDF; UniXNULib and FdtLib mapped; built on UniXNU/uefi-sheng for the SEC FDT handoff."]
+procedure = ["UEFIReader uefi_a.img tb710fu; copy uefi/ over uefi-sheng; ./unixnu build firmware --uefi ../uefi-tb710fu."]
+findings = ["The giulia references resolve against the TB710FU blobs except OplusProject and OnePlus panel XMLs, which were dropped.", "uefiplat.cfg matches giulia's configuration map except EnableDisplayThread/EnableDisplayImageFv (kept 0 as in Silicium).", "SILICIUM_UEFI.fd builds at exactly 0x300000 with all four UniXNU modules (WSL, clang 18).", "scripts/dump-firmware.sh also dumps vbmeta and takes SLOT=_b for the inactive slot (read-only); scripts/sign-images.sh signs from the slot-a dumps (vbmeta_a, boot_a).", "First device boot (2026-11-11, slot b, locked ABL): ABL accepted the testkey chain and BootShim started Mu-Silicium; the framebuffer showed DxeCore 'Loading driver at' lines, then the panel went black with the backlight on and nothing else appeared. pstore was empty afterwards. This matches sheng's PORTING.md for its vendor drivers (panel blanks at ClockDxe). The APRIORI list also loaded GLinkDxe, which DXE.inc marks as crashing.", "TB710FU_VENDOR_HW (DSC, default 0) gates every Binaries/tb710fu DXE and RamManagerDxe and sets PcdBuildXblHobs FALSE, as in sheng. Without RamManagerDxe, the UEFI has only the MemoryMapLib DXE_Heap (432 MiB) as conventional memory.", "With TB710FU_VENDOR_HW = 0 the device reaches the UniXNU menu with the payload (kits 0, drivers 0 is normal), and the 3 s timeout starts the xnu entry. DarwinBoot then returned Out of Resources: the 2 GiB owned window had no conventional run. MemoryMapLib therefore maps RAM_High (0x8C0000000 + 3 GiB, DDR in the live FDT) as Conv. Buttons do nothing without the vendor PMIC drivers."]
+completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations."]
+limits = ["The vendor-driver build blanks the panel; the Mu-only build has no UFS, USB or clocks in UEFI. Firmware blobs are not redistributed."]
+next_action = ["Boot the TB710FU_VENDOR_HW = 0 image from slot b; check the UniXNU menu and the payload line; then re-add vendor drivers in groups to find the one that blanks the panel."]
+evidence = [
+  { kind = "source", reference = "uefi/Platforms/Lenovo/tb710fuPkg/tb710fu.dsc", result = "board package with UniXNU integration" }
+]
+
+[[area]]
+id = "cpu"
+status = "planned"
+components = []
+paths = ["package/CpuFreq*", "scripts/*armcpu*"]
+inputs = ["Identify the cpu and interrupts hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for cpu and interrupts."]
+procedure = ["Follow the cpu and interrupts stage in the porting guide and record the actual commands."]
+findings = ["Collect the first cpu and interrupts observation, its cause when established, and the resulting implementation decision."]
+completion = ["Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required cpu and interrupts inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["dts/**", "scripts/gen-board-dts.py", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scripts/*memory*"]
+inputs = ["Reserved memory from the mainline sm8650-lenovo-tb710fu.dtb; stock UEFI memory map from the DTB embedded in xbl_config; DDR banks from /sys/firmware/fdt."]
+configuration = ["dts/tb710fu.dts generated by scripts/gen-board-dts.py: 37 mainline regions plus display-demura@a3600000 and display-reserved@d5100000; /memory = 0x8c0000000 + 5 GiB.", "MemoryMapLib: PIL_Reserved 0x16F80000 and Display_Demura from the stock map; DXE_Heap ends at 0xD3000000."]
+procedure = ["scripts/gen-board-dts.py LINUX_DTB LIVE_FDT; scripts/stock-memory-map.py xbl_config_a.img MemoryMapLib.c; scripts/check-memory-map.py."]
+findings = ["DDR is split: 2 GiB at 0x80000000 and 6 GiB at 0x880000000 with secure holes (MemTotal 7.4 GiB, 8 GB SKU). XNU manages one contiguous window, so the largest run 0x8c0000000-0xa00000000 is the /memory node.", "The mainline board DT puts rmtfs at 0xd3000000, inside the stock DXE heap (stock Android allocates rmtfs dynamically).", "Display_Demura (0xA3600000, 43 MiB) exists only in the stock UEFI map; mainline does not reserve it."]
+completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
+limits = ["The 2 GiB owned window is the caihong value; the UEFI free map on this device is not observed yet."]
+next_action = ["Read the DarwinBoot window address on the first boot; try a larger owned_memory_size after root works."]
+evidence = [
+  { kind = "source", reference = "dts/tb710fu.dts", result = "generated board DTS; compiles against the SoC DTSI in CI" }
+]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = []
+paths = ["drivers/ShengUfs", "scripts/*ufs*", "scripts/*storage*", "scripts/*userdata*", "scripts/*root*"]
+inputs = ["Identify the storage and root hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for storage and root."]
+procedure = ["Follow the storage and root stage in the porting guide and record the actual commands."]
+findings = ["Collect the first storage and root observation, its cause when established, and the resulting implementation decision."]
+completion = ["Host: register, clock, link and SMMU facts match the board inventory.", "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.", "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required storage and root inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
+inputs = ["Identify the display hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for display."]
+procedure = ["Follow the display stage in the porting guide and record the actual commands."]
+findings = ["Collect the first display observation, its cause when established, and the resulting implementation decision."]
+completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required display inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/ShengHidInput", "drivers/ShengNovatekTouch", "package/*Touch*", "package/*Button*", "scripts/*touch*", "scripts/*hid*"]
+inputs = ["Identify the input hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for input."]
+procedure = ["Follow the input stage in the porting guide and record the actual commands."]
+findings = ["Collect the first input observation, its cause when established, and the resulting implementation decision."]
+completion = ["Touches map to the display, simultaneous contacts keep stable IDs, release events arrive, and buttons produce expected HID reports."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required input inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = []
+paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = ["Identify the gpu hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for gpu."]
+procedure = ["Follow the gpu stage in the porting guide and record the actual commands."]
+findings = ["Collect the first gpu observation, its cause when established, and the resulting implementation decision."]
+completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required gpu inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["drivers/Ath12kWifi", "package/*Wifi*", "package/MhiBoot*", "scripts/*wifi*", "scripts/*mhi*"]
+inputs = ["Identify the network hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for network."]
+procedure = ["Follow the network stage in the porting guide and record the actual commands."]
+findings = ["Collect the first network observation, its cause when established, and the resulting implementation decision."]
+completion = ["Scanning, association, address configuration and sustained receive/transmit traffic pass with the selected firmware."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required network inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["package/*Adsp*", "package/*Audio*", "package/*Gpr*", "package/QcomGlink*", "package/QcomMdt*", "package/QcomSmem*", "package/QcomSmp2p*", "scripts/*adsp*", "scripts/*audio*", "scripts/*gpr*"]
+inputs = ["Identify the audio hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for audio."]
+procedure = ["Follow the audio stage in the porting guide and record the actual commands."]
+findings = ["Collect the first audio observation, its cause when established, and the resulting implementation decision."]
+completion = ["Each declared route carries the selected audio format through playback or capture and handles start/stop correctly."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required audio inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["package/*Battery*", "package/*Battmgr*", "package/*Power*", "package/*PlatformPower*", "package/QcomQmp*", "package/QcomRpmh*", "package/QcomScm.h", "scripts/*power*", "scripts/*battery*", "scripts/*pmgr*"]
+inputs = ["Identify the power hardware, resources and existing component interfaces for this board."]
+configuration = ["Record the board.toml fields, DTS properties and defconfig values used for power."]
+procedure = ["Follow the power stage in the porting guide and record the actual commands."]
+findings = ["Collect the first power observation, its cause when established, and the resulting implementation decision."]
+completion = ["Declared power controls and battery readings match observations; each claimed sleep/resume transition restores its dependent peripherals."]
+limits = ["Hardware inputs and implementation are pending for this example board."]
+next_action = ["Inventory the required power inputs before implementation."]
+evidence = []
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = []
+paths = ["scripts/*payload*", "scripts/*image*", "scripts/*flash*", "scripts/avb/**", "patches/**", "package/Kit.toml", "scripts/android/**"]
+inputs = ["Stock boot_a: header v4, ramdisk 0 (GKI). Stock vendor_boot_a: header v4, ramdisk at 0x1000000, DTB 0x317e5d bytes at 0x1f00000.", "Bootloader stays locked (LTBox root). Stock vbmeta is signed with the AOSP testkey (2597c218...); it chains boot (rollback location 3) to the testkey and carries a hash descriptor for vendor_boot."]
+configuration = ["Payload in vendor_boot with --ramdisk-addr 0x2400000; boot.img with --ramdisk none and the live FDT as firmware DTB."]
+procedure = ["./unixnu build payload; ./unixnu vendor_boot --stock vendor_boot_a.img --ramdisk payload.img --ramdisk-addr 0x2400000; ./unixnu bootimg --uefi ../uefi-tb710fu --dtb live-fdt.dtb --ramdisk none.", "scripts/sign-images.sh firmware-dump images -> images/slot-b; scripts/flash-slot-b.sh images/slot-b [--write]."]
+findings = ["boot.img 2228224 bytes; vendor_boot.img 100663296 bytes (the partition size) with the 64 MiB payload; the payload holds kernel.macho and kernel.macho.adt, no trust cache or Data seed yet.", "A locked bootloader refuses fastboot boot and flash, so the images are signed for the testkey path and written to slot b from rooted Android (LTBox EDL partition writes are the recovery path).", "scripts/avb/avbsign.py rehash recomputes vbmeta hash descriptors; on the stock vbmeta the init_boot descriptor equals sha256(salt + init_boot[:size]), and the rehashed vendor_boot descriptor (70365184 bytes) matches the built image.", "patches/xnu/tb710fu-ramoops-console.patch applies on the 61-patch arm64/SM8650/iPadOS 17 series (git apply --check on xnu d8b80295).", "The stock slot-b chain is mixed firmware: vbmeta_b's vendor_boot descriptor matches vendor_boot_a, its dtbo descriptor matches neither dtbo_a nor dtbo_b. vbmeta_a matches dtbo_a, init_boot_a and vendor_boot_a, and chains vbmeta_system to the testkey, so slot b is built as slot a's chain plus the UniXNU boot/vendor_boot and a re-signed vbmeta_a (shared with the tb710fu-arch-linux E2 design).", "A simulated slot b (images/slot-b + dtbo_a + init_boot_a) passes tb710fu-arch-linux build/avbcheck.py; boot_b verifies against the testkey with rollback index 1736035200.", "adb exec-in can return before the device-side dd finishes; the flash path now runs on the tablet (scripts/android/flash-slot-b.sh, from tb710fu-arch-linux) with cmp verification.", "Real AOSP libavb avb_slot_verify (tb710fu-arch-linux build/avbverify, locked, testkey only, partitions boot/dtbo/vendor_boot/init_boot) returns OK on images/slot-b plus slot a's dtbo, init_boot, vbmeta_system and recovery, with the device rollback floors 0/1/1780617600/1736035200.", "Qualcomm ABL (SM8650 VerifiedBoot.c GetOsVerAndSecPactchLevel, found by the tb710fu-arch-linux session) reads com.android.build.boot.os_version/security_patch from the boot vbmeta and falls back to the boot header os_version, refusing 0. The UniXNU boot.img header carries 0x200001a7 (16, 2026-07), so it passed either way; sign-images.sh now copies boot_a's properties (14, 2025-01-05) with avbsign.py footer --props-from so the OS version handed to the TEE matches stock, and fails when the property is missing. The ABL-emulating build/avbverify harness returns OK for the new slot b.", "PVMFW_BCC ABL builds add pvmfw to the avb_slot_verify request when the partition holds an image (HasPvmFw); its hash descriptor is in vbmeta_system, so copying vbmeta_system_a without pvmfw_a fails verification (tb710fu-arch-linux found it; their E1 then passed ABL on the device). The flash path copies pvmfw from slot a; the build/avbverify harness returns ERROR_VERIFICATION for UniXNU slot b with the old pvmfw_b and OK with pvmfw_a.", "After AVB, ABL's UpdateDeviceTree() fails BootLinux (fastboot fallback) when the selected DTB lacks /, /memory, /chosen, /reserved-memory or /soc/cache-controller (LLCC, SCT DDR); the mainline DTB names it system-cache-controller and stalled the Linux E2 boot. UniXNU keeps the stock vendor_boot DTBs: tb710fu-arch-linux build/dtcheck.py passes on the msm-id 0x2b8 entry ABL selects."]
+completion = ["The signed images boot from slot b, the menu lists the xnu entry and DarwinBoot hands off."]
+limits = ["Not booted. Slot b currently holds the tb710fu-arch-linux E2 set (written 18:31, after the UniXNU writes); UniXNU images are written again only after the user assigns slot b.", "ABL loads a 70365184-byte vendor_boot (stock 11.9 MB, mostly the 64 MiB FAT payload); whether ABL caps the vendor ramdisk size is unknown, and libavb success does not cover ABL's image loading (a header-v2 boot passed libavb yet was rejected).", "The GKI init_boot ramdisk is appended after the 64 MiB FAT payload; UniXNURamDiskDxe reads the FAT from initrd-start, but this is unverified on TB710FU."]
+next_action = ["Agree slot-b ownership with the Linux session, then scripts/flash-slot-b.sh (dry run), scripts/flash-slot-b.sh images/slot-b --write; the user activates slot b."]
+evidence = [
+  { kind = "source", reference = "README.md", result = "build, signing and test commands" },
+  { kind = "source", reference = "scripts/avb/avbsign.py", result = "selftest covers footer, rekey and rehash" }
+]
+
+[[area]]
+id = "diagnostics"
+status = "implemented"
+components = []
+paths = ["scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-*", "scripts/prepare-*", "scripts/data/**", "package/tests/**", "package/*Tests*", "package/*Diagnostic*", "package/*Probe*", "package/Boot*", "package/linux-log/**", "tests/**"]
+inputs = ["Host-side checks for the hardware description."]
+configuration = ["scripts/check-memory-map.py fails when a UEFI Conv region overlaps a no-map DTS region; every script carries a --selftest run in CI."]
+procedure = ["python3 scripts/check-memory-map.py; CI build.yml checks job."]
+findings = ["The check caught the giulia DXE_Heap overlapping the TB710FU rmtfs at 0xd3000000.", "Kernel console mirrored into the stock Android ramoops console zone (live DT ramoops_region 0xac300000, 1 MiB, console 0x40000 at 0xac340000 after the dmesg zone, ecc-size 16) in the fs/pstore/ram_core.c format: DBGC header, ring, RS(255) parity per 128-byte block plus header parity (poly 0x11d, fcr 0, prim 1). Hooked at _cnputc, so console, printf and panic text all reach it; output before arm_vm_init is buffered (4 KiB) and replayed. A panic flushes, waits ramoops_panic_delay and issues PSCI SYSTEM_RESET; ramoops_reset_after resets a hung boot. tests/run-ramoops-test.sh builds the writer from the patch with ASan/UBSan and checks every codeword has zero syndromes, append across boots, ring wrap and no-ECC mode.", "scripts/read-ramoops.sh reads /sys/fs/pstore from rooted Android; --check prints the stock ramoops module parameters, --mark proves a reset keeps the zone. Not run on the device yet."]
+completion = ["Every check runs in CI and fails on a regression."]
+limits = ["No device-side diagnostics yet."]
+next_action = ["Add log capture once the UniXNU menu runs on the device."]
+evidence = [
+  { kind = "source", reference = "scripts/check-memory-map.py", result = "overlap check with selftest" }
+]
