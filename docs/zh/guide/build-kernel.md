@@ -23,7 +23,7 @@ python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK
 python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27
 ```
 
-导出任务收集工具依赖的非系统动态库，运行导出目录中的编译器、IIG 和链接器，再使用导出的 classic 链接器编译并部分链接 arm64e 对象。本地运行器为本次调用选择导出的 SDK、编译器、链接器和内核工具。`build-paths.json` 记录编译器与 Xcode 版本。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
+导出任务收集工具依赖的非系统动态库，运行导出目录中的编译器、IIG 和链接器，用导出的编译器生成 arm64e 对象，再通过 classic 链接器执行部分链接。本地运行器在工具查找和执行时均选择导出的 SDK、编译器、链接器和内核工具。`build-paths.json` 记录编译器与 Xcode 版本。组件归档按当前源码重新编译，内核复用保留的 XNU 目标文件。
 
 ## 源码与构建树
 
