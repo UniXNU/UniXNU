@@ -129,12 +129,32 @@ def check(device, base=None):
         previous = {a['id']: a for a in old.get('area', [])}
         current = {a['id']: a for a in record['area']}
         changed = git(device, 'diff', '--name-only', '--no-renames', base, 'HEAD').splitlines()
-        check_changes(previous, current, changed)
+        check_changes(previous, current, changed, device)
     print(f'{record["device"]["name"]}: {len(record["area"])} structured areas checked')
     return record
 
 
-def check_changes(previous, current, changed):
+def published_evidence_matches(device, area, paths):
+    if device is None:
+        return False
+    for item in area['evidence']:
+        revision = item.get('revision', '')
+        if item['kind'] not in ('host', 'device') or not re.fullmatch(r'[0-9a-f]{40}', revision):
+            continue
+        ancestor = subprocess.run(['git', '-C', str(device), 'merge-base', '--is-ancestor', revision, 'HEAD'],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if ancestor.returncode:
+            continue
+        same = subprocess.run(['git', '-C', str(device), 'diff', '--quiet', revision, 'HEAD', '--', *paths],
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if same.returncode == 0:
+            return True
+    return False
+
+
+def check_changes(previous, current, changed, device=None):
+    source_paths = [path for path in changed if path != 'porting.toml' and not path.lower().endswith(('.md', '.rst'))]
+    covered = set()
     for path in changed:
         if path == 'porting.toml' or path.lower().endswith(('.md', '.rst')):
             continue
@@ -142,9 +162,15 @@ def check_changes(previous, current, changed):
             fnmatch.fnmatchcase(path, pattern) for pattern in area['paths'] + previous.get(key, {}).get('paths', []))}
         need(bool(owners), f'{path}: add its owner area and paths to porting.toml')
         for owner in owners:
+            if owner in covered:
+                continue
             before = previous.get(owner, {})
-            need(any(current[owner][key] != before.get(key) for key in ('findings', 'evidence')),
+            owned = [name for name in source_paths if any(fnmatch.fnmatchcase(name, pattern)
+                     for pattern in current[owner]['paths'] + before.get('paths', []))]
+            updated = any(current[owner][key] != before.get(key) for key in ('findings', 'evidence'))
+            need(updated or published_evidence_matches(device, current[owner], owned),
                  f'{path}: update {owner} findings or evidence with this change')
+            covered.add(owner)
 
 def markdown_text(value):
     """Render record prose as text in Markdown and Vue templates."""
