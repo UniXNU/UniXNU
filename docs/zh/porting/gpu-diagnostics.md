@@ -89,3 +89,14 @@ sheng 使用 `cpufreq=4` 时，可按内核运行时间把 `kernel.cpufreq.bin` 
 python3 scripts/check-gpu-trace.py
 python3 scripts/check-native-adreno-scheduling.py
 ```
+
+准备好的 macOS GPU lab 可自动接收 CI 构建的内核并启动定时上机流程：
+
+```sh
+python3 scripts/run-sheng-ci-gpu-lab.py RUN --base PREPARED_GPU.img \
+  --reader LINUX_LOG.img --output PRIVATE_DIRECTORY
+```
+
+脚本等待 CI 成功，下载启动镜像和 manifest，将内核替换到准备好的镜像中，保留 Data，并在 macOS 返回后运行 Linux 日志读取器。输出目录权限使用 `0700`。lab 的时钟探针在一秒休眠前后记录架构计数器与 Darwin 时钟。
+
+sheng 每轮定时启动携带新的 `build-tag`，导出日志须包含该标记；cycle 记录 `expected_tag` 和 `fresh_log`。`[timebase]` 行记录物理与虚拟计数器、绝对时间、一秒对应的 tick 数和当前缩放比例。

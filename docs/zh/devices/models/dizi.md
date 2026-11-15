@@ -4,4 +4,4 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [vildangil/UniXNU-Dizi-Ruan](https://github.com/vildangil/UniXNU-Dizi-Ruan) | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/zh/devices/dizi) | 记录待补齐 | SM7435 |
+| [vildangil/UniXNU-Dizi-Ruan](https://github.com/vildangil/UniXNU-Dizi-Ruan) | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/zh/devices/dizi) | 适配记录 | SM7435 |

@@ -35,7 +35,7 @@ macOS 构建在装有 Xcode 的 Mac 上进行。除[通用前置条件](/zh/guid
 | Kernelcache | 从 IPSW 提取，并按 `kernelcache_sha256` 校验 |
 | 信任缓存 | `[payload.runtime] trust_components` 指定进入 owner 信任包的 IPSW 成员 |
 | Data seed | 以 root 身份从系统卷制作一次，见[步骤 4](#data-seed) |
-| root 权限 | 制作 Data seed 需要 `sudo` |
+| root 权限 | 制作 Data seed 需要 `sudo`，只读枚举 Metal 库需要非交互 `sudo` |
 
 ## 2. 在设备仓库加入 macOS 的值 {#device}
 

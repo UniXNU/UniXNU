@@ -219,12 +219,18 @@ panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并�
 
 ### 交接时的绿色条 {#green-bar}
 
-顶部绿色条由 DarwinBoot 的 `DarwinEnter` 在 `ExitBootServices` 之后绘制，随后才执行缓存维护、关闭 MMU 和跳转 XNU。画面停在这里时，需要入口探针或串口日志定位后续阶段。仅凭绿色条，原因未查明。
+顶部绿色条由 DarwinBoot 的 `DarwinEnter` 在 `ExitBootServices` 之后绘制，随后才执行缓存维护、关闭 MMU 和跳转 XNU。持久化内核日志记录后续检查点，包括 `Darwin Kernel Version` 和 `SourceStorage: Data disk started`。framebuffer 保留加载器画面时，按最新内核检查点定位。
+
+内核入口故障按以下步骤检查：
 
 1. 记录最后的 `DARWINBOOT:` 日志，包括内核入口地址、显示几何信息、命令行和 CPU 状态。确认所选内核和 ADT 对应同一设备及 OS 配置。
 2. 对 `scripts/patch-xnu-entry-probe.py` 支持的内核，在设备配置中设置 `[payload] panic_screen = true`，运行 `./unixnu payload` 和 `./unixnu bootimg`，再启动新镜像。检查 `logs/payload-patch.log` 中的探针安装结果。
 3. 查看绿色条下方的蓝色和品红色条。蓝色表示进入 MMU 关闭状态下的内核入口，品红色表示到达开启 MMU 前的位置。缺少探针画面时，检查记录的 framebuffer 基址和行跨度。
 4. 使用 `entry_probe_reset_delay = 6` 设置开启 MMU 后的定时复位检查点。在设备移植记录中保存色条、复位时间、串口输出和 `payload.json`。
+
+sheng 使用 `storage-probe=1 log=1` 记录 BSD 初始化、后续 bootstrap 调用和 PID 1 执行阶段。UFS 日志区的空闲块分别保留 bootstrap 和 PID 1 的环形记录，包含序号、PID、线程、构建标签、阶段、计数器、虚拟定时器状态、DAIF、待处理中断和调用地址。`read-sheng-log.py --expected-tag TAG` 将匹配记录导出为 `startup-checkpoints.txt`，并将最新记录保存为 `startup-checkpoint.txt`。自动循环传入预期标签，并记录日志文件头和检查点是否属于本次启动。保持已验证的固件 watchdog 和自动返回 fastboot 功能启用。
+
+持久化启动日志覆盖关闭屏幕进度层时的 PID 1 阶段、挂载与启动策略返回码，并在进入调试器前保存第一条格式化 panic 消息。读取器通过状态为 `5` 的日志文件头导出 panic 消息缓冲区。
 
 配置修改未体现在启动镜像中时，按[应用启动参数](/zh/xnu/boot-arguments#apply-arguments)检查。
 
