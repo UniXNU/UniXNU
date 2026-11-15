@@ -196,6 +196,8 @@ python3 scripts/prepare-sheng-gpu-lab.py boot.img gpu-lab.img \
 
 Actions 构建可使用 `scripts/fetch-actions-artifact.py OWNER/REPOSITORY RUN_ID ARTIFACT OUTPUT --file prime-list.txt --file prime-list.json` 按 HTTP 字节范围获取指定文件。省略 `--file` 时获取产物中的文件，下载直接写入输出目录并检查 ZIP 完整性。1 MiB 以内的产物缓存在内存中，加快日志读取。使用 `--file NAME` 重新运行可续传未完成的文件，下载链接自动刷新。
 
+已安装的根镜像所用 OS 镜像及策略保持一致时，以 `root_storage=false` 触发 `macos-lab.yml`，构建 boot、内核和 payload 产物。默认设置同时构建 userdata 镜像。
+
 准备脚本读取匹配 Turnip 构建生成的 ICD 元数据，构建首选帧率范围为 120 Hz 的原生 Core Animation 场景；将签名工具和当前 lab 脚本加入 addon，将其代码标识追加到 owner trust bundle，并生成 256 MiB RAM payload。继续已有预编译时加入 `--preserve-data`。预编译完成后，agent 在 180 秒进程预算内运行数值验证及与原生路径成对的吞吐检查，再开始固定场景。工具输出保存在 `agent.log`。
 
 逻辑 FAT 容量为 256 MiB。sheng 配合支持该格式的固件，将其按 1 MiB 块独立压缩为 UEFI 流（`UNXNFAT1`）；编码后的 ramdisk 必须符合 190 MiB 板级上限。`UniXNURamDiskDxe` 使用 1 MiB 读取缓存提供逻辑 FAT。
