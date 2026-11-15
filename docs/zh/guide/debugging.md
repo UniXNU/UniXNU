@@ -230,6 +230,8 @@ panic 屏幕把格式化后的 panic 消息和寄存器写到 framebuffer，并�
 
 sheng 使用 `storage-probe=1 log=1` 记录 BSD 初始化、后续 bootstrap 调用和 PID 1 执行阶段。UFS 日志区的空闲块分别保留 bootstrap 和 PID 1 的环形记录，包含序号、PID、线程、构建标签、阶段、计数器、虚拟定时器状态、DAIF、待处理中断和调用地址。`read-sheng-log.py --expected-tag TAG` 将匹配记录导出为 `startup-checkpoints.txt`，并将最新记录保存为 `startup-checkpoint.txt`。自动循环传入预期标签，并记录日志文件头和检查点是否属于本次启动。保持已验证的固件 watchdog 和自动返回 fastboot 功能启用。
 
+持久化启动日志覆盖关闭屏幕进度层时的 PID 1 阶段、挂载与启动策略返回码，并在进入调试器前保存第一条格式化 panic 消息。读取器通过状态为 `5` 的日志文件头导出 panic 消息缓冲区。
+
 配置修改未体现在启动镜像中时，按[应用启动参数](/zh/xnu/boot-arguments#apply-arguments)检查。
 
 ### 颜色条
