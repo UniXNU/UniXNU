@@ -182,7 +182,7 @@ SERIAL=<serial> READER=<sheng-linux-log.img> OUT=<capture-directory> \
 
 `cycle.json` 记录启动确认、测试及读取器耗时、读取器退出状态和最终可响应命令的 fastboot 状态。
 
-主机脚本在采集期间保持 Mac 唤醒。镜像使用 `autoreset=7200 diag=1 diag-export=6900`。macOS lab agent 等待本次启动、全系统范围的 `prime.log` pass 出现 `complete=1`，再运行固定动画。root 任务采集内存、swap、挂载和电池状态，通过 `kern.unixnu_diag_request` 请求导出，在 `kern.unixnu_diag_status` 返回 `2` 后重启。agent 在预编译前清理 Finder 和系统设置的窗口恢复状态。导出期间动画继续运行，电量低时也请求采集并返回。Linux 读取器另有 300 秒返回定时器。
+主机脚本在采集期间保持 Mac 唤醒。镜像使用 `autoreset=7200 diag=1 diag-export=6900`。macOS lab agent 等待本次启动、全系统范围的 `prime.log` pass 出现 `complete=1`，再运行固定动画。root 任务采集内存、swap、挂载和电池状态，通过 `kern.unixnu_diag_request` 请求导出，在 `kern.unixnu_diag_status` 返回 `2` 后重启。agent 在预编译前清理 Finder 和系统设置的窗口恢复状态。六分钟动画覆盖 120 秒的导出预算，电量低时也请求采集并返回。Linux 读取器另有 300 秒返回定时器。
 
 `scripts/repack-sheng-boot.py INPUT OUTPUT --partition-bytes <bytes>` 按实测启动分区容量调整 payload。使用 `--kernel-arg NAME=VALUE` 或 `--remove-arg NAME` 修改 XNU 参数。首次安装使用 `data-reset=1`，后续预编译启动保留 Data 和按构建区分的着色器 checkpoint。
 
