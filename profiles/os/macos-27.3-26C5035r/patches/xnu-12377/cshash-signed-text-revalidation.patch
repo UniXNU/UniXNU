@@ -125,7 +125,7 @@ index ca0e00e..3fa697c 100644
 +				continue;
 +			}
 +			const size_t first = MAX(at, start), last = MIN(at + f->length, start + part);
-+			memcpy(snapshot + first - start, f->original + first - at, last - first);
++			memcpy(snapshot + (first - start), f->original + (first - at), last - first);
 +		}
 +		md->cs_update(ctx, snapshot, part);
 +		start += part;
