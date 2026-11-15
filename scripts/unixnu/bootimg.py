@@ -73,14 +73,15 @@ def settings(ctx, uefi):
 def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     log('bootimg')
     image, base, size, requires_header, config = settings(ctx, uefi)
+    template = ctx.board.get('bootimg', {}).get('template')
     mkbootimg = uefi / 'Resources/Scripts/mkbootimg.py'
     if not mkbootimg.is_file():
         raise Error(f'{mkbootimg} missing: --uefi must be a Mu-Silicium checkout')
-    for path, what in ((fd, 'firmware volume (--fd)'), (dtb, 'device tree (--dtb)')):
-        if not path or not Path(path).is_file():
-            if path == fd:
-                raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
-            raise Error(f'{what} not found: {path}')
+    if not fd or not Path(fd).is_file():
+        raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
+    # A qualified template supplies its own validated appended device tree.
+    if not template and (not dtb or not Path(dtb).is_file()):
+        raise Error(f'device tree (--dtb) not found: {dtb}')
     firmware = Path(fd).read_bytes()
     if base is None or size is None:
         raise Error('the Mu-Silicium device config has no [uefi_fd] base and size')
@@ -88,7 +89,6 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         raise Error(f'firmware volume is {len(firmware):#x} bytes, the device config says {size:#x}')
     out = Path(output) if output else ctx.work / 'boot/boot.img'
     out.parent.mkdir(parents=True, exist_ok=True)
-    template = ctx.board.get('bootimg', {}).get('template')
     compatibility = {}
     with tempfile.TemporaryDirectory(prefix='unixnu-bootimg-') as scratch_name:
         scratch = Path(scratch_name)
