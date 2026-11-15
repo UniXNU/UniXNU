@@ -91,3 +91,12 @@ Run `python3 scripts/sheng-latency-report.py RUN/diag --frames-only` in the devi
 python3 scripts/check-gpu-trace.py
 python3 scripts/check-native-adreno-scheduling.py
 ```
+
+A prepared macOS GPU lab can receive the kernel from a successful CI run and start its timed device cycle automatically:
+
+```sh
+python3 scripts/run-sheng-ci-gpu-lab.py RUN --base PREPARED_GPU.img \
+  --reader LINUX_LOG.img --output PRIVATE_DIRECTORY
+```
+
+The helper waits for CI, downloads the boot image and manifest, replaces the prepared image's kernel, preserves Data, and runs the Linux reader after macOS returns. Use an output directory with mode `0700`. The lab clock probe records the architectural counter and Darwin clocks around a one-second sleep.
