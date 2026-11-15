@@ -41,7 +41,7 @@ The linked files illustrate a Qualcomm GLINK integration. For that interface:
    sizes and opening direction from the target service protocol.
 4. Handle `sheng_adsp_send` results: `0` queues the message, `-1` reports a full
    queue or oversized message, and `-2` reports invalid arguments. The reference
-   API accepts messages up to `SHENG_ADSP_MAX_MESSAGE` (512 bytes). A service with
+   API accepts messages up to `SHENG_ADSP_MAX_MESSAGE` (560 bytes). A service with
    larger packets needs corresponding transport and receive-buffer support.
 5. On disconnect, cancel requests and invalidate remote handles. On reconnect,
    negotiate the channel and restore subscriptions before resuming consumers.
@@ -179,6 +179,63 @@ non-zero samples and the peak. Then record in an app and read `[audio-io]`.
 If the firmware owns charging control, retain that ownership while implementing
 measurement publication. A host-controlled charger needs its own controller
 protocol, limits and thermal policy.
+
+### PD, PPS and MiPPS on sheng {#sheng-charging}
+
+Sheng uses the DSP battery manager for PD/PPS contracts, charge pumps, current limits and thermal regulation. `package/ShengChargeAuth.c` authenticates both gauges with HMAC-SHA256, then authenticates a Xiaomi adapter advertising SVID `0x2717` and a valid PDO2. The USB request changes the data role to host. Authentication runs once per attachment through the battery manager's serialized request queue.
+
+The Linux tool uses the same C state machine through the Xiaomi `qcom-battery` sysfs interface. Run from the sheng device checkout on its matching Linux kernel with Python 3, a C compiler and C headers:
+
+```sh
+python3 scripts/charge-sheng-linux.py --out charge-before.json
+sudo python3 scripts/charge-sheng-linux.py --authenticate --out charge-auth.json
+```
+
+The captures include adapter identity, authentication state, PD/PPS properties, both charge pumps and battery measurements. Compare them with macOS `log-power=1` charger rows using the same charger, cable, battery level and temperature. Host protocol checks cover authentication and attachment changes; negotiated charging power requires the physical adapter measurement.
+
+### Sheng Linux charge reader
+
+The charge reader combines Linux 7.3.4, the static `sheng-charge` executable,
+ADSP firmware and the driver's module dependencies. Build it on the host:
+
+```sh
+python3 ../UniXNU-sheng/scripts/prepare-linux-charge-reader.py \
+  --unixnu . --busybox /path/to/static-aarch64-busybox \
+  --out /path/to/sheng-linux-charge.img
+```
+
+With the tablet in fastboot, start the charger test from the host:
+
+```sh
+python3 ../UniXNU-sheng/scripts/run-sheng-charge-test.py \
+  --serial SERIAL --reader /path/to/sheng-linux-charge.img \
+  --out /path/to/charge-capture
+```
+
+Add `--snapshot` to collect the currently connected source and battery readings while keeping the PC connected.
+
+The host boots the reader and explicitly runs `/bin/sheng-charge-setup` to
+load the charging modules. The tool waits up to 30 seconds for a successful
+battery-manager property read. Authentication uses the same `ShengChargeAuth.c`
+state machine as macOS in an independent session with SIGHUP ignored, standard
+input from `/dev/null` and output written to RAM files. Follow the host prompt:
+connect the PD charger for 140 seconds, then reconnect the PC within the printed time.
+
+The host retrieves `charge.log`, `charge-console.log`, kernel logs and the
+program's exit status, runs `rebootbl`, and verifies fastboot. `result.json`
+records authentication and device-return results. The host time limit is
+270 seconds; the reader starts its own 300-second return timer before loading
+charging modules.
+
+Before loading ADSP modules, `/bin/sheng-charge --arm-fastboot` resolves the
+active device tree's SDAM reboot-reason cell, writes bootloader value 2 to bits
+7:1 at offset `0x48`, preserves bit 0 and verifies readback. A failed check runs
+`rebootbl`. The kernel uses `panic=5` and `qcom_scm.download_mode=off`; its panic
+restart preserves the prepared bootloader reason.
+
+The captures include fuel-gauge, adapter and charge-pump readings. The Xiaomi
+attributes are under the `pmic_glink.power-supply` auxiliary device's `xiaomi`
+directory; the tools discover that path automatically.
 
 ## 5. Implement frequency and power operations {#power}
 

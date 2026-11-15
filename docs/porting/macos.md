@@ -39,7 +39,7 @@ A macOS build runs on a Mac with Xcode. In addition to the
 | Kernelcache | Extracted from the IPSW and checked against `kernelcache_sha256` |
 | Trust caches | `[payload.runtime] trust_components` names the IPSW members that go into the owner trust bundle |
 | Data seed | Made once as root from the system volume, see [step 4](#data-seed) |
-| Root access | `sudo` for the Data seed |
+| Root access | `sudo` for the Data seed; noninteractive `sudo` for read-only Metal-library enumeration |
 
 ## 2. Add the macOS values to the device repository {#device}
 
