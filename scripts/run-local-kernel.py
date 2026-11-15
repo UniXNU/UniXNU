@@ -19,6 +19,11 @@ def main():
         parser.error('require the exported SDK and migcom/iig tools')
     for name in ('migcom', 'iig'):
         (args.tools / name).chmod(0o755)
+    libraries = args.tools.resolve().parent / 'lib'
+    clang_library = libraries / 'libclang.dylib'
+    if not clang_library.exists():
+        libraries.mkdir(parents=True, exist_ok=True)
+        clang_library.symlink_to('/Library/Developer/CommandLineTools/usr/lib/libclang.dylib')
     arguments = args.arguments[1:] if args.arguments[:1] == ['--'] else args.arguments
     if not arguments:
         parser.error('pass unixnu build arguments after --')
