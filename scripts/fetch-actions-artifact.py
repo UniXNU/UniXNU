@@ -5,12 +5,12 @@ import io
 import json
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import time
 import urllib.error
 import urllib.request
 import zipfile
+import zlib
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -21,8 +21,8 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
 def download_url(repository, artifact):
     token = subprocess.check_output(['gh', 'auth', 'token'], text=True).strip()
     request = urllib.request.Request(
-        f'https://api.github.com/repos/{repository}/actions/artifacts/{artifact}/zip',
-        headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json'})
+        f'https://api.github.com/repos/{repository}/actions/artifacts/{artifact}/zip?request_time={time.time_ns()}',
+        headers={'Authorization': 'Bearer ' + token, 'Accept': 'application/vnd.github+json', 'Cache-Control': 'no-cache'})
     try:
         urllib.request.build_opener(NoRedirect).open(request, timeout=60)
     except urllib.error.HTTPError as error:
@@ -35,8 +35,9 @@ def download_url(repository, artifact):
 
 
 class RangedZip(io.RawIOBase):
-    def __init__(self, url):
+    def __init__(self, url, refresh_url=None):
         self.url, self.position, self.small = url, 0, None
+        self.refresh_url = refresh_url
         with urllib.request.urlopen(urllib.request.Request(url, headers={'Range': 'bytes=0-0'}), timeout=60) as response:
             match = re.fullmatch(r'bytes 0-0/(\d+)', response.headers.get('Content-Range', ''))
             if response.status != 206 or not match:
@@ -85,6 +86,8 @@ class RangedZip(io.RawIOBase):
             except (OSError, urllib.error.URLError):
                 if attempt == 2:
                     raise
+                if self.refresh_url:
+                    self.url = self.refresh_url()
                 time.sleep(attempt + 1)
 
 
@@ -103,7 +106,8 @@ def main():
     matches = [item for item in result['artifacts'] if item['name'] == args.artifact and not item['expired']]
     if len(matches) != 1:
         parser.error('require one unexpired artifact with the selected name')
-    with RangedZip(download_url(args.repository, matches[0]['id'])) as source, zipfile.ZipFile(source) as archive:
+    refresh = lambda: download_url(args.repository, matches[0]['id'])
+    with RangedZip(refresh(), refresh) as source, zipfile.ZipFile(source) as archive:
         selected = args.file or [item.filename for item in archive.infolist() if not item.is_dir()]
         for name in selected:
             relative = Path(name)
@@ -114,8 +118,23 @@ def main():
                 raise FileExistsError('Choose a new output directory: ' + str(target))
             target.parent.mkdir(parents=True, exist_ok=True)
             temporary = target.with_name(target.name + '.download')
-            with archive.open(name) as incoming, temporary.open('wb') as outgoing:
-                shutil.copyfileobj(incoming, outgoing, length=64 * 1024 * 1024)
+            info, position, crc = archive.getinfo(name), 0, 0
+            if temporary.exists():
+                with temporary.open('rb') as previous:
+                    for data in iter(lambda: previous.read(64 * 1024 * 1024), b''):
+                        position += len(data)
+                        crc = zlib.crc32(data, crc)
+                if position > info.file_size:
+                    raise ValueError('Partial download exceeds the selected artifact file')
+                print(f'{target}: resuming at {position} bytes', flush=True)
+            with archive.open(name) as incoming, temporary.open('ab') as outgoing:
+                incoming.seek(position)
+                for data in iter(lambda: incoming.read(64 * 1024 * 1024), b''):
+                    outgoing.write(data)
+                    position += len(data)
+                    crc = zlib.crc32(data, crc)
+            if position != info.file_size or crc != info.CRC:
+                raise zipfile.BadZipFile('Downloaded file differs from the ZIP entry: ' + name)
             temporary.replace(target)
             print(f'{target}: {target.stat().st_size} bytes', flush=True)
 
