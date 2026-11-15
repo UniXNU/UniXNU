@@ -6,7 +6,7 @@
 
 Redmi K70 \(vermeer, SM8550, 16 GiB, UFS 4.0\). Port state: the firmware volume builds and runs, the UniXNU menu appears, and the prelinked iPadOS 27 kernel enters on the phone and runs through IOKit and bsd\_init to the root-device lookup. The boot stops there because no storage driver is selected, so stage 6 \(root mount\) and stage 7 \(launchd\) are still ahead.
 
-Source record: [porting.toml](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/porting.toml), `2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22`.
+Source record: [porting.toml](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/porting.toml), `2b350fb0ed773978e59f5fceb595ca0edf93648a`.
 
 This page is generated from the device record.
 
@@ -105,10 +105,10 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Board, IPSW identity, component selection, firmware paths and payload inputs described in this area.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
-- `source`: [SoC source URL and commit pin.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/feeds.toml)
-- `source`: [Stock ABL device tree pulled from the device with adb pull /sys/firmware/fdt on HyperOS OS3.0.307.0.WNKCNXM; 808716 bytes, DTB version 17.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
-- `host`: [All source pins resolved: xnu ac9718fb1af618d5ce8678d0dc6e8a58f252216f, sm8550 a9f45dc60c035084b95463781538380f4c3606c9, edk2 cfb93724a06ff86ff5ba971413368a7809ee42a5.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/unixnu.lock)
+- `source`: [Board, IPSW identity, component selection, firmware paths and payload inputs described in this area.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/board.toml)
+- `source`: [SoC source URL and commit pin.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/feeds.toml)
+- `source`: [Stock ABL device tree pulled from the device with adb pull /sys/firmware/fdt on HyperOS OS3.0.307.0.WNKCNXM; 808716 bytes, DTB version 17.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/firmware/dtb/vermeer.dtb)
+- `host`: [All source pins resolved: xnu ac9718fb1af618d5ce8678d0dc6e8a58f252216f, sm8550 a9f45dc60c035084b95463781538380f4c3606c9, edk2 cfb93724a06ff86ff5ba971413368a7809ee42a5.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/unixnu.lock)
   Command: <code>./unixnu fetch -D ../UniXNU-vermeer</code>. Revision: `c8027115706c3ceac37e45c9b81db447bbc5ceba`.
 
 ## Firmware and boot {#firmware}
@@ -166,10 +166,10 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [Firmware inputs and their consumers; the SecParti.cfg entry is a placeholder from another platform and nothing consumes it while VERMEER\_VENDOR\_HW = 0.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/proprietary-files.txt)
+- `source`: [Firmware inputs and their consumers; the SecParti.cfg entry is a placeholder from another platform and nothing consumes it while VERMEER\_VENDOR\_HW = 0.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/proprietary-files.txt)
 - `host`: [SILICIUM\_UEFI.fd built at 3145728 bytes; FVMAIN 5565584 of 5566464 bytes used, FVMAIN\_COMPACT 1056872 of 3145728.](https://github.com/UniXNU/UniXNU/blob/main/docs/porting/uefi-firmware.md)
   Command: <code>./unixnu build firmware --uefi ../uefi-vermeer -D ../UniXNU-vermeer</code>. Revision: `009f9f7b5b3ff59d3109fa6f5bce9911adbb2d62`.
-- `device`: [The bootloader sent 1788 KB and booted the image; the screen then showed the UniXNU menu with its UNIXNU: output. Image 1830912 bytes, SHA-256 4a2994d4792c41e72a3efc4da6484cde6289cd36f366faae0366e21eabc9c2a4, header v0, ramdisk none.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-09-uefi-menu.md)
+- `device`: [The bootloader sent 1788 KB and booted the image; the screen then showed the UniXNU menu with its UNIXNU: output. Image 1830912 bytes, SHA-256 4a2994d4792c41e72a3efc4da6484cde6289cd36f366faae0366e21eabc9c2a4, header v0, ramdisk none.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/reports/2026-11-09-uefi-menu.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b1c88c0808db7955a9ffd0e55ff35489e34bc25b`.
 
 ## CPU and interrupts {#cpu}
@@ -226,7 +226,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Cluster assignment for cpu0-7 and the enabled UFS, GPU, GMU and GPU SMMU nodes.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
+- `source`: [Cluster assignment for cpu0-7 and the enabled UFS, GPU, GMU and GPU SMMU nodes.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/dts/vermeer.dts)
 
 ## Memory and DMA {#memory}
 
@@ -272,7 +272,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Stock ABL device tree: memory extents, 0xb8000000 splash carveout and reserved-memory entries.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
+- `source`: [Stock ABL device tree: memory extents, 0xb8000000 splash carveout and reserved-memory entries.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/firmware/dtb/vermeer.dtb)
 
 ## Storage and root {#storage}
 
@@ -350,8 +350,8 @@ Components: `ShengUfs`, `RamBlock`, `VerifiedRoot`, `VirtioMmioBlock`.
 
 ### Evidence
 
-- `source`: [userdata geometry, the root-partition argument and the per-profile defconfig selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
-- `source`: [Pins https://github.com/qusno1/ShengUfs.git at 3475e76e3342ad6a5197347cebfb1f80e821534c, the fork that selects the root partition by name, defines it in the parser's unnamed namespace and exports the root diagnostic snapshot.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/feeds.toml)
+- `source`: [userdata geometry, the root-partition argument and the per-profile defconfig selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/board.toml)
+- `source`: [Pins https://github.com/qusno1/ShengUfs.git at 3475e76e3342ad6a5197347cebfb1f80e821534c, the fork that selects the root partition by name, defines it in the parser's unnamed namespace and exports the root diagnostic snapshot.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/feeds.toml)
 - `host`: [First package run with the storage runtime compiled: boot.img sha256 0cb19c3f3b862d44f3529a8a38e33d0c772e0f4595cc7d97d72d41b2ca6b1e92, kernel.macho 95797248 bytes \(65536 over v58\), strings NativeUfs 121, SourceStorage 17, VROOTB01 1, vermeer-root-partition 1.](https://github.com/qusno1/UniXNU-vermeer/actions/runs/43532882511)
   Command: <code>gh run download 43532882511 -n images-27</code>. Revision: `4800b404c79cd21f17074f567d82faea932f047f`.
 - `device`: [UFS transport works on this phone: root step 1 \(host bring-up\) and step 2 \(LUN 0 GPT, unixnu partition, manifest status 0\) passed; the start failed in step 3 window preparation and the fail-loud panic reached the screen as 'SourceStorage: UFS start failed \(root step 3: root window preparation failed\)'. The boot log also showed 36 'Couldn't alloc class NativeUfs' lines from the XNU\_NATIVE\_UFS personalities, now removed from the defconfig.](https://github.com/qusno1/UniXNU-vermeer/actions/runs/43532882511)
@@ -406,7 +406,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [splash\_region reservation matching the stock device tree.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
+- `source`: [splash\_region reservation matching the stock device tree.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/dts/vermeer.dts)
 
 ## Input {#input}
 
@@ -448,7 +448,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [qcom,i2c-touch-active = goodix,gt9916 and the active touch node maxima.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
+- `source`: [qcom,i2c-touch-active = goodix,gt9916 and the active touch node maxima.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/firmware/dtb/vermeer.dtb)
 
 ## GPU {#gpu}
 
@@ -492,7 +492,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [qcom,gmu@3d69000, qcom,kgsl-3d0@3d00000 and qcom,kgsl-iommu@3da0000 with their interrupts and register ranges.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
+- `source`: [qcom,gmu@3d69000, qcom,kgsl-3d0@3d00000 and qcom,kgsl-iommu@3da0000 with their interrupts and register ranges.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/firmware/dtb/vermeer.dtb)
 
 ## Network {#network}
 
@@ -532,7 +532,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [wlan and bluetooth nodes with the WCN7850 compatible values.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/dts/vermeer.dts)
+- `source`: [wlan and bluetooth nodes with the WCN7850 compatible values.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/dts/vermeer.dts)
 
 ## Audio {#audio}
 
@@ -570,7 +570,7 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Stock audio node names, which reference the kalama-mtp sound card.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/firmware/dtb/vermeer.dtb)
+- `source`: [Stock audio node names, which reference the kalama-mtp sound card.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/firmware/dtb/vermeer.dtb)
 
 ## Power {#power}
 
@@ -613,7 +613,7 @@ Components: `AppleKeyStoreState`.
 
 ### Evidence
 
-- `source`: [AppleKeyStoreState selection and the absence of board power services.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
+- `source`: [AppleKeyStoreState selection and the absence of board power services.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/board.toml)
 
 ## Image assembly {#packaging}
 
@@ -670,8 +670,8 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Fixed packaging steps and the board.toml keys they read.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/scripts/package.sh)
-- `host`: [Profiles, component sources and patch order resolve; the kernel archive plan reported the missing Adreno740 and AppleKeyStoreState entries before this record.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/unixnu.lock)
+- `source`: [Fixed packaging steps and the board.toml keys they read.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/scripts/package.sh)
+- `host`: [Profiles, component sources and patch order resolve; the kernel archive plan reported the missing Adreno740 and AppleKeyStoreState entries before this record.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/unixnu.lock)
   Command: <code>./unixnu status --json -D ../UniXNU-vermeer</code>. Revision: `c8027115706c3ceac37e45c9b81db447bbc5ceba`.
 
 ## Diagnostics {#diagnostics}
@@ -720,10 +720,10 @@ Components: `XnuPrelink`.
 
 ### Evidence
 
-- `source`: [Kernel arguments, panic screen setting and the serial console selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/board.toml)
-- `device`: [The UniXNU menu appeared after the bootloader sent 1788 KB, confirming the UEFI and UniXNU checkpoints of the bring-up order.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-09-uefi-menu.md)
+- `source`: [Kernel arguments, panic screen setting and the serial console selection.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/board.toml)
+- `device`: [The UniXNU menu appeared after the bootloader sent 1788 KB, confirming the UEFI and UniXNU checkpoints of the bring-up order.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/reports/2026-11-09-uefi-menu.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `b1c88c0808db7955a9ffd0e55ff35489e34bc25b`.
-- `device`: [With the framebuffer console patch the panel scrolled the whole kernel boot: iBoot 7.0.0 task start, AMFI 'Booted in a VM', AMFI/Sandbox/vnguard, the MRC framework, zone\_init 164 MB, apfs successfully initialized, AppleFSCompressionTypeZlib load succeeded, then the serialised root match and the root-device panic. Image boot.img sha256 7078c8ca065827ee72aaf13eef6be557b45eee5c38beec2f864af450768238d2.](https://github.com/qusno1/UniXNU-vermeer/blob/2a43ea44a9f1d08dc54ae7d1aa7e97b47a3e9b22/reports/2026-11-10-framebuffer-console-and-apfs.md)
+- `device`: [With the framebuffer console patch the panel scrolled the whole kernel boot: iBoot 7.0.0 task start, AMFI 'Booted in a VM', AMFI/Sandbox/vnguard, the MRC framework, zone\_init 164 MB, apfs successfully initialized, AppleFSCompressionTypeZlib load succeeded, then the serialised root match and the root-device panic. Image boot.img sha256 7078c8ca065827ee72aaf13eef6be557b45eee5c38beec2f864af450768238d2.](https://github.com/qusno1/UniXNU-vermeer/blob/2b350fb0ed773978e59f5fceb595ca0edf93648a/reports/2026-11-10-framebuffer-console-and-apfs.md)
   Command: <code>fastboot boot boot.img</code>. Revision: `44c5e2579fd0b6a35b0bbbe3d6a1f5a0f4e0e6c3`.
 
 </div>

@@ -13,6 +13,7 @@ import tempfile
 import zlib
 from pathlib import Path
 
+from . import boot_template
 from .config import load_toml
 from .util import Error, log, run, sha256_file, tool
 
@@ -72,14 +73,15 @@ def settings(ctx, uefi):
 def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
     log('bootimg')
     image, base, size, requires_header, config = settings(ctx, uefi)
+    template = ctx.board.get('bootimg', {}).get('template')
     mkbootimg = uefi / 'Resources/Scripts/mkbootimg.py'
     if not mkbootimg.is_file():
         raise Error(f'{mkbootimg} missing: --uefi must be a Mu-Silicium checkout')
-    for path, what in ((fd, 'firmware volume (--fd)'), (dtb, 'device tree (--dtb)')):
-        if not path or not Path(path).is_file():
-            if path == fd:
-                raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
-            raise Error(f'{what} not found: {path}')
+    if not fd or not Path(fd).is_file():
+        raise Error(f'firmware volume not found: {fd}; run ./unixnu build firmware --uefi {uefi}')
+    # A qualified template supplies its own validated appended device tree.
+    if not template and (not dtb or not Path(dtb).is_file()):
+        raise Error(f'device tree (--dtb) not found: {dtb}')
     firmware = Path(fd).read_bytes()
     if base is None or size is None:
         raise Error('the Mu-Silicium device config has no [uefi_fd] base and size')
@@ -87,12 +89,18 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         raise Error(f'firmware volume is {len(firmware):#x} bytes, the device config says {size:#x}')
     out = Path(output) if output else ctx.work / 'boot/boot.img'
     out.parent.mkdir(parents=True, exist_ok=True)
+    compatibility = {}
     with tempfile.TemporaryDirectory(prefix='unixnu-bootimg-') as scratch_name:
         scratch = Path(scratch_name)
-        shim = compile_shim(uefi, base, size, requires_header, scratch)
-        tree = patch_dtb(Path(dtb).read_bytes(), ctx.board.get('bootimg', {}).get('dtb_node', []), scratch)
-        if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
-            raise Error('invalid compiled device tree')
+        if template:
+            shim, firmware, tree, template_image, compatibility = boot_template.prepare(ctx, template, firmware)
+            image.update(template_image)
+            log('bootimg: using qualified firmware transport with the current DarwinBoot loader')
+        else:
+            shim = compile_shim(uefi, base, size, requires_header, scratch)
+            tree = patch_dtb(Path(dtb).read_bytes(), ctx.board.get('bootimg', {}).get('dtb_node', []), scratch)
+            if tree[:4] != b'\xd0\x0d\xfe\xed' or struct.unpack_from('>I', tree, 4)[0] != len(tree):
+                raise Error('invalid compiled device tree')
         combined = shim + firmware
         # [bootimg.image] kernel_compression selects the kernel encoding. The
         # default keeps the gzip convention; "none" writes the uncompressed
@@ -111,14 +119,27 @@ def build(ctx, uefi, fd, dtb, ramdisk=None, output=None):
         else:
             ramdisk_path = scratch / 'ramdisk'
             ramdisk_path.write_bytes(b'')
-        command = ['python3', mkbootimg, '--kernel', kernel_path, '--ramdisk', ramdisk_path, '-o', out]
+        candidate = scratch / 'boot.img'
+        command = ['python3', mkbootimg, '--kernel', kernel_path, '--ramdisk', ramdisk_path, '-o', candidate]
         for key in MKBOOTIMG_FLAGS:
             if key in image:
                 command += [f'--{key}', str(image[key])]
         run(command, capture=True)
-        report = verify(out, combined, tree, ramdisk_path, image, compression)
+        limit = ctx.board.get('bootimg', {}).get('max_image_bytes')
+        if limit is not None and (not isinstance(limit, int) or limit <= 0 or candidate.stat().st_size > limit):
+            raise Error(f'boot image is {candidate.stat().st_size} bytes, exceeding the qualified limit {limit}')
+        report = verify(candidate, combined, tree, ramdisk_path, image, compression)
+        # Publish only the fully verified image; a failed repack leaves the previous image intact.
+        with tempfile.NamedTemporaryFile(prefix='.boot-', dir=out.parent, delete=False) as handle:
+            pending = Path(handle.name)
+        try:
+            shutil.copyfile(candidate, pending)
+            pending.replace(out)
+        finally:
+            pending.unlink(missing_ok=True)
     report.update(image_sha256=sha256_file(out), image_bytes=out.stat().st_size, fd_sha256=sha256_file(fd),
-                  dtb_sha256=sha256_file(dtb), shim_bytes=len(shim), hardware_tested=False)
+                  dtb_sha256=hashlib.sha256(tree).hexdigest(), shim_bytes=len(shim), hardware_tested=False,
+                  compatibility=compatibility, selected_fd_sha256=hashlib.sha256(firmware).hexdigest())
     (out.parent / 'boot.json').write_text(json.dumps(report, indent=2) + '\n')
     log(f'bootimg: {out} ({out.stat().st_size} bytes)')
     return out
@@ -142,11 +163,16 @@ def verify(path, combined, tree, ramdisk_path, image, compression='gzip'):
         start = page * max(1, -(-header_size // page))
         ramdisk_start = start + page * (-(-kernel_size // page))
     else:
-        kernel_size, kernel_address, ramdisk_size, _, second_size, _, tags, header_page, _, _ = struct.unpack_from('<10I', data, 8)
+        kernel_size, kernel_address, ramdisk_size, ramdisk_address, second_size, _, tags, header_page, _, encoded_os = struct.unpack_from('<10I', data, 8)
         if second_size or header_page != page:
             raise Error('boot image header does not match the requested parameters')
         if kernel_address != image['base'] + image['kernel_offset'] or tags != image['base'] + image['tags_offset']:
             raise Error('boot image load addresses do not match the requested offsets')
+        expected_ramdisk_address = image['base'] + image.get('ramdisk_offset', 0x1000000) if ramdisk_size else 0
+        if ramdisk_address != expected_ramdisk_address:
+            raise Error('boot image ramdisk address does not match the requested offset')
+        if 'encoded_os_version' in image and encoded_os != image['encoded_os_version']:
+            raise Error('boot image OS metadata differs from the qualified template')
         start = page
         ramdisk_start = page * (1 + -(-kernel_size // page))
     kernel = data[start:start + kernel_size]

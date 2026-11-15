@@ -6,14 +6,14 @@
 
 Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from the pixelios-kernel research port, which boots XNU 8796 with the iOS 16.7 userland on this phone; this repository restates them in UniXNU format. No UniXNU image has been built or booted for this board yet.
 
-Source record: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/dad5812b69bc74b486007ab1514854ba5113d5ac/porting.toml), `dad5812b69bc74b486007ab1514854ba5113d5ac`.
+Source record: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/b952bbcac4196aeab8b577848e26429eb074a905/porting.toml), `b952bbcac4196aeab8b577848e26429eb074a905`.
 
 This page is generated from the device record.
 
 | Area | Status |
 | --- | --- |
 | [Configuration](#configuration) | `implemented` |
-| [Firmware and boot](#firmware) | `planned` |
+| [Firmware and boot](#firmware) | `implemented` |
 | [CPU and interrupts](#cpu) | `implemented` |
 | [Memory and DMA](#memory) | `implemented` |
 | [Storage and root](#storage) | `planned` |
@@ -36,7 +36,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`, `DarwinBoot`, `GopFramebuff
 
 ### Hardware and dependencies
 
-- Google Pixel 6a \(bluejay\), Tensor G1 \(GS101\), 8 GiB DRAM, 128 GiB UFS, 1080x2400 panel.
+- Google Pixel 6a \(bluejay\), Tensor G1 \(GS101\), 6 GiB DRAM \(2 GiB low bank + 4 GiB high pair, measured\), 128 GiB UFS, 1080x2400 panel.
 - pixelios-kernel hardware descriptions: soc/google/gs101/soc.json, device/google/bluejay/board.json, docs/research/05-fact-check.md.
 
 ### Configuration
@@ -78,7 +78,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `XnuPrelink`, `DarwinBoot`, `GopFramebuff
 
 ## Firmware and boot {#firmware}
 
-`planned`
+`implemented`
 
 Components: `DarwinBoot`.
 
@@ -91,18 +91,23 @@ Components: `DarwinBoot`.
 ### Configuration
 
 - \[firmware\] config = bluejay, dsc = Platforms/Google/bluejayPkg/bluejay.dsc, fd = Build/bluejayPkg/&\#123;target&\#125;\_CLANGPDB/FV/SILICIUM\_UEFI.fd.
-- \[firmware.defines\] DEVICE\_MODEL = bluejay. \[bootimg.image\] matches the pixelios shim image layout: base 0, kernel\_offset 0x8000, tags\_offset 0x100, pagesize 4096, header\_version 0.
+- \[firmware.defines\] DEVICE\_MODEL = bluejay. \[bootimg.image\] header\_version 4, kernel\_compression none: ABL rejects a nonzero arm64 text\_offset, so the shim is built with text\_offset 0.
+- \[bootimg\] dtb is written by the firmware preflight: a 4 KiB FDT envelope followed by the real payload volume, because the pack stage appends only that file to the kernel field.
+- \[payload\] size\_mib 54: the volume carries kernel.macho \(49.5 MiB\) plus the ADT; boot.img is checked against boot\_partition\_bytes 67108864.
 
 ### Procedure
 
 - Install uefi-bluejay into a Mu-Silicium checkout with scripts/apply.sh, following https://unixnu.com/porting/uefi-firmware, then build the firmware volume with build\_uefi.py -d bluejay.
 - Run scripts/package.sh --check --os 17.
+- Boot the artifact with fastboot boot and read the panel.
 
 ### Development findings
 
 - The stock bootloader boots Android boot images only, so UniXNU must be packaged as a boot image first \(layer 1\) before the firmware volume is reachable; the pixelios fastboot boot flow proves this path on the phone.
 - ABL sets up the panel framebuffer and provides no framebuffer node in its FDT; the address and size are measured \(0xfac00000, 0x9e3400\).
 - The phone is read-only toward storage in the pixelios pre-kernel path; any UniXNU firmware must preserve that property until the userdata install is explicit.
+- Tensor ABL caps the boot image ramdisk at 32 MiB \(measured 2026-11-15: 4 and 32 MiB boot, 36/40/42/44/46/48/54/56 MiB are refused, header v0 and v4 alike\), while the prelinked kernel alone is 49.5 MiB. The payload therefore travels in the kernel field, which accepts 56 MiB.
+- ABL does not parse bytes appended after the FD: a kernel field with 54 MiB of 0xAA after the FD still boots the firmware, so the field can carry the payload volume behind a 4 KiB envelope.
 
 ### Completion criteria
 
@@ -110,11 +115,11 @@ Components: `DarwinBoot`.
 
 ### Current limits
 
-- The platform package has never been compiled in a full Mu-Silicium checkout or run on hardware; no firmware archive pin and no proprietary file hashes yet.
+- The menu scrolls without input on hardware; the xnu boot entry has not been reached yet. No firmware archive pin and no proprietary file hashes yet.
 
 ### Next action
 
-- Build uefi-bluejay in a full Mu-Silicium checkout, confirm the planned FD address, UFS link and framebuffer on hardware, then fill \[firmware.image\] and proprietary-files.txt.
+- Boot the kernel-field payload image, confirm that UniXNU finds EFI/UniXNU/unixnu.toml on the payload volume, then fix the menu input/redraw bug.
 
 ### Evidence
 
@@ -173,13 +178,14 @@ Components: `ArmDTPlatform`.
 ### Hardware and dependencies
 
 - DRAM banks measured: 0x80000000 \(2 GiB, carve-outs\), 0x880000000 and 0x900000000 \(2 GiB each, contiguous, no reserved range inside\).
-- XNU range: 0x880000000 size 0x100000000.
+- XNU range: 0x884000000 size 0xfc000000 \(the high pair after the firmware payload window\).
 - USB DMA carve-out: 0xf8800000 size 0x1000000 \(ABL, no-map\).
 
 ### Configuration
 
-- One memory node for the high range only: reg = &lt;0x8 0x80000000 0x1 0x0&gt;.
-- payload.adt.owned\_memory\_size = 0x100000000; dram\_size = 0x100000000.
+- One memory node for the high range only: reg = &lt;0x8 0x84000000 0x0 0xfc000000&gt;.
+- payload.adt.owned\_memory\_size = 0xfc000000; dram\_size = 0xfc000000.
+- The first 64 MiB of the high range \(0x880000000\) is the firmware payload window: reserved in the UEFI map, outside XNU's node.
 - reserved-memory/framebuffer@fac00000 is no-map.
 
 ### Procedure
@@ -188,13 +194,14 @@ Components: `ArmDTPlatform`.
 
 ### Development findings
 
-- XNU maps \[kernel, physBase+memSize\) cacheable, so the range must contain no carve-out and its base and size must be multiples of 32 MiB \(16K-granule L2 block\). The high range satisfies both.
+- XNU maps \[kernel, physBase+memSize\) cacheable, so the range must contain no carve-out and its base and size must be multiples of 32 MiB \(16K-granule L2 block\). The high pair, minus the 64 MiB payload window, satisfies both.
+- The payload volume travels in the boot image kernel field because Tensor ABL caps the ramdisk at 32 MiB; BootShim copies it to 0x880000000 before the MMU is on, and the firmware maps that window as reserved.
 - The low bank cannot be handed over whole: ABL reserves several no-map ranges, including its 16 MiB USB event buffer. Its allocation moves between boots \(0xF8B92000, 0xF8D12000 observed\).
 - The 0xfac00000 framebuffer is below the XNU range, so it needs a reservation for firmware/DarwinBoot but does not fragment owned memory.
 
 ### Completion criteria
 
-- XNU sees 4 GiB of owned memory, boots past pmap setup, and the framebuffer and USB carve-outs stay untouched.
+- XNU sees 0xfc000000 bytes of owned memory, boots past pmap setup, and the framebuffer, USB carve-outs and payload window stay untouched.
 
 ### Current limits
 
@@ -543,8 +550,8 @@ Components: `XnuPrelink`, `DarwinBoot`.
 ### Configuration
 
 - \[userdata\] first\_lba 2290150, last\_lba 31130618, lba\_bytes 4096.
-- \[payload\] volume BLUEJAY, 192 MiB, loader firmware, dram\_size 0x100000000, kernel\_args -v serial=3 debug=0x14e keepsyms=1.
-- \[bootimg.image\] base 0, kernel\_offset 0x8000, tags\_offset 0x100, pagesize 4096, header\_version 0.
+- \[payload\] volume BLUEJAY, 54 MiB \(kernel field, not ramdisk\), loader firmware, dram\_size 0xfc000000, kernel\_args -v serial=3 debug=0x14e keepsyms=1.
+- \[bootimg.image\] base 0, kernel\_offset 0x8000, tags\_offset 0x100, pagesize 4096, header\_version 4, kernel\_compression none.
 
 ### Procedure
 

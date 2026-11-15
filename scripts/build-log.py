@@ -2,6 +2,7 @@
 """Render build status prefixes and keep an uncolored, complete build log."""
 import argparse
 import codecs
+from contextlib import nullcontext
 import os
 from pathlib import Path
 import re
@@ -69,11 +70,12 @@ def render(text: str, color: bool, line_start: bool = True) -> str:
     return ''.join(result) + text[position:]
 
 
-def relay(command: list[str], log_path: Path, color: bool) -> int:
+def relay(command: list[str], log_path: Path | None, color: bool) -> int:
     environment = os.environ.copy()
     environment['UNIXNU_LOG_COLOR'] = '1' if color else '0'
     environment['PYTHONUNBUFFERED'] = '1'
-    environment['BUILD_LOG'] = str(log_path)
+    if log_path is not None:
+        environment['BUILD_LOG'] = str(log_path)
     # Keep the controlling terminal for interactive tools. The child shares
     # the foreground process group, so terminal signals also reach its descendants.
     child = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, env=environment)
@@ -90,12 +92,14 @@ def relay(command: list[str], log_path: Path, color: bool) -> int:
     pending = ''
     continuation = False
     try:
-        with log_path.open('a', encoding='utf-8', buffering=1) as log, selectors.DefaultSelector() as selector:
+        destination = log_path.open('a', encoding='utf-8', buffering=1) if log_path is not None else nullcontext(None)
+        with destination as log, selectors.DefaultSelector() as selector:
             selector.register(child.stdout, selectors.EVENT_READ)
 
             def output(text, first=True):
-                log.write(ANSI.sub('', text))
-                log.flush()
+                if log is not None:
+                    log.write(ANSI.sub('', text))
+                    log.flush()
                 sys.stdout.write(render(text, color, line_start=first))
                 sys.stdout.flush()
 

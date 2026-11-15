@@ -115,7 +115,7 @@ From the workspace root:
 
 ```sh
 python3 UniXNU-<device>/scripts/check-bluetooth-platform.py
-python3 UniXNU-<device>/scripts/check-bluetooth-shared.py
+python3 UniXNU-<device>/scripts/check-bluetooth-shared.py --tree <resolved-tree>
 python3 UniXNU-<device>/scripts/check-wcn-power.py
 ```
 
@@ -132,6 +132,22 @@ fastboot boot boot.img
 `state=2 error=0` and `[bluetooth proc]` shows one `bluetoothd` start. In Settings, turn
 Bluetooth on, pair an accessory and play audio. Restart and confirm it reconnects without
 pairing again.
+
+For sheng discovery failures, use `log-bluetooth=3`. The persistent boot log
+records `[bluetooth hci]` rows with timestamps, command bytes, controller replies
+and Inquiry results. `TX_UART` records a complete frame accepted by the UART;
+`RX_CONTROLLER` records a received event. `missed` and `dropped` count trace
+losses. Keep the accessory in pairing mode while opening Bluetooth Settings,
+then capture the log from Recovery. ACL, audio and pairing keys are excluded.
+
+The macOS sheng profile selects `QcaBluetooth` through the component catalog.
+The kernel and runtime use the same device submodule. Build the diagnostic image
+with the standard commands:
+
+```sh
+./unixnu build kernel payload --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng --kernel-arg=log-bluetooth=3
+./unixnu bootimg --os macos-27 -D ../UniXNU-sheng --uefi ../uefi-sheng
+```
 
 | Symptom | Check |
 | --- | --- |
