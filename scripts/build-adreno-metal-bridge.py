@@ -100,6 +100,30 @@ cargo = ['cargo', '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if ARM64E e
 # finished while this stays the same (PrimeShaders.h).
 runtime_id = hashlib.sha256((PIN + '\n' + states[-1]).encode()).hexdigest()[:32]
 component_id = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+identity = dict(target=args.target, translator=PIN, source_tree=states[-1], component=component_id,
+                runtime=runtime_id,
+                manifest=hashlib.sha256(manifest.read_text().replace(str(SOURCE), '<translator>').replace(str(ROOT), '<tree>').encode()).hexdigest(),
+                inputs={name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in {
+                    'bridge': ROOT / 'drivers/AdrenoMetal/bridge/NativeMetalBridge.rs',
+                    'runtime_examples': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll',
+                    'function_constant': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll',
+                    'scanout': ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll'}.items()})
+final = out / args.target / 'libadreno_metal_bridge.a'
+final.parent.mkdir(exist_ok=True)
+prebuilt = os.environ.get('NMB_PREBUILT_BRIDGE')
+if prebuilt:
+    metadata = Path(prebuilt).resolve()
+    record = json.loads(metadata.read_text())
+    archive = metadata.parent / 'libadreno_metal_bridge.a'
+    with archive.open('rb') as stream:
+        digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+    if record.get('identity') != identity or record.get('sha256') != digest:
+        raise SystemExit('Prebuilt Metal bridge differs from the selected target or source identity')
+    if archive != final.resolve():
+        shutil.copyfile(archive, final)
+    final.with_suffix('.a.json').write_text(json.dumps(record, indent=2) + '\n')
+    print('PASS: qualified prebuilt Metal bridge for %s; runtime %s' % (args.target, runtime_id))
+    raise SystemExit(0)
 env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
 if ARM64E:
     env['RUSTC_BOOTSTRAP'] = '1'
@@ -107,11 +131,12 @@ target_dir = ROOT / 'build/m2v-target'
 log = out / ('build-%s.log' % args.target)
 with log.open('w') as stream:
     result = subprocess.run(cargo + ['build', '--release', '--manifest-path', manifest, '--target', triple,
-                             '--target-dir', target_dir], env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=1800)
+                             '--target-dir', target_dir], env=env, stdout=stream, stderr=subprocess.STDOUT, timeout=7200)
 if result.returncode:
     raise SystemExit(log.read_text()[-6000:])
 library = target_dir / triple / 'release/libadreno_metal_bridge.a'
-final = out / args.target / 'libadreno_metal_bridge.a'
-final.parent.mkdir(exist_ok=True)
 shutil.copyfile(library, final)
+with final.open('rb') as stream:
+    digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+final.with_suffix('.a.json').write_text(json.dumps(dict(identity=identity, sha256=digest), indent=2) + '\n')
 print('PASS: native Metal bridge static library for %s (%d bytes); translator %s' % (args.target, final.stat().st_size, PIN[:12]))
