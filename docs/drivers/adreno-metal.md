@@ -46,7 +46,7 @@ Logical Metal queues share one Vulkan queue and kernel queue per process. The fr
 
 ## Shader priming and diagnostics
 
-The render server primes default compute and vertex pipeline variants while idle. Successful and refused entry points have separate, build-specific checkpoints. A library enters `prime-done` once all its selected variants compile. `PR` reports successful libraries over eligible libraries; `PRc` reports state (`0` running, `1` complete, `2` incomplete), failed libraries, refused functions, interrupted functions and missing inventory paths.
+The render server primes default compute and vertex pipeline variants while idle. Function reflection supplies zero-valued constants and packed vertex inputs; container stage tags select executable entry points. Failed entries carry input revision 3, while successful checkpoints retain their translator and driver build identity. Successful and refused entry points have separate, build-specific checkpoints. A library enters `prime-done` once all its selected variants compile. `PR` reports successful libraries over eligible libraries; `PRc` reports state (`0` running, `1` complete, `2` incomplete), failed libraries, refused functions, interrupted functions and missing inventory paths.
 
 The macOS runtime build inventories `.metallib` files from the OS, SystemOS and App images. It embeds `build/prime-list.txt` in the plugin and includes the list in its bundle. The inventory accepts paths containing spaces; missing or invalid inventory produces an incomplete pass. Planned lab returns record `prime-resume`, so an interrupted compile can resume after reboot. Unexpected interruptions retain their entry in `prime-bad`.
 
@@ -87,7 +87,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 python3 scripts/check-native-metal-frontend-host.py
 ```
 
-`NMB_PREBUILT_BRIDGE` selects a bridge archive metadata file. The builder checks its target, translator tree, component, wrapper, fixtures, manifest and archive digest against the selected sources before reuse. Source builds retain a two-hour Cargo budget.
+`NMB_PREBUILT_BRIDGE` selects a bridge archive metadata file. The builder checks its target, translator tree, component, wrapper, fixtures, manifest and archive digest against the selected sources before reuse. Source builds retain a two-hour Cargo budget. `python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` packages the current archive, its identity and tracked component sources for CI reuse.
 
 The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. Host checks cover rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Hardware qualification covers frame pacing and preemption under concurrent clients.
 
