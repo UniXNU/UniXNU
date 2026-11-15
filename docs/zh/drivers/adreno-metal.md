@@ -48,7 +48,7 @@ Turnip 为每个渲染通道选择瓦片内存或系统内存，并发分箱默�
 
 ## 着色器预编译和诊断
 
-渲染服务在空闲时预编译默认的计算和顶点管线变体。成功和被拒绝的函数分别保存到按构建区分的 checkpoint。一个库的适用变体全部编译成功后，才写入 `prime-done`。`PR` 显示成功库数量与适用库总数；`PRc` 显示状态（`0` 进行中，`1` 已完成，`2` 未完成）、失败库数量、被拒绝函数数量、中断函数数量和缺失路径数量。
+渲染服务在空闲时预编译默认的计算和顶点管线变体。函数反射提供零值常量与紧凑排列的顶点输入，容器中的阶段标签选择可执行入口。失败条目使用输入版本 3，成功条目保留其翻译器与驱动构建标识。成功和被拒绝的函数分别保存到按构建区分的 checkpoint。一个库的适用变体全部编译成功后，才写入 `prime-done`。`PR` 显示成功库数量与适用库总数；`PRc` 显示状态（`0` 进行中，`1` 已完成，`2` 未完成）、失败库数量、被拒绝函数数量、中断函数数量和缺失路径数量。
 
 macOS runtime 构建会枚举 OS、SystemOS 和 App 镜像中的 `.metallib`，将 `build/prime-list.txt` 嵌入插件并放入 bundle。清单支持带空格的路径；清单缺失或无效时，pass 为未完成。lab 计划返回时记录 `prime-resume`，中断的编译可在重启后继续。意外中断的条目保留在 `prime-bad`。
 
@@ -100,3 +100,5 @@ python3 scripts/check-native-metal-frontend-host.py
 `wallpaper-freeze=1` 用于隔离壁纸渲染。名字包含 Poster 的渲染进程首次成功绘制并保存至少 200 万像素的 IOSurface 后，保留该输出，拦下后续 command buffer 的 runtime 提交。被拦下的缓冲保持已 commit、未调度状态，继续持有资源和队列名额；此前已提交的工作正常完成。PosterBoard、backboardd 和其他客户端继续提交。此模式默认关闭。
 
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。
+
+`python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` 将当前静态库、构建标识和组件源码打包，供 CI 复用。
