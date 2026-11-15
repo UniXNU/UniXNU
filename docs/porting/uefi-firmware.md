@@ -238,6 +238,8 @@ fastboot -s SERIAL boot /path/to/watchdog-probe.img
 
 The probe waits before `EARLY_BOOT` and has a 120-second PSCI reset fallback. With firmware `fb2b2ae1`, fastboot returned 70.503 seconds after the boot command, before that fallback. The elapsed time includes firmware startup; the configured hardware timeout is 30 seconds.
 
+The inherited kernel path pings the already running firmware timer and starts its service thread. `patch-sheng-inherited-watchdog.py INPUT OUTPUT --kernel-args "uefi-watchdog=1"` qualifies that path on an existing source-built kernel with the matching instruction sequence; boot the result with the inherited-watchdog profile.
+
 ## External firmware builds
 
 A firmware supplied with `./unixnu bootimg --fd <file>` needs the same DSC/FDF

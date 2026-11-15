@@ -235,6 +235,8 @@ fastboot -s SERIAL boot /path/to/watchdog-probe.img
 
 探针在 `EARLY_BOOT` 前等待，并设有 120 秒的 PSCI 重启后备路径。固件 `fb2b2ae1` 的设备验证中，从启动命令到 fastboot 返回共 70.503 秒，早于后备重启。该时间包含固件启动；硬件看门狗配置为 30 秒。
 
+内核继承路径对固件已运行的计时器发送 ping，并启动心跳线程。`patch-sheng-inherited-watchdog.py INPUT OUTPUT --kernel-args "uefi-watchdog=1"` 可在指令序列匹配的已构建源码内核上验证该路径；输出内核配合继承 watchdog 的启动配置使用。
+
 ## 外部固件构建
 
 通过 `./unixnu bootimg --fd <file>` 传入的固件需要与所选 `[firmware]` 配置一致的
