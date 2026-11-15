@@ -24,6 +24,8 @@ UniXNU 的 `profiles/os/macos-27.3-26C5035r/profile.toml`：
 Darwin 26 系统调用与内核接口、macOS 机器选项、Data firmlink、位于 Data 上的 VM 与
 Hardware 卷，以及应用 cryptex 挂载。
 
+签名文本修补按原始字节校验。代码签名检查使用有界快照，APFS 压缩块检查使用私有副本，已驻留的可执行页面保留配置的指令。
+
 ## 1. 检查主机和输入 {#inputs}
 
 macOS 构建在装有 Xcode 的 Mac 上进行。除[通用前置条件](/zh/guide/requirements)外还需要：
