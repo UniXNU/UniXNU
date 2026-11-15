@@ -22,6 +22,7 @@ parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--target', choices=('ios', 'ios27', 'macos27'), default='ios')
 parser.add_argument('--no-replay', action='store_true', help='omit the optional host simulation capture used by diagnostic probes')
 parser.add_argument('--translator-source', type=Path, help='use an existing pinned and patched translator checkout')
+parser.add_argument('--reuse-bridge', action='store_true', help='reuse the matching Rust archive for a frontend relink')
 args = parser.parse_args()
 MACOS = args.target == 'macos27'
 # IOS27 marks the arm64e builds (iPadOS 27 and macOS 27): pointer authentication, the PAC bridge and the arm64e checks.
@@ -67,8 +68,14 @@ BRIDGE_TARGET = args.target
 bridge_command = ['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
 if args.translator_source:
     bridge_command += ['--source', args.translator_source]
+if args.reuse_bridge:
+    bridge_command += ['--reuse-current']
 subprocess.run([str(value) for value in bridge_command], check=True)
 BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'
+manifest = json.loads((resources / 'gpu-build.json').read_text())
+manifest['component'] = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+manifest['bridge_component'] = json.loads(BRIDGE.with_suffix('.a.json').read_text())['identity']['component']
+(resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 # arm64e: the Rust objects' imports that take a callback go through the signing wrappers of RustPacBoundary.c, and their indirect branches
 # are routed through its stripping trampolines after the link (scripts/rust-pac-rewrite.py).
 link_extra, PAC_RENAMES = [], {'_pthread_create': '_nmb_pac_pthread_create', '__tlv_atexit': '_nmb_pac_tlv_atexit',

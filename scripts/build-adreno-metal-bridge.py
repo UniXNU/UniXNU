@@ -21,6 +21,7 @@ parser.add_argument('--target', choices=['ios', 'ios27', 'macos27', 'host'], def
 parser.add_argument('--source', type=Path, default=SOURCE, help='Use an exact pinned translator checkout and reuse its Cargo cache')
 parser.add_argument('--manifest-only', action='store_true',
                     help='write build/adreno-metal-bridge/Cargo.toml (patched source, fixtures) and stop before cargo, for `cargo fetch`')
+parser.add_argument('--reuse-current', action='store_true', help='reuse the existing archive when its target and complete bridge sources match')
 args = parser.parse_args()
 SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
@@ -126,6 +127,23 @@ if prebuilt:
                                                   + json.dumps(record, indent=2) + '\n')
     print('PASS: qualified prebuilt Metal bridge for %s; runtime %s' % (args.target, runtime_id))
     raise SystemExit(0)
+if args.reuse_current and final.is_file() and final.with_suffix('.a.json').is_file():
+    record = json.loads(final.with_suffix('.a.json').read_text())
+    previous = record.get('identity', {})
+    comparable = lambda value: {key: item for key, item in value.items() if key != 'component'}
+    def bridge_tree(revision):
+        result = subprocess.run(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', revision + ':bridge'],
+                                capture_output=True, text=True)
+        return result.stdout.strip() if result.returncode == 0 else None
+    old_tree = bridge_tree(previous.get('component', ''))
+    clean = subprocess.run(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'diff', '--quiet', 'HEAD', '--', 'bridge']).returncode == 0
+    if old_tree and old_tree == bridge_tree(component_id) and clean and comparable(previous) == comparable(identity):
+        with final.open('rb') as stream:
+            digest = hashlib.file_digest(stream, 'sha256').hexdigest()
+        if digest == record.get('sha256'):
+            print('PASS: reused unchanged %s Rust bridge from component %s; frontend component %s' %
+                  (args.target, previous['component'], component_id))
+            raise SystemExit(0)
 env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
 if ARM64E:
     env['RUSTC_BOOTSTRAP'] = '1'
