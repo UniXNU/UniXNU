@@ -15,7 +15,7 @@ def main():
     parser.add_argument('--tools', type=Path, required=True)
     parser.add_argument('arguments', nargs=argparse.REMAINDER)
     args = parser.parse_args()
-    required = ('clang', 'clang++', 'ld', 'migcom', 'iig')
+    required = ('clang', 'clang++', 'ld', 'ld-classic', 'migcom', 'iig')
     if not (args.sdk / 'SDKSettings.plist').exists() or not all((args.tools / name).is_file() for name in required):
         parser.error('require the exported SDK, compiler, linker and kernel tools')
     for tool in args.tools.iterdir():
