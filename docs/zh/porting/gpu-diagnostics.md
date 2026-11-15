@@ -98,3 +98,5 @@ python3 scripts/run-sheng-ci-gpu-lab.py RUN --base PREPARED_GPU.img \
 ```
 
 脚本等待 CI 成功，下载启动镜像和 manifest，将内核替换到准备好的镜像中，保留 Data，并在 macOS 返回后运行 Linux 日志读取器。输出目录权限使用 `0700`。lab 的时钟探针在一秒休眠前后记录架构计数器与 Darwin 时钟。
+
+sheng 每轮定时启动携带新的 `build-tag`，导出日志须包含该标记；cycle 记录 `expected_tag` 和 `fresh_log`。`[timebase]` 行记录物理与虚拟计数器、绝对时间、一秒对应的 tick 数和当前缩放比例。

@@ -15,3 +15,5 @@ ARM64 CPU、GIC 和定时器驱动。发布 CPU、中断控制器和架构定时
 ## 构建
 
 选定内核配方通过 `component:ArmCpu` 构建 `build/armcpu/libArmCpu.a`。启用对应内核配置，按平台适配流程核对 GIC、定时器和 PSCI 资源。
+
+计数器采样先执行 `ISB`，再读取 `CNTVCT_EL0`。GIC 控制、SGI 和 EOI 序列保留有序屏障。Darwin 上的多指令内联汇编使用换行分隔。
