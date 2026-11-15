@@ -19,7 +19,7 @@ in the aperture, probes it with one load and marks it managed, and vm_page_creat
 through the page radix tree, as for pages ml_static_mfree returns, and frees it. The memory sizes grow by what was
 adopted. A load the system refuses (memory of a hypervisor guest or the secure world that the firmware's map calls
 free) is a synchronous external abort: ml_memory_probe() makes the platform error handler skip the load and answer
-instead of panicking, the page stays unmapped and unmanaged, and the rest of its run is left alone.
+instead of panicking. Each refused page stays unmapped and unmanaged; the scan continues through the complete run.
 
 Run on hardware: 117264 pages (458 MiB) adopted on sheng, the rest of the listed runs refused by the probe; hw.memsize grows accordingly.
 With the addresses below the static region: two runs of 243 s and 461 s without a failed kernel allocation; with them
@@ -542,9 +542,9 @@ diff --color -ruN a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routine
 +			const kern_return_t kr = pmap_adopt_outside_page(pn);
 +
 +			if (kr == KERN_PROTECTION_FAILURE) {
-+				/* Another owner's memory: the rest of the run is left alone, so a run costs one refused load. */
-+				refused += (uint32_t)atop(end - pa);
-+				break;
++				/* Protected pages stay unmanaged; probe every page of the free run. */
++				refused++;
++				continue;
 +			}
 +			if (kr != KERN_SUCCESS) {
 +				refused++;
