@@ -133,6 +133,13 @@ fastboot boot boot.img
 Bluetooth on, pair an accessory and play audio. Restart and confirm it reconnects without
 pairing again.
 
+For sheng discovery failures, use `log-bluetooth=3`. The persistent boot log
+records `[bluetooth hci]` rows with timestamps, command bytes, controller replies
+and Inquiry results. `TX_UART` records a complete frame accepted by the UART;
+`RX_CONTROLLER` records a received event. `missed` and `dropped` count trace
+losses. Keep the accessory in pairing mode while opening Bluetooth Settings,
+then capture the log from Recovery. ACL, audio and pairing keys are excluded.
+
 | Symptom | Check |
 | --- | --- |
 | Settings item stays gray | `bluetoothd` launchd job and the `[bluetooth proc]` restart count |
