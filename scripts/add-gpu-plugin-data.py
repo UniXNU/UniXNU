@@ -38,7 +38,8 @@ def main():
         sys.exit('Build the plugin first: python3 scripts/build-adreno-metal-plugin.py')
     blob = base.read_bytes()
     logical, extents = packed_ramdisk.regions(blob)
-    with tempfile.TemporaryDirectory(prefix='data-seed-', dir=str(ROOT / 'build')) as td:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='data-seed-', dir=output.parent) as td:
         raw = Path(td) / 'seed.raw'
         with raw.open('wb') as f:
             f.truncate(logical)

@@ -155,7 +155,8 @@ def main():
     logical, extents = packed_ramdisk.regions(blob)
     if target <= logical:
         sys.exit(f'The seed already holds {logical // GIB} GiB; growing needs a larger size')
-    with tempfile.TemporaryDirectory(prefix='data-grow-', dir=str(ROOT / 'build')) as scratch:
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='data-grow-', dir=args.output.parent) as scratch:
         raw = Path(scratch) / 'seed.raw'
         with raw.open('wb') as handle:
             handle.truncate(target)
@@ -175,8 +176,9 @@ def main():
             print(f'Growing APFS container - {container} - target {gib} GiB', flush=True)
             run('diskutil', 'apfs', 'resizeContainer', container, '0')
         finally:
-            subprocess.run(['hdiutil', 'detach', store, '-force'], capture_output=True)
-        header = raw.open('rb').read(4096)
+            subprocess.run(['hdiutil', 'detach', store, '-force'], capture_output=True, check=True)
+        with raw.open('rb') as handle:
+            header = handle.read(4096)
         if header[32:36] != b'NXSB':
             sys.exit('The grown image does not start with an APFS container')
         if str(uuid.UUID(bytes=header[72:88])) != container_uuid:
