@@ -75,6 +75,7 @@
 | [三星 Galaxy Tab S9 Ultra Wi-Fi](/zh/devices/models/gts9uwifi) | gts9uwifi | SM8550 | 1 |
 | [OnePlus 7 Pro](/zh/devices/models/guacamole) | guacamole | SM8150 | 1 |
 | [摩托罗拉 Moto G9 Play](/zh/devices/models/guamp) | guamp | SM6115 | 1 |
+| [Motorola Moto E32 \(XT2227-1\), Unisoc UMS9230 / Tiger T606](/zh/devices/models/hawaii) | hawaii | UMS9230 | 1 |
 | [Redmi K40 Pro](/zh/devices/models/haydn) | haydn | SM8350 | 3 |
 | [三星 Galaxy S7 Edge](/zh/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
 | [OnePlus 7T Pro \(HD1910/HD1911/HD1913\)](/zh/devices/models/hotdog) | hotdog | SM8150 | 1 |
@@ -107,7 +108,7 @@
 | [Xiaomi Redmi K40S \(munch, 22021211RC\)](/zh/devices/models/munch) | munch | SM8250 | 3 |
 | [Xiaomi Pad 7 Pro](/zh/devices/models/muyu) | muyu | SM8635 | 3 |
 | [Redmi K90 Pro Max / Poco F8 Ultra](/zh/devices/models/myron) | myron | SM8850 | 2 |
-| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 8 |
+| [小米平板 5](/zh/devices/models/nabu) | nabu | SM8150 | 9 |
 | [摩托罗拉 Moto Z2 Force](/zh/devices/models/nash) | nash | MSM8998 | 1 |
 | [一加 10 Pro 5G](/zh/devices/models/negroni) | negroni | SM8450 | 1 |
 | [MOTO Edge S \(XT2125-4\) / SM8250-AC UniXNU bring-up](/zh/devices/models/nio) | nio | SM8250 | 1 |
@@ -131,7 +132,7 @@
 | [Sony Xperia 1 II](/zh/devices/models/pdx203) | pdx203 | SM8250 | 2 |
 | [Redmi Turbo 3 / Poco F6](/zh/devices/models/peridot) | peridot | SM8635 | 3 |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/models/phy120) | phy120 | SM8650 | 1 |
-| [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 4 |
+| [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 5 |
 | [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 9 |
 | [小米平板 6](/zh/devices/models/pipa) | pipa | SM8250 | 5 |
 | [一加 Ace 3（PJE110）](/zh/devices/models/pje110) | pje110 |  | 1 |
@@ -153,7 +154,7 @@
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 55 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 56 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
