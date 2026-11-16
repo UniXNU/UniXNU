@@ -66,6 +66,8 @@ cp unixnu.example.toml unixnu.local.toml
 黄色表示警告，红色表示失败。pip、CMake 和编译器诊断也会着色。重定向、
 `--json`、`NO_COLOR` 和 `TERM=dumb` 保持无色，各步骤日志文件保留纯文本。
 
+源码存储编译在 `<tree>/build/sheng-source-storage/` 保存每个源文件的完整日志，失败时打印末尾 6000 个字符。runtime Metal 库清单使用系统临时目录挂载附加 cryptex，构建输出可以位于已挂载的磁盘镜像中。
+
 同时保存完整命令输出：
 
 ```sh
