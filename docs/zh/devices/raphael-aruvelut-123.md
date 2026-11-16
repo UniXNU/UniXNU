@@ -6,7 +6,7 @@
 
 Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipados-18.7.12-22H390 \(Darwin 24.6.0\).
 
-源记录: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/porting.toml), `cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa`.
+源记录: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/porting.toml), `bb29528c9339ab2df4597432d56bdc2a2da2c36e`.
 
 本页按设备记录自动生成。
 
@@ -46,6 +46,13 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 - the arm64 kernelcache is staged by scripts/stage-arm64-kernelcache.py into the path \[kernel.prelink\] kernelcache names
 - kernel fragments arch:configs/common.config and soc:configs/sm8150.config
 - arm64e-only profiles are intentionally not mapped: SM8150 has no FEAT\_PAuth
+- configs/raphael\_defconfig selects CONFIG\_XNU\_CRYPTO\_BOOTSTRAP=prelinked; a native-only --skip-prelink image therefore has no source crypto callbacks and no retained Apple crypto provider
+- v41 hardware probe reads g\_crypto\_funcs as zero inside the generatePlatformUUID SHA-1 call, matching the native-only build path
+- the 22H390 arm64 kernelcache contains com.apple.kec.corecrypto; adding the qualified 31 roots gives a 38-entry dependency closure containing corecrypto, APFS and AMFI dependencies
+- using the prior CI native kernel artifact and the verified 22H390 cache, host prelink emitted a 55,156,736-byte experimental candidate retaining all 31 roots and com.apple.kec.corecrypto; that native-only candidate was not qualified for hardware
+- CI run 43892011062 compiled and linked XNU, then prelink failed because kernelcache was staged under checkout out/raphael while the profile-relative lookup resolved under the isolated tree/out/raphael; pass the staged file through UNIXNU\_KERNELCACHE
+- CI run 43894941089 completed the formal macOS prelink with the staged kernelcache override: the 31-root command included com.apple.kec.corecrypto and emitted kernel.macho at 55,156,736 bytes \(sha256 1526a3df9d1b563ef2cde0a2afdfa25c31448679fa93f6ff0ca6b52139394ab1\); the workflow does not publish loadable, relocation-complete, ABI or runtime qualification fields, so those remain unverified
+- the formal prelinked kernel is 52.6 MiB while payload.py accepts only 95% of the FAT size for files; the old 48 MiB volume therefore rejected the 22H390 kernel at 52 MiB, and size\_mib=56 leaves the required headroom while the measured Aloha fixed overhead predicts a boot image near 59.4 MiB
 
 ### 操作步骤
 
@@ -62,7 +69,7 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 - status resolves arch=arm64, soc=sm8150, os=ipados-18.7.12-22H390 and the device board.toml
 - board.toml \[firmware\] and \[bootimg.image\] describe the Mu-Silicium route only \(config raphael, Platforms/Xiaomi/raphaelPkg/raphael.dsc, SILICIUM\_UEFI.fd, header\_version 1 with base 0x10000000 and pagesize 2048\); ./unixnu build firmware and ./unixnu bootimg read those paths, and that route has never produced an image that booted on this device
 - the shipping firmware route is Project Aloha instead: build\_cfg/sm8150.json uses header\_version 0 with base 0 and pagesize 4096, and PythonLibs/PostBuild.py is the packer, so the Mu-Silicium values in \[bootimg.image\] are deliberately not applied to it
-- board.toml \[payload\] is what makes the Aloha image bootable: volume UNIXNU, 192 MiB, loader firmware, carrying Payloads/kernel.macho, its ADT and EFI/UniXNU/unixnu.toml
+- board.toml \[payload\] is what makes the Aloha image bootable: volume UNIXNU, 56 MiB, loader firmware, carrying Payloads/kernel.macho, its ADT and EFI/UniXNU/unixnu.toml; 56 MiB is required by the 55,156,736-byte formal prelinked kernel and payload.py's 95% file-content limit
 
 ### 完成条件
 
@@ -74,12 +81,14 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 下一步
 
+- Run the macOS build without --skip-prelink and inspect the candidate report for the retained crypto closure
+- Obtain a loadable, relocation-complete and runtime-qualified candidate, then repeat the v41 check with a nonzero g\_crypto\_funcs expectation
 - Record the resolved status output as host evidence once the CI build produces it
 
 ### 证据
 
-- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/board.toml)
-- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/feeds.toml)
+- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/board.toml)
+- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/feeds.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -116,7 +125,7 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 - with the placeholder ramdisk the menu still renders but falls back to the built-in configuration, which has no bootable entry: Config.c reads \\EFI\\UniXNU\\unixnu.toml from any SimpleFileSystem volume and UniXNURamDiskDxe publishes the payload volume as BlockIo from the FDT /chosen initrd range
 - the kernel and the firmware are built in one workflow run \(jobs build on macos-26 and firmware on ubuntu-24.04, joined by needs\), so the payload can only carry the kernel that run compiled; the firmware job re-checks kernel.macho's sha256 against the build job's output before packing it
 - the firmware job runs on a plain push to main as well as on dispatch: the platform seed comes from the UNIXNU\_UNIQUE\_CHIP\_ID repository variable, and only an explicit dispatch with build\_firmware=false turns the job off
-- the payload volume is sized for the boot partition, not for comfort: kernel.macho plus its ADT and unixnu.toml take about 20 MiB, and a 192 MiB volume produced a 195 MiB boot image that cannot be flashed, so size\_mib is 48 and the boot image is about 51 MiB
+- the payload volume is sized for the boot partition, not for comfort: the formal 22H390 kernel.macho is 55,156,736 bytes \(52.6 MiB\), so payload.py's 95% content limit requires size\_mib=56; the prior 192 MiB volume produced a 195 MiB boot image that cannot be flashed, while the measured Aloha fixed overhead predicts about 59.4 MiB at 56 MiB payload size
 - the payload image itself is byte-correct: the boot image header reports ramdisk\_size 50331648 at ramdisk\_addr 0x1000000, and check-bootimg-ramdisk.py confirms the ramdisk is the payload. The problem is that the ramdisk is never published as a UEFI volume
 - UniXNURamDiskDxe reads the DTB address from the Mu-Silicium entry-argument HOB \(0xDAEE82E6...\), which only that platform's SEC emits. Searching the whole tree shows no producer of that HOB at all, so on Aloha the driver returns at 'no entry argument HOB' and publishes nothing
 - a fallback to the FDT configuration table \(gFdtTableGuid\) alone is not enough: Aloha installs the Android board tree, whose /chosen names the MIUI boot's initrd \(0x84518000\) rather than this handoff's ramdisk, so the driver read a valid tree and still published the wrong range; the UniXNU FV entries were moved after DtPlatformDxe and its FDT freefile because a configuration table is not a protocol and cannot be expressed as a Depex
@@ -134,8 +143,8 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 ### 当前范围
 
 - Verified on the handset \(images built before this patch\): the menu renders with working UI, fonts and input, but the footer reads "built-in configuration", so no unixnu.toml was found. On those images the driver had no path to the volume at all, which is why the DTB swap and the FDF reorder changed nothing on screen
-- The scan fallback only makes the volume reachable; whether the menu then lists the xnu entry and hands off to DarwinBoot is still an on-device question. The 48 MiB payload \(kernel.macho, its ADT and unixnu.toml, about 20 MiB used\) keeps the boot image at about 51 MiB
-- DarwinBoot has not handed off to XNU on this device: the payload kernel is the native Mach-O \(build kernel --skip-prelink\), and a prelinked kernelcache needs macOS AEA + hdiutil
+- The scan fallback only makes the volume reachable; whether the menu then lists the xnu entry and hands off to DarwinBoot is still an on-device question. The 56 MiB payload is sized for the formal 52.6 MiB prelinked kernel and is estimated to keep the boot image near 59.4 MiB
+- DarwinBoot has not handed off to XNU on this device: CI now emits the formal prelinked Mach-O, but no loadable, relocation-complete, ABI-qualified or runtime-qualified result has yet been established
 
 ### 下一步
 
@@ -143,9 +152,9 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 证据
 
-- `source`: [jobs.build runs on macos-26 \(Xcode, cctools, lzfse\) and produces kernel.macho; jobs.firmware runs on ubuntu-24.04 with needs: build, packs that run's kernel into the payload volume, installs it as Aloha's ramdisk and verifies the result with scripts/check-bootimg-ramdisk.py.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/.github/workflows/build.yml)
-- `source`: [Patches both Aloha DSC variants and the FDF to compile UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD, teaches PlatformBuild\*.py about ALOHA\_EXTRA\_PACKAGES, and with --payload installs the volume over PythonLibs/emptyramdisk.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/scripts/stage-aloha-unixnu.py)
-- `device`: [UniXNU draws its menu on raphael: blue title, Input/Tools on the right, and the footer reads "built-in configuration", which is Config.c:1595 falling back because no \\EFI\\UniXNU\\unixnu.toml volume was present.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/docs/evidence/2026-11-14-aloha-unixnu-menu.md)
+- `source`: [jobs.build runs on macos-26 \(Xcode, cctools, lzfse\) and produces kernel.macho; jobs.firmware runs on ubuntu-24.04 with needs: build, packs that run's kernel into the payload volume, installs it as Aloha's ramdisk and verifies the result with scripts/check-bootimg-ramdisk.py.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/.github/workflows/build.yml)
+- `source`: [Patches both Aloha DSC variants and the FDF to compile UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD, teaches PlatformBuild\*.py about ALOHA\_EXTRA\_PACKAGES, and with --payload installs the volume over PythonLibs/emptyramdisk.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/scripts/stage-aloha-unixnu.py)
+- `device`: [UniXNU draws its menu on raphael: blue title, Input/Tools on the right, and the footer reads "built-in configuration", which is Config.c:1595 falling back because no \\EFI\\UniXNU\\unixnu.toml volume was present.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/docs/evidence/2026-11-14-aloha-unixnu-menu.md)
   Command: <code>fastboot flash boot aloha-unixnu.img, then photograph the UniXNU boot menu on the handset</code>. Revision: `dc881bab4a5c44206ecb6802ef2cb8a58349169c`.
 - `host`: [Both jobs pass in one run: build compiles the kernel on macos-26, firmware installs device-tree-compiler and mtools, builds the 192 MiB payload volume, stages it over PythonLibs/emptyramdisk, builds Aloha, and asserts in step 17 that the boot image ramdisk is the payload. The artifact aloha-raphael-bootimg carries SM8150\_EFI.fd \(3145728 B\), payload.img \(201326592 B\) and xiaomi-raphael.img \(204840960 B\); scripts/check-bootimg-ramdisk.py reports the ramdisk is the payload volume at offset 0x35a000.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
   Command: <code>gh api -X POST repos/Aruvelut-123/UniXNU-raphael/actions/workflows/build.yml/dispatches -f ref=main -f 'inputs[build_kernel]=true' -f 'inputs[build_firmware]=true' -f 'inputs[unique_chip_id]=0123456789ABCDEF'</code>. Revision: `43803ea568627dd054c7ae5a3ade9d446f4e2d7d`.
@@ -260,11 +269,12 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 当前范围
 
-- No root image has been built or flashed for this device yet
+- The matching SHNGROOT image was built and flashed; XNU root mounting and launchd remain unverified
+- Image SHA-256 b8f8c41637b0d4918e91241fab771224f6985154631feaca80ffff9e755b1f75; OS and SystemOS UUIDs were extracted from checksum-valid APFS superblocks
 
 ### 下一步
 
-- Decrypt the iOS 18.7.12 OS dmg on macOS and fill \[root\] os\_volume\_uuid and systemos\_volume\_uuid in the board's OS profile
+- Build with the extracted OS and SystemOS volume UUIDs and verify XNU root mounting on hardware
 - Download the payload IPSW once and fill the \[ipsw.sha256\] member pins
 
 ### 证据
@@ -498,7 +508,7 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 配置
 
-- jobs.build \(macos-26\) runs defconfig, fetch, status, kernel --skip-prelink, package and uploads kernel.macho; jobs.firmware \(ubuntu-24.04, needs: build\) builds the payload from that kernel and then the firmware, so the two artifacts of one run cannot disagree
+- jobs.build \(macos-26\) runs defconfig, fetch, status, formal prelink, package and uploads kernel.macho; jobs.firmware \(ubuntu-24.04, needs: build\) builds the payload from that kernel and then the firmware, so the two artifacts of one run cannot disagree
 - scripts/stage-aloha-unixnu.py --payload installs payload.img over PythonLibs/emptyramdisk, which PostBuild.py hands to mkbootimg as --ramdisk; scripts/check-bootimg-ramdisk.py then fails the run unless the boot image ramdisk is byte-identical to the payload volume
 - scripts/report-payload.py reads payload.json rather than parsing log text, and reports the kernel, ADT and volume hashes
 - scripts/ipsw\_to\_sparse.py converts a raw image to libsparse chunks and self-verifies the result
@@ -515,7 +525,7 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 - the boot image and the payload have to come from one run: pulling kernel.macho out of an older build.yml run silently pairs a firmware with a stale kernel, so jobs.firmware both depends on jobs.build and re-checks the artifact's sha256
 - the kernel cannot be built on the Linux runner: setup-toolchain.py compiles a patched LLVM and cctools-port from source, and the kernel step dies on the first missing host tool \(unifdef, then lzfse\) long before that finishes
 - Sparse output is produced only from a raw image; AEA-encrypted IPSW payloads need macOS tooling and the script reports that instead of emitting a bad image. root-image.yml handles that case on macos-26
-- the boot image ramdisk is 192 MiB by board.toml \[payload\] size\_mib, so the packed .img grows by that much; Aloha's own emptyramdisk placeholder is six bytes, which is why a stock build looks small
+- the boot image ramdisk is 56 MiB by board.toml \[payload\] size\_mib, so the packed .img grows by that amount; Aloha's own emptyramdisk placeholder is six bytes, which is why a stock build looks small
 
 ### 完成条件
 
@@ -531,7 +541,7 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 证据
 
-- `source`: [Parses the v0-v2 boot image header, locates the ramdisk by page-aligned kernel size and exits non-zero unless those bytes equal the payload volume. Against the baseline image it reports a 6-byte ramdisk holding b'dummy\\n', which is exactly the placeholder that produced the built-in configuration menu.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/cd506ba20ab7ec93eda88cc63f4af68d3ee5fdaa/scripts/check-bootimg-ramdisk.py)
+- `source`: [Parses the v0-v2 boot image header, locates the ramdisk by page-aligned kernel size and exits non-zero unless those bytes equal the payload volume. Against the baseline image it reports a 6-byte ramdisk holding b'dummy\\n', which is exactly the placeholder that produced the built-in configuration menu.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/bb29528c9339ab2df4597432d56bdc2a2da2c36e/scripts/check-bootimg-ramdisk.py)
 - `host`: [The Aloha workflow on ubuntu-24.04 reached the XNU kernel step and failed there with 'unifdef not found on PATH', which is the measurement that moved the kernel build back to the macOS job.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577)
   Command: <code>gh api repos/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577/jobs --jq '.jobs[].steps[] | &#123;name,conclusion&#125;'</code>. Revision: `8dd26ff2a7fc82e8ae3aae13645a8d3d22ea1f7c`.
 - `host`: [The folded workflow completes end to end: jobs.build \(macos-26\) compiles the kernel and records its sha256, jobs.firmware \(ubuntu-24.04\) downloads that artifact, refuses to continue on a hash mismatch, and produces aloha-raphael-bootimg. Downloaded and re-checked locally, the boot image's ramdisk is byte-identical to payload.img \(201326592 bytes at offset 0x35a000\).](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
@@ -555,7 +565,32 @@ Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipado
 
 ### 开发经验
 
-- Log capture is required before any hardware area can move past planned
+- User reports v14 and v15 show the boot entry then remain on a green top bar; v15 includes the extracted root UUIDs with no observed improvement
+- DarwinBoot 5243c68 Entry.S paints the green bar in DarwinEnter after ExitBootServices but before cache maintenance, MMU shutdown and the branch to XNU; the green bar alone does not establish kernel entry
+- Device report: v16 shows blue and magenta XNU probes; v17 resets with the post-MMU probe, v18 resets with the probe after the first PE\_init\_platform call, and v19 resets with the probe after arm\_vm\_init in arm\_init
+- Device report: v20 resets with the probe after the second PE\_init\_platform call in arm\_init \(call site 0xfffffff007a2e3b4\)
+- Device report: v21 resets immediately. Source inspection confirms RESET\_BEFORE has no delay and directly invokes PSCI SYSTEM\_RESET before machine\_startup \(call site 0xfffffff007a2e410\); the earlier description of a six-second delay for v21 was incorrect. This supports reaching that call site
+- Device report: v22 resets with the timed stage-4 probe after machine\_conf in machine\_startup \(call site 0xfffffff007475200\), before its tail branch to kernel\_bootstrap; exact reboot latency was not specified
+- Device report: v23 resets after approximately six seconds with the probe after machine\_init in kernel\_bootstrap \(call site 0xfffffff007300e54\), supporting execution through that call
+- Device report: v24 does not reset with the probe after PE\_init\_iokit in kernel\_bootstrap\_thread \(call site 0xfffffff007a0d804\). This does not isolate PE\_init\_iokit: intervening initialization, thread handoff and probe execution remain possible causes
+- Device report: v25 resets with the probe after kernel\_thread\_create in kernel\_bootstrap \(call site 0xfffffff0073011fc\). The probe checks return before its status is tested, so this does not establish successful thread creation; exact reboot latency was not specified
+- Device report: v26 resets with the probe after sched\_startup in kernel\_bootstrap\_thread \(call site 0xfffffff007a0d684\), supporting progress into the bootstrap thread; exact reboot latency was not specified
+- Device report: v27 resets with the probe after the second kernel\_startup\_initialize\_upto call in kernel\_bootstrap\_thread \(call site 0xfffffff007a0d790\); exact reboot latency was not specified
+- v28 places a timed reset before PE\_init\_iokit at the same call site as v24 \(0xfffffff007a0d804\). Generated by importing patch-xnu-entry-probe.py and replacing RESET\_BEFORE in memory with SOURCES\[4\] minus bl callee, formatted with TIMEBASE\*6 ticks; the original script remains unchanged. The emitted cave contains 115200000 ticks and SMC. Device report: v28 resets; exact latency was not specified
+- Device report: v29 resets with the timed-before probe before InitIOKit within PE\_init\_iokit \(call site 0xfffffff0079db3bc\); exact latency was not specified. Uses the same timed-before generator as v28. SHA-256 9b57b1960698c784fb51685223acabd0fb8986b00702941d9b71b8e4ace42ec7
+- Device report: v30 resets with the six-second stage-4 probe after InitIOKit within PE\_init\_iokit \(call site 0xfffffff0079db3bc\); exact latency was not specified. SHA-256 cddc6c1a34d8eee7be32bff340dff2639bc934c11f3bda49ee803e66fcd03b78
+- Device report: v31 does not reset after ConfigureIOKit within PE\_init\_iokit \(call site 0xfffffff0079db3c0\); SHA-256 09219d2b421e52d61d9a1a8ebdc1ddc88dcdde0020173400f432274a31f754b8. Disassembly shows ConfigureIOKit tail-branches to IOPlatformExpertDevice::configureDefaults when the platform object exists; the latter calls createNVRAM before property handling and generatePlatformUUID
+- Device report: v32 resets with the six-second probe after IOPlatformExpertDevice::createNVRAM in configureDefaults \(call site 0xfffffff007970d64\); exact latency was not specified. SHA-256 d722ac5daec6a027da3e36d3a2e182530188f770b792f30a787243d6e204b6ac
+- Device report: v33 resets with the terminal six-second probe at IOPlatformExpertDevice::generatePlatformUUID entry \(0xfffffff00796f884\); exact latency was not specified. The configureDefaults tail branch at 0xfffffff007970dd4 was verified. This probe does not execute the UUID function body. SHA-256 ecdf5ea9fc35ee7e619a5dfc648ee5932b452d46002a8eb5679bcb11d6c08d2c
+- Device report: v34 does not reset at the common exit of generatePlatformUUID \(0xfffffff00796fb38, before the stack-canary check\). Entry remains original; stage-1/2 bars retained. SHA-256 cf3cc2463c9787ac9aa47a2562c5254ed8b25c301392e6dc9400334823f5bd97. Together with the resetting v33 entry probe, this focuses investigation on the function body while retaining probe-execution uncertainty
+- Device report: v35 resets after the first IORegistryEntry::fromPath call in generatePlatformUUID \(call site 0xfffffff00796f8e0\); exact latency was not specified. This supports return from the call and execution through the entry prologue, stack-canary load, movi v0 and stp q0, but does not establish a non-null lookup result. SHA-256 637f3cd0fba8068f6fe84128e0afae9b53b6bfbcdf04937f05e5d08b14f61730
+- Device report: v36 resets; exact latency was not specified. It covers both successors of the first fromPath result test with terminal six-second probes: 0xfffffff00796f914 after the first property virtual call and safeMetaCast, and 0xfffffff00796fa70 at the null-lookup fallback entry. The report establishes reaching at least one of these sites, not which path, property validity or UUID success. SHA-256 f6dffe0f6c57d78ec9db4a59b70e585fb673615356cf1e5c0f4a862556f37866
+- Device report: v37 resets after approximately six seconds. Its primary-path probe at 0xfffffff00796f96c waits six seconds, while probes at primary validation failure \(0xfffffff00796fa58\) and fallback entry \(0xfffffff00796fa70\) wait twelve seconds. This supports both primary data properties passing type and length checks \(8 and 4 bytes\) and reaching SHA1 setup, but does not prove hashing or UUID success. SHA-256 112fdd289d5aa1e2467389f6b243c9cd652babad06191d140a745e08e7c2284d
+- Device report: v38 does not reset with the probe after SHA1Final \(call site 0xfffffff00796fa18, callee 0xfffffff007903c00\) in generatePlatformUUID. Together with v37 this focuses investigation on context setup, sha1\_init, three sha1\_loop calls, intervening data access and SHA1Final; it does not isolate SHA1Final itself. Probe execution uncertainty remains. SHA-256 b3142e6eaeefe447903eac63f8e1f2c8b1787202b964a870251feefc97ae0c21
+- Device report: v39 does not reset after the first sha1\_loop/SHA1Update call in generatePlatformUUID \(0xfffffff00796f9a0, target 0xfffffff007903a64, input length 16\). With v37 this focuses investigation on context setup, sha1\_init and the first update, without isolating the update itself. SHA-256 ef0be6aef0cb6df4fcf4afbb1288454fe6e5ee9ddbd423476244d38a8a4d2258
+- Device report: v40 does not reset after sha1\_init/SHA1Init in generatePlatformUUID \(call site 0xfffffff00796f98c, target 0xfffffff007903958\). With v37 this focuses investigation on context setup and sha1\_init, while retaining probe execution uncertainty. SHA-256 f5a5ba4b59e455df9979ca0ce4ecca9f75b22617b0e3cadb6ff0d9d325187e4a
+- v41 patches sha1\_init at 0xfffffff00790398c before ldr x20,\[x22,\#0x28\], after x22 has loaded g\_crypto\_funcs. A caller filter compares x30 with the PC-relative generatePlatformUUID return address 0xfffffff00796f990; other callers replay the displaced load and resume. For the target caller, x22==0 selects a terminal six-second reset, x22\!=0 selects twelve seconds, without dereferencing the table. No reset requires investigating progress before this checkpoint or filter/probe execution. A nonzero result does not validate the table or descriptor. Branches, delay constants, caller gate disassembly, payload readback, boot digest and sdcard copy verified; SHA-256 b278e4c9dbda2ff011a8cfed9cb2fd3564a68fbd2aa01bbc377d5b4795e45828. Device report: reset after approximately six seconds, supporting g\_crypto\_funcs==0 for this generatePlatformUUID SHA-1 call
+- Disassembly shows sha1\_init reads g\_crypto\_funcs at 0xfffffff0071cc128, then dereferences its SHA1 descriptor at offset 0x28 before indirect digest initialization. The original kernel file holds zero at g\_crypto\_funcs; this is only its static initial value and does not establish whether runtime registration occurred. If v40 fails, runtime table registration and descriptor access remain hypotheses to probe alongside context setup and sha1\_init execution
 
 ### 完成条件
 

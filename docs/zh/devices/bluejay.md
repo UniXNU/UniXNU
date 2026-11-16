@@ -6,7 +6,7 @@
 
 Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from the pixelios-kernel research port, which boots XNU 8796 with the iOS 16.7 userland on this phone; this repository restates them in UniXNU format. No UniXNU image has been built or booted for this board yet.
 
-源记录: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/e2a3b3f9dee3e25ccff1912cda82b2471e48d77d/porting.toml), `e2a3b3f9dee3e25ccff1912cda82b2471e48d77d`.
+源记录: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/3b0c11f78352d3399d1c603d951a6fcbebca2ab7/porting.toml), `3b0c11f78352d3399d1c603d951a6fcbebca2ab7`.
 
 本页按设备记录自动生成。
 

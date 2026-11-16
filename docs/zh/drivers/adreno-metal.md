@@ -22,11 +22,23 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 
 渲染通道编码失败时仍返回 encoder，通过 command buffer 报错，支持缓存 encoder 方法的调用方。
 
+Uniform 着色器数组覆盖对齐后的设备 uniform 范围上限，容纳 binding 在共享 descriptor 范围内的剩余偏移。编译器缓存标识包含数组布局语义。
+
 ## 原生 half 运算
 
 A740 的 half FMA 使用 float32 乘加后转换为 half，正常 half 操作数和结果的误差不超过一个 half ULP。half 除法先将两个操作数按相同的二次幂缩放，使原生除数位于 `[2^-14, 2^14]`：大除数使用 `2^-2`，小除数使用 `2^10`。正常操作数和结果遵循 Vulkan 的 2.5 half ULP 界限，非正规数行为由设备浮点控制决定。
 
 其他适用的 half 运算通过 `RelaxedPrecision` 和 `HalfChainPolicy::AtExits` 使用原生精度。源码枚举的算术清单记录每项运算的 `PrecisionNote`，runtime 策略日志记录实际选用的设备能力。
+
+对所选 core 和 translator 源码运行审计：
+
+```sh
+python3 drivers/AdrenoMetal/tools/audit-runtime-fast-paths.py \
+  --core /path/to/UniXNU --translator /path/to/metal2vulkan \
+  --mesa-source /path/to/mesa --output build/runtime-fast-paths.json
+```
+
+报告列出策略默认值、Turnip 选项和所选版本中各算术判断函数的可用状态。`--runtime-policy` 附加设备采集的能力和 runtime 检查结果。
 
 ## 缓存和优先级
 

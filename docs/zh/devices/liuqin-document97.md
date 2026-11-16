@@ -6,7 +6,7 @@
 
 Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, first-boot configuration and stage-1 firmware; nothing is device-verified yet
 
-源记录: [porting.toml](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/porting.toml), `10afd2a62c145adbeb968e4c27e9ffbd8d6b0176`.
+源记录: [porting.toml](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/porting.toml), `d47b3746e0a7bc2917392a540cc4ef228d56483d`.
 
 本页按设备记录自动生成。
 
@@ -68,7 +68,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Board data file read by scripts/make-pong-adt-ipados18.py --board liuqin; pong's defaults are unchanged.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/configs/liuqin-board.json)
+- `source`: [Board data file read by scripts/make-pong-adt-ipados18.py --board liuqin; pong's defaults are unchanged.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/configs/liuqin-board.json)
 
 ## 固件与启动 {#firmware}
 
@@ -109,7 +109,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Host test with a synthetic full OTA \(stored zip, REPLACE and REPLACE\_XZ, three base DTBs\) wrote byte-identical partitions and selected the Cape SoC DTB.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/tools/fetch-liuqin-stock.py)
+- `source`: [Host test with a synthetic full OTA \(stored zip, REPLACE and REPLACE\_XZ, three base DTBs\) wrote byte-identical partitions and selected the Cape SoC DTB.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/tools/fetch-liuqin-stock.py)
 - `source`: [Run 42217454136 \(77d2250, binaries=pong, DEBUG\): Mu-liuqin.img with boot header v4 and the kernel gzip\(BootShim + 3 MiB FD\) followed by a DTB byte-identical to the Cape SoC DTB of the V14.0.9.0.TMYCNXM vendor\_boot.](https://github.com/Document97/uefi-liuqin/actions/runs/42217454136)
 
 ## 内存与 DMA {#memory}
@@ -150,7 +150,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Generated 5 banks 7.81 GiB, 99 reserved entries, 12 allocatable ranges 6.33 GiB; dts/liuqin.dts is written by the same run.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/scripts/gen-liuqin-memory.py)
+- `source`: [Generated 5 banks 7.81 GiB, 99 reserved entries, 12 allocatable ranges 6.33 GiB; dts/liuqin.dts is written by the same run.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/scripts/gen-liuqin-memory.py)
 
 ## 显示 {#display}
 
@@ -193,7 +193,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [KTZ8866 driver: register writes, GENI I2C setup, the CoreBrightness conformance, and the ABL-configured parts it deliberately leaves alone.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/drivers/PongPower/LiuqinBacklight.cpp)
+- `source`: [KTZ8866 driver: register writes, GENI I2C setup, the CoreBrightness conformance, and the ABL-configured parts it deliberately leaves alone.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/drivers/PongPower/LiuqinBacklight.cpp)
 - `host`: [The kernel builds with PONG\_BACKLIGHT=y and the boot arguments carry pong\_backlight=0.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 
@@ -239,7 +239,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Polled NT36532 driver over QUP0 SE4: image download with the hardware CRC, the 65-byte point report, and the boot arguments above.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/drivers/LiuqinTouch/liuqin_nvt.c)
+- `source`: [Polled NT36532 driver over QUP0 SE4: image download with the hardware CRC, the 65-byte point report, and the boot arguments above.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/drivers/LiuqinTouch/liuqin_nvt.c)
 - `host`: [kernel.macho 30,256,864 B carries both Novatek images \(names visible in the binary\) and the ADT carries /arm-io/liuqin-touch.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 
@@ -284,10 +284,10 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [userdata 0x2A1600..0x1D143FA, 4 KiB sectors, 105.795 GiB, with the derivation recorded in the section comment.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/board.toml)
-- `source`: [35 partitions, userdata at entry 34 with last\_lba = first\_lba - 1; gpt\_main0.bin gives the same start and gpt\_both4.bin puts boot\_a and vendor\_boot\_a at entries 13 and 24, the sde14 and sde25 of 2026-11-12. The document also records the four cross-checks and why the device side could not supply the number.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/docs/userdata-geometry.zh.md)
-- `source`: [The reader the numbers came from: it validates the header CRC and the entry array CRC, detects 512 or 4096 B sectors and header-only files, and compares every partition against a fastboot getvar table.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/tools/parse-gpt.py)
-- `source`: [partition-size:userdata = 0x1A72DFB000 B, the measured end the grow-to-end marker needs, plus the 132 partition sizes the six LUN tables were checked against. The serial number is redacted.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/device-info/fastboot-getvar-2026-11-14.txt)
+- `source`: [userdata 0x2A1600..0x1D143FA, 4 KiB sectors, 105.795 GiB, with the derivation recorded in the section comment.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/board.toml)
+- `source`: [35 partitions, userdata at entry 34 with last\_lba = first\_lba - 1; gpt\_main0.bin gives the same start and gpt\_both4.bin puts boot\_a and vendor\_boot\_a at entries 13 and 24, the sde14 and sde25 of 2026-11-12. The document also records the four cross-checks and why the device side could not supply the number.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/docs/userdata-geometry.zh.md)
+- `source`: [The reader the numbers came from: it validates the header CRC and the entry array CRC, detects 512 or 4096 B sectors and header-only files, and compares every partition against a fastboot getvar table.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/tools/parse-gpt.py)
+- `source`: [partition-size:userdata = 0x1A72DFB000 B, the measured end the grow-to-end marker needs, plus the 132 partition sizes the six LUN tables were checked against. The serial number is redacted.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/device-info/fastboot-getvar-2026-11-14.txt)
 
 ## 镜像组装 {#packaging}
 
@@ -331,7 +331,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Workflow: stock release steps for ADSP, touch and Wi-Fi firmware, then kernel, payload, firmware, boot image and the product check.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/.github/workflows/package.yml)
+- `source`: [Workflow: stock release steps for ADSP, touch and Wi-Fi firmware, then kernel, payload, firmware, boot image and the product check.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/.github/workflows/package.yml)
 - `host`: [Green run: liuqin-xnu-initial.img 102,162,432 B, kernel.macho 30,256,864 B, product check passed, artifact uploaded encrypted.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 
@@ -374,7 +374,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [kernel\_args pass cpus=1 for the liuqin first boot.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/board.toml)
+- `source`: [kernel\_args pass cpus=1 for the liuqin first boot.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/board.toml)
 
 ## GPU {#gpu}
 
@@ -414,7 +414,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Adreno stages off: NATIVE\_ADRENO=n, PONG\_ADRENO\_PLATFORM=n, NATIVE\_OFFLINE\_GPU=n.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/configs/liuqin_ipados18_defconfig)
+- `source`: [Adreno stages off: NATIVE\_ADRENO=n, PONG\_ADRENO\_PLATFORM=n, NATIVE\_OFFLINE\_GPU=n.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/configs/liuqin_ipados18_defconfig)
 
 ## 网络 {#network}
 
@@ -456,7 +456,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Stages amss.bin, amss20.bin, m3.bin, regdb.bin and bd\_m81gf.elf as bdwlang.elf/bdwlan.elf, with the provenance record the Wi-Fi build checks.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/scripts/stage-liuqin-wifi-firmware.py)
+- `source`: [Stages amss.bin, amss20.bin, m3.bin, regdb.bin and bd\_m81gf.elf as bdwlang.elf/bdwlan.elf, with the provenance record the Wi-Fi build checks.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/scripts/stage-liuqin-wifi-firmware.py)
 - `host`: [kernel.macho carries bdwlang.elf, bdwlan.elf and amss.bin.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 
@@ -498,7 +498,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [kernel\_args keep pong\_audio=0 and pong\_adsp=0 for the first boot.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/board.toml)
+- `source`: [kernel\_args keep pong\_audio=0 and pong\_adsp=0 for the first boot.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/board.toml)
 
 ## 电源 {#power}
 
@@ -544,7 +544,7 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [Rebuilds adsp.mbn from adsp.mdt plus adsp.bNN at the program-header offsets, checking every segment size and copying the hash segment as it is.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/scripts/merge-qcom-mdt.py)
+- `source`: [Rebuilds adsp.mbn from adsp.mdt plus adsp.bNN at the program-header offsets, checking every segment size and copying the hash segment as it is.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/scripts/merge-qcom-mdt.py)
 - `host`: [The ADSP merge step verified 26 segments of the stock release and the kernel command line carries pong\_adsp=2.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 
@@ -595,9 +595,9 @@ Xiaomi Pad 6 Pro \(liuqin\) on the SM8475 stack of UniXNU-pong: board data, firs
 
 ### 证据
 
-- `source`: [RAMOOPS\_CONSOLE=y, VOLATILE\_PANIC\_LOG=n and the 0x85200000 and 0xA7000000 note.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/configs/liuqin_ipados18_defconfig)
-- `source`: [/memory@840000000 reg &lt;0x8 0x40000000 0x1 0x40000000&gt;: physBase 0x840000000 and 5 GiB, so the 4 GiB owned window does not reach 0xA7000000.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/dts/liuqin.dts)
-- `source`: [kernel.macho of run 42788427078: \_start\_first\_cpu, \_panic and \_vinfo present, the entry branches to \_start\_first\_cpu, the SCTLR/ISB/CPACR sequence is found and the probe cave is empty.](https://github.com/document97/UniXNU-liuqin/blob/10afd2a62c145adbeb968e4c27e9ffbd8d6b0176/scripts/check-liuqin-kernel-probe.py)
+- `source`: [RAMOOPS\_CONSOLE=y, VOLATILE\_PANIC\_LOG=n and the 0x85200000 and 0xA7000000 note.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/configs/liuqin_ipados18_defconfig)
+- `source`: [/memory@840000000 reg &lt;0x8 0x40000000 0x1 0x40000000&gt;: physBase 0x840000000 and 5 GiB, so the 4 GiB owned window does not reach 0xA7000000.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/dts/liuqin.dts)
+- `source`: [kernel.macho of run 42788427078: \_start\_first\_cpu, \_panic and \_vinfo present, the entry branches to \_start\_first\_cpu, the SCTLR/ISB/CPACR sequence is found and the probe cave is empty.](https://github.com/document97/UniXNU-liuqin/blob/d47b3746e0a7bc2917392a540cc4ef228d56483d/scripts/check-liuqin-kernel-probe.py)
 - `host`: [The kernel links with PONG\_POWER=y and the command line is 785 B.](https://github.com/Document97/UniXNU-liuqin/actions/runs/42788427078)
   Command: <code>gh workflow run package.yml -R Document97/UniXNU-liuqin --ref liuqin -f os=ipados-18.7.10-22H374 -f prelink=false</code>. Revision: `df2dd999fb24fa462896b0240e4bad2ad6bff1dc`.
 - `host`: [The kernel linked and carries PONG DIAGNOSTIC v92 and pong\_ramoops\_console, so the ramoops console is in it; the payload step then stopped at patch-xnu-entry-probe.py with Padding at 0xfffffff007fe2518 is not empty.](https://github.com/Document97/UniXNU-liuqin/actions/runs/43184148347)

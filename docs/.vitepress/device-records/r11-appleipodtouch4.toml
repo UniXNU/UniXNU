@@ -24,6 +24,16 @@ kind = "source"
 reference = "board.toml"
 result = "Format 2 board configuration with values traced to inputs/hw.json"
 
+[[area.evidence]]
+kind = "source"
+reference = "patches/xnu/zzz-emmc-gptread.patch"
+result = "XNU eMMC GPT read path; the panel now reaches partition lookup and the iOS 16.5 APFS rootfs mounts, with process 1 still stopping at launchd ENOEXEC."
+
+[[area.evidence]]
+kind = "source"
+reference = "patches/xnu/zzz-emmc-shngroot.patch"
+result = "Standard userdata: skip the 1 MiB SHNGROOT manifest and mount the OS APFS window at +0x100000; launchd exec succeeds, with the Data volume still missing."
+
 [[area]]
 id = "firmware"
 status = "implemented"

@@ -72,6 +72,8 @@ progress, green completion, yellow warnings and red failures. This includes pip,
 CMake and compiler diagnostics. Redirected output, `--json`, `NO_COLOR` and
 `TERM=dumb` remain uncolored. Per-step log files remain plain text.
 
+Source-storage compilation writes complete per-source logs under `<tree>/build/sheng-source-storage/`; failures print the last 6000 characters. Runtime Metal-library inventory mounts auxiliary cryptexes in the system temporary directory, so the build output may reside on an attached disk image.
+
 To also save the complete command output:
 
 ```sh
@@ -177,6 +179,10 @@ cp out/<device>/<os_profile>/<config>/kernel/kernel.macho \
 The candidate names and the display or kernelcache inputs come from the device repository.
 
 The workflow runs kernel, userdata and payload. Package, firmware and boot image commands run locally on supported macOS or Linux hosts. Check the workflow and account runner settings before using hosted builds.
+
+### Sheng macOS lab
+
+The [sheng macOS lab workflow](https://github.com/UniXNU/UniXNU-sheng/actions/workflows/macos-lab.yml) selects the core checkout through `core_ref`, which defaults to `main`. Use a branch, tag or full 40-character commit SHA. Set it to the local core revision for a matching CI build. `root_storage=false` builds the boot image while retaining the installed root storage and Data.
 
 ## Linux host
 

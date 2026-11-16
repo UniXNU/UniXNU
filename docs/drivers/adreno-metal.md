@@ -20,6 +20,8 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 
 A render pass that fails encoding returns an encoder and reports a command-buffer error. This supports callers that cache encoder methods.
 
+Uniform shader arrays span the aligned device uniform range limit. This covers the residual offset of a binding within a shared descriptor range. The compiler cache identity includes the array layout semantics.
+
 
 Unused owned image backing is reused by pooled and dedicated images. Extra spares have no byte limit, expire after ten seconds, and go sooner under memory pressure or when a new block cannot be made. Blocks are freed off the releasing thread on the runtime's free thread, and on the releasing thread once its queue is full. An allocation failure releases kept spares and waits for posted frees before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
 
@@ -28,6 +30,16 @@ Unused owned image backing is reused by pooled and dedicated images. Extra spare
 On A740, half FMA uses float32 multiply-add followed by conversion to half, with a one-half-ULP bound for normal half operands and results. Half division scales both operands by the same power of two to keep the native divisor in `[2^-14, 2^14]`: large divisors use `2^-2`, small divisors use `2^10`. Normal operands and results follow Vulkan's 2.5-half-ULP bound; the device's float controls determine denormal behavior.
 
 Other eligible half operations use `RelaxedPrecision` with `HalfChainPolicy::AtExits`. The source-derived arithmetic inventory records each operation's `PrecisionNote`; the runtime policy log records the selected device capabilities.
+
+Run the source audit against the selected core and translator checkouts:
+
+```sh
+python3 drivers/AdrenoMetal/tools/audit-runtime-fast-paths.py \
+  --core /path/to/UniXNU --translator /path/to/metal2vulkan \
+  --mesa-source /path/to/mesa --output build/runtime-fast-paths.json
+```
+
+The report lists policy defaults, Turnip options and each arithmetic gate's availability in the selected revision. `--runtime-policy` attaches a captured device profile and runtime verdicts.
 
 ## Cache and priority
 

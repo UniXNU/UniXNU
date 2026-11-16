@@ -102,3 +102,15 @@ python3 scripts/run-sheng-ci-gpu-lab.py RUN --base PREPARED_GPU.img \
 The helper waits for CI, downloads the boot image and manifest, replaces the prepared image's kernel, preserves Data, and runs the Linux reader after macOS returns. Use an output directory with mode `0700`. The lab clock probe records the architectural counter and Darwin clocks around a one-second sleep.
 
 Each timed sheng cycle carries a fresh `build-tag`. Its capture must report that tag; the cycle records `expected_tag` and `fresh_log`. The `[timebase]` row records physical and virtual counters, absolute time, one-second ticks and the active scale.
+
+## macOS userspace capture
+
+Prepare the existing desktop account's runtime addon with:
+
+```sh
+python3 scripts/make-macos-autologin-addon.py INPUT.bin OUTPUT.bin \
+  --user unixnu --password-stdin --capture-graphics \
+  --ssh-public-key /path/to/operator-ed25519.pub < /path/to/account-password
+```
+
+The helper configures automatic login and awake settings. The optional graphics capture records the boot UUID, streams selected graphics services for up to 120 seconds and retains at most 1,900,000 stream bytes. The files are `Users/Shared/unixnu-test/graphics-events.log` and `graphics-state.log` in the diagnostic export. The optional public key configures Remote Login for the selected account. `daemon.log` records battery state and network interfaces.
