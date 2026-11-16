@@ -20,6 +20,8 @@ AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR t
 
 A render pass that fails encoding returns an encoder and reports a command-buffer error. This supports callers that cache encoder methods.
 
+Uniform shader arrays span the aligned device uniform range limit. This covers the residual offset of a binding within a shared descriptor range. The compiler cache identity includes the array layout semantics.
+
 
 Unused owned image backing is reused by pooled and dedicated images. Extra spares have no byte limit, expire after ten seconds, and go sooner under memory pressure or when a new block cannot be made. Blocks are freed off the releasing thread on the runtime's free thread, and on the releasing thread once its queue is full. An allocation failure releases kept spares and waits for posted frees before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
 
