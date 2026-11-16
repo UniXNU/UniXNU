@@ -26,6 +26,7 @@ def common():
         p.add_argument(f'--local-{kind}', metavar='DIR', help=f'use DIR as the {kind} directory (beats --local)')
     p.add_argument('--local-module', action='append', metavar='[KIND:]NAME=PATH', help='use PATH for one module (beats everything)')
     p.add_argument('--uefi', metavar='DIR', help='Mu-Silicium checkout for the device (uefi-sheng); or UNIXNU_UEFI')
+    p.add_argument('--clang-bin', metavar='DIR', help='EDK II clang, lld-link, llvm-lib and llvm-rc directory; or CLANG_BIN')
     p.add_argument('--edk2', metavar='DIR', help='Mu_Basecore checkout; or UNIXNU_EDK2')
     p.add_argument('--kernel-sdk', metavar='DIR', help='exported iPhoneOS SDK for kernel and prelink; or UNIXNU_KERNEL_SDK')
     p.add_argument('--kernel-tools', metavar='DIR', help='exported toolchain bin directory for kernel and prelink; or UNIXNU_KERNEL_TOOLS')
