@@ -72,6 +72,8 @@ progress, green completion, yellow warnings and red failures. This includes pip,
 CMake and compiler diagnostics. Redirected output, `--json`, `NO_COLOR` and
 `TERM=dumb` remain uncolored. Per-step log files remain plain text.
 
+Source-storage compilation writes complete per-source logs under `<tree>/build/sheng-source-storage/`; failures print the last 6000 characters. Runtime Metal-library inventory mounts auxiliary cryptexes in the system temporary directory, so the build output may reside on an attached disk image.
+
 To also save the complete command output:
 
 ```sh
