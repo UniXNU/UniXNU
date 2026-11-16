@@ -23,20 +23,22 @@ The sheng macOS lab exports its cached XNU objects, kernel headers, iPhoneOS SDK
 
 ```sh
 python3 scripts/relocate-xnu-cache.py TREE --metadata build-paths.json --sdk SDK --device DEVICE --toolchain TOOLCHAIN
-python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN/bin -- build kernel prelink -D DEVICE --os macos-27 --data-ramdisk SEED
+./unixnu build kernel -D DEVICE --os macos-27 --data-ramdisk SEED \
+  --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
 ```
 
-The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It uses the exported compiler to generate an arm64e object, then partially links it with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for both tool discovery and execution. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects.
+The export collects each tool's non-system dynamic library dependencies and runs the staged compiler, IIG and linker. It uses the exported compiler to generate an arm64e object, then partially links it with the packaged classic linker. The local runner selects the exported SDK, compiler, linker and kernel tools for both tool discovery and execution. `build-paths.json` records the compiler and Xcode versions. Component archives rebuild from current sources and the kernel uses the retained XNU objects. Unchanged patched sources and restored headers retain their timestamps when the source tree is prepared again.
 
 `SEED` is the preserved Data seed from the installed boot payload. The kernel-only build reads its APFS UUID and binds the compiled Data lookup to that installation.
 
-From the device checkout, run the sheng RAM image helper with the resolved tree and matching kernel and root policies. It applies the configured entry and panic probes and seals the source POST field before inserting the kernel:
+The same tool selection works with the full packaging entry:
 
 ```sh
-python3 scripts/repack-sheng-boot.py INPUT OUTPUT --kernel-tree TREE --uefi UEFI \
-  --payload-file KERNEL=EFI/UniXNU/Payloads/kernel.macho \
-  --payload-file POLICIES=EFI/UniXNU/Payloads/kernel.macho.vroot
+../UniXNU-sheng/scripts/package.sh --os macos-27 --data-ramdisk SEED \
+  --uefi UEFI --kernel-sdk SDK --kernel-tools TOOLCHAIN/bin
 ```
+
+The exported tools apply to kernel compilation and prelink. Runtime libraries and GPU tools use the host macOS SDK; firmware uses its configured LLVM toolchain. Save `kernel_sdk` and `kernel_tools` in `unixnu.local.toml` to reuse these paths. `scripts/run-local-kernel.py` forwards its `--sdk` and `--tools` options to the same build entry.
 
 ## Source and tree
 
