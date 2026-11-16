@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Copy a GPU addon (NGPUADD2, see UniXNU scripts/make-gpu-addon.py) and add the files of DIR below PREFIX.
-usage: addon-add-dir.py IN.bin OUT.bin PREFIX DIR [PREFIX DIR ...]   (executables keep 0755, the rest 0644)"""
+usage: addon-add-dir.py IN.bin OUT.bin PREFIX DIR [PREFIX DIR ...] [--addon FILE]
+Executables keep 0755, the rest 0644. --addon merges entries from another addon."""
 import os
 import struct
 import sys
@@ -45,7 +46,13 @@ def main():
         sys.exit(__doc__)
     files = read(sys.argv[1])
     for prefix, directory in zip(sys.argv[3::2], sys.argv[4::2]):
+        if prefix == '--addon':
+            for entry in read(directory):
+                files = [item for item in files if item[0] != entry[0]] + [entry]
+            continue
         base = Path(directory)
+        if prefix.startswith('--') or not base.is_dir():
+            sys.exit('Expected a directory for addon prefix ' + prefix + ': ' + directory)
         for p in sorted(x for x in base.rglob('*') if x.is_file()):
             name = prefix.rstrip('/') + '/' + p.relative_to(base).as_posix()
             mode = 0o755 if os.access(p, os.X_OK) else 0o644
