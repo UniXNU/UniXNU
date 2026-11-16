@@ -223,6 +223,20 @@ sheng 配置选择 `SHENG_BOOT_GUARD=1`，preflight 将设备仓库的 `BootRese
 
 配套 XNU 内核使用 `uefi-watchdog=1`，在 `EARLY_BOOT` 接续看门狗，每十秒发送一次 ping。`autoreset=<秒数>` 限定运行时间，零截止时间使内核持续发送 ping。固件与内核配置需要配套。sheng lab 使用 LLVM 和 LLD 22.1.8 构建 COFF 固件，`CLANG_BIN` 指向包含该工具链 `clang`、`lld-link`、`llvm-lib` 和 `llvm-rc` 的目录。
 
+在 UniXNU 仓库中准备该目录：
+
+```sh
+brew install llvm@22 lld@22
+mkdir -p .cache/edk2-llvm22
+for edk2_tool in clang llvm-lib llvm-rc; do
+  ln -sf "$(brew --prefix llvm@22)/bin/$edk2_tool" ".cache/edk2-llvm22/$edk2_tool"
+done
+ln -sf "$(brew --prefix lld@22)/bin/lld-link" .cache/edk2-llvm22/lld-link
+```
+
+在 `unixnu.local.toml` 中设置 `clang_bin = ".cache/edk2-llvm22"`。
+
+
 验证早期返回路径时，将已知可启动的 header-v0 XNU 镜像与选定固件组合，并加入内核入口等待：
 
 ```sh

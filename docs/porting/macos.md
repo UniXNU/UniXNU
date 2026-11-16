@@ -225,13 +225,13 @@ The packaging script runs the same steps except userdata:
 scripts/package.sh --os macos-27 --uefi ../uefi-<device>
 ```
 
-For sheng, save the installation inputs in the UniXNU checkout's `unixnu.local.toml`:
+For sheng, prepare the [LLVM 22 tools](/porting/uefi-firmware), then save the installation inputs in the UniXNU checkout's `unixnu.local.toml`:
 
 ```toml
 [build]
 device = "../UniXNU-sheng"
 uefi = "../uefi-sheng"
-clang_bin = "/path/to/edk2-llvm22-tools"
+clang_bin = ".cache/edk2-llvm22"
 data_ramdisk = "/path/to/installed-data.dbr"
 unique_chip_id = "<device platform seed>"
 ```

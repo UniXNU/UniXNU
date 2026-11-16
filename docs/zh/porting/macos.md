@@ -212,13 +212,13 @@ payload 构建会停止并要求重新构建内核。内核把 seed 挂载到 `/
 scripts/package.sh --os macos-27 --uefi ../uefi-<device>
 ```
 
-sheng 的安装输入写入 UniXNU 仓库的 `unixnu.local.toml`：
+sheng 先准备 [LLVM 22 工具](/zh/porting/uefi-firmware)，再将安装输入写入 UniXNU 仓库的 `unixnu.local.toml`：
 
 ```toml
 [build]
 device = "../UniXNU-sheng"
 uefi = "../uefi-sheng"
-clang_bin = "/path/to/edk2-llvm22-tools"
+clang_bin = ".cache/edk2-llvm22"
 data_ramdisk = "/path/to/installed-data.dbr"
 unique_chip_id = "<设备平台标识>"
 ```
