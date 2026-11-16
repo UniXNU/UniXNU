@@ -46,7 +46,7 @@ def report(path, pause, big):
         s['turn'] = angle(steps[i - 1]['d'], s['d']) if i else None
     after_pause = [s for s in steps if s['gap'] >= pause]
     moving = [s for s in steps if s['gap'] < pause]
-    print(f'{path}: {len(rows)} changes over {rows[-1][0] / 1000:.1f} s')
+    print(f'{path}: {len(rows)} positions over {rows[-1][0] / 1000:.1f} s')
     print(f'  moving steps (gap < {pause:.0f} ms): {len(moving)}, length median {pct([s["len"] for s in moving], .5):.0f} px, '
           f'p90 {pct([s["len"] for s in moving], .9):.0f}, max {max((s["len"] for s in moving), default=0):.0f}; '
           f'gap median {pct([s["gap"] for s in moving], .5):.0f} ms')

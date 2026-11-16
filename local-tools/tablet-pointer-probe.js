@@ -23,7 +23,12 @@ function run(argv) {
     if (p.x !== last.x || p.y !== last.y) break;
     $.NSThread.sleepForTimeInterval(0.005);
   }
-  if (p.x === last.x && p.y === last.y) { console.log('no movement in ' + waitSeconds + ' s'); return 'done'; }
+  if (p.x === last.x && p.y === last.y) {
+    if (csvPath) $('0,' + last.x.toFixed(1) + ',' + last.y.toFixed(1) + '\n')
+      .writeToFileAtomicallyEncodingError(csvPath, true, $.NSUTF8StringEncoding, $());
+    console.log('no movement in ' + waitSeconds + ' s');
+    return 'done';
+  }
 
   const start = Date.now();
   const end = start + seconds * 1000;
