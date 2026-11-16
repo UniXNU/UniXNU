@@ -29,6 +29,16 @@ On A740, half FMA uses float32 multiply-add followed by conversion to half, with
 
 Other eligible half operations use `RelaxedPrecision` with `HalfChainPolicy::AtExits`. The source-derived arithmetic inventory records each operation's `PrecisionNote`; the runtime policy log records the selected device capabilities.
 
+Run the source audit against the selected core and translator checkouts:
+
+```sh
+python3 drivers/AdrenoMetal/tools/audit-runtime-fast-paths.py \
+  --core /path/to/UniXNU --translator /path/to/metal2vulkan \
+  --mesa-source /path/to/mesa --output build/runtime-fast-paths.json
+```
+
+The report lists policy defaults, Turnip options and each arithmetic gate's availability in the selected revision. `--runtime-policy` attaches a captured device profile and runtime verdicts.
+
 ## Cache and priority
 
 Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
