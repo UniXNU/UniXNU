@@ -24,7 +24,9 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 
 Replace the placeholders with your port's inputs. Relative paths start at the configuration file's directory. Command-line flags take priority, followed by environment variables, then this file, then device defaults. `kernel_args` overrides board arguments by name; `--kernel-arg` overrides local arguments by name.
 
-Supported path keys are `device`, `out`, `uefi`, `edk2`, `kernelcache`, `kernel`, `trust_cache`, `owner_trust_cache`, `data_ramdisk`, `gpu_addon`, `dtb`, `fd`, `ramdisk`, and `output`. Other keys are `ipsw` (path or URL), `unique_chip_id` (hex string), `jobs` (positive integer), `target` (`DEBUG` or `RELEASE`), and `kernel_args` (string array). `ramdisk = "none"` selects an empty boot-image ramdisk.
+Supported path keys are `device`, `out`, `uefi`, `edk2`, `clang_bin`, `kernel_sdk`, `kernel_tools`, `kernelcache`, `kernel`, `trust_cache`, `owner_trust_cache`, `data_ramdisk`, `gpu_addon`, `dtb`, `fd`, `ramdisk`, and `output`. Other keys are `ipsw` (path or URL), `unique_chip_id` (hex string), `jobs` (positive integer), `target` (`DEBUG` or `RELEASE`), and `kernel_args` (string array). `ramdisk = "none"` selects an empty boot-image ramdisk.
+
+`clang_bin` selects the EDK II tool directory containing `clang`, `lld-link`, `llvm-lib` and `llvm-rc` (`--clang-bin` or `CLANG_BIN`). `kernel_sdk` and `kernel_tools` select an exported iPhoneOS SDK and toolchain `bin` directory for kernel compilation and prelink. Their command-line options are `--kernel-sdk` and `--kernel-tools`; their environment variables are `UNIXNU_KERNEL_SDK` and `UNIXNU_KERNEL_TOOLS`.
 
 ```sh
 ./unixnu defconfig <device>_defconfig
