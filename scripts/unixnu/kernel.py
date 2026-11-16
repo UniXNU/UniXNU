@@ -192,7 +192,7 @@ def build(ctx, modules):
     env.update(xnu_env(ctx))
     env.update(version_env(modules, ctx))
     if ctx.schema_version == 2:
-        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules))
+        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules, env=env))
         generated = ctx.tree / 'build/generated'
         generated.mkdir(parents=True, exist_ok=True)
         env['UNIXNU_GENERATED_DIR'] = str(generated)
