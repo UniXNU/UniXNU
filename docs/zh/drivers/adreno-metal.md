@@ -28,6 +28,16 @@ A740 的 half FMA 使用 float32 乘加后转换为 half，正常 half 操作数
 
 其他适用的 half 运算通过 `RelaxedPrecision` 和 `HalfChainPolicy::AtExits` 使用原生精度。源码枚举的算术清单记录每项运算的 `PrecisionNote`，runtime 策略日志记录实际选用的设备能力。
 
+对所选 core 和 translator 源码运行审计：
+
+```sh
+python3 drivers/AdrenoMetal/tools/audit-runtime-fast-paths.py \
+  --core /path/to/UniXNU --translator /path/to/metal2vulkan \
+  --mesa-source /path/to/mesa --output build/runtime-fast-paths.json
+```
+
+报告列出策略默认值、Turnip 选项和所选版本中各算术判断函数的可用状态。`--runtime-policy` 附加设备采集的能力和 runtime 检查结果。
+
 ## 缓存和优先级
 
 相同 UID 的客户端在可写时共用账户 home 下的 `Library/Caches/org.unixnu.metal`。沙箱限制写入时使用私有缓存。`NATIVE_METAL_SHARED_CACHE_DIR` 可指定共享目录，空值关闭共享。缓存覆盖 Apple 前端结果、runtime 产物和 Turnip IR3。并发导入使用独立临时文件，管线日志按进程分开。
