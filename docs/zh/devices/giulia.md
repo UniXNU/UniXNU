@@ -10,7 +10,7 @@
 
 iOS 16 / Darwin 22 移植已进入 Hello 和设置界面，覆盖完整 1264x2780 面板，触控坐标正确。CPU0、原生 UFS、HFSX 根卷、`launchd` 和 USB CDC 日志可用。精简按键构建已验证物理电源键和音量键。
 
-Wi-Fi 已到达 PCIe、BHI/BHIE、AMSS 和 QMI 资源请求，实机在 firmware-ready 之前的 QMP open 处停止。仓库包含 GPU 准备服务和音频运行时代码，GPU 执行、无线联网及音频播放待实机验证。
+Wi-Fi 已到达 PCIe、BHI/BHIE、AMSS 和 QMI 资源请求，实机在 firmware-ready 之前的 QMP open 处停止。仓库包含 GPU 准备服务和音频运行时代码，GPU 执行器、无线联网及音频播放待实机验证。
 
 ## 来源
 
