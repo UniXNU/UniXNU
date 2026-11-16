@@ -95,6 +95,13 @@ def main():
         files.append((f'{prefix}/NativeAdrenoMetal.publish', 0o644, b'1\n'))
     if prime_list:
         files.append((f'{prefix}/NativeAdrenoMetal.primelist', 0o644, prime_list.read_bytes()))
+    if prefix == 'GPUBundles':
+        application = PLUGIN / 'Shader Cache.app'
+        if not application.is_dir():
+            sys.exit('Build the macOS Shader Cache app with the matching plugin')
+        for path in sorted(p for p in application.rglob('*') if p.is_file()):
+            mode = 0o755 if path.parent.name == 'MacOS' else 0o644
+            files.append(('Library/UniXNU/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
     if cache_export:   # the plugin sends its cache directory to the UFS log (CacheExport.h)
         files.append((f'{prefix}/NativeAdrenoMetal.cacheexport', 0o644, b'1\n'))
     if pipeline_pack:
