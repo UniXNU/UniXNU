@@ -55,7 +55,16 @@ fi
 /bin/sleep 60
 /bin/echo "Login state boot=$(/usr/sbin/sysctl -n kern.bootsessionuuid)"
 /usr/bin/stat -f '%Su %u' /dev/console
-/bin/ps -axo pid,ppid,user,etime,comm | /usr/bin/awk 'NR == 1 || /loginwindow|WindowServer|Finder|Dock|Setup Assistant|ScreenSaver|caffeinate/'
+/bin/ps -axo pid,ppid,user,etime,comm | /usr/bin/awk 'NR == 1 || /loginwindow|WindowServer|Finder|Dock|System Settings|iconservices|Setup Assistant|ScreenSaver|caffeinate/'
+'''
+
+GRAPHICS_LOG = '''#!/bin/sh
+set -eu
+directory=/Users/Shared/unixnu-test
+/bin/mkdir -p "$directory"
+exec >"$directory/graphics-events.log" 2>&1
+/bin/echo "graphics capture boot=$(/usr/sbin/sysctl -n kern.bootsessionuuid)"
+exec /usr/bin/log stream --style compact --level info --timeout 120s --predicate 'process == "WindowServer" OR process == "System Settings" OR process == "loginwindow" OR process BEGINSWITH "Wallpaper" OR process CONTAINS[c] "iconservices" OR subsystem CONTAINS[c] "CoreImage" OR subsystem CONTAINS[c] "Metal"'
 '''
 
 
@@ -64,6 +73,7 @@ def main():
     parser.add_argument('input', type=Path)
     parser.add_argument('output', type=Path)
     parser.add_argument('--user', required=True)
+    parser.add_argument('--capture-graphics', action='store_true', help='capture 120 seconds of fresh graphics logs during boot')
     parser.add_argument('--password-stdin', action='store_true', required=True,
                         help='read the existing account password from standard input')
     args = parser.parse_args()
@@ -87,10 +97,15 @@ def main():
                StandardErrorPath='/private/var/log/unixnu-autologin.log')
     awake = dict(Label='org.unixnu.desktop-awake', RunAtLoad=True, KeepAlive=True,
                  ProgramArguments=['/usr/bin/caffeinate', '-d', '-i', '-s'])
+    capture = dict(Label='org.unixnu.graphics-log', RunAtLoad=True,
+                   Disabled=not args.capture_graphics,
+                   ProgramArguments=['/bin/sh', '/' + prefix + 'capture-graphics.sh'])
     additions = [(prefix + 'user', 0o600, (args.user + '\n').encode()),
                  (prefix + 'kcpassword', 0o600, encoded),
                  (prefix + 'install.sh', 0o700, INSTALLER.encode()),
+                 (prefix + 'capture-graphics.sh', 0o700, GRAPHICS_LOG.encode()),
                  ('Library/LaunchDaemons/org.unixnu.autologin.plist', 0o644, plistlib.dumps(job)),
+                 ('Library/LaunchDaemons/org.unixnu.graphics-log.plist', 0o644, plistlib.dumps(capture)),
                  ('Library/LaunchDaemons/org.unixnu.desktop-awake.plist', 0o644, plistlib.dumps(awake))]
     names = {name for name, _, _ in additions}
     files = [entry for entry in files if entry[0] not in names] + additions
