@@ -78,8 +78,10 @@ set -eu
 directory=/Users/Shared/unixnu-test
 /bin/mkdir -p "$directory"
 exec >"$directory/graphics-events.log" 2>&1
-/bin/echo "graphics capture boot=$(/usr/sbin/sysctl -n kern.bootsessionuuid)"
-exec /usr/bin/log stream --style compact --level info --timeout 120s --predicate 'process == "WindowServer" OR process == "System Settings" OR process == "loginwindow" OR process BEGINSWITH "Wallpaper" OR process CONTAINS[c] "iconservices" OR subsystem CONTAINS[c] "CoreImage" OR subsystem CONTAINS[c] "Metal"'
+boot=$(/usr/sbin/sysctl -n kern.bootsessionuuid)
+/bin/echo "graphics capture boot=$boot"
+/bin/echo "graphics capture boot=$boot" >"$directory/graphics-state.log"
+/usr/bin/log stream --style compact --level info --timeout 120s --predicate '(process == "WindowServer" OR process == "System Settings" OR process == "loginwindow" OR process BEGINSWITH "Wallpaper" OR process CONTAINS[c] "iconservices" OR subsystem CONTAINS[c] "CoreImage" OR subsystem CONTAINS[c] "Metal") AND NOT eventMessage BEGINSWITH "NativeAdrenoMetal table:" AND NOT subsystem BEGINSWITH "com.apple.network" AND NOT subsystem BEGINSWITH "com.apple.CFNetwork" AND NOT subsystem == "com.apple.wallpaper"' | /usr/bin/head -c 1900000
 '''
 
 
