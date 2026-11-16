@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Record where a build came from, right after `./unixnu build ...`.
 
-    record-build-provenance.py LABEL [--output DIR] [--artifact PATH ...]
+    record-build-provenance.py LABEL [--core CORE] [--device DEVICE] [--uefi UEFI] [--output DIR] [--artifact PATH ...]
 
 The build outputs record only their own hashes and arguments. This records, as JSON:
 
@@ -172,19 +172,24 @@ def write_record(record, targets, secrets):
 
 
 def main():
+    global ROOT
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('label', help='record name, for example cd6')
+    parser.add_argument('--core', type=Path, help='core checkout owning the build settings')
+    parser.add_argument('--device', type=Path, help='selected device checkout')
+    parser.add_argument('--uefi', type=Path, help='selected firmware checkout')
     parser.add_argument('--output', type=Path, help='the build output directory (default: from unixnu.local.toml)')
     parser.add_argument('--artifact', type=Path, action='append', default=[], help='an image built from these outputs')
     args = parser.parse_args()
+    ROOT = (args.core or ROOT).resolve()
     settings, secrets = local_settings(ROOT / 'unixnu.local.toml')
     if not secrets:
         raise SystemExit('unixnu.local.toml names no unique_chip_id; the record could not be checked for it')
     output = args.output or Path(build_setting(settings, 'out', ROOT / 'out')).joinpath(*PROFILE)
     if not (output / 'kernel').is_dir():
         raise SystemExit(f'{output}: no build output there (pass --output)')
-    device = (ROOT / build_setting(settings, 'device', '../UniXNU-sheng')).resolve()
-    uefi = (ROOT / build_setting(settings, 'uefi', '../uefi-sheng')).resolve()
+    device = (args.device or ROOT / build_setting(settings, 'device', '../UniXNU-sheng')).resolve()
+    uefi = (args.uefi or ROOT / build_setting(settings, 'uefi', '../uefi-sheng')).resolve()
     payload_json = output / 'payload/payload.json'
     policies = sorted((device / 'scripts/policies').glob('*/*/*')) if (device / 'scripts/policies').is_dir() else []
     patches = output / 'xnu-patches.list'
