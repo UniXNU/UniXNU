@@ -33,11 +33,7 @@ Other eligible half operations use `RelaxedPrecision` with `HalfChainPolicy::AtE
 
 Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
 
-Three metal2vulkan work placements are on by default. `metal-flow=<bits>` selects them: 1 for the first, 2 for the second, 4 for the third, and 0 for none:
-
-- Render encoder calls lower on the runtime's lowering thread. A refusal found while lowering fails the command buffer.
-- A commit submits on the committing thread when no other submission pass is running.
-- Each program appends its pipeline records to `pipeline-records-<name>.bin` in the cache. A new device makes the recorded pipelines again in the background at the utility class.
+`metal-flow=<bits>` selects render work placement. Bit 1 uses the lowering worker and bit 2 submits directly from commit; macOS defaults to 3. iPadOS also supports bit 4 for warming earlier pipeline records and defaults to 7.
 
 Any value of `metal-flow=` logs the `FL` counts to os_log every ten seconds when they change.
 
@@ -47,15 +43,28 @@ Logical Metal queues share one Vulkan queue and kernel queue per process. The fr
 
 ## Shader priming and diagnostics
 
-The render server primes default compute and vertex pipeline variants while idle. Function reflection supplies zero-valued constants and packed vertex inputs; container stage tags select executable entry points. Universal archives containing only Apple GPU machine-code slices are listed separately from AIR inputs. Failed entries carry input revision 3, while successful checkpoints retain their translator and driver build identity. Successful and refused entry points have separate, build-specific checkpoints. A library enters `prime-done` once all its selected variants compile. `PR` reports successful libraries over eligible libraries; `PRc` reports state (`0` running, `1` complete, `2` incomplete), failed libraries, refused functions, interrupted functions and missing inventory paths.
+Source and packaging: [AdrenoMetal](https://github.com/UniXNU/AdrenoMetal/pull/38), [UniXNU](https://github.com/UniXNU/UniXNU/pull/271), [sheng](https://github.com/UniXNU/UniXNU-sheng/pull/107).
 
-The macOS runtime build inventories `.metallib` files from the OS, SystemOS and App images. It embeds `build/prime-list.txt` in the plugin and includes the list in its bundle. The inventory accepts paths containing spaces; missing or invalid inventory produces an incomplete pass. Planned lab returns record `prime-resume`, so an interrupted compile can resume after reboot. Unexpected interruptions retain their entry in `prime-bad`.
+On macOS, open **Shader Cache** and click **Start** to compile the system inventory. The window shows library progress, compiled functions, failures and missing inputs. **Stop** finishes the current compilation before stopping. Starting again keeps successful checkpoints and retries failed entries. Administrator authorization gives the worker access to the shared system cache. Closing the window keeps the requested task running.
 
-On macOS, WindowServer writes `prime.log`, `prime-done`, `prime-fn2`, `prime-refused2`, `prime-bad` and `prime-current` under `/private/var/tmp/NativeAdrenoMetal.cache`. Inspect a captured directory with:
+The app is installed at `/Library/UniXNU/Shader Cache.app`; the sheng lab exposes it in `/Applications`. Build it with the macOS plugin:
 
 ```sh
+python3 scripts/build-adreno-metal-plugin.py --target macos27 --no-replay
+```
+
+The runtime build inventories `.metallib` files from OS, SystemOS and App. The worker uses reflected constants and vertex inputs for default compute pipelines and BGRA8/RGBA16Float render variants. Apple GPU machine-code archives are counted separately. A library enters `prime-done` after all selected variants compile. Missing inputs and refused variants produce an incomplete result.
+
+The worker stores status in `shader-cache.plist`, its active-task lock in `shader-cache.lock`, and checkpoints beside `prime.log` under `/private/var/tmp/NativeAdrenoMetal.cache`. Checkpoints retain the translator and Turnip identity. All Metal clients read the shared cache through `/Library/GPUBundles/NativeAdrenoMetal.cache`.
+
+Read status or summarize a captured cache:
+
+```sh
+'/Applications/Shader Cache.app/Contents/MacOS/ShaderCache' --status
 python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
 ```
+
+On iPadOS, the render server compiles the inventory while idle and reports progress through `PR`, `PRb` and `PRc`.
 
 `FP` reports grouped submissions and batches, command pools made and reused, linear passes rendered in place and through copies, and region pipelines evicted. `CM` reports commit calls and cumulative microseconds in total, lowering, recording, pipeline waits, lock waits, scheduler passes and submission. Compare counter differences within the same controlled workload.
 
