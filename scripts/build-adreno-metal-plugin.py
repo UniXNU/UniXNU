@@ -21,6 +21,8 @@ ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--target', choices=('ios', 'ios27', 'macos27'), default='ios')
 parser.add_argument('--no-replay', action='store_true', help='omit the optional host simulation capture used by diagnostic probes')
+parser.add_argument('--translator-source', type=Path, help='use an existing pinned and patched translator checkout')
+parser.add_argument('--reuse-bridge', action='store_true', help='reuse the matching Rust archive for a frontend relink')
 args = parser.parse_args()
 MACOS = args.target == 'macos27'
 # IOS27 marks the arm64e builds (iPadOS 27 and macOS 27): pointer authentication, the PAC bridge and the arm64e checks.
@@ -41,7 +43,7 @@ base = ['xcrun', 'clang', '-target', {'ios': 'arm64-apple-ios17.0', 'ios27': 'ar
         '-fstack-protector-strong']
 source_hash = hashlib.sha256()
 for path in sorted((ROOT / 'drivers/AdrenoMetal').rglob('*')):
-    if path.is_file() and '.git' not in path.parts and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
+    if path.is_file() and '.git' not in path.parts and path.relative_to(ROOT / 'drivers/AdrenoMetal').parts[0] != 'tools' and path.suffix in ('.h','.mm','.cpp','.rs','.patch'):
         source_hash.update(str(path.relative_to(ROOT / 'drivers/AdrenoMetal')).encode())
         source_hash.update(path.read_bytes())
 metal_build_id = source_hash.hexdigest()
@@ -63,12 +65,22 @@ if args.no_replay:
 else:
     subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
 BRIDGE_TARGET = args.target
-subprocess.run(['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET], check=True)
+bridge_command = ['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
+if args.translator_source:
+    bridge_command += ['--source', args.translator_source]
+if args.reuse_bridge:
+    bridge_command += ['--reuse-current']
+subprocess.run([str(value) for value in bridge_command], check=True)
 BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'
+manifest = json.loads((resources / 'gpu-build.json').read_text())
+manifest['component'] = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
+manifest['bridge_component'] = json.loads(BRIDGE.with_suffix('.a.json').read_text())['identity']['component']
+(resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 # arm64e: the Rust objects' imports that take a callback go through the signing wrappers of RustPacBoundary.c, and their indirect branches
 # are routed through its stripping trampolines after the link (scripts/rust-pac-rewrite.py).
 link_extra, PAC_RENAMES = [], {'_pthread_create': '_nmb_pac_pthread_create', '__tlv_atexit': '_nmb_pac_tlv_atexit',
-                               '_atexit': '_nmb_pac_atexit', '__dyld_register_func_for_add_image': '_nmb_pac_dyld_register_func_for_add_image',
+                               '_atexit': '_nmb_pac_atexit', '___cxa_atexit': '_nmb_pac_cxa_atexit',
+                               '__dyld_register_func_for_add_image': '_nmb_pac_dyld_register_func_for_add_image',
                                '__Unwind_Backtrace': '_nmb_pac_Unwind_Backtrace', '_dlsym': '_nmb_pac_dlsym'}
 if IOS27:
     objcopy = next(p for p in ['/opt/homebrew/opt/llvm/bin/llvm-objcopy', shutil.which('llvm-objcopy') or ''] if p and Path(p).exists())
