@@ -28,3 +28,16 @@ python3 scripts/audit-fork-branches.py \
 ```
 
 The repository-paths file maps repository names to local checkouts. `--review` accepts JSON rows containing `id`, `decision` and `reason`; annotations follow the exact file variant. Output includes `branches.csv`, `files.csv`, `fork-files.csv`, `commits.csv`, `audit.json` and full patches under `diffs/`.
+
+
+## Runtime policy audit
+
+Run the AdrenoMetal source audit against the selected core, translator and Mesa checkouts:
+
+```sh
+python3 /path/to/AdrenoMetal/tools/audit-runtime-fast-paths.py \
+  --core /path/to/UniXNU --translator /path/to/metal2vulkan \
+  --mesa-source /path/to/mesa --output /path/to/runtime-fast-paths.json
+```
+
+`--runtime-policy /path/to/runtime-policy.log` attaches the captured device profile and runtime check results. The report enumerates policy fields, consumer overrides, owning source references, Turnip options and the math vocabulary defined by `Math::float_stems()`, `BinOp::ALL` and `PrecisionNote`. The development `39dc6585` source audit resolved all 25 policy fields and 19 Turnip options.
