@@ -13,7 +13,7 @@ The [file table](fork-coverage-20261117.csv) compares every branch of the eight 
 | UniXNU-sm8550-common | 3 | 4 | 0 |
 | uefi-sheng | 7 | 21 | 4 |
 
-The full inventory contains 58 branches and 1,287 distinct file differences. The table lists the 249 variants changed by the fork, deduplicated by repository, path and both tree entries. Differences caused exclusively by newer upstream code are recorded in the full inventory.
+The [branch table](fork-branches-20261117.csv) identifies all 58 branch revisions. The [complete file table](fork-file-inventory-20261117.csv) lists all 1,287 distinct file differences. The table lists the 249 variants changed by the fork, deduplicated by repository, path and both tree entries. Differences caused exclusively by newer upstream code are recorded in the full inventory.
 
 The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. The comparison baseline uses `0046-main-optimizations-on-development-555b13d5.patch`. Its half-division implementation already normalizes divisors outside 2^-14 through 2^14, scaling both operands by 1024 or 0.25. The corresponding native-half-division-range acceptance case remains in main.
 
