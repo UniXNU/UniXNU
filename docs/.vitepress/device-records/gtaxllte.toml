@@ -4,7 +4,7 @@ schema_version = 1
 name = "gtaxllte"
 soc = "Exynos 7870"
 os_profile = "ipados-17.7.11-21H461"
-summary = "Samsung Galaxy Tab A 10.1 (2016) LTE (SM-T585). Scaffold: the UEFI port and the public hardware data exist; the XNU SoC layer, storage, display and input drivers are the work. No hardware boot of UniXNU yet."
+summary = "Samsung Galaxy Tab A 10.1 (2016) LTE (SM-T585). S-Boot loads the UniXNU UEFI, the menu and DarwinBoot hand off to XNU, and the prelinked kernel reaches PE_init_iokit. Storage, display, input and GPU drivers are the remaining work."
 
 [[area]]
 id = "configuration"
@@ -14,7 +14,11 @@ paths = ["board.toml", "feeds.toml", "configs/**", ".gitmodules", ".github/**", 
 inputs = ["Identify the configuration hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for configuration."]
 procedure = ["Follow the configuration stage in the porting guide and record the actual commands."]
-findings = ["Collect the first configuration observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The prelinked payload is the working architecture: it is written to HIDDEN (mmcblk0p21, 60 MiB FAT16, label UNIXNU) and loaded from EFI/UniXNU/Payloads/kernel.macho because the 49 MiB image cannot fit the 14 MiB ramdisk.",
+  "The prelinked AppleARMPlatform ships an AppleARMCPU personality with IONameMatch cpu; IODTPlatformExpert matches by prefix and would claim the Exynos /cpus. The kernel artifact is rewritten byte-for-byte to xpu before it is written to HIDDEN.",
+  "The prelink roots are trimmed to the software, security and storage closure plus AppleARMPlatform and ApplePMGR; the display, GPU and media kexts wait for Apple hardware and are excluded until the Exynos drivers exist.",
+]
 completion = ["All source pins resolve; every selected component has a record; status shows the intended overrides and patch order."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required configuration inputs before implementation."]
@@ -22,17 +26,22 @@ evidence = []
 
 [[area]]
 id = "firmware"
-status = "planned"
+status = "device-verified"
 components = []
 paths = ["proprietary-files.txt", "scripts/extract-files.py", "scripts/gen-touch-firmware.py"]
 inputs = ["Identify the firmware and boot hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for firmware and boot."]
 procedure = ["Follow the firmware and boot stage in the porting guide and record the actual commands."]
-findings = ["Collect the first firmware and boot observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "S-Boot loads the UniXNU UEFI, the menu entries run, and DarwinBoot reports the prelinked kernel virtual address, entry point and boot args before branching to XNU.",
+  "Early kernel progress is visible through direct framebuffer bars at y=400/500/600/700: green after arm_vm_init, red after the console init, blue at PE_init_iokit, yellow at bsd_init. Green, red and blue appear; yellow does not yet.",
+]
 completion = ["Firmware image builds, enters UniXNU, publishes the framebuffer and preserves the documented memory reservations."]
-limits = ["Hardware inputs and implementation are pending for this example board."]
-next_action = ["Inventory the required firmware and boot inputs before implementation."]
-evidence = []
+limits = ["The prelinked kernel stops inside IOKit before bsd_init; storage and display drivers are not built yet."]
+next_action = ["Name the IOKit sub-phase that stops the prelinked kernel with the traced framebuffer squares."]
+evidence = [
+  { kind = "device", reference = "PHASE0.md", result = "S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.", command = "manual boot of the SM-T585; the photos are recorded in the workspace", revision = "f45b68897f5f48da0026881847d9204680c9dd24" },
+]
 
 [[area]]
 id = "cpu"
@@ -42,7 +51,10 @@ paths = ["package/CpuFreq*", "scripts/*armcpu*"]
 inputs = ["Identify the cpu and interrupts hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for cpu and interrupts."]
 procedure = ["Follow the cpu and interrupts stage in the porting guide and record the actual commands."]
-findings = ["Collect the first cpu and interrupts observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "ArmCpu owns /cpus and the architectural timer; the prelinked AppleARMCPU IONameMatch is rewritten to xpu so it cannot claim the Exynos cores.",
+  "The ADT must describe the GIC cell counts the kernel expects; the missing counts were fixed before the prelinked path became primary.",
+]
 completion = ["Every enabled CPU reaches its entry checkpoint and timer/IPI handling works on each enabled CPU."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required cpu and interrupts inputs before implementation."]
@@ -56,7 +68,10 @@ paths = ["dts/**", "package/*Smmu*", "package/*Memory*", "scripts/*smmu*", "scri
 inputs = ["Identify the memory and dma hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for memory and dma."]
 procedure = ["Follow the memory and dma stage in the porting guide and record the actual commands."]
-findings = ["Collect the first memory and dma observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The kernel direct-maps the UEFI framebuffer at 0x67000000 (1200x1920, 32 bpp, 4800-byte rows) with ml_io_map_wcomb; the green/red/blue stage bars are direct writes there.",
+  "The prelinked kernel cannot use the corecrypto kernel RNG before the kext providers start, so the kmem size-class randomization and the platform UUID are guarded and crypto-free in the prelinked series.",
+]
 completion = ["All handoff regions are accounted for and each enabled DMA engine accesses its allocated range with the documented cache policy."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required memory and dma inputs before implementation."]
@@ -70,7 +85,12 @@ paths = ["drivers/ShengUfs", "scripts/*ufs*", "scripts/*storage*", "scripts/*use
 inputs = ["Identify the storage and root hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for storage and root."]
 procedure = ["Follow the storage and root stage in the porting guide and record the actual commands."]
-findings = ["Collect the first storage and root observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The eMMC is a Samsung MSHC at 0x13540000: VERID 0x6c, RINTSTS 0x44, STATUS 0x48, FIFO 0x100 or 0x200, 32-bit FIFO items, 8-bit bus; Mu-Silicium MshcDxe initializes it and leaves the card selected with 512-byte blocks.",
+  "USERDATA is mmcblk0p23 at LBA 8,013,824 with 53,043,200 sectors; HIDDEN is mmcblk0p21 at LBA 7,880,704 with 122,880 sectors. The read-only bsd_init probe prints the controller state and reads LBA 0/1 through the PIO FIFO.",
+  "No block driver or root mount exists yet; the first goal is the GPT signature (EFI PART) from the probe, then IOBlockStorageDevice publication.",
+  "The same probe is also reachable from arm_init behind an emmc-probe=1 boot argument, so the eMMC state can be read even while the prelinked kernel still hangs inside IOKit.",
+]
 completion = ["Host: register, clock, link and SMMU facts match the board inventory.", "Reads: SCSI capacity, GPT and known blocks are correct; OS/SystemOS windows stay within userdata.", "Root: the configured volume mounts and launchd starts. Persistence: writes survive reboot within the allocated Data region."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required storage and root inputs before implementation."]
@@ -84,7 +104,10 @@ paths = ["package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "p
 inputs = ["Identify the display hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for display."]
 procedure = ["Follow the display stage in the porting guide and record the actual commands."]
-findings = ["Collect the first display observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "Only the UEFI GOP framebuffer is used: DECON/DSI, backlight and touch are not programmed by XNU.",
+  "The stage bars prove the framebuffer mapping and the UEFI mode are usable before the display driver exists.",
+]
 completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required display inputs before implementation."]
@@ -112,7 +135,10 @@ paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*
 inputs = ["Identify the gpu hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for gpu."]
 procedure = ["Follow the gpu stage in the porting guide and record the actual commands."]
-findings = ["Collect the first gpu observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The Mali-T830 is Midgard v5 with a Job Manager; Mesa PanVK has no arch 5 backend, so the GPU needs a new PanVK backend and a NativeMali JM driver.",
+  "The GPU plan lives in a separate repository; no GPU code or hardware access runs in this image yet.",
+]
 completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required gpu inputs before implementation."]
@@ -168,7 +194,16 @@ paths = ["scripts/*payload*", "scripts/*image*", "scripts/*flash*", "patches/**"
 inputs = ["Identify the image assembly hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for image assembly."]
 procedure = ["Follow the image assembly stage in the porting guide and record the actual commands."]
-findings = ["Collect the first image assembly observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The prelink build overrides the device patch series: native-only workarounds are excluded, while the early framebuffer bars, the NULL-safe kmem wrapper, the crypto-free platform UUID, the read-only eMMC probe and the IOKit trace squares stay in.",
+  "The package step always fails at strip on the 49 MiB prelinked Mach-O; the prelinked-kernel artifact is uploaded with if: always() and is the image written to HIDDEN.",
+  "The payload step patches a copy of the prelinked kernel with the entry bars and the framebuffer panic screen before strip fails; that stage copy is uploaded with the raw kernel and is preferred when staging, because it renders panic arguments on the panel without a serial console.",
+  "The prelink series now also carries the boot-phase trace squares (startup/bootstrap) and the boot-argument-gated early eMMC probe, so one image answers both the IOKit hang and the storage question.",
+  "The payload builder now generates the ADT sidecar before the strip step, so a failed prelinked package still yields a fresh kernel.macho.adt next to the patched kernel; staging the ADT is opt-in until it is compared with the working one.",
+  "Device XNU patches are generated against the post-arch-series source, not the pristine XNU tree: offline-component-load-probes.patch inserts its probes between the bsd_init comment and the function, so a context built from the pristine file no longer applies.",
+  "The boot-phase squares showed the prelinked kernel completing PE_lockdown_iokit and then stopping before bsd_init. The only blocking call between them is kperf_init_early()->ml_wait_max_cpus(); the native ArmCpu path does not call ml_set_max_cpus() on this board, so the boot now marks the maximum CPU count set explicitly before the VM restrictions and kperf.",
+  "The first eMMC read completed with zero data: HCON[9:7]=2 means a 64-bit FIFO, and the probe consumed one 32-bit word per FIFO item. The probes now take the item width from HCON, read both words per item, and require RINTSTS DTO before reporting success.",
+]
 completion = ["Kernel and prelink succeed, payload contains all declared inputs, and the boot image matches the bootloader format and size limit."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required image assembly inputs before implementation."]
@@ -182,7 +217,10 @@ paths = ["scripts/check-*", "scripts/probe-*", "scripts/audit-*", "scripts/read-
 inputs = ["Identify the diagnostics hardware, resources and existing component interfaces for this board."]
 configuration = ["Record the board.toml fields, DTS properties and defconfig values used for diagnostics."]
 procedure = ["Follow the diagnostics stage in the porting guide and record the actual commands."]
-findings = ["Collect the first diagnostics observation, its cause when established, and the resulting implementation decision."]
+findings = [
+  "The direct framebuffer bars are the primary early-boot diagnostic because the Apple console/panic path waits for hardware and can stay dark.",
+  "The prelinked kernel reaches PE_init_iokit (blue); the IOKit trace squares now mark IOLibInit, OSlibkernInit, IOMachPortInitialize, the root nub and ConfigureIOKit to name the next stop.",
+]
 completion = ["Each claimed milestone has a reproducible command, a matching source/image revision and an accessible result."]
 limits = ["Hardware inputs and implementation are pending for this example board."]
 next_action = ["Inventory the required diagnostics inputs before implementation."]

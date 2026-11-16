@@ -4,4 +4,4 @@
 
 Complete and validate [porting.toml](/porting/records) in the device repository to publish its subsystem record.
 
-dddqmmx/UniXNU-diting/services193-settings-brightness: verification evidence needs a command
+dddqmmx/UniXNU-diting/services213-gpu-colour-observation-paused: verification evidence needs a command
