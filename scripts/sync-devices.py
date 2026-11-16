@@ -220,7 +220,10 @@ def update_entry(entry, metadata, tools):
             entry['record_state'] = 'invalid'
             entry['record_error'] = str(error)
         else:
-            snapshot.write_text(raw)
+            # The publish gate runs `git diff --cached --check`; normalize
+            # trailing whitespace/CRLF from the upstream record.
+            snapshot.write_text('\n'.join(
+                line.rstrip() for line in raw.splitlines()) + '\n')
             entry['record_state'] = 'available'
     if entry['record_state'] != 'available':
         snapshot.unlink(missing_ok=True)
