@@ -100,3 +100,15 @@ python3 scripts/run-sheng-ci-gpu-lab.py RUN --base PREPARED_GPU.img \
 脚本等待 CI 成功，下载启动镜像和 manifest，将内核替换到准备好的镜像中，保留 Data，并在 macOS 返回后运行 Linux 日志读取器。输出目录权限使用 `0700`。lab 的时钟探针在一秒休眠前后记录架构计数器与 Darwin 时钟。
 
 sheng 每轮定时启动携带新的 `build-tag`，导出日志须包含该标记；cycle 记录 `expected_tag` 和 `fresh_log`。`[timebase]` 行记录物理与虚拟计数器、绝对时间、一秒对应的 tick 数和当前缩放比例。
+
+## macOS 用户态采集
+
+为已有桌面账户准备 runtime addon：
+
+```sh
+python3 scripts/make-macos-autologin-addon.py INPUT.bin OUTPUT.bin \
+  --user unixnu --password-stdin --capture-graphics \
+  --ssh-public-key /path/to/operator-ed25519.pub < /path/to/account-password
+```
+
+工具配置自动登录和保持唤醒。可选的图形日志记录启动 UUID，采集指定图形服务最多 120 秒，保留最多 1,900,000 字节的日志流。导出文件位于 `Users/Shared/unixnu-test/graphics-events.log` 和 `graphics-state.log`。可选的公钥为指定账户配置远程登录。`daemon.log` 记录电池状态和网络接口。
