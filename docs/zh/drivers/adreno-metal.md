@@ -49,7 +49,7 @@ Turnip 为每个渲染通道选择瓦片内存或系统内存，并发分箱默�
 
 macOS 用户打开 **Shader Cache**，点击“开始”编译系统清单。窗口显示库进度、已编译函数、失败和缺失数量。“停止”会在当前编译结束后停止任务；再次开始时保留成功的 checkpoint 并重试失败条目。工作进程通过管理员授权写入系统共享缓存。关闭窗口后，已启动的任务继续执行。
 
-App 安装在 `/Library/UniXNU/Shader Cache.app`，sheng lab 同时在 `/Applications` 提供入口。随 macOS 插件构建：
+App 安装在 `/Library/GPUBundles/Shader Cache.app`，sheng lab 同时在 `/Applications` 提供入口。随 macOS 插件构建：
 
 ```sh
 python3 scripts/build-adreno-metal-plugin.py --target macos27 --no-replay
