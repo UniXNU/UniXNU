@@ -54,6 +54,21 @@ def linked_objects(directory, lto):
             for name in objects if name.strip()]
 
 
+def require_link_phase(directory, lto, returncode, build_log, log_path):
+    """Only repair comparison-link exports after compilation reached the link."""
+    errors = re.findall(r'^.*:\d+:\d+: (?:fatal )?error:.*$', build_log, re.M)
+    filelist = directory / ('nonltolink.filelist' if lto else 'link.filelist')
+    if errors or not filelist.is_file():
+        detail = '\n'.join(errors[:5]) or f'Link input list was not generated: {filelist}'
+        raise SystemExit(f'RELEASE reference compilation failed ({returncode}); log {log_path}\n{detail}')
+
+
+def target_define(target):
+    if target not in ('ios', 'macosx'):
+        raise SystemExit('UNIXNU_XNU_TARGET must be ios or macosx')
+    return '-DXNU_TARGET_OS_OSX' if target == 'macosx' else '-DXNU_TARGET_OS_IOS'
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--tree', required=True, type=Path, help='prepared XNU build tree of the OS profile')
@@ -65,11 +80,14 @@ def main():
     final = build_root / 'mach.release.bcm2837.unstripped.noctf'
     cache_record = final.with_suffix('.json')
     sdk = root / '.cache/fakeroot'
+    target = os.environ.get('UNIXNU_XNU_TARGET', 'ios')
+    deployment = target_define(target)
     archives = [root/'build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a']
     forced = [root/f'build/{folder}/{name}' for folder,name in (
         ('libpthread-kernel','libpthread_kernel.a'),('armdt-platform','libArmDTPlatform.a'),('armcpu','libArmCpu.a'))]
     inputs = {
         'mode': mode,
+        'target': target,
         'script': file_hash(Path(__file__)),
         'source': tree_hash(root / '.cache/xnu-work'),
         'sdk': tree_hash(sdk),
@@ -111,7 +129,7 @@ def main():
         'ARCH_CONFIGS=ARM64','MACHINE_CONFIGS=BCM2837','KERNEL_CONFIGS=RELEASE',
         'ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64e','LARGE_MEMORY_DEFINE=-UARM_LARGE_MEMORY',
         'ARM64_LINK_ADDR=0xfffffff007004000','ARM64_PLKSEG_ADDR=0xfffffff004004000',
-        f'DEPLOYMENT_TARGET_FLAGS=-miphoneos-version-min={os.environ.get("UNIXNU_IOS_VERSION", "26.0")} -DXNU_TARGET_OS_IOS',
+        f'DEPLOYMENT_TARGET_FLAGS=-miphoneos-version-min={os.environ.get("UNIXNU_IOS_VERSION", "26.0")} {deployment}',
         f'DEPLOYMENT_LINKER_FLAGS=-Wl,-ios_version_min,{os.environ.get("UNIXNU_IOS_VERSION", "26.0")}',
         f'RC_DARWIN_KERNEL_VERSION={os.environ.get("UNIXNU_XNU_DARWIN", "25.5.0")}',
         f'RC_ProjectSourceVersion={os.environ.get("UNIXNU_XNU_VERSION", "12377.121.6")}',
@@ -131,7 +149,9 @@ def main():
     # the authenticated pointer of an undefined weak symbol fails the link. The private copy stubs them: this
     # comparison kernel never runs, the prelink step reads its layout.
     build_log = (output / f'{mode}-build.log').read_text()
-    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_log_rounds|boot_cache_input_capture))"', build_log, re.M)))
+    require_link_phase(output / f'{mode}-obj/RELEASE_ARM64_BCM2837', options.lto,
+                       result.returncode, build_log, output / f'{mode}-build.log')
+    stub_names = sorted(set(re.findall(r'^\s+"(_(?:native_[a-z0-9_]+|boot_log_[a-z0-9_]+|boot_cache_input_capture))"', build_log, re.M)))
     if stub_names:
         (output / 'native-stubs.c').write_text(''.join(f'long {name[1:]};\n' for name in stub_names))   # the linker names carry the leading underscore
         iphoneos = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
