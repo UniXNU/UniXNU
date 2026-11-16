@@ -78,10 +78,7 @@ CLANGPDB_TOOLS = ('clang', 'lld-link', 'llvm-lib', 'llvm-rc')
 
 
 def clang_bin(directory):
-    """A directory with the tools EDK II's CLANGPDB tool chain expects (CLANG_BIN), linked from wherever they are.
-
-    Apple's clang has no llvm-lib or lld-link, so the Homebrew LLVM and lld are used.
-    """
+    """Link EDK II's CLANGPDB tools using the LLVM installation's COFF compiler."""
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
     llvm_compiler = Path(tool('llvm-lib', 'brew install llvm')).resolve().parent / 'clang'

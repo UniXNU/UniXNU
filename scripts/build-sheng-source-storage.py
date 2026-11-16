@@ -235,7 +235,7 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
         (out / (source.stem + '.command.json')).write_text(json.dumps(command, indent=2) + '\n')
         (out / (source.stem + '.log')).write_text(result.stdout)
         if result.returncode:
-            raise SystemExit(result.stdout[-6000:])
+            raise SystemExit(result.stdout)
         target.check_object(output.read_bytes(), source.name)
         if source.name in ('IOBlockStorageDevice.cpp', 'NativeUfs.cpp', 'NativeRamBlock.cpp'):
             late = output.with_suffix('.late.o')
