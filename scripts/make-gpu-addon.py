@@ -101,7 +101,7 @@ def main():
             sys.exit('Build the macOS Shader Cache app with the matching plugin')
         for path in sorted(p for p in application.rglob('*') if p.is_file()):
             mode = 0o755 if path.parent.name == 'MacOS' else 0o644
-            files.append(('Library/UniXNU/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
+            files.append(('GPUBundles/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
     if cache_export:   # the plugin sends its cache directory to the UFS log (CacheExport.h)
         files.append((f'{prefix}/NativeAdrenoMetal.cacheexport', 0o644, b'1\n'))
     if pipeline_pack:
