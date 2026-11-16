@@ -92,6 +92,7 @@ def main():
         print(f'{target}: manifest.header.bin {hashlib.sha256(data).hexdigest()[:12]}, trusted-key.bin {wanted[:12]}'
               + ('' if args.write else ' (not written)'))
         if args.write:
+            target.mkdir(parents=True, exist_ok=True)
             (target / 'manifest.header.bin').write_bytes(data)
             (target / 'trusted-key.bin').write_bytes(key)
     return 0
