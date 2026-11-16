@@ -45,6 +45,7 @@ fi
 /usr/bin/logger -t UniXNUAutoLogin "Automatic login configured for $user"
 /bin/echo "Automatic login configured for $user; changed=$changed"
 /usr/bin/pmset -g custom || :
+/usr/bin/pmset -g batt || :
 /usr/sbin/sysadminctl -autologin status 2>&1 || :
 /usr/bin/defaults read /Library/Preferences/com.apple.loginwindow 2>&1 || :
 /usr/bin/defaults read /Library/Preferences/com.apple.screensaver 2>&1 || :
