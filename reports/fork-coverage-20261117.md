@@ -15,7 +15,7 @@ The [file table](fork-coverage-20261117.csv) compares every branch of the eight 
 
 The full inventory contains 58 branches and 1,287 distinct file differences. The table lists the 249 variants changed by the fork, deduplicated by repository, path and both tree entries. Differences caused exclusively by newer upstream code are recorded in the full inventory.
 
-The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. Main's effective Metal runtime patch is `0046-main-optimizations-on-development-555b13d5.patch`. Its half-division implementation already normalizes divisors outside 2^-14 through 2^14, scaling both operands by 1024 or 0.25. The corresponding native-half-division-range acceptance case remains in main.
+The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. The comparison baseline uses `0046-main-optimizations-on-development-555b13d5.patch`. Its half-division implementation already normalizes divisors outside 2^-14 through 2^14, scaling both operands by 1024 or 0.25. The corresponding native-half-division-range acceptance case remains in main.
 
 `待修复后验证` marks platform sleep and dependent code whose resume and dark-wake handling require correction before device validation. `随上游整合核对` marks older complete runtime overlays whose effects must be compared with the effective current overlay and the full development merge. The remaining decisions distinguish current main implementations, selected input changes, independent inspection tools and implementation-based documentation updates.
 
