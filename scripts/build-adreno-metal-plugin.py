@@ -74,7 +74,15 @@ subprocess.run([str(value) for value in bridge_command], check=True)
 BRIDGE = ROOT / 'build/adreno-metal-bridge' / BRIDGE_TARGET / 'libadreno_metal_bridge.a'
 manifest = json.loads((resources / 'gpu-build.json').read_text())
 manifest['component'] = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
-manifest['bridge_component'] = json.loads(BRIDGE.with_suffix('.a.json').read_text())['identity']['component']
+bridge_identity = json.loads(BRIDGE.with_suffix('.a.json').read_text())['identity']
+manifest['bridge_component'] = bridge_identity['component']
+uuid_text = subprocess.check_output(['xcrun', 'dwarfdump', '--uuid', str(TURNIP)], text=True)
+turnip_uuid = re.search(r'UUID:\s+([0-9a-fA-F-]{36})', uuid_text)
+if not turnip_uuid:
+    raise SystemExit('Turnip must provide a Mach-O UUID for the shader cache identity')
+manifest['runtime'] = bridge_identity['runtime']
+manifest['turnip_uuid'] = turnip_uuid[1].replace('-', '').lower()
+manifest['cache_build'] = manifest['runtime'] + '-' + manifest['turnip_uuid']
 (resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 # arm64e: the Rust objects' imports that take a callback go through the signing wrappers of RustPacBoundary.c, and their indirect branches
 # are routed through its stripping trampolines after the link (scripts/rust-pac-rewrite.py).
