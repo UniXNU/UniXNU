@@ -22,6 +22,7 @@
 | Rust 1.98.0 与 rust-src | Metal 桥接库 | `rustup toolchain install 1.98.0 --profile minimal --component rust-src` |
 | mtools | 负载卷 | `brew install mtools` |
 | dtc | 设备树属性 | `brew install dtc` |
+| ipsw | AEA 镜像（iOS 与 iPadOS 27）：macOS 上获取密钥，Linux 上获取密钥并解密 | `brew install blacktop/tap/ipsw`，Linux 上用 [release](https://github.com/blacktop/ipsw/releases) |
 | fastboot | seed-data-grow `--auto`、userdata 刷写 | Android platform tools |
 | QEMU 与 AAVMF | 可选冒烟测试 | `brew install qemu` |
 

@@ -22,6 +22,7 @@ The build driver supports macOS and Linux. On macOS, the kernel step uses Xcode 
 | Rust 1.98.0 with rust-src | Metal bridge | `rustup toolchain install 1.98.0 --profile minimal --component rust-src` |
 | mtools | payload volume | `brew install mtools` |
 | dtc | device tree properties | `brew install dtc` |
+| ipsw | AEA images (iOS and iPadOS 27): the key on macOS, key and decryption on Linux | `brew install blacktop/tap/ipsw`, or a [release](https://github.com/blacktop/ipsw/releases) on Linux |
 | fastboot | seed-data-grow `--auto`, userdata flash | Android platform tools |
 | QEMU and AAVMF | optional smoke tests | `brew install qemu` |
 

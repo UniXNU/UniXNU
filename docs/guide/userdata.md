@@ -2,7 +2,7 @@
 
 The userdata image supplies the root file system to XNU. It holds the unchanged `OS` and `Cryptex1,SystemOS` disk images from the target IPSW behind a manifest that the kernel reads.
 
-Prepare the selected IPSW and the device GPT values. On Linux, install the [Linux toolchain](/guide/requirements#linux), which provides `lzfse`. Growing the Data seed (step 4) needs macOS `hdiutil` and `diskutil`. AEA encrypted images, such as those of iOS and iPadOS 27, need macOS `aea` and the `ipsw` tool. Select the device and save local inputs using [Build and boot](/building) first.
+Prepare the selected IPSW and the device GPT values. On Linux, install the [Linux toolchain](/guide/requirements#linux), which provides `lzfse`. Growing the Data seed (step 4) needs macOS `hdiutil` and `diskutil`. AEA encrypted images, such as those of iOS and iPadOS 27, need the [`ipsw`](https://github.com/blacktop/ipsw) tool on `PATH`: on macOS it fetches the key for macOS `aea`, on Linux it fetches the key and decrypts the image itself. Select the device and save local inputs using [Build and boot](/building) first.
 
 ## 1. Check partition geometry {#partition}
 
@@ -38,7 +38,7 @@ The image size is the sum of the windows, each aligned to 1 MiB, plus the 1 MiB 
 ./unixnu build userdata --ipsw /path/to/restore.ipsw
 ```
 
-The step extracts the IPSW components named in `[userdata] windows`, decrypts AEA images on macOS, reads each disk image with `hdiutil` on macOS or `scripts/unixnu/udif.py` on Linux, and writes a raw image to `out/<device>/<os_profile>/<config>/userdata/userdata-root.img`.
+The step extracts the IPSW components named in `[userdata] windows`, decrypts AEA images (macOS `aea` on macOS, `ipsw fw aea` elsewhere), reads each disk image with `hdiutil` on macOS or `scripts/unixnu/udif.py` on Linux, and writes a raw image to `out/<device>/<os_profile>/<config>/userdata/userdata-root.img`.
 
 The report `userdata-root.json` records the window offsets, sizes and hashes, the partition capacity and the flash command.
 

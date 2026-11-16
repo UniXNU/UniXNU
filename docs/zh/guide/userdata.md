@@ -2,7 +2,7 @@
 
 userdata 镜像为 XNU 提供根文件系统。它保存目标 IPSW 中未修改的 `OS` 和 `Cryptex1,SystemOS` 磁盘镜像，并在前面加一个 manifest。
 
-准备选定的 IPSW 及设备 GPT 数据。Linux 上安装提供 `lzfse` 的 [Linux 工具链](/zh/guide/requirements#linux)。扩大 Data 种子（第 4 步）需要 macOS 的 `hdiutil` 和 `diskutil`。AEA 加密的镜像（如 iOS 与 iPadOS 27）需要 macOS 的 `aea` 和 `ipsw` 工具。先在[构建流程](/zh/building)中选定设备并保存本地输入。
+准备选定的 IPSW 及设备 GPT 数据。Linux 上安装提供 `lzfse` 的 [Linux 工具链](/zh/guide/requirements#linux)。扩大 Data 种子（第 4 步）需要 macOS 的 `hdiutil` 和 `diskutil`。AEA 加密的镜像（如 iOS 与 iPadOS 27）需要 `PATH` 上有 [`ipsw`](https://github.com/blacktop/ipsw) 工具：macOS 上它为 macOS 的 `aea` 获取密钥，Linux 上它获取密钥并自行解密。先在[构建流程](/zh/building)中选定设备并保存本地输入。
 
 ## 1. 核对分区 {#分区}
 
@@ -38,7 +38,7 @@ IPSW 没有某个 `optional = true` 的窗口时跳过它。macOS profile 还列
 ./unixnu build userdata --ipsw /path/to/restore.ipsw
 ```
 
-步骤按 `[userdata] windows` 提取 IPSW 组件，在 macOS 上解密 AEA 镜像，在 macOS 上用 `hdiutil`、在 Linux 上用 `scripts/unixnu/udif.py` 读取每个磁盘镜像，写出原始镜像到 `out/<device>/<os_profile>/<config>/userdata/userdata-root.img`。
+步骤按 `[userdata] windows` 提取 IPSW 组件，解密 AEA 镜像（macOS 上用 macOS 的 `aea`，其他主机用 `ipsw fw aea`），在 macOS 上用 `hdiutil`、在 Linux 上用 `scripts/unixnu/udif.py` 读取每个磁盘镜像，写出原始镜像到 `out/<device>/<os_profile>/<config>/userdata/userdata-root.img`。
 
 报告 `userdata-root.json` 记录窗口偏移、大小、哈希、分区容量和刷写命令。
 
