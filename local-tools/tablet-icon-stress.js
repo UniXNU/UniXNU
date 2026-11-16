@@ -1,7 +1,5 @@
-// Icon load for the GPU hang comparison on the sheng macOS test images (2026-11-15): every hang seen so far came while many icons
-// were drawn (Settings opening, the Dock, iconservicesagent). This asks IconServices for every application's icon at several sizes
-// and scales and turns each into a bitmap, so iconservicesagent renders them.
-// Run on the tablet: osascript -l JavaScript tablet-icon-stress.js [rounds]
+// Request application icons at several sizes and create their bitmaps.
+// Run: osascript -l JavaScript tablet-icon-stress.js [rounds]
 ObjC.import('AppKit');
 
 function apps(dir) {
