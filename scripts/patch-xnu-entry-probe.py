@@ -140,7 +140,11 @@ def kernel_symbols(kernel):
     for line in subprocess.run([nm, '-n', kernel], capture_output=True, text=True, check=True).stdout.splitlines():
         parts = line.split()
         if len(parts) == 3:
-            table.setdefault(int(parts[0], 16), parts[2])
+            try:
+                address = int(parts[0], 16)
+            except ValueError:
+                continue
+            table.setdefault(address, parts[2])
     return table
 
 
@@ -361,6 +365,7 @@ def main():
     parser.add_argument('--reset-before', action='store_true', help='reset at the call site before invoking SYMBOL (requires --reset-after)')
     parser.add_argument('--panic-screen', action='store_true', help='draw panic() messages on the screen')
     parser.add_argument('--no-reset', action='store_true', help='no reset probe at all')
+    parser.add_argument('--watchdog-wait', action='store_true', help='wait at kernel entry for the firmware watchdog, with a timed PSCI fallback')
     parser.add_argument('--occurrence', type=int, default=1, help='which call to SYMBOL (1 = first)')
     parser.add_argument('--in', dest='function', default='_arm_init', help='function that makes the call (default _arm_init)')
     args = parser.parse_args()
@@ -368,6 +373,47 @@ def main():
         raise SystemExit('--reset-before requires --reset-after')
     data = bytearray(args.kernel.read_bytes())
     load_segments(data)
+    if args.watchdog_wait:
+        if not 1 <= args.reset_delay <= 3600:
+            parser.error('--watchdog-wait requires --reset-delay in 1..3600')
+        entry = unixthread_pc(data)
+        cave = entry + 4
+        offset = file_offset(cave)
+        if struct.unpack_from('<I', data, file_offset(entry))[0] >> 26 != 0b000101:
+            raise SystemExit('Require the branch-only kernel entry')
+        source = f'''.text
+.global _start
+_start:
+  mrs x1, cntpct_el0
+  mrs x2, cntfrq_el0
+  mov x3, #{args.reset_delay}
+  madd x2, x2, x3, x1
+1:
+  isb
+  mrs x1, cntpct_el0
+  cmp x1, x2
+  b.lo 1b
+  movz w0, #0x0009
+  movk w0, #0x8400, lsl #16
+  mov x1, xzr
+  mov x2, xzr
+  mov x3, xzr
+  smc #0
+2:
+  wfe
+  b 2b
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+            code = assemble(source, cave, {}, Path(tmp))
+        if len(code) > 0x100:
+            raise SystemExit('Watchdog probe exceeds the entry padding')
+        if len(data[offset:offset + len(code)]) != len(code) or any(data[offset:offset + len(code)]):
+            raise SystemExit('Kernel entry padding must be empty across the watchdog probe')
+        data[offset:offset + len(code)] = code
+        struct.pack_into('<I', data, file_offset(entry), branch(entry, cave))
+        args.kernel.write_bytes(data)
+        print(f'Watchdog wait at kernel entry; PSCI fallback after {args.reset_delay}s')
+        return
     kernel_names = rebase(args.kernel, data)
 
     def word(va):

@@ -109,6 +109,11 @@ def prepare(ctx, kernel_build=False):
         source = Ipsw(ctx)
         if not seed.is_file() or (want_addon and not addon) or spec.get('wifi_launchd_cache') or spec.get('bluetooth_tool') or spec.get('appsync'):
             request['os_image'] = str(source.disk_image('OS'))
+        if want_addon and not addon and spec.get('target') == 'macos27':
+            prefixes = {'OS': '/', 'SystemOS': '/System/Cryptexes/OS', 'App': '/System/Cryptexes/App'}
+            request['prime_images'] = [dict(name=window['name'], image=str(source.disk_image(window['component'])),
+                                          prefix=prefixes[window['name']])
+                                       for window in ctx.board['userdata']['windows']]
         if not trust:
             request['trust_modules'] = [str(source.extract(name)) for name in spec['trust_components']]
         request_path = out / 'request.json'
