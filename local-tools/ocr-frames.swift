@@ -1,6 +1,7 @@
 // Recognise the text of video frames with macOS Vision.
 //   swift ocr-frames.swift FRAME.png [FRAME.png ...]            each recognised line once, in frame order
 //   swift ocr-frames.swift --boxes FRAME.png [FRAME.png ...]    every piece of text with its place in the frame
+//   swift ocr-frames.swift --fast FRAME.png [FRAME.png ...]     use Vision's fast recognition mode
 // Used to read the sheng firmware and kernel console from a phone recording of the tablet screen.
 //
 // Vision returns a console line with wide gaps between its columns as several pieces. --boxes prints one piece a line
@@ -11,8 +12,9 @@ import Vision
 import AppKit
 
 var arguments = Array(CommandLine.arguments.dropFirst())
-let boxes = arguments.first == "--boxes"
-if boxes { arguments.removeFirst() }
+let boxes = arguments.contains("--boxes")
+let fast = arguments.contains("--fast")
+arguments.removeAll { $0 == "--boxes" || $0 == "--fast" }
 
 var seen = Set<String>()
 var failed = false
@@ -24,7 +26,7 @@ for path in arguments {
         continue
     }
     let request = VNRecognizeTextRequest()
-    request.recognitionLevel = .accurate
+    request.recognitionLevel = fast ? .fast : .accurate
     request.usesLanguageCorrection = false
     do {
         try VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
