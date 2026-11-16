@@ -226,6 +226,20 @@ The sheng profile selects `SHENG_BOOT_GUARD=1`. Its preflight imports the device
 
 The matching XNU kernel uses `uefi-watchdog=1` and takes over at `EARLY_BOOT`, pinging every ten seconds. `autoreset=<seconds>` bounds the run; a zero deadline keeps the watchdog serviced. Keep the firmware and kernel configuration together. The sheng lab builds COFF firmware with LLVM and LLD 22.1.8. `CLANG_BIN` points to a directory containing that toolchain's `clang`, `lld-link`, `llvm-lib` and `llvm-rc`.
 
+From the UniXNU checkout, prepare that directory:
+
+```sh
+brew install llvm@22 lld@22
+mkdir -p .cache/edk2-llvm22
+for edk2_tool in clang llvm-lib llvm-rc; do
+  ln -sf "$(brew --prefix llvm@22)/bin/$edk2_tool" ".cache/edk2-llvm22/$edk2_tool"
+done
+ln -sf "$(brew --prefix lld@22)/bin/lld-link" .cache/edk2-llvm22/lld-link
+```
+
+Set `clang_bin = ".cache/edk2-llvm22"` in `unixnu.local.toml`.
+
+
 To qualify the early return path, pack a known header-v0 XNU image with the selected firmware and a kernel-entry wait:
 
 ```sh

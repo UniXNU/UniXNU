@@ -225,18 +225,20 @@ The packaging script runs the same steps except userdata:
 scripts/package.sh --os macos-27 --uefi ../uefi-<device>
 ```
 
-For sheng, save the installation inputs in the UniXNU checkout's `unixnu.local.toml`:
+For sheng, prepare the [LLVM 22 tools](/porting/uefi-firmware), then save the installation inputs in the UniXNU checkout's `unixnu.local.toml`:
 
 ```toml
 [build]
 device = "../UniXNU-sheng"
 uefi = "../uefi-sheng"
-clang_bin = "/path/to/edk2-llvm22-tools"
+clang_bin = ".cache/edk2-llvm22"
 data_ramdisk = "/path/to/installed-data.dbr"
 unique_chip_id = "<device platform seed>"
 ```
 
 Then run `../UniXNU-sheng/scripts/package.sh --os macos-27` from UniXNU. Add the [exported kernel tool paths](/guide/build-kernel#local-builds-with-exported-inputs) on a host using exported build inputs. `package.manifest.json` records the source revisions, complete boot arguments and runtime input identities.
+
+The sheng macOS workflow uses Xcode 26.6, Python 3.14 and LLVM/LLD 22. Configure repository secrets `UNIXNU_UNIQUE_CHIP_ID` and `UNIXNU_LAB_PASSWORD` for the device identity and the initial administrator account. `root_storage=true` builds the three verified root windows and userdata; `false` retains the profile's signed policies for a boot-image update.
 
 A saved Android sparse userdata image can supply the three root images locally:
 

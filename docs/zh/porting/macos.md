@@ -212,18 +212,20 @@ payload 构建会停止并要求重新构建内核。内核把 seed 挂载到 `/
 scripts/package.sh --os macos-27 --uefi ../uefi-<device>
 ```
 
-sheng 的安装输入写入 UniXNU 仓库的 `unixnu.local.toml`：
+sheng 先准备 [LLVM 22 工具](/zh/porting/uefi-firmware)，再将安装输入写入 UniXNU 仓库的 `unixnu.local.toml`：
 
 ```toml
 [build]
 device = "../UniXNU-sheng"
 uefi = "../uefi-sheng"
-clang_bin = "/path/to/edk2-llvm22-tools"
+clang_bin = ".cache/edk2-llvm22"
 data_ramdisk = "/path/to/installed-data.dbr"
 unique_chip_id = "<设备平台标识>"
 ```
 
 随后从 UniXNU 执行 `../UniXNU-sheng/scripts/package.sh --os macos-27`。使用导出构建输入的主机另填[内核工具路径](/zh/guide/build-kernel#使用导出输入在本机构建)。`package.manifest.json` 记录源码版本、完整启动参数和运行时输入标识。
+
+sheng macOS 工作流使用 Xcode 26.6、Python 3.14 和 LLVM/LLD 22。仓库 secret `UNIXNU_UNIQUE_CHIP_ID` 提供设备标识，`UNIXNU_LAB_PASSWORD` 提供初始管理员密码。`root_storage=true` 构建三个已验证根窗口及 userdata；`false` 为启动镜像更新复用 profile 的签名策略。
 
 已有 Android sparse userdata 镜像时，可从本地恢复三个根镜像：
 
