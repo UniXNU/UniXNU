@@ -19,6 +19,7 @@ The build driver supports macOS and Linux. On macOS, the kernel step uses Xcode 
 | cmake, ninja | kernel references | `brew install cmake ninja` |
 | unifdef | libdispatch headers | `brew install unifdef` |
 | LLVM with lld | kernel, firmware, boot image | `brew install llvm` |
+| Rust 1.98.0 with rust-src | Metal bridge | `rustup toolchain install 1.98.0 --profile minimal --component rust-src` |
 | mtools | payload volume | `brew install mtools` |
 | dtc | device tree properties | `brew install dtc` |
 | fastboot | seed-data-grow `--auto`, userdata flash | Android platform tools |

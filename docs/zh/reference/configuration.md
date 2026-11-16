@@ -23,7 +23,9 @@ kernel_args = ["-v", "serial=3", "debug=0x14e"]
 
 将占位符替换为设备所需输入。相对路径从配置文件所在目录解析。优先级为命令行、环境变量、本地文件、设备默认值。`kernel_args` 按名称覆盖板级参数，`--kernel-arg` 按名称覆盖本地参数。
 
-路径字段包括 `device`、`out`、`uefi`、`edk2`、`kernelcache`、`kernel`、`trust_cache`、`owner_trust_cache`、`data_ramdisk`、`gpu_addon`、`dtb`、`fd`、`ramdisk` 和 `output`。其他字段为 `ipsw`（路径或 URL）、`unique_chip_id`（十六进制字符串）、`jobs`（正整数）、`target`（`DEBUG` 或 `RELEASE`）、`kernel_args`（字符串数组）。`ramdisk = "none"` 选择空启动镜像 ramdisk。
+路径字段包括 `device`、`out`、`uefi`、`edk2`、`clang_bin`、`kernel_sdk`、`kernel_tools`、`kernelcache`、`kernel`、`trust_cache`、`owner_trust_cache`、`data_ramdisk`、`gpu_addon`、`dtb`、`fd`、`ramdisk` 和 `output`。其他字段为 `ipsw`（路径或 URL）、`unique_chip_id`（十六进制字符串）、`jobs`（正整数）、`target`（`DEBUG` 或 `RELEASE`）、`kernel_args`（字符串数组）。`ramdisk = "none"` 选择空启动镜像 ramdisk。
+
+`clang_bin` 选择包含 `clang`、`lld-link`、`llvm-lib` 和 `llvm-rc` 的 EDK II 工具目录，对应 `--clang-bin` 或 `CLANG_BIN`。`kernel_sdk` 和 `kernel_tools` 为内核编译与预链接选择导出的 iPhoneOS SDK 和工具链 `bin` 目录，对应命令行参数为 `--kernel-sdk`、`--kernel-tools`，环境变量为 `UNIXNU_KERNEL_SDK`、`UNIXNU_KERNEL_TOOLS`。
 
 ```sh
 ./unixnu defconfig <device>_defconfig
