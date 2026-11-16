@@ -52,10 +52,10 @@ def inspect(name, repository, owner, upstream, output, fetch):
             subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet', '--unshallow',
                             '--no-tags', '--no-recurse-submodules',
                             f'https://github.com/{owner}/{name}.git'], check=True)
-        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet', '--prune', '--no-tags',
+        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet', '--no-tags',
                         '--no-recurse-submodules', f'https://github.com/{upstream}/{name}.git',
                         '+refs/heads/main:' + main_ref], check=True)
-        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet', '--no-tags',
+        subprocess.run(['git', '-C', str(repo), 'fetch', '--quiet', '--prune', '--no-tags',
                         '--no-recurse-submodules', f'https://github.com/{owner}/{name}.git',
                         '+refs/heads/*:' + fork_ref + '*'], check=True)
     main = git(repo, 'rev-parse', main_ref).decode().strip()
