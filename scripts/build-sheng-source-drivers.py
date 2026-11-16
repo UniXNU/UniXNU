@@ -79,7 +79,8 @@ def main():
     tree, device = args.tree.resolve(), args.device.resolve()
     if args.profile is None:
         board = tomllib.loads((device / 'board.toml').read_text())
-        args.profile = ROOT / 'profiles/os' / board['board']['os_profile'] / 'profile.toml'
+        core = (device / board['package']['unixnu']).resolve()
+        args.profile = Path(os.environ['UNIXNU_OS_PROFILE']) if os.environ.get('UNIXNU_OS_PROFILE') else core / 'profiles/os' / board['board']['os_profile'] / 'profile.toml'
     profile = tomllib.loads(args.profile.read_text())
     pins = {entry['name']: entry for entry in profile.get('source', [])}
     for family in ('IOStorageFamily', 'IOHIDFamily'):
