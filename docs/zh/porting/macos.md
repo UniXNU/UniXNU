@@ -176,13 +176,7 @@ sheng 刷入全新 userdata 后，选择 **Initialize macOS Data and boot**，
 后续开机选择 **Boot**，保留 Data。账户和设置助理配置来自 seed；
 `--skip-setup` 在制作 seed 时传入。
 
-sheng 的 macOS 配置使用固定 SHA-256 的固件模板完成 ABL 封装。
-`unixnu bootimg` 只替换本次固件构建生成的 DarwinBoot，保留已验证的 BootShim、
-设备固件、DTB 和 Android 头参数。payload 为 187 MiB；启动镜像超过 193 MiB 时停止打包。
-菜单等待按键。
-
-模板缓存在 `out/downloads`。离线构建时，将 `UNIXNU_BOOT_TEMPLATE` 指向对应的
-`.img.xz`，仍会核对校验值。`boot/boot.json` 记录模板、加载器和实际固件的哈希。
+sheng 的 macOS 桌面配置从选定源码构建 BootShim、板级固件和 DarwinBoot。256 MiB 逻辑 payload 使用分块压缩，启动镜像上限为 193 MiB。菜单在一秒后选择 **Boot**。`autoreset=7200` 和 `uefi-watchdog=1` 提供固件返回计时，`diag-export=7140` 在期限前保存启动日志。Shader Cache 安装到应用程序目录，显示编译进度。
 
 制作 seed 的参数：
 
@@ -217,6 +211,27 @@ payload 构建会停止并要求重新构建内核。内核把 seed 挂载到 `/
 ```sh
 scripts/package.sh --os macos-27 --uefi ../uefi-<device>
 ```
+
+sheng 的安装输入写入 UniXNU 仓库的 `unixnu.local.toml`：
+
+```toml
+[build]
+device = "../UniXNU-sheng"
+uefi = "../uefi-sheng"
+clang_bin = "/path/to/edk2-llvm22-tools"
+data_ramdisk = "/path/to/installed-data.dbr"
+unique_chip_id = "<设备平台标识>"
+```
+
+随后从 UniXNU 执行 `../UniXNU-sheng/scripts/package.sh --os macos-27`。使用导出构建输入的主机另填[内核工具路径](/zh/guide/build-kernel#使用导出输入在本机构建)。`package.manifest.json` 记录源码版本、完整启动参数和运行时输入标识。
+
+已有 Android sparse userdata 镜像时，可从本地恢复三个根镜像：
+
+```sh
+python3 ../UniXNU-sheng/scripts/restore-macos-images.py /path/to/userdata.sparse
+```
+
+脚本按选定 OS profile 校验恢复内容，写入 `out/ipsw/<build>/<window>.raw.dmg`，构建直接使用这些镜像。提取前应预留三个镜像的合计大小及构建空间。
 
 | 步骤 | macOS 的差异 |
 | --- | --- |

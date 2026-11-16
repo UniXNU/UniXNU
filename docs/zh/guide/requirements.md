@@ -19,6 +19,7 @@
 | cmake、ninja | 内核参考源码 | `brew install cmake ninja` |
 | unifdef | libdispatch 头文件 | `brew install unifdef` |
 | LLVM 与 lld | 内核、固件、启动镜像 | `brew install llvm` |
+| Rust 1.98.0 与 rust-src | Metal 桥接库 | `rustup toolchain install 1.98.0 --profile minimal --component rust-src` |
 | mtools | 负载卷 | `brew install mtools` |
 | dtc | 设备树属性 | `brew install dtc` |
 | fastboot | seed-data-grow `--auto`、userdata 刷写 | Android platform tools |
