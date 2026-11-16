@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). Scaffold: the UEFI port and the public hardware data exist; the XNU SoC layer, storage, display and input drivers are the work. No hardware boot of UniXNU yet.
 
-Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/e860c1a347ee3cdf12d17b520e75560bbfcdfe46/porting.toml), `e860c1a347ee3cdf12d17b520e75560bbfcdfe46`.
+Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/8450cca0280ce6cb69032031dd48c631f63c7894/porting.toml), `8450cca0280ce6cb69032031dd48c631f63c7894`.
 
 This page is generated from the device record.
 

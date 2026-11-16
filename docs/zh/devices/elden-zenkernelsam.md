@@ -6,7 +6,7 @@
 
 v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot direct-DMA path. Charging cycles/net power, wireless, persistence, memory and remaining peripherals are incomplete; GPU is separate offline work.
 
-源记录: [porting.toml](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/porting.toml), `c4ebf12968e342bf7941781bc3ed0467060eb364`.
+源记录: [porting.toml](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/porting.toml), `ac9d409c8a77e2ed0ad77e556034b7435b6f7869`.
 
 本页按设备记录自动生成。
 
@@ -71,7 +71,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Frozen v91 source profile imported and verified. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/REPRODUCIBILITY.md)
+- `host`: [Frozen v91 source profile imported and verified. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/REPRODUCIBILITY.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 固件与启动 {#firmware}
@@ -114,7 +114,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `device`: [Existing UniXNU menu, payload handoff and recovery firmware boot the v91 kernel. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## CPU 与中断 {#cpu}
@@ -157,7 +157,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [CPU8 source configuration, identity/IRQ changes and guarded startup are captured in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 内存与 DMA {#memory}
@@ -200,7 +200,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [v91 retains the validated high-address RAM configuration. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [v91 retains the validated high-address RAM configuration. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 存储与根卷 {#storage}
@@ -250,13 +250,13 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [UFS-backed iPadOS root, RAM Data, launchd and Settings have run. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [UFS-backed iPadOS root, RAM Data, launchd and Settings have run. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
-- `device`: [Three property readbacks and six ioctl outcomes passed; root and Android restoration passed. No throughput or energy-saving benchmark; drop132 and unconfirmed human touch source retained.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/storage-medium/hardware.json)
+- `device`: [Three property readbacks and six ioctl outcomes passed; root and Android restoration passed. No throughput or energy-saving benchmark; drop132 and unconfirmed human touch source retained.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/storage-medium/hardware.json)
   Command: <code>Run the v149 signed storage-medium candidate, retain existing spec_open SSD outcomes and property readbacks, then perform session-bound sync/reset and full-SHA stock Android restore.</code>. Revision: `8af7569707e0401fc24b2999e5edbbe37ab26609`.
-- `device`: [128 rows/64 paired hashes; actual IRQ wakes and recovery passed.3129911B/drop26/no reconnect; no sustained throughput, CPU utilization or user-visible speedup claim.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/ufs-wait-trial/hardware.json)
+- `device`: [128 rows/64 paired hashes; actual IRQ wakes and recovery passed.3129911B/drop26/no reconnect; no sustained throughput, CPU utilization or user-visible speedup claim.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/ufs-wait-trial/hardware.json)
   Command: <code>Run v152 paired pinned-block trial, retain complete rows and IRQ/stop counters, then session-bound sync/reset and full-SHA stock Android restoration.</code>. Revision: `1629b24a472f7b19d74cf5d5fb5aa8059c5ff0cf`.
-- `device`: [32-slot NC mapping/1536 direct reads and root/SMP/return passed.3185070B/drop155/no reconnect; fixed order/cache and high-SOC current limitations retained. v154 refusal and recovery archived separately.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/ufs-queue-trial/hardware.json)
+- `device`: [32-slot NC mapping/1536 direct reads and root/SMP/return passed.3185070B/drop155/no reconnect; fixed order/cache and high-SOC current limitations retained. v154 refusal and recovery archived separately.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/ufs-queue-trial/hardware.json)
   Command: <code>Run the complete v155 QD1/8/32 candidate with retained snapshot DMA, full image pins and read-hash matching; then verify sync/reset and full-SHA stock Android restoration.</code>. Revision: `7c6553abb4e8f3de21b63a00c17004e9a8d9ebb0`.
 
 ## 显示 {#display}
@@ -298,7 +298,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [v91 renders a populated Settings page with the owned CPU graphic-variant helper. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [v91 renders a populated Settings page with the owned CPU graphic-variant helper. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 输入 {#input}
@@ -340,7 +340,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [One software swipe and one short Settings tap reached the real Settings UI in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [One software swipe and one short Settings tap reached the real Settings UI in v91. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## GPU {#gpu}
@@ -379,7 +379,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Reference sources and inactive experimental components are preserved. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [Reference sources and inactive experimental components are preserved. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 网络 {#network}
@@ -416,7 +416,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [Board resources, firmware inspection and partial Wi-Fi/Bluetooth transport components exist. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 音频 {#audio}
@@ -453,7 +453,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Reference work retained; no new speaker enablement. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [Reference work retained; no new speaker enablement. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 电源 {#power}
@@ -494,9 +494,9 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `host`: [Battery/backlight, OEM ADSP/GLINK, UCSI notifications and controlled PD procedures have hardware evidence. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
-- `device`: [AHIT5f4/CFG183c/IE61 admitted;32 wake reads verified; stop0 phaseRestored and original Android UFS/charging settings restored. Drop1172; critical records complete, no net-energy claim.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/ufs-idle-trial/hardware.json)
+- `device`: [AHIT5f4/CFG183c/IE61 admitted;32 wake reads verified; stop0 phaseRestored and original Android UFS/charging settings restored. Drop1172; critical records complete, no net-energy claim.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/ufs-idle-trial/hardware.json)
   Command: <code>Run v156 auto-Hibern8 idle/read proof, verify32 hardware enter/exit counters and block hashes, then controller restore, sync/reset and full stock recovery.</code>. Revision: `9c9a739148b175c4df362d91467ae39a7fadb9c2`.
 
 ## 镜像组装 {#packaging}
@@ -537,7 +537,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [v91 boot image ran; rollback floor and full-image identity are recorded. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `device`: [v91 boot image ran; rollback floor and full-image identity are recorded. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
 
 ## 诊断 {#diagnostics}
@@ -578,9 +578,9 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/docs/CURRENT-STATUS.md)
+- `device`: [USB kernel logs, frame readback, session-bound RPC and directed fastboot recovery work. Imported source is a local snapshot based on this revision; see profiles/v91/manifest.json for exact hashes.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/docs/CURRENT-STATUS.md)
   Command: <code>Read frozen source/hardware manifests; no new device operation during maintenance</code>. Revision: `c7fae2baaaad4be7406de3691a4e79cc5cc48664`.
-- `device`: [EARLY\_ARM/SMP\_ADOPT and eight-core admission passed. Masked-stall marker to responsive fastboot46.583s includes bootloader/USB time; no software fallback or PC reset observed. Normal drop59; stall drop0 with final transport-timeout boundary.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/early-storage-guard/hardware.json)
+- `device`: [EARLY\_ARM/SMP\_ADOPT and eight-core admission passed. Masked-stall marker to responsive fastboot46.583s includes bootloader/USB time; no software fallback or PC reset observed. Normal drop59; stall drop0 with final transport-timeout boundary.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/early-storage-guard/hardware.json)
   Command: <code>Run v150 normal mode and the same-kernel --early-stall candidate with passive PC capture; verify the exact stall marker, response before the120s fallback and full stock Android restoration.</code>. Revision: `e7bfb105e0af80eafe6c372da2d99857a89e372d`.
 
 ## network-initialization {#network-initialization}
@@ -619,7 +619,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [Signed candidate, sync return and complete stock restoration verified.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/v108-network-family/hardware-result.json)
+- `device`: [Signed candidate, sync return and complete stock restoration verified.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/v108-network-family/hardware-result.json)
   Command: <code>Run the recorded v108 candidate, inspect six busy/provider snapshots, request session-bound reset-after-sync and verify the full stock boot hash and Android recovery.</code>. Revision: `1bb142e0375ed47a38b7b7166cc4cc442d3e792a`.
 
 ## memory-window8 {#memory-window8}
@@ -658,7 +658,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [Three trials completed sync return and full stock restoration; Android/root/green restored.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/v109-memory8/ui-hardware-result.json)
+- `device`: [Three trials completed sync return and full stock restoration; Android/root/green restored.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/v109-memory8/ui-hardware-result.json)
   Command: <code>Run the v109 GUI window trial, verify captured Settings/General frames and the recorded full-SHA stock Android restoration.</code>. Revision: `63c7f9994776f9e1d9b990fdf5c59c06c8356a66`.
 
 ## spmi-adc-bt-serialization {#spmi-adc-bt-serialization}
@@ -697,7 +697,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `host`: [Injected concurrency/error model; not hardware proof.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/drivers/EldenSpmi/host-result.json)
+- `host`: [Injected concurrency/error model; not hardware proof.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/drivers/EldenSpmi/host-result.json)
   Command: <code>Run the actual-reader transaction-gate fault/concurrency host tests recorded in drivers/EldenSpmi/host-result.json.</code>. Revision: `b86a5f368ca97ebdd2c2a31f58437b1cd61ed917`.
 
 ## spmi-hci-v114 {#spmi-hci-v114}
@@ -736,7 +736,7 @@ v156 adds verified UFS automatic idle/wake and restoration to the v15532-slot di
 
 ### 证据
 
-- `device`: [Typed sync/reset and stock restore; stage2 timeout retained.](https://github.com/zenkernelsam/UniXNU_elden/blob/c4ebf12968e342bf7941781bc3ed0467060eb364/profiles/v114-hci-length/hardware-result.json)
+- `device`: [Typed sync/reset and stock restore; stage2 timeout retained.](https://github.com/zenkernelsam/UniXNU_elden/blob/ac9d409c8a77e2ed0ad77e556034b7435b6f7869/profiles/v114-hci-length/hardware-result.json)
   Command: <code>Run the recorded v114 candidate and preserve its failed preparation-stage trace plus the verified stock restoration; the new length gate was not reached.</code>. Revision: `79ecf38be39bcade9bb6f90ec95af60a9f57c36a`.
 
 </div>

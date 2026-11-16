@@ -6,7 +6,7 @@
 
 Xiaomi Pad 6S Pro 12.4 uses shared SM8550 support and board-owned storage, input, firmware and power integration. This record describes implementation coverage and the evidence required for each milestone.
 
-Source record: [porting.toml](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/porting.toml), `ee4d9cb63bf55d23b76c908410872307f10e4e07`.
+Source record: [porting.toml](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/porting.toml), `14235b6d21a1a3f731c2f3492ab657f781433319`.
 
 This page is generated from the device record.
 
@@ -53,7 +53,9 @@ This page is generated from the device record.
 
 ### Development findings
 
-- The timed macOS 27.3 lab preserves Data and successful shader checkpoints, using reflected primer inputs and context-switch recovery.
+- The kernel-cache export selects Xcode 26.6 and stages its compiler, classic linker, SDK, resource directory and non-system dylib dependencies. Its staged arm64e compile and partial-link check verifies the exported toolchain.
+- The local-input export job selects Xcode 26.6, follows non-system dynamic library dependencies and runs the staged compiler, IIG and linker, then compiles and partially links an arm64e object with the packaged classic linker.
+- The macOS lab preserves Data and shader checkpoints. Shader Cache provides manual inventory compilation, progress and stop controls; --shader-cache-view opens its window for inspection.
 - The macOS kernel adopts loader-listed free memory outside the managed span using the profile memory map and access checks.
 - The macOS profile uses a 6 GiB high-memory window, 64 excluded-range slots and 8 outside-memory slots. The SoC feed is 2dc650ca76ae38715cd0712e60a44b14fe251745; unixnu.lock records the same source.
 - The macos-lab workflow builds on macos-26 with pinned core, device and UEFI sources, a private chip identifier and an account password supplied through Actions secrets. Its source and dependency caches support incremental builds.
@@ -103,18 +105,22 @@ This page is generated from the device record.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `source`: [The lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the lite=1 jobs.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-boot-watchdog-policy.py)
-- `device`: [Boot 50d4021e7 with lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `source`: [The lite=2 profile disables com.apple.iconservices.iconservicesagent in addition to the lite=1 jobs.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-boot-watchdog-policy.py)
+- `device`: [Boot 50d4021e7 with lite=2 recorded no iconservicesagent PID or associated main-thread wait. Settings opened. All app icon artwork was missing from the photographed Home Screen and Dock. The continuous-HID flip median changed from 15.358 to 9.631 ms and P99 from 43.232 to 46.384 ms.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch4.img</code>. Revision: `fe636ce2c24b5f5ef406e2dc70504d2573f00092`.
-- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `device`: [On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `source`: [On 24A446, iconservicesagent runs on demand with FORCE\_SOFTWARE\_RENDERER=0 and CI\_ENABLE\_METAL\_GPU=0. The stock J820 Jetsam profile sets a 15 MiB inactive hard limit and a 1,224 MiB active soft limit.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `device`: [On 24A446 boot 41dcdcce, iconservicesagent PID 168 obtained the Adreno 740 Metal device and created a command queue. Eight completed command buffers contained 149 draws. The kernel recorded 495 paired submissions and retirements with zero replays. No fault or exit of that agent was recorded through the 240-second export.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4.img</code>. Revision: `1c0d9770f6b3cf8de565ba793146c8d5427b979f`.
-- `device`: [On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `device`: [On cold-cache boot 41ee75ce, the Home Screen displayed complete Settings and App Store icons. The 56 px Wi-Fi, Battery and About cache variants were transparent. All 488 GPU submissions from iconservicesagent PID 139 retired. Launchd recorded a per-process Jetsam termination after 173.752 s.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot ico4-lock-fix.img</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
 - `host`: [The macOS 27.3 profile and pinned inputs produce the prepared source-built lab image.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
-- `source`: [The timed macOS 27.3 lab preserves Data and successful shader checkpoints, using reflected primer inputs and context-switch recovery.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/.github/workflows/macos-lab.yml)
+- `source`: [The macOS lab preserves Data and shader checkpoints. Shader Cache provides manual inventory compilation, progress and stop controls; --shader-cache-view opens its window for inspection.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/.github/workflows/macos-lab.yml)
+- `host`: [The macOS integration resolves the SM8550 GENI UART and video interfaces from the selected platform source.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `ef015993fb686b29d915a64463a4adaf03dbf77e`.
+- `host`: [The exported Xcode 26.6 compiler, classic linker, SDK and kernel tools build the macOS arm64e kernel and prelink it locally. The current component selection also builds the signed Metal plugin and guarded 256 MiB lab payload.](https://github.com/UniXNU/UniXNU-sheng/commit/9ea98e5b491c96883e5ea55659d8e0b9feb7ab33)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLS -- build kernel prelink -D DEVICE --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `9ea98e5b491c96883e5ea55659d8e0b9feb7ab33`.
 
 ## Firmware and boot {#firmware}
 
@@ -140,6 +146,7 @@ Components: `ShengPreflight`.
 
 ### Development findings
 
+- The macOS boot transport uses a SHA-256-pinned qualified firmware template. The current build replaces only its DarwinBoot PE; the other 53 inner-FV modules, BootShim, firmware DTB collection and encoded Android OS metadata remain unchanged. A 187 MiB payload keeps the image below the qualified 193 MiB boundary. QEMU verifies the loader handoff and a menu that waits for input; sheng reached the desktop after explicit Data initialization on 2026-11-15. The newly built full firmware volume is not qualified by this compatibility result.
 - The board stores FAT payloads as independently UEFI-compressed 1 MiB chunks. The encoded ramdisk limit is 199229440 bytes; UniXNURamDiskDxe exposes the logical FAT through a 1 MiB cache.
 - The sheng firmware profile enables SHENG\_BOOT\_GUARD. SEC verifies the SDAM bootloader reboot reason and arms the 30000 ms Gunyah watchdog. DXE pings every 2 s within a 180 s firmware budget and hands the armed timer to XNU at ExitBootServices. The matching kernel takes over at EARLY\_BOOT with uefi-watchdog=1, pings the running timer and starts its servicing thread.
 - The Wi-Fi runtime fetches WCN7850 amss.bin, m3.bin and board-2.bin from linux-firmware revision a4ce85e98a33fa1021c31d1887fc2dffed27e8dd into .cache/firmware/wcn7850 and checks their sizes and SHA-256 values against firmware/wcn7850/manifest.json.
@@ -175,9 +182,9 @@ Components: `ShengPreflight`.
   Command: <code>python3 scripts/prepare-sheng-watchdog-probe.py known-boot.img watchdog-probe.img --uefi ../uefi-sheng --fd SILICIUM_UEFI.fd --dtb sheng.dtb; fastboot -s SERIAL boot watchdog-probe.img</code>. Revision: `011f452ac016a67664a63a879a62f506fc133796`.
 - `device`: [The encoded ramdisk was 72935112 bytes. Fastboot acknowledged boot in 1.978 s and answered getvar product 76.221 s after the command. The firmware watchdog was configured for 30 s and the kernel-entry reset fallback for 120 s.](https://github.com/rponeawa/UniXNU-sheng/blob/8d4eae0/reports/sheng-packed-watchdog.json)
   Command: <code>fastboot boot packed-watchdog-probe.img</code>. Revision: `9525a4674bf775e8373d5e3e2b3cf15882d75287`.
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/proprietary-files.txt)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/proprietary-files.txt)
 - `source`: [Shared FDT initrd block-device publication; board memory policy remains in uefi-sheng.](https://github.com/rponeawa/UniXNU/blob/9113590/package/UniXNUPkg/Driver/UniXNURamDiskDxe/UniXNURamDiskDxe.c)
-- `host`: [2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados26-boot-build.json)
+- `host`: [2026-10-26: DEBUG firmware and a 219283456-byte boot image built for the minimal arm64e kernel. DarwinBoot accepts arm64e capability bits. The kernel was relinked with legacy threaded starts, all 103192 fixups were walked, and the source corecrypto HMAC was regenerated after the entry and panic probes. Prior notes report fastboot download and boot returned OKAY; kernel and userspace execution remain unobserved. This handoff only rechecked the existing image SHA-256 against the archived manifest; it did not boot this image. The recorded base revision has uncommitted build changes.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados26-boot-build.json)
   Command: <code>shasum -a 256 ../UniXNU/out/sheng/ipados-26.5.2-23F84/sheng_ipados26/boot/boot.img</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
 - `host`: [The compressed-FAT firmware builds and the packager applies the 190 MiB encoded-ramdisk limit.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
@@ -228,8 +235,8 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/dts/sheng.dts)
-- `device`: [Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/dts/sheng.dts)
+- `device`: [Boot da1dbd496 recorded 6,680 exact SpringBoard samples with CPU IDs, 6,679 ready Arm PMU readings, 8,485 DVFS windows and main-thread Mach wait durations. The five busy long flips had maximum votes in all 82 governor windows. A synchronous XPC wait involving iconservicesagent overlapped 4.444 seconds of a flip gap.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch3.img</code>. Revision: `948a8b8696e56c0ab74a4a1ee22753744ea462e3`.
 
 ## Memory and DMA {#memory}
@@ -266,6 +273,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 - The DTS carries each CPU's cluster type for the ADT \(see the cpu area\).
 - The GPU memory host fixture uses the current trace and task-role interfaces. Image backing reuse and deferred physical release are bounded by the Metal runtime; foreground placement and room-worker allocations can still overlap.
 - The exported Bluetooth node carries transport encoding and baud as little-endian u32 properties; its runtime MAC address is derived from the chosen platform identity.
+- The macOS outside-window handoff accepts up to 64 firmware free ranges, matching the exclusion table capacity; the fixed 64 KiB ADSP buffer remains reserved. This changes descriptor capacity, not the installed DRAM size.
 
 ### Completion criteria
 
@@ -281,7 +289,7 @@ Components: `ArmCpu`, `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/dts/sheng.dts)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/dts/sheng.dts)
 - `device`: [On sheng, macOS 27.3 build 26C5035r reported hw.memsize 6914097152 and an active VM compressor.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/reports/sheng-macos27-first-boot.json)
   Command: <code>scripts/run-sheng-unattended.sh sheng-macos27-inherited-prime.img 7500</code>. Revision: `c30fec292042b44537bf764468e6a15d658f21b6`.
 
@@ -312,6 +320,8 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 
 ### Development findings
 
+- SourceStorage registers the macOS platform power callback before storage startup, leaving XNU filesystem sync and unmount ordering unchanged. The registration does not access or modify userdata.
+- SourceStorage records its family, policy, service and log initialization stages when storage-probe is selected.
 - On sheng, macOS 27.3 mounted Data as writable APFS. The captured swap total and usage were both zero.
 - make-userdata-full.py --raw ROOT\_IMAGE PARTITION\_BYTES OUTPUT preserves the complete root image and uses zero FILL chunks for the rest of userdata. This initializes persistent Data and diagnostic regions for a fresh installation.
 - Storage maintenance and throughput diagnostics convert Mach absolute-time intervals through the kernel timebase. Raw controller measurements retain the hardware-counter frequency.
@@ -332,6 +342,8 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 - macOS mounts Data at /System/Volumes/Data. The system volume's /private is empty; /etc, /var and /tmp resolve through the /private firmlink of /usr/share/firmlinks. APFS sets firmlinks only for the Data volume of the system volume's own group, and the owner Data volume is on another device, so macos-owner-data-firmlinks.patch sets each listed firmlink with vnode\_setasfirmlink after the mount and follows firmlinks on name cache misses.
 - The macOS Data seed comes from /System/Library/Templates/Data \(about 0.8 GiB\). Its entries are owned by root and service accounts \(\_windowserver, \_mdnsresponder, \_postfix and others\), so scripts/make-macos-data-seed.py copies it with ditto as root; the iPadOS seed is written with owners off \(uid 99\).
 - The Data seed is carried in every payload beside the 137 MiB macOS kernel, and the packed format holds at most 256 MiB, so the 0.8 GiB template is not copied whole: files below private/, Users/, Library/Preferences/ and Library/Keychains/ \(267 files, 18 MiB\) are copied, and the other 13004 files become links to the system volume's template, as macOS does for Data.symlink-patterns. The copy goes through a scratch volume so the seed image holds no blocks of the replaced files; the macOS payload volume is 192 MiB.
+- A fresh macOS userdata image leaves the persistent Data overlay blank. The 210 GiB seed requires the explicit Initialize macOS Data and boot entry \(data-reset=1\) before writable Data is available; ordinary Boot preserves the existing overlay. Setup Assistant and account settings come from the selected seed.
+- The macOS storage checkout identifies verified UFS windows as internal media so Disk Arbitration can mount the App cryptex before login.
 
 ### Completion criteria
 
@@ -353,16 +365,18 @@ Components: `ShengUfs`, `VirtioMmioBlock`, `RamBlock`, `VerifiedRoot`.
 ### Evidence
 
 - `source`: [Implementation and configuration described in this section](https://github.com/UniXNU/ShengUfs/blob/e2b32cc429e8cf1501161c1d8c517f8994ceb9b2/NativeUfs.cpp)
-- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados26-source-drivers.json)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
-- `device`: [Every read test \(4 KiB to 1 MiB, queue depth 1, 8 and 32, random and sequential\) matches or exceeds the mainline Linux 7.2 ufshcd-qcom driver on the same tablet; worst ratio 1.013 \(4 KiB at queue depth 8\). 1000 zero-copy reads match the data-area path.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/SourceStorage.cpp)
+- `device`: [Every read test \(4 KiB to 1 MiB, queue depth 1, 8 and 32, random and sequential\) matches or exceeds the mainline Linux 7.2 ufshcd-qcom driver on the same tablet; worst ratio 1.013 \(4 KiB at queue depth 8\). 1000 zero-copy reads match the data-area path.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/SourceStorage.cpp)
   Command: <code>boot with ufs-bench=1 and read the UFS log; ufsbench on the Linux reader over the same LBAs; three runs each</code>. Revision: `fd420df000f43213d9cd019725abff0849c98c72`.
-- `source`: [The macos-27.3-26C5035r override selects the UniXNU macOS profile, whose macos-owner-data-firmlinks.patch mounts owner Data at /System/Volumes/Data and sets the firmlinks; not yet run on the device.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `source`: [\[os\_overrides."macos-27.3-26C5035r".payload.runtime\] data\_seed\_tool selects UniXNU scripts/make-macos-data-seed.py, which copies the system volume's Data template with owners as root.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
+- `source`: [The macos-27.3-26C5035r override selects the UniXNU macOS profile, whose macos-owner-data-firmlinks.patch mounts owner Data at /System/Volumes/Data and sets the firmlinks; not yet run on the device.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `source`: [\[os\_overrides."macos-27.3-26C5035r".payload.runtime\] data\_seed\_tool selects UniXNU scripts/make-macos-data-seed.py, which copies the system volume's Data template with owners as root.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
 - `host`: [The source-built kernel includes the owner Data path and the pinned verified-root policy inputs.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
 - `device`: [On sheng, macOS 27.3 mounted Data as writable APFS. The captured swap total and usage were both zero.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/reports/sheng-macos27-first-boot.json)
   Command: <code>scripts/run-sheng-unattended.sh sheng-macos27-inherited-prime.img 7500</code>. Revision: `c30fec292042b44537bf764468e6a15d658f21b6`.
+- `host`: [The selected ShengUfs b6fe07b307eeddc5e258c9d5d4387b968a55e4e9 source compiles and links in the macOS 27.3 kernel; the validated integration mounts its sealed root and persistent Data volumes.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `ef015993fb686b29d915a64463a4adaf03dbf77e`.
 
 ## Display {#display}
 
@@ -426,8 +440,8 @@ Components: `GopFramebuffer`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/LegacyDisplayProbe.cpp)
-- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/LegacyDisplayProbe.cpp)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/LegacyDisplayProbe.cpp)
+- `source`: [The diagnostic ring timestamps VSync timer arms, sends, idle stops, late ticks, starts and refresh-rate reports.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/LegacyDisplayProbe.cpp)
 - `host`: [The source kernel links the macOS display adapter; the six-minute Core Animation scene builds with a preferred 120 Hz frame rate.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
 
@@ -469,6 +483,7 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 - iPadOS 26 source-interface build: IOHIDDevice reports and independent touch/button, GENI SPI, Novatek and firmware archives compile. Four host model suites pass ASan/UBSan. The source path does not patch a foreign vtable.
 - On arm64e the event driver's vtable is copied and every slot is re-signed with the 220 discriminators read from the 24A446 kernelcache; each slot is checked against the original table first, and AppleUserHIDEventService, this device's event driver, takes the copy as well. A search over 16-bit values can accept a second discriminator with the same 24-bit signature and stops touch events.
 - With latency capture enabled, the HID input path records the time of each touch report handed to the event driver; these times bound the analysed touch windows. Contact IDs and coordinates are not recorded.
+- Idle touch handling returns the controller to doze after the last touch report.
 
 ### Completion criteria
 
@@ -485,18 +500,20 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Evidence
 
-- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/BootDiagExport.c)
+- `source`: [The joint latency capture exports vsync tick events and CPU frequency windows alongside HID report times. Exact user-stack samples are marked with peer -2.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/BootDiagExport.c)
 - `host`: [Host replays cover adjacent-key taps, bottom-edge tip-down coordinates and four- and five-finger pinches with stable IDs.](https://github.com/UniXNU/ShengNovatekTouch/blob/3b44b1b7603eaadae942ea44ddc51bdcc48ad060/Test/touch-core.c)
   Command: <code>python3 scripts/check-touch-host.py</code>. Revision: `3b44b1b7603eaadae942ea44ddc51bdcc48ad060`.
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/TouchBoard.h)
-- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados26-source-drivers.json)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/TouchBoard.h)
+- `host`: [Source-interface compile audit with uncommitted workspace changes; source and object hashes are recorded. Link/runtime/edge qualification remain false. Historical device results in this area apply to iOS 17.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados26-source-drivers.json)
   Command: <code>cd ../UniXNU &amp;&amp; python3 scripts/build-sheng-source-drivers.py --tree out/sheng/ipados-26.5.2-23F84/sheng_ipados26/tree --device ../UniXNU-sheng --storage-source out/driver-sources/IOStorageFamily --hid-source out/driver-sources/IOHIDFamily --with-storage-family</code>. Revision: `2ab05c11ae80e8b59dac2d312f627e78cacc0fca`.
-- `device`: [Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/TouchProbe.cpp)
+- `device`: [Boot 532856a9 retained 6,195 HID report timestamps. The median interval between reports was 8.334 ms.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/TouchProbe.cpp)
   Command: <code>fastboot boot sch1.img</code>. Revision: `8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87`.
-- `device`: [Five fingers retained distinct IDs through a 250 ms pause. All 57 rapid typing contacts released. Both App Switcher gestures failed and rapid taps sometimes selected alternate characters.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `device`: [Five fingers retained distinct IDs through a 250 ms pause. All 57 rapid typing contacts released. Both App Switcher gestures failed and rapid taps sometimes selected alternate characters.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch2.img</code>. Revision: `8ec842f38c21ef1d73e12000fae16df7442e0c73`.
 - `host`: [The selected input archives compile and link into the macOS 27.3 kernel image.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
+- `host`: [ShengNovatekTouch 69fdd6223ed2572aa8bd8351e77c53a238276130 compiles and links against the selected SM8550 interfaces in the macOS 27.3 integration.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `ef015993fb686b29d915a64463a4adaf03dbf77e`.
 
 ## keyboard {#keyboard}
 
@@ -563,18 +580,18 @@ Components: `ShengHidInput`, `ShengNovatekTouch`, `QcomGeniSpi`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/KeyboardProbe.cpp)
-- `host`: [2536 codec checks pass under ASan and UBSan. For the pinned image the header command and the first and last data commands match the script's own encoding of the boot ROM structures \(99 blocks, 49756 code bytes\).](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-wn8030-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/KeyboardProbe.cpp)
+- `host`: [2536 codec checks pass under ASan and UBSan. For the pinned image the header command and the first and last data commands match the script's own encoding of the boot ROM structures \(99 blocks, 49756 code bytes\).](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-wn8030-host.py)
   Command: <code>python3 scripts/check-wn8030-host.py</code>. Revision: `87dd80c2de24d40a5038e4d73f2ce444e23de84c`.
-- `device`: [iPadOS 27.0.1 \(24A446\) with appsync=1: the image loads in 586 ms at 1 MHz, attach creates the HID device, typing, Caps Lock, the touchpad and its pointer and scroll gestures work, folding the cover behind the tablet disables input, and the buttons arm \(B st=3\).](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/KeyboardProbe.cpp)
+- `device`: [iPadOS 27.0.1 \(24A446\) with appsync=1: the image loads in 586 ms at 1 MHz, attach creates the HID device, typing, Caps Lock, the touchpad and its pointer and scroll gestures work, folding the cover behind the tablet disables input, and the buttons arm \(B st=3\).](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/KeyboardProbe.cpp)
   Command: <code>fastboot boot boot.img</code>. Revision: `87dd80c2de24d40a5038e4d73f2ce444e23de84c`.
-- `host`: [3185 checks pass under ASan and UBSan, including 67- and 513-byte writes and 68-byte reads through a 16-word FIFO model.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/tests/geni_i2c_host.c)
+- `host`: [3185 checks pass under ASan and UBSan, including 67- and 513-byte writes and 68-byte reads through a 16-word FIFO model.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/tests/geni_i2c_host.c)
   Command: <code>python3 scripts/check-geni-i2c-host.py</code>. Revision: `83e43ef798df30a889a3cea76d6393a962d35d77`.
-- `host`: [PASS WN8030: 5195 checks under ASan and UBSan, including raw single-count motion, diagonal cadence, contact transitions, buttons and scroll. Pinned firmware commands match all 99 blocks.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-wn8030-host.py)
+- `host`: [PASS WN8030: 5195 checks under ASan and UBSan, including raw single-count motion, diagonal cadence, contact transitions, buttons and scroll. Pinned firmware commands match all 99 blocks.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-wn8030-host.py)
   Command: <code>python3 scripts/check-wn8030-host.py</code>. Revision: `e0fbcadbb6f26ff232703e6bb1bfc18bfbb2ffb9`.
-- `host`: [PASS keyboard HID: 5199 iPadOS checks and 5107 macOS checks under ASan and UBSan. The actual KeyboardCover.cpp uses one descriptor across mixed report lengths and concurrent producers; recursive input and stopped devices cannot overwrite or submit it. Failure cleanup releases all mock objects. The macOS descriptor declares 828 counts/inch and leaves scroll units unset.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-keyboard-cover-host.py)
+- `host`: [PASS keyboard HID: 5199 iPadOS checks and 5107 macOS checks under ASan and UBSan. The actual KeyboardCover.cpp uses one descriptor across mixed report lengths and concurrent producers; recursive input and stopped devices cannot overwrite or submit it. Failure cleanup releases all mock objects. The macOS descriptor declares 828 counts/inch and leaves scroll units unset.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-keyboard-cover-host.py)
   Command: <code>python3 scripts/check-keyboard-cover-host.py</code>. Revision: `e0fbcadbb6f26ff232703e6bb1bfc18bfbb2ffb9`.
-- `host`: [PASS keyboard service: 123 checks under ASan and UBSan for retry without a new edge, bounded input batches, idle without resets, keepalive wake, failed state writes, repeated read failures, recovery backoff and counter wrap.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-keyboard-service-host.py)
+- `host`: [PASS keyboard service: 123 checks under ASan and UBSan for retry without a new edge, bounded input batches, idle without resets, keepalive wake, failed state writes, repeated read failures, recovery backoff and counter wrap.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-keyboard-service-host.py)
   Command: <code>python3 scripts/check-keyboard-service-host.py</code>. Revision: `e0fbcadbb6f26ff232703e6bb1bfc18bfbb2ffb9`.
 - `host`: [The keyboard integration compiles and links into the macOS 27.3 kernel image.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
@@ -622,6 +639,7 @@ Components: `Adreno740`, `AdrenoMetal`, `AirNir`, `Sm8550Platform`, `AdrenoPM4`,
 - AdrenoMetal carries 25 patches over metal2vulkan 963f0e64. The lowering thread, commit submission and pipeline warm pass are off by default and metal-flow=1 enables them for testing. They showed no measured frame rate gain, and one of four boots with them stopped presenting at the logo. pipeline\_waits stays Exact because the upstream default drops draws of a pipeline not made in time.
 - The macos27 target builds Turnip, the Rust bridge and NativeAdrenoMetal.bundle as arm64e Mach-Os for macOS 27 \(LC\_BUILD\_VERSION platform 1, minos 27.0\). The macOS bundle keeps the executable and Turnip in Contents/MacOS \(turnip::libraryPath looks beside the executable\) and gpu-build.json in Contents/Resources, which codesign seals as data. The macOS payload does not yet carry it \(\[payload.runtime\] gpu\_addon = false\).
 - Mesa's ir3 parser needs GNU Bison 3 or newer \(-Wcounterexamples\); Xcode's bison is 2.3. The builds take tools from .cache/mesa-tools/bin first.
+- GPU diagnostics retain bounded submission and wait records alongside the native driver recovery state.
 
 ### Completion criteria
 
@@ -638,11 +656,11 @@ Components: `Adreno740`, `AdrenoMetal`, `AirNir`, `Sm8550Platform`, `AdrenoPM4`,
 
 ### Evidence
 
-- `host`: [Address/undefined-behavior checks pass for ring packets, preemption power sequencing, per-ring tables, queue FIFO, fence-history rollover and CPU-table fallback. Kernel, board, Turnip and Metal bridge builds target arm64e iPadOS 27. Hardware qualification of these changes is pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-gpu.md)
+- `host`: [Address/undefined-behavior checks pass for ring packets, preemption power sequencing, per-ring tables, queue FIFO, fence-history rollover and CPU-table fallback. Kernel, board, Turnip and Metal bridge builds target arm64e iPadOS 27. Hardware qualification of these changes is pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-gpu.md)
   Command: <code>python3 scripts/check-native-adreno-scheduling.py</code>. Revision: `509bd695c4f58dab8d2d005d1b92f5ba85312595`.
-- `device`: [iPadOS 27 build 24A446, capture 532856a9, panicked while idle on the home screen. The interrupted stack reached lck\_mtx\_unlock\_contended from native\_adreno\_preempt\_irq via gpuIrq. The board now queues preemption completion on a serialized thread call.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/GpuPowerProbe.cpp)
+- `device`: [iPadOS 27 build 24A446, capture 532856a9, panicked while idle on the home screen. The interrupted stack reached lck\_mtx\_unlock\_contended from native\_adreno\_preempt\_irq via gpuIrq. The board now queues preemption completion on a serialized thread call.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/GpuPowerProbe.cpp)
   Command: <code>fastboot boot sch1.img</code>. Revision: `8fcf9a4e0f3c5a23a820f85fd25189e2c7e83f87`.
-- `device`: [Boot 5cfa7b18a recorded a responsive desktop through 360 s with deferred CP preemption and cross-core stack sampling disabled.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-touch-frame-gaps.md)
+- `device`: [Boot 5cfa7b18a recorded a responsive desktop through 360 s with deferred CP preemption and cross-core stack sampling disabled.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-touch-frame-gaps.md)
   Command: <code>fastboot boot sch2.img</code>. Revision: `8ec842f38c21ef1d73e12000fae16df7442e0c73`.
 - `host`: [The patch series check passes for 25 patches over metal2vulkan 963f0e64. The frontend host check passes through the scanout presenter on Apple M1 through MoltenVK with the lowering thread, commit submission and warm pass enabled. The Turnip host simulation does not link, so its driver cache and plugin bridge phases did not run.](https://github.com/UniXNU/AdrenoMetal/tree/c333f988df1196a19abbe756f6e199984300a487/bridge/patches)
   Command: <code>python3 scripts/check-metal2vulkan-pin.py --latest; python3 scripts/check-native-metal-frontend-host.py</code>. Revision: `642c4fef77c28c5f9f32a3eb862fe8bea9ed0339`.
@@ -681,6 +699,8 @@ Components: `QcaBluetooth`.
 
 ### Development findings
 
+- The macOS profile explicitly selects QcaBluetooth so the kernel component and runtime use the same pinned source checkout.
+- log-bluetooth=3 captures bounded discovery HCI frames at UART acceptance and controller receive, including Inquiry Complete and full result payloads. BootLog reserves 16 KiB per slot, advances the trace cursor only after successful storage sync, and snapshots the newest sixteen records at panic. Physical discovery remains unverified.
 - The Bluetooth RX wake pin shares TLMM summary interrupt 240 with touch and keyboard and its raw status latches while the wake is disarmed; a wake acknowledgement queued behind a stopped UART clock made the worker spin, fixed in QcaBluetooth. Not yet run on hardware.
 - On macOS 27.3 the image carries the Bluetooth runtime: the serial device front end \(/dev/cu.BLTH\), the daemon patched by the 26C5035r adapter and BlueTool in the addon's sbin \(shown over /usr/sbin\), the capability library in the addon's lib \(shown over /usr/lib\), the firmware, and bluetooth=1. On the tablet the controller comes up, the system's job starts the patched daemon, it loads the library and opens the serial device; its initialization then failed on a Broadcom version command \(the daemon's default chipset\) and it restarted every ten seconds. The adapter now makes the third-party chipset the default; that has not run yet, so the Settings page and pairing are not confirmed.
 - On iPadOS 27.0.1 \(24A446\) the device pairs AirPods Pro, reconnects after reboot without pairing again, toggles power, plays A2DP at normal volume and quality, and shows noise control and battery. Music over Bluetooth during 2.4 and 5 GHz speed tests stays normal.
@@ -697,6 +717,7 @@ Components: `QcaBluetooth`.
 - Extended scanning uses 0x2041 and 0x2042, because the controller rejects legacy scan commands once extended advertising commands have been used. Apple's scan extension stays off because it has no type zero backend.
 - A random address \(0x2005\) is queued before a scan can be enabled, and starting an advertising set always sends its address \(0x2035\). When no resolvable address can be generated, the refresh uses a non-resolvable address and completes, so the daemon does not restart on the busy flag.
 - Pairing keys need the keychain, which needs AppleKeyStoreState software key wrapping. The board returns /chosen/unique-chip-id through native\_aks\_device\_id.
+- The macOS integration selects QcaBluetooth effe4ec5c57cd400a5f818b21c9903fef237edbc with the merged runtime and signed launchd configuration.
 
 ### Completion criteria
 
@@ -716,25 +737,27 @@ Components: `QcaBluetooth`.
 
 ### Evidence
 
-- `host`: [Production ownership code passes ASan/UBSan for both startup orders, idempotent votes, independent release, Bluetooth-only PCIe exclusion and failed transitions. The power operations are simulated.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-wcn-power.py)
+- `host`: [Production ownership code passes ASan/UBSan for both startup orders, idempotent votes, independent release, Bluetooth-only PCIe exclusion and failed transitions. The power operations are simulated.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-wcn-power.py)
   Command: <code>python3 scripts/check-wcn-power.py</code>. Revision: `bea420e4520654670b95549fb4d3ecb6511ae8e1`.
-- `host`: [WifiProbe, BluetoothProbe, ArmCpu, touch, audio and boot-log sources compile using the selected iPadOS 27 arm64e kernel commands. The Bluetooth builder compiles eight protocol and SM8550 objects.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-bluetooth-board.py)
+- `host`: [WifiProbe, BluetoothProbe, ArmCpu, touch, audio and boot-log sources compile using the selected iPadOS 27 arm64e kernel commands. The Bluetooth builder compiles eight protocol and SM8550 objects.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-bluetooth-board.py)
   Command: <code>python3 scripts/check-bluetooth-board.py ASSEMBLED_TREE --extra-source ../UniXNU/drivers/ArmCpu/ArmCpu.cpp --extra-source package/TouchProbe.cpp --extra-source package/AudioProbe.cpp --extra-source package/BootLog.c</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/BluetoothFirmware.h)
-- `host`: [ASan/UBSan register models pass exact rate ratios, DFS handoff, native DMA page translation, ASID conflicts, bounded timeouts and preserved storage/touch routes.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-bluetooth-platform.py)
+- `source`: [Data firmware prefix shared by the VFS reader and staging tool; firmware/bluetooth/manifest.json pins both WCN7850 firmware inputs.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/BluetoothFirmware.h)
+- `host`: [ASan/UBSan register models pass exact rate ratios, DFS handoff, native DMA page translation, ASID conflicts, bounded timeouts and preserved storage/touch routes.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-bluetooth-platform.py)
   Command: <code>python3 scripts/check-bluetooth-platform.py</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `host`: [Production GIC/GCC code passes ASan/UBSan for shared level IRQs, edge/exclusive checks, direct dispatch, masking, concurrent registration and shared clock lifetime.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-bluetooth-shared.py)
+- `host`: [Production GIC/GCC code passes ASan/UBSan for shared level IRQs, edge/exclusive checks, direct dispatch, masking, concurrent registration and shared clock lifetime.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-bluetooth-shared.py)
   Command: <code>python3 scripts/check-bluetooth-shared.py</code>. Revision: `d846103b491c082ebf3f7928e5d8de12f7f1c343`.
-- `host`: [The QcaBluetooth native adapter passes 144 AArch64 instruction cases at two ASLR slides and 58 ASan/UBSan HCI/policy cases. The arm64e library builds and passes signature verification. PAC operations are modeled without device keys; runtime installation and device checks are pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-bluetooth-native.md)
+- `host`: [The QcaBluetooth native adapter passes 144 AArch64 instruction cases at two ASLR slides and 58 ASan/UBSan HCI/policy cases. The arm64e library builds and passes signature verification. PAC operations are modeled without device keys; runtime installation and device checks are pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-bluetooth-native.md)
   Command: <code>cd drivers/QcaBluetooth &amp;&amp; out/native-venv/bin/python tools/test-native.py ORIGINAL_BLUETOOTHD &amp;&amp; python3 tools/test-type0.py ORIGINAL_BLUETOOTHD</code>. Revision: `97f48bf20bd47f233681668d50e5f5638e72384b`.
-- `host`: [The combined runtime verifies 45 files, three signed arm64e Bluetooth binaries, 716 launchd jobs, preserved native entitlements, 12 unchanged input trust modules and the original Data seed. Host libxpc accepts the cache. Bluetooth UART properties encode as little-endian values; platform sources and the executable/library mount patch compile for the target. Protocol simulation covers the Linux address conversion. Device execution and a complete image rebuild are pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-bluetooth-native.md)
+- `host`: [The combined runtime verifies 45 files, three signed arm64e Bluetooth binaries, 716 launchd jobs, preserved native entitlements, 12 unchanged input trust modules and the original Data seed. Host libxpc accepts the cache. Bluetooth UART properties encode as little-endian values; platform sources and the executable/library mount patch compile for the target. Protocol simulation covers the Linux address conversion. Device execution and a complete image rebuild are pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-bluetooth-native.md)
   Command: <code>python3 scripts/check-bluetooth-runtime.py --runtime RUNTIME --os-root ORIGINAL_OS --seed-record ORIGINAL_RUNTIME_INPUTS</code>. Revision: `1258c87da0cdbb0a25f59b030cd48997c2793548`.
-- `host`: [The complete kernel and fileset link; the 176 MiB FAT payload and temporary boot image build. Actual payload extraction verifies nine Bluetooth exports, six packed files, runtime/trust hashes, H4/3.2 Mbaud ADT, preserved Data seed and no automatic reset. Device operation is pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-bluetooth-native.md)
+- `host`: [The complete kernel and fileset link; the 176 MiB FAT payload and temporary boot image build. Actual payload extraction verifies nine Bluetooth exports, six packed files, runtime/trust hashes, H4/3.2 Mbaud ADT, preserved Data seed and no automatic reset. Device operation is pending.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-bluetooth-native.md)
   Command: <code>python3 drivers/QcaBluetooth/out/recovery-image/resume.py; python3 drivers/QcaBluetooth/out/recovery-image/verify-payload.py</code>. Revision: `b2c0146caafe7d23d57479ed401c7f4790e6c154`.
-- `device`: [Device log untagged-55f92f8343 records successful cache and Bluetooth overlays, an AMFI cache-hash query, PID 1 No service cache and Bluetooth DMA allocation ENOSPC before UART startup. The log writer reports zero write errors; device Bluetooth operation is not verified.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-bluetooth-startup.md)
+- `device`: [Device log untagged-55f92f8343 records successful cache and Bluetooth overlays, an AMFI cache-hash query, PID 1 No service cache and Bluetooth DMA allocation ENOSPC before UART startup. The log writer reports zero write errors; device Bluetooth operation is not verified.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-bluetooth-startup.md)
   Command: <code>fastboot boot UniXNU/out/sheng/inputs/sheng-linux-log.img; python3 UniXNU-sheng/scripts/read-sheng-log.py --wait 50 --out CAPTURE</code>. Revision: `8f2af527c7204b07535b9e015a53c05d8029c0ee`.
-- `device`: [AirPods Pro pair, reconnect after reboot and play A2DP at normal volume and quality; noise control and battery work; one bluetoothd process for the whole run with no panic and no UART errors. The images predate the kern.qbt\_\* rename and the board and driver were local checkouts.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
+- `device`: [AirPods Pro pair, reconnect after reboot and play A2DP at normal volume and quality; noise control and battery work; one bluetoothd process for the whole run with no panic and no UART errors. The images predate the kern.qbt\_\* rename and the board and driver were local checkouts.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img (bluetooth=1 log-bluetooth=2); pair and play AirPods Pro; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `cc895db196751e155831d58e23a6e33984360367`.
+- `host`: [The HCI recorder, QcaBluetooth runtime and GENI model checks pass ASan/UBSan, including full packets, retry cursors, overwrite accounting, fragmented writes and bounded callbacks. The selected kernel sources compile for macOS arm64e.](https://github.com/UniXNU/UniXNU-sheng/pull/104)
+  Command: <code>clang -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined package/tests/bluetooth_hci_trace.c; python3 tools/test-runtime.py; python3 tools/test-geni.py</code>. Revision: `6866eae8f573e2be6db12b94d326ddb14646d8ec`.
 
 ## usb {#usb}
 
@@ -855,6 +878,7 @@ Components: `Ath12kWifi`.
 - TX/RX use direct copies, shared DMA storage, bounded reuse and batching; mac80211 supplies aggregation, reordering, FQ and AQL.
 - Data firmware reads wait for addon installation. Packaging validates file hashes, service/cache signatures, stock jobs, trust modules and the preserved Data seed.
 - The shared runtime cache retains the native Wi-Fi jobs and adds the supplicant alongside the Bluetooth service configuration; the original Data seed and existing trust modules are preserved.
+- The WCN7850 firmware manifest and source fetcher select matching pinned inputs for the macOS runtime.
 
 ### Completion criteria
 
@@ -870,15 +894,17 @@ Components: `Ath12kWifi`.
 
 ### Evidence
 
-- `host`: [The signed supplicant links openlog and vsyslog, and the staged job runs it with -q -s and no StandardOutPath or StandardErrorPath. Ath12kWifi tools/test-supplicant.py passes with the syslog build.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/build-wifi-userspace.py)
+- `host`: [The signed supplicant links openlog and vsyslog, and the staged job runs it with -q -s and no StandardOutPath or StandardErrorPath. Ath12kWifi tools/test-supplicant.py passes with the syslog build.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/build-wifi-userspace.py)
   Command: <code>python3 scripts/build-wifi-userspace.py OUT ios27</code>. Revision: `9938cf3015072035fc0e27eed76c6b474ff26846`.
-- `host`: [ASan/UBSan fixtures pass with simulated radio operations; the lifecycle releases 287 tracked allocations. Production audit: 125 objects, 13 XNU imports, zero missing imports and zero duplicate definitions. Kernel, payload and packed-image checks pass.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-wifi-mainline-migration.md)
+- `host`: [ASan/UBSan fixtures pass with simulated radio operations; the lifecycle releases 287 tracked allocations. Production audit: 125 objects, 13 XNU imports, zero missing imports and zero duplicate definitions. Kernel, payload and packed-image checks pass.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-wifi-mainline-migration.md)
   Command: <code>python3 scripts/check-wifi-association.py</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
-- `device`: [Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-wifi-association.md)
+- `device`: [Wi-Fi toggling, SSID scanning, WPA2 association, DHCP, traffic and join-result delivery are verified. The current image has been accepted for temporary boot.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-wifi-association.md)
   Command: <code>fastboot boot build/wifi-mainline/fix9/boot.img</code>. Revision: `fa9af675a5c56e27e1aaf0693c77939a4641a3ef`.
-- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-wifi-launchd.py)
+- `source`: [The launchd cache fixture checks that the Wi-Fi job and other stock jobs retain their settings when the icon service environment is applied.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-wifi-launchd.py)
 - `host`: [The selected network archives compile and link with the macOS 27.3 target.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
+- `host`: [The macOS 27.3 archive build resolves Ath12kWifi 39cc47b7bd1afef3c03a977c0c06fe475199ac0c with SM8550 2dc650ca and compiles the selected network sources with the exported Xcode 26.6 kernel toolchain.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `e4b7c7af39124d0e957fa73833ed6c98b361ed8b`.
 
 ## Audio {#audio}
 
@@ -940,12 +966,12 @@ Components: `Ath12kWifi`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/AudioProbe.cpp)
-- `host`: [PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-audioreach-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/AudioProbe.cpp)
+- `host`: [PASS audioreach: 182 checks; PASS cs35l43: 225 checks; PASS GENI I2C: 2169 checks](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-audioreach-host.py)
   Command: <code>python3 scripts/check-audioreach-host.py; python3 scripts/check-cs35l43-host.py; python3 scripts/check-geni-i2c-host.py</code>. Revision: `9e9971883be72b2fd76b8fb552367a9e4940aa63`.
-- `device`: [Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
+- `device`: [Speaker test tone: DSP mapped the buffer, 155 periods sent and 151 returned, all six amplifiers PLL-locked with no error interrupts. WCD938x enumerated \(manufacturer 0x0217, part 0x010d\). Capture: 200 of 200 periods returned, 191328 bytes, 97 percent non-zero samples, peak 128 in a quiet room.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img (adsp=2 audio=6); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `9e2e6de1e63d9493e841d51c6b41108e75c7d537`.
-- `device`: [Playback and recording smooth from the start. Host clock set to 19200000 Hz, IO thread period 409600 ticks. 4822 of 4843 IO cycles 15 to 25 ms apart. Write-ahead 16501 to 19638 frames, skew -474 to 1 frames, 0 late periods.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
+- `device`: [Playback and recording smooth from the start. Host clock set to 19200000 Hz, IO thread period 409600 ticks. 4822 of 4843 IO cycles 15 to 25 ms apart. Write-ahead 16501 to 19638 frames, skew -474 to 1 frames, 0 late periods.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img (adsp=2 audio=14); play music and record in Voice Memos; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `dea464ef093349dd746582691b0eaa3807fe1441`.
 
 ## Power {#power}
@@ -976,6 +1002,7 @@ Components: `AppleKeyStoreState`.
 
 ### Development findings
 
+- The macOS source-storage startup registers a PSCI SMC halt/restart callback only when PE\_halt\_restart is unowned. SYSTEM\_OFF and SYSTEM\_RESET availability is queried before registration; panic notifications do not trigger either operation. Unsupported or returned firmware calls report failure. Device power transitions remain pending validation.
 - The macOS 27.3 PC-USB capture reported battery 97 percent, 4865 mV and 1109 mA at the input, with gauge authentication bits 3.
 - AdapterDetails selects USB property 7 for the adapter family, the port maximum for advertised current and BmPowerMax for adapter wattage.
 - run-sheng-charge-test.py boots the reader in RAM, starts authentication in an independent session with SIGHUP ignored, retrieves charger and kernel logs after USB reconnects and confirms fastboot within a 270 s host limit. The original 300 s reader return timer remains active.
@@ -1006,6 +1033,7 @@ Components: `AppleKeyStoreState`.
 - GpuPowerProbe retries AHB-fenced context-switch writes for up to 2 ms while keepalive is held. The governor records accepted frequency votes and, with gpu-perf=1 and diagnostic export enabled, samples 19 A7XX BR counters approximately every 32 ms with selector, reset and preemption validity.
 - package/WcnPower.h keeps independent Wi-Fi and Bluetooth votes over the six shared WCN supplies; the last owner releases them. scripts/check-wcn-power.py covers both startup orders, independent release, repeated votes and failed transitions.
 - ShengBattery routes GLINK owner 32779 to the UCSI client and passes the charger's USB online value to QcomDwc3.
+- Charging authentication and battery reads share the serialized battery-manager request queue; reconnects retire earlier replies.
 
 ### Completion criteria
 
@@ -1027,15 +1055,15 @@ Components: `AppleKeyStoreState`.
 - `source`: [Before loading ADSP, the charge reader resolves the active device tree's SDAM reboot-reason cell, writes bootloader value 2 to bits 7:1 at offset 0x48 with bit 0 preserved, and verifies readback. A failed check runs rebootbl. The image selects panic=5 and qcom\_scm.download\_mode=off.](https://github.com/rponeawa/UniXNU-sheng/blob/4aac3f6d8eda279a9a24a135f4aa47ffcc13c10a/package/linux-log/charge.cpp)
 - `device`: [Linux 7.3.4: SDAM bootloader reason write/readback passed, ADSP started, qcom\_battmgr properties returned and fastboot returned after 22.4 s. The connected PC was CDP, 5.181 V, 0.144 A, 0.9 A input limit; battery 73 percent at 23.4 C, both charge-pump chip\_ok values 1. The host reconnected its shell once while the RAM job continued.](https://github.com/rponeawa/UniXNU-sheng/blob/0e2df15070b32c41c024a37badf3e1fbe696d2a8/reports/sheng-linux-charge-734.json)
   Command: <code>python3 scripts/run-sheng-charge-test.py --serial SERIAL --reader sheng-linux-charge.img --out CAPTURE --snapshot</code>. Revision: `4aac3f6d8eda279a9a24a135f4aa47ffcc13c10a`.
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/ShengBattery.cpp)
-- `host`: [PASS battery manager: 4074 checks](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-battery-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/ShengBattery.cpp)
+- `host`: [PASS battery manager: 4074 checks](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-battery-host.py)
   Command: <code>python3 scripts/check-battery-host.py</code>. Revision: `8719a19294bc79eed72366a19070acfd8e131737`.
-- `device`: [PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
+- `device`: [PPS adapter: 8.72 V at 1.3 A in, battery +1.99 A, 1 to 3 percent in 3 minutes. Mac: PD 5 V at 1.1 A in \(1.2 A limit\), battery +0.25 to +0.4 A on the desktop, 20 to 21 percent. Temperature 31.4 to 32.9 C; full 9353 mAh, design 9800 mAh, 172 cycles.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img; python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `8f5d921d7a3b71a20a97f551cad546dc8e2f3700`.
-- `device`: [CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
+- `device`: [CPU: domain 1 between 499 and 2803 MHz, domain 2 between 595 and 2956 MHz, about 1.2 GHz and 620 MHz mean when idle. GPU: every vote accepted, 61 percent of the time at 680 MHz at 7 percent mean busy.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
   Command: <code>fastboot boot boot.img (cpufreq=4 gpu-dcvs=1); python3 scripts/read-sheng-log.py --wait 240</code>. Revision: `a338c71a6f83809c84686b4996478f1c4cd3f3ab`.
-- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/GpuPowerProbe.cpp)
-- `host`: [PASS battery manager: 6785 checks under ASan and UBSan, including keyboard state coalescing, changes during an outstanding request, uncertain writes after timeout, bounded retries, replay after reinitialization and retained charger readings across errors and timeouts.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-battery-host.py)
+- `source`: [The GPU hard interrupt schedules CP preemption completion on a high-priority thread call that can take the submission mutex.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/GpuPowerProbe.cpp)
+- `host`: [PASS battery manager: 6785 checks under ASan and UBSan, including keyboard state coalescing, changes during an outstanding request, uncertain writes after timeout, bounded retries, replay after reinitialization and retained charger readings across errors and timeouts.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-battery-host.py)
   Command: <code>python3 scripts/check-battery-host.py</code>. Revision: `e0fbcadbb6f26ff232703e6bb1bfc18bfbb2ffb9`.
 - `host`: [The source-built macOS kernel includes the shared charging state machine and battery-manager transport.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
@@ -1064,6 +1092,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Development findings
 
+- The matched-toolchain startup comparison records Data disk initialization and an approximately 80-second watchdog return for current, GPU-reference and combined CPU/GPU-reference kernel builds. Persistent checkpoints identify completion of BSD initialization; the bootstrap and PID 1 call sites record the subsequent startup path.
 - Local kernel inputs include the Xcode 26.6 compiler, linker, resource directory, SDK and kernel tools. Cache relocation selects that toolchain for compile records and native component builds.
 - The timed boot runner uses a six-character build-tag beginning with s. cycle.json records the expected tag and whether the capture matches it.
 - The macOS lab restores cached XNU compile records, builds the source-matched Metal bridge, and supports a boot-only build with root\_storage=false.
@@ -1115,21 +1144,25 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/patches/xnu/series)
-- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `source`: [Historical working-tree observation: sheng b714917c, iPadOS 27.0.1 24A446, boot-prelink-fixed.img: instruction fetch abort at 0xfffffff00dbb4c74 with LR 0xfffffff00b5a3340 in native\_legacy\_display\_allocate. Corecrypto and SourceStorage initialization had completed.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: 62 prelink regressions pass. The packed kernel has 266 fixed original-function branches \(205 mobile graphics, 51 HID, eight IOSurface, two GPU\), preserved absolute GOT values and no additional native external branch instructions. This is host evidence, not a desktop boot result.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: sheng b714917c, 24A446: NativeLegacyDisplay and NativeHidInput initialized, APFS mounted the root OS and SystemCryptex, then load\_init\_program stopped with offline scratch Data mount failed: 2. The payload lacked initrd and PackedRAMDisk.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: Recovered runtime inputs match boot-framepath.img: seed 1bde7901df3acd0e8a14cd89928bedc12c07ef2128c6bce18ffccf3611a666a3 equals the existing data-seed-215g-skipca/data.dbr. The payload includes the original owner trust cache and GPU addon, required ADT placeholders and 870-byte normal arguments without autoreset or data-reset. Checks cover 266 branches, five absolute data symbols and 189 vnode descriptor pointer sites. Local inputs are stored in the ignored UniXNU unixnu.local.toml.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [Historical working-tree observation: The repaired v4 kernel and restored runtime inputs ran to the 120-second auto-reset deadline: log state 2, 61 rounds, zero write errors and no panic. SpringBoard PID 30, backboardd PID 61 and wifid PID 49 are present. The diagnostic image differs from the normal payload only by autoreset=120. Visual presentation was not verified. Two unresolved data imports and 24 trap references remain outside this boot qualification.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-startup-repair-2026-11-02.md)
-- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/.github/workflows/package.yml)
-- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/board.toml)
-- `source`: [Global AppSync scope, on-device signature repair, dynamic kernel trust, native ABI observations and successful host/kernel/payload/boot-image builds with the concurrent backlight sources. Original Data is preserved. The combined image was accepted by fastboot boot on b714917c; desktop and application behavior remain to be observed.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/reports/ipados27-appsync.md)
-- `source`: [On macOS the keyboard firmware image is placed in \_\_DATA,\_\_firmware.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/build-gop-legacy-display-27.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/patches/xnu/series)
+- `source`: [The 27 archive recipe explicitly selects --lto for the fileset reference. The common builder invalidates stale references and handles LTO link objects; XnuPrelink records the recovered 24A446 ABI identities.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `source`: [Historical working-tree observation: sheng b714917c, iPadOS 27.0.1 24A446, boot-prelink-fixed.img: instruction fetch abort at 0xfffffff00dbb4c74 with LR 0xfffffff00b5a3340 in native\_legacy\_display\_allocate. Corecrypto and SourceStorage initialization had completed.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: 62 prelink regressions pass. The packed kernel has 266 fixed original-function branches \(205 mobile graphics, 51 HID, eight IOSurface, two GPU\), preserved absolute GOT values and no additional native external branch instructions. This is host evidence, not a desktop boot result.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: sheng b714917c, 24A446: NativeLegacyDisplay and NativeHidInput initialized, APFS mounted the root OS and SystemCryptex, then load\_init\_program stopped with offline scratch Data mount failed: 2. The payload lacked initrd and PackedRAMDisk.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: Recovered runtime inputs match boot-framepath.img: seed 1bde7901df3acd0e8a14cd89928bedc12c07ef2128c6bce18ffccf3611a666a3 equals the existing data-seed-215g-skipca/data.dbr. The payload includes the original owner trust cache and GPU addon, required ADT placeholders and 870-byte normal arguments without autoreset or data-reset. Checks cover 266 branches, five absolute data symbols and 189 vnode descriptor pointer sites. Local inputs are stored in the ignored UniXNU unixnu.local.toml.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [Historical working-tree observation: The repaired v4 kernel and restored runtime inputs ran to the 120-second auto-reset deadline: log state 2, 61 rounds, zero write errors and no panic. SpringBoard PID 30, backboardd PID 61 and wifid PID 49 are present. The diagnostic image differs from the normal payload only by autoreset=120. Visual presentation was not verified. Two unresolved data imports and 24 trap references remain outside this boot qualification.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-startup-repair-2026-11-02.md)
+- `source`: [The iPadOS 27 payload runtime prepares IPSW trust modules, source-built GPU/audio addons and explicit first-install Data before kernel compilation. Existing installations reuse the original seed; its content hash and UUID are recorded. The normal board arguments now include the validated persistence, GPU, display and log switches without relying on unixnu.local.toml.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `source`: [The package workflow selects the repair UniXNU revision, restores or imports the original Data seed, and preserves a seed backup. Cache loss fails unless first-install generation is explicitly selected. Rebuilding the full reference exposed lost order matches for IOCircularDataQueueCopyLatest and get\_aiotask; the fixture now fixes both identities and the profile rejects new unresolved references.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/.github/workflows/package.yml)
+- `source`: [The iPadOS 27 payload sets two environment variables for iconservicesagent in the launchd service cache.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/board.toml)
+- `source`: [Global AppSync scope, on-device signature repair, dynamic kernel trust, native ABI observations and successful host/kernel/payload/boot-image builds with the concurrent backlight sources. Original Data is preserved. The combined image was accepted by fastboot boot on b714917c; desktop and application behavior remain to be observed.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/reports/ipados27-appsync.md)
+- `source`: [On macOS the keyboard firmware image is placed in \_\_DATA,\_\_firmware.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/build-gop-legacy-display-27.py)
 - `host`: [The prepared RAM boot preserves Data and encodes its 256 MiB logical FAT in 98732528 bytes.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
 - `source`: [The macOS lab restores cached XNU compile records, builds the source-matched Metal bridge, and supports a boot-only build with root\_storage=false.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/.github/workflows/macos-lab.yml)
+- `host`: [Probe packaging resolves the LLVM tools through the shared host lookup used by the matching firmware build.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `ef015993fb686b29d915a64463a4adaf03dbf77e`.
+- `host`: [The current ARM64e lab tools and source-built guarded firmware produce a 100921344-byte boot image within the board transport limit. The 256 MiB decoded payload retains the installed Data seed and includes both decoder fixtures.](https://github.com/UniXNU/UniXNU-sheng/commit/9a2ef561f225a440695f4304f608b62f90f208a3)
+  Command: <code>python3 scripts/prepare-sheng-gpu-lab.py INPUT OUTPUT --tools TOOLS --plugin PLUGIN --video-fixture HEVC8 --video-fixture-10bit HEVC10 --bluetooth-runtime BLUETOOTH --refresh-payload --uefi UEFI --autoreset 600 --preserve-data</code>. Revision: `9a2ef561f225a440695f4304f608b62f90f208a3`.
 
 ## Diagnostics {#diagnostics}
 
@@ -1151,6 +1184,9 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Development findings
 
+- The icon probe reads System Settings sidebar entries and their extension bundle icon configurations, compares NSWorkspace and asynchronous IconServices requests, and records 24-point and 128-point source pixels. The lab captures System Settings events and the user icon service launchd state. The graphics comparison closes restored GUI applications, repeats the same settings panes beside the fixed animation, and captures two WindowServer process samples with background shader priming paused. Manual inspection opens General settings and captures four process samples while keeping the desktop active.
+- The macOS power callback logs installation, advertised PSCI operations and returned transition calls. A sheng shutdown capture completed Data unmount and driver quiescence before Halt/Restart Timed Out; registration addresses the absent platform callback.
+- storage-probe=1 writes synchronous startup checkpoints to the spare UFS log blocks. Separate rings retain the bootstrap and PID 1 paths through BSD initialization, bootstrap completion and launchd execution. Records include sequence, PID, thread, build tag, stage, counters, virtual timer, DAIF, pending interrupt and caller. The reader exports startup-checkpoints.txt and the latest startup-checkpoint.txt, filtered by the expected build tag.
 - The macOS lab exported 72721568 bytes through the Linux reader and returned to command-responsive fastboot. The clock probe records CNTFRQ, counter deltas and Darwin clock deltas around a one-second sleep.
 - cycle.json records acknowledgement, elapsed test and reader time, exit status and the final fastboot command response. The six-minute scene covers the 120-second export budget.
 - The lab agent clears Finder and System Settings saved-window state before priming, then runs the same numeric, paired-throughput and animation sequence after the current boot reports complete whole-system priming. The watchdog timeout is 30000 ms, with kernel pings every 10 s.
@@ -1206,6 +1242,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 - package/linux-log/ufsbench.c is a static aarch64 Linux program without libc: O\_DIRECT reads of a fixed-seed sequence of offsets at queue depths of forked processes, one line per test with IOPS, MB/s, mean, p50, p99 and longest latency.
 - The \[gpu vm fail\] row reports GPU address spaces taken out of use \(count, the last one's status, the source line of the check in NativeAdrenoVm.cpp and whether it was a process's\), and \[gpu global fault\] the SMMU's global fault status seen by such a check and cleared at a recovery. The \[video fw\] and \[video fw error\] rows hold the video firmware's messages with log-video=1.
 - The \[gpu stall\] ib2 row reports the search of a stalled job's IB1s for the IB2 address the GPU thread stopped in: how many CP\_INDIRECT\_BUFFER packets name it, the first one's IB1, offset and words, and how much was read.
+- The persistent boot log records App Cryptex mount stage/status and HCI discovery commands \(sent, replies, status\), with classic, legacy LE and extended LE report counts. The counters distinguish an absent scan request, controller refusal and received reports; they do not establish radio discovery by themselves.
 
 ### Completion criteria
 
@@ -1221,17 +1258,25 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 
 ### Evidence
 
-- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/read-sheng-log.py)
-- `host`: [151 rounds over 2254981 stream bytes write 635 message blocks; a quiet round writes none, a failed write is retried by the next round, a replaced kernel ring restarts the stream once, and read-sheng-log.py returns the newest 131072 bytes and every slot. The kernel arm64e command compiles BootLog.c.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-boot-log-host.py)
+- `source`: [Implementation and configuration described in this section](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/read-sheng-log.py)
+- `host`: [151 rounds over 2254981 stream bytes write 635 message blocks; a quiet round writes none, a failed write is retried by the next round, a replaced kernel ring restarts the stream once, and read-sheng-log.py returns the newest 131072 bytes and every slot. The kernel arm64e command compiles BootLog.c.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-boot-log-host.py)
   Command: <code>python3 scripts/check-boot-log-host.py</code>. Revision: `2a7187d270fdb20244353e7b949e60fdb5cc960a`.
-- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/BootUiTraceProbe.c)
-- `host`: [The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH\_WAIT \| TH\_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/check-boot-ui-trace.py)
+- `source`: [CLI1 header flag 1 identifies exact user-mode samples with the interrupting CPU ID in the wait field. The target CPU records its own timestamp, PC, LR and FP. CPF1 records the policy vote and EPSS domain state per governor window.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/BootUiTraceProbe.c)
+- `host`: [The shared sampler retains the three expected return addresses for a blocked thread. The regression covers the TH\_WAIT \| TH\_RUN transition observed in boot 6ba5a54e, terminating threads, missing or out-of-stack saved state and a wrapping frame address.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/check-boot-ui-trace.py)
   Command: <code>python3 scripts/check-boot-ui-trace.py</code>. Revision: `571fcc972a4ea3e8c402183ba98a0a8f67a4750a`.
-- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/scripts/sheng-springboard-profile.py)
+- `source`: [With cs-profile=1, exact cross-calls target the SpringBoard main thread. The trace includes Mach wait durations and destinations, per-core PMU availability, EL0 instructions and cycles, and sampler time.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/scripts/sheng-springboard-profile.py)
 - `host`: [The signed numeric, native-control and scene tools are packaged with timed return, system logs and command-responsive fastboot checks.](https://github.com/rponeawa/UniXNU-sheng/blob/d4f97b86b7bcf239f03ab9fe34bfb1f295901400/reports/sheng-macos27-source-lab.json)
   Command: <code>prepare-sheng-gpu-lab.py --preserve-data</code>. Revision: `d4f97b86b7bcf239f03ab9fe34bfb1f295901400`.
 - `device`: [The macOS lab exported 72721568 bytes through the Linux reader and returned to command-responsive fastboot. The clock probe records CNTFRQ, counter deltas and Darwin clock deltas around a one-second sleep.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/reports/sheng-macos27-first-boot.json)
   Command: <code>scripts/run-sheng-unattended.sh sheng-macos27-inherited-prime.img 7500</code>. Revision: `c30fec292042b44537bf764468e6a15d658f21b6`.
+- `device`: [With Xcode 26.6 tools, all three source-built kernels reached Data disk initialization and returned through the watchdog after approximately 80 seconds. GPU-only and combined CPU/GPU reference selections reproduced the stall; cause undetermined.](https://github.com/rponeawa/UniXNU-sheng/blob/788684be43e74755367a7d646ba39fed2d11a11e/reports/sheng-macos27-startup-comparison.json)
+  Command: <code>SERIAL=SERIAL READER=reader.img OUT=capture scripts/run-sheng-unattended.sh boot.img 7500</code>. Revision: `a35cbc41487da1720147bea1fc887fb714a26ed8`.
+- `host`: [The entry-probe build uses the shared LLVM lookup; the selected component lock resolves in the local macOS kernel and firmware builds.](https://github.com/UniXNU/UniXNU-sheng/pull/99)
+  Command: <code>python3 scripts/run-local-kernel.py --sdk SDK --tools TOOLCHAIN -- build kernel prelink -D ../UniXNU-sheng --os macos-27 --data-ramdisk installed-data.dbr --skip-preflight</code>. Revision: `ef015993fb686b29d915a64463a4adaf03dbf77e`.
+- `host`: [On Apple M1 Pro, 16 persistent IOSurface CPU/GPU round trips and both exact-heap layout policies pass. The 120-frame HEVC fixture returns 120 frames with no drops, and all 1880 sampled NV12 bytes match FFmpeg. The ARM64e lab tools and authored half compound AIR assemble and package successfully.](https://github.com/UniXNU/UniXNU-sheng/commit/9ea98e5b491c96883e5ea55659d8e0b9feb7ab33)
+  Command: <code>gpu-correctness-probe --cache-only; video-probe video-probe.mp4 --require-hardware; python3 scripts/compare-video-probe.py video-probe.mp4 video-probe.log</code>. Revision: `9ea98e5b491c96883e5ea55659d8e0b9feb7ab33`.
+- `host`: [On Apple M1 Pro, the source-compiled half kernel returns mix=0 and dot=32, missing-function lookup returns MTLLibraryErrorDomain code 5, both exact-heap layouts pass, and 16 persistent IOSurface CPU/GPU round trips pass. All 64 requested icons have finite source components; the RGBAh blur is finite.](https://github.com/UniXNU/UniXNU-sheng/commit/9a2ef561f225a440695f4304f608b62f90f208a3)
+  Command: <code>gpu-correctness-probe --all; icon-probe icons.png</code>. Revision: `9a2ef561f225a440695f4304f608b62f90f208a3`.
 
 ## arm64e-os {#arm64e-os}
 
@@ -1276,6 +1321,7 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
 - The selected device series supplies the launchd cache/executable overlays and the bounded 540-byte IEEE80211 association event transport for 24A446.
 - The 24A446 Bluetooth runtime patch compiles with the target kern\_exec command. The signed native daemon retains its identifier and all original entitlements; the platform service carries typed properties for native transport selection.
 - The device series relaxes the disabled-signal assertion in processor\_cpu\_reinit once sheng\_sigp\_recover has run.
+- The macOS patch series includes bootstrap, headless-startup, process-exit and BSD checkpoints used by the local kernel build.
 
 ### Completion criteria
 
@@ -1299,12 +1345,12 @@ Components: `DarwinBoot`, `XnuPrelink`, `SoftwareAES`.
   Command: <code>shasum -a 256 &lt;ipsw&gt;; ipsw extract --kernel &lt;ipsw&gt;; ipsw kernel version &lt;kernelcache&gt;</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
 - `host`: [dyld cache iOS 26.5, 4261 images, 83 subcaches; 1208 SMSTART SM and 1287 SMSTART ZA in 11 subcaches. Sampled functions with names include \_sme\_sgemm, \_sme\_strsm and \*\_SME2.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
   Command: <code>ipsw extract --dyld -a arm64e &lt;ipsw&gt;; scan 4-byte aligned words for SMSTART SM (0xd503437f) and SMSTART ZA (0xd503457f)</code>. Revision: `759eb61b6b8d475de5b3d1b39e1de1f5294e8d9a`.
-- `host`: [27 patches on xnu-12377.121.6; mach.development.bcm2837 links, 19789128 bytes, arm64e MH\_EXECUTE with LC\_DYLD\_CHAINED\_FIXUPS \(pointer format 7\). The prelink step stops: the input is MH\_FILESET.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/configs/sheng_ipados26_defconfig)
+- `host`: [27 patches on xnu-12377.121.6; mach.development.bcm2837 links, 19789128 bytes, arm64e MH\_EXECUTE with LC\_DYLD\_CHAINED\_FIXUPS \(pointer format 7\). The prelink step stops: the input is MH\_FILESET.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/configs/sheng_ipados26_defconfig)
   Command: <code>./unixnu defconfig sheng_ipados26_defconfig -D ../UniXNU-sheng; ./unixnu kernel -D ../UniXNU-sheng</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
 - `host`: [298 entries, base 0xfffffe0007004000, 585131 fixups in pointer format 8, 0 symbols in every entry. For the 31 prelink roots \(30 with code, 7 kernel resources\): 1864 kernel targets, 47807 pointer sites, 42027 branch sites.](https://updates.cdn-apple.com/2026SpringFCS/fullrestores/140-25976/000BB0A6-045B-47FF-AE4E-D8BF722E24FD/iPad17%2C1%2CiPad17%2C2%2CiPad17%2C3%2CiPad17%2C4_26.5.2_23F84_Restore.ipsw)
   Command: <code>parse LC_FILESET_ENTRY, LC_DYLD_CHAINED_FIXUPS and kext __TEXT_EXEC branches of the decompressed kernelcache</code>. Revision: `4ed86f68213ed7dc83726987c2d3a78b7c16114a`.
-- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/patches/xnu-12377/sheng-main-thread-profile.patch)
-- `device`: [iPadOS 27.0.1 \(24A446\): the app installs over USB, launches and stays usable, with no EXC\_GUARD or SIGBUS.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/patches/xnu-12377/sheng-appsync-user-trust.patch)
+- `source`: [The XNU patch records Mach receive waits for the selected thread and handles trapped PMU reads during profiling.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/patches/xnu-12377/sheng-main-thread-profile.patch)
+- `device`: [iPadOS 27.0.1 \(24A446\): the app installs over USB, launches and stays usable, with no EXC\_GUARD or SIGBUS.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/patches/xnu-12377/sheng-appsync-user-trust.patch)
   Command: <code>ideviceinstaller -i &lt;unsigned, decrypted arm64 IPA&gt;; launch the app; idevicesyslog</code>. Revision: `f188b857dd6443e6f81ccebd69d99a3d133585a1`.
 - `device`: [On sheng, macOS 27.3 build 26C5035r booted and automatically logged into the unixnu admin account with UID 501.](https://github.com/rponeawa/UniXNU-sheng/blob/ef84485040ae364c91caeeed3a1a342a9b40d89d/reports/sheng-macos27-first-boot.json)
   Command: <code>scripts/run-sheng-unattended.sh sheng-macos27-inherited-prime.img 7500</code>. Revision: `c30fec292042b44537bf764468e6a15d658f21b6`.
@@ -1342,6 +1388,7 @@ Components: `QcomIris`.
 - A 10-bit stream's reference pictures are sized as QC10C and its output as P010, as mainline does; the 10-bit 4K stream decodes on hardware. The pictures' colours have not been compared with a reference yet.
 - With log-video=1 the firmware is told a debug level at init \(errors, fatal and high messages; it writes none otherwise\), and the boot log keeps its last four messages \(\[video fw\]\) and its error messages in full \(\[video fw error\], without its version lines\).
 - The VPU's buffers are pageable memory that prepare\(\) wires. A 4K session needs 150 to 440 MiB of internal buffers \(50 MiB bitstream bin, 33 MiB of motion vectors per four pictures, 12.6 or 16.8 MiB per reference picture\); the system runs with tens of MiB free, a wired kernel allocation is refused at once there, and wiring waits for pages. The \[video alloc\] row shows a refused buffer \(pages, step, result\) and the physical address bits the VPU's table reaches \(36\). A start failure reaches the client with the session's own error number, which the last word of \[video media\] shows.
+- HEVC decoder configuration retains complete parameter-set NAL units; reduced frame delivery is selected explicitly.
 
 ### Completion criteria
 
@@ -1358,7 +1405,11 @@ Components: `QcomIris`.
 
 ### Evidence
 
-- `device`: [\[video\] stage 6; \[video vt\] stage 2, 27 sessions, 60 frames handed over with pictures; \[video media\] 4808 sessions opened, 1 source change at 1280x720 8-bit, 60 bitstream buffers queued, 60 pictures returned, 4807 sessions failed with 0x01000005 \(HEVC\). No GPU hang in the run.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/ee4d9cb63bf55d23b76c908410872307f10e4e07/package/BootLog.c)
+- `device`: [\[video\] stage 6; \[video vt\] stage 2, 27 sessions, 60 frames handed over with pictures; \[video media\] 4808 sessions opened, 1 source change at 1280x720 8-bit, 60 bitstream buffers queued, 60 pictures returned, 4807 sessions failed with 0x01000005 \(HEVC\). No GPU hang in the run.](https://github.com/shanggeshijidefeng/UniXNU-sheng/blob/14235b6d21a1a3f731c2f3492ab657f781433319/package/BootLog.c)
   Command: <code>fastboot boot boot.img (log-video=1 diag=1); the test agent transcodes a 1280x720 H.264 clip with avconvert</code>. Revision: `9252d988c0b668bc1f68c3e482951c8b2b33abc1`.
+- `host`: [The production VideoToolbox parameter-set parser accepts the complete 2416-byte HEVC configuration, including its SEI NAL, and rejects a truncated NAL under ASan and UBSan. The full-rate decoder delivery change compiles in the macOS arm64e kernel.](https://github.com/UniXNU/UniXNU-sheng/commit/9ea98e5b491c96883e5ea55659d8e0b9feb7ab33)
+  Command: <code>python3 scripts/check-vt-parameters-host.py video-probe.mp4</code>. Revision: `9ea98e5b491c96883e5ea55659d8e0b9feb7ab33`.
+- `host`: [On Apple M1 Pro, hardware decoding returns all 120 8-bit frames and all 12 3840x2160 10-bit frames without drops. Explicit NV12 and P010 outputs match FFmpeg at all 1880 and 1920 sampled components respectively.](https://github.com/UniXNU/UniXNU-sheng/commit/9a2ef561f225a440695f4304f608b62f90f208a3)
+  Command: <code>video-probe video-probe.mp4 --require-hardware; video-probe video-probe-10bit.mp4 --require-hardware; python3 scripts/compare-video-probe.py FIXTURE VIDEO_LOG --sample INDEX</code>. Revision: `9a2ef561f225a440695f4304f608b62f90f208a3`.
 
 </div>
