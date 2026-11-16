@@ -295,6 +295,15 @@ class Ipsw:
         # AEA inputs may have been removed after decryption. Validate the plain
         # image and both recorded identities before downloading the archive again.
         name = self.member(component)
+        for window in self.ctx.board.get('userdata', {}).get('windows', []):
+            if window['component'] != component:
+                continue
+            raw = self.cache / (window['name'] + '.raw.dmg')
+            pin = self.ctx.board.get('root', {}).get(window['name'].lower() + '_image_sha256')
+            if raw.is_file() and pin:
+                if sha256_file(raw) != pin:
+                    raise Error(f'{raw}: raw root image differs from the selected OS profile')
+                return raw
         if name.endswith('.aea'):
             archive = self.cache / Path(name).name
             plain = archive.with_suffix('')

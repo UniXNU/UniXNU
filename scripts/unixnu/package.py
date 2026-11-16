@@ -30,7 +30,10 @@ def build(ctx, modules, target='DEBUG', toolchain='CLANGPDB'):
     edk2 = edk2_dir(ctx, modules)
     tool('clang', 'brew install llvm')
     env = dict(os.environ, UNIXNU_EDK2=str(edk2), UNIXNU_BUILD_DIR=str(ctx.work / 'package'), JOBS=str(ctx.jobs))
-    if toolchain == 'CLANGPDB' and 'CLANG_BIN' not in env:
+    selected_tools = ctx.option('clang_bin', 'CLANG_BIN')
+    if selected_tools:
+        env['CLANG_BIN'] = str(selected_tools) + '/'
+    elif toolchain == 'CLANGPDB' and 'CLANG_BIN' not in env:
         env['CLANG_BIN'] = clang_bin(ctx.work / 'toolchain')
     (ctx.work / 'package').mkdir(parents=True, exist_ok=True)
     run(['bash', ctx.tree / 'package/build.sh', '-b', target, '-t', toolchain], cwd=ctx.tree / 'package', env=env,
