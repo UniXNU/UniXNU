@@ -82,10 +82,10 @@ def make_prime_list(request, work, os_root):
         if Path(image['image']).resolve() == Path(request['os_image']).resolve():
             found = collect(os_root, image['prefix'])
         else:
-            directory = work / ('prime-' + image['name'])
-            directory.mkdir()
-            with os_mount(image['image'], directory) as mount:
-                found = collect(mount, image['prefix'])
+            # Use a system mount point when the build output resides on an attached image.
+            with tempfile.TemporaryDirectory(prefix=f'unixnu-prime-{image["name"]}-') as scratch:
+                with os_mount(image['image'], Path(scratch)) as mount:
+                    found = collect(mount, image['prefix'])
         counts[image['name']] = len(found)
         paths.update(found)
     if not paths:
