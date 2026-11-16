@@ -139,6 +139,7 @@ def main():
     parser.add_argument('--upstream', default='UniXNU')
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--fetch', action='store_true', help='refresh upstream main and every fork branch')
+    parser.add_argument('--review', type=Path, help='JSON rows with file id, decision and reason annotations')
     args = parser.parse_args()
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -150,12 +151,20 @@ def main():
     branches = [row for result in results for row in result['branches']]
     files = [row for result in results for row in result['files']]
     commits = [row for result in results for row in result['commits']]
+    if args.review:
+        reviews = {row['id']: row for row in json.loads(args.review.read_text())}
+        for row in files:
+            if review := reviews.get(row['id']):
+                row.update(decision=review['decision'], reason=review['reason'])
     snapshot = dict(captured_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
                     owner=args.owner, upstream=args.upstream, repositories=results)
     (output / 'audit.json').write_text(json.dumps(snapshot, ensure_ascii=False, indent=2) + '\n')
     write_csv(output / 'branches.csv', branches, ['repo', 'branch', 'sha', 'upstream_main', 'ahead', 'behind', 'merge_bases', 'files'])
-    write_csv(output / 'files.csv', files, ['id', 'repo', 'path', 'classifications', 'decision', 'reason',
-                                         'branches', 'hunks', 'upstream_entry', 'fork_entry', 'patch', 'source_url'])
+    fields = ['id', 'repo', 'path', 'classifications', 'decision', 'reason',
+              'branches', 'hunks', 'upstream_entry', 'fork_entry', 'patch', 'source_url']
+    write_csv(output / 'files.csv', files, fields)
+    write_csv(output / 'fork-files.csv',
+              [row for row in files if any(kind != 'upstream-only' for kind in row['classifications'])], fields)
     write_csv(output / 'commits.csv', commits, ['repo', 'sha', 'author', 'date', 'title', 'branches', 'paths', 'source_url'])
     for result in results:
         candidates = sum(any(kind != 'upstream-only' for kind in row['classifications']) for row in result['files'])
