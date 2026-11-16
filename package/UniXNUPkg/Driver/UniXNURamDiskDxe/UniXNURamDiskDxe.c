@@ -10,9 +10,11 @@
 #include <Library/DebugLib.h>
 #include <Library/FdtLib.h>
 #include <Library/HobLib.h>
+#include <Library/MemoryAllocationLib.h>
 #include <Library/UefiBootServicesTableLib.h>
 #include <Protocol/BlockIo.h>
 #include <Protocol/DevicePath.h>
+#include <Protocol/Decompress.h>
 
 // Mu-Silicium SEC stores the incoming x0 value in this HOB as a UINT64.
 STATIC CONST EFI_GUID mEntryArgHobGuid = {
@@ -52,6 +54,66 @@ STATIC RAM_BLOCK_DEVICE_PATH  mDevicePath = {
 
 STATIC UINT8                    *mRamBase;
 STATIC EFI_BLOCK_IO_MEDIA       mMedia;
+STATIC EFI_DECOMPRESS_PROTOCOL  *mDecompress;
+STATIC UINTN                    mSourceBytes;
+STATIC UINT64                   mLogicalBytes;
+STATIC UINT32                   mChunkCount;
+STATIC UINT8                    *mChunkCache;
+STATIC VOID                     *mScratch;
+STATIC UINT32                   mScratchBytes;
+STATIC UINT32                   mCachedChunk = MAX_UINT32;
+
+#define PACKED_HEADER_SIZE  24
+#define PACKED_CHUNK_SIZE   (1024 * 1024)
+
+STATIC
+EFI_STATUS
+ReadPackedChunk (
+  IN UINT32  Index
+  )
+{
+  EFI_STATUS  Status;
+  UINT32      Offset;
+  UINT32      Length;
+  UINT32      DestinationBytes;
+  UINT32      ScratchBytes;
+  UINT32      Expected;
+
+  if (Index == mCachedChunk) {
+    return EFI_SUCCESS;
+  }
+  if (Index >= mChunkCount) {
+    return EFI_INVALID_PARAMETER;
+  }
+  Offset = ReadUnaligned32 ((CONST UINT32 *)(mRamBase + PACKED_HEADER_SIZE + Index * 8));
+  Length = ReadUnaligned32 ((CONST UINT32 *)(mRamBase + PACKED_HEADER_SIZE + Index * 8 + 4));
+  if ((Offset < PACKED_HEADER_SIZE + mChunkCount * 8) || (Length < 8) ||
+      ((UINT64)Offset + Length > mSourceBytes)) {
+    return EFI_COMPROMISED_DATA;
+  }
+  Status = mDecompress->GetInfo (mDecompress, mRamBase + Offset, Length,
+                               &DestinationBytes, &ScratchBytes);
+  Expected = (UINT32)MIN ((UINT64)PACKED_CHUNK_SIZE, mLogicalBytes - (UINT64)Index * PACKED_CHUNK_SIZE);
+  if (EFI_ERROR (Status) || (DestinationBytes != Expected)) {
+    return EFI_COMPROMISED_DATA;
+  }
+  if (ScratchBytes > mScratchBytes) {
+    if (mScratch != NULL) {
+      FreePool (mScratch);
+    }
+    mScratch = AllocatePool (ScratchBytes);
+    mScratchBytes = mScratch == NULL ? 0 : ScratchBytes;
+    if (mScratch == NULL) {
+      return EFI_OUT_OF_RESOURCES;
+    }
+  }
+  Status = mDecompress->Decompress (mDecompress, mRamBase + Offset, Length,
+                                  mChunkCache, DestinationBytes, mScratch, ScratchBytes);
+  if (!EFI_ERROR (Status)) {
+    mCachedChunk = Index;
+  }
+  return Status;
+}
 
 STATIC
 EFI_STATUS
@@ -91,7 +153,25 @@ RamBlockRead (
     return EFI_INVALID_PARAMETER;
   }
 
-  CopyMem (Buffer, mRamBase + Lba * RAM_BLOCK_SIZE, BufferSize);
+  if (mDecompress != NULL) {
+    UINT64      Position = Lba * RAM_BLOCK_SIZE;
+    UINTN       Copied = 0;
+    EFI_STATUS  Status;
+    while (Copied < BufferSize) {
+      UINT32  Index = (UINT32)(Position / PACKED_CHUNK_SIZE);
+      UINTN   Offset = (UINTN)(Position % PACKED_CHUNK_SIZE);
+      UINTN   Bytes = MIN (BufferSize - Copied, PACKED_CHUNK_SIZE - Offset);
+      Status = ReadPackedChunk (Index);
+      if (EFI_ERROR (Status)) {
+        return Status;
+      }
+      CopyMem ((UINT8 *)Buffer + Copied, mChunkCache + Offset, Bytes);
+      Copied += Bytes;
+      Position += Bytes;
+    }
+  } else {
+    CopyMem (Buffer, mRamBase + Lba * RAM_BLOCK_SIZE, BufferSize);
+  }
   return EFI_SUCCESS;
 }
 
@@ -166,6 +246,38 @@ PublishInitrd (
     return;
   }
 
+  mRamBase = (UINT8 *)(UINTN)Start;
+  mSourceBytes = (UINTN)(End - Start);
+  mLogicalBytes = End - Start;
+  if ((mSourceBytes >= PACKED_HEADER_SIZE) && (CompareMem (mRamBase, "UNXNFAT1", 8) == 0)) {
+    UINT32 ChunkSize = ReadUnaligned32 ((CONST UINT32 *)(mRamBase + 16));
+    mLogicalBytes = ReadUnaligned64 ((CONST UINT64 *)(mRamBase + 8));
+    mChunkCount = ReadUnaligned32 ((CONST UINT32 *)(mRamBase + 20));
+    if ((ChunkSize != PACKED_CHUNK_SIZE) || (mLogicalBytes == 0) ||
+        (mLogicalBytes > 1024ULL * 1024 * 1024) || ((mLogicalBytes % RAM_BLOCK_SIZE) != 0) ||
+        (mChunkCount != (mLogicalBytes + PACKED_CHUNK_SIZE - 1) / PACKED_CHUNK_SIZE) ||
+        ((UINT64)PACKED_HEADER_SIZE + (UINT64)mChunkCount * 8 > mSourceBytes)) {
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: invalid packed geometry\n"));
+      return;
+    }
+    Status = gBS->LocateProtocol (&gEfiDecompressProtocolGuid, NULL, (VOID **)&mDecompress);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: decompressor %r\n", Status));
+      return;
+    }
+    mChunkCache = AllocatePool (PACKED_CHUNK_SIZE);
+    if (mChunkCache == NULL) {
+      return;
+    }
+    Status = ReadPackedChunk (0);
+    if (EFI_ERROR (Status)) {
+      DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: first packed chunk %r\n", Status));
+      return;
+    }
+    DEBUG ((DEBUG_ERROR, "UNIXNURAMDISK: packed %lu decoded %lu chunks %u\n",
+            (UINT64)mSourceBytes, mLogicalBytes, mChunkCount));
+  }
+
   //
   // The bootloader does not always end the initrd on a sector boundary: the
   // nubia NX769J hands over an end address whose low bits are 0x430. Round the
@@ -173,10 +285,10 @@ PublishInitrd (
   // real end and the rounded end are inside the RAM the bootloader reserved for
   // the initrd, and the volume is read-only.
   //
-  if (((End - Start) % RAM_BLOCK_SIZE) != 0) {
-    UINT64  Rounded = ((End - Start) + RAM_BLOCK_SIZE - 1) / RAM_BLOCK_SIZE * RAM_BLOCK_SIZE;
+  if ((mLogicalBytes % RAM_BLOCK_SIZE) != 0) {
+    UINT64  Rounded = (mLogicalBytes + RAM_BLOCK_SIZE - 1) / RAM_BLOCK_SIZE * RAM_BLOCK_SIZE;
     DEBUG ((DEBUG_WARN, "UNIXNURAMDISK: initrd 0x%lx-0x%lx rounded to 0x%lx bytes\n", Start, End, Rounded));
-    End = Start + Rounded;
+    mLogicalBytes = Rounded;
   }
 
   mRamBase                = (UINT8 *)(UINTN)Start;
@@ -188,7 +300,7 @@ PublishInitrd (
   mMedia.WriteCaching     = FALSE;
   mMedia.BlockSize        = RAM_BLOCK_SIZE;
   mMedia.IoAlign          = 1;
-  mMedia.LastBlock        = (End - Start) / RAM_BLOCK_SIZE - 1;
+  mMedia.LastBlock        = mLogicalBytes / RAM_BLOCK_SIZE - 1;
 
   Handle = NULL;
   Status = gBS->InstallMultipleProtocolInterfaces (
