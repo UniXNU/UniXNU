@@ -15,13 +15,24 @@ let boxes = arguments.first == "--boxes"
 if boxes { arguments.removeFirst() }
 
 var seen = Set<String>()
+var failed = false
 for path in arguments {
-    guard let image = NSImage(contentsOfFile: path),
-          let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else { continue }
+    guard let image = NSImage(contentsOfFile: URL(fileURLWithPath: path).path),
+          let cg = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        fputs("\(path): cannot read image\n", stderr)
+        failed = true
+        continue
+    }
     let request = VNRecognizeTextRequest()
     request.recognitionLevel = .accurate
     request.usesLanguageCorrection = false
-    try? VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
+    do {
+        try VNImageRequestHandler(cgImage: cg, options: [:]).perform([request])
+    } catch {
+        fputs("\(path): \(error)\n", stderr)
+        failed = true
+        continue
+    }
     let name = (path as NSString).lastPathComponent
     let results = (request.results ?? []).sorted { $0.boundingBox.minY > $1.boundingBox.minY }
     for result in results {
@@ -35,3 +46,5 @@ for path in arguments {
         }
     }
 }
+
+if failed { exit(EXIT_FAILURE) }
