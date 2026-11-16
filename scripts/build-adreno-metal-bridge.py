@@ -27,7 +27,7 @@ SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
-    '0046-main-optimizations-on-development-555b13d5.patch']]
+    '0047-main-optimizations-on-development-39dc6585.patch']]
 
 
 def git_tree(*steps):
