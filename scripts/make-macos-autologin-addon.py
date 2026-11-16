@@ -25,6 +25,20 @@ exec >>/Users/Shared/unixnu-test/daemon.log 2>&1
 base='/Library/Application Support/UniXNU/AutoLogin'
 user=$(/bin/cat "$base/user")
 /usr/bin/id "$user" >/dev/null
+if [ -s "$base/authorized-key" ]; then
+    uid=$(/usr/bin/id -u "$user")
+    group=$(/usr/bin/id -gn "$user")
+    home=$(/usr/bin/dscl . -read "/Users/$user" NFSHomeDirectory | /usr/bin/cut -d ' ' -f 2-)
+    /usr/bin/install -d -o "$user" -g "$group" -m 700 "$home/.ssh"
+    /usr/bin/touch "$home/.ssh/authorized_keys"
+    key=$(/bin/cat "$base/authorized-key")
+    /usr/bin/grep -Fqx "$key" "$home/.ssh/authorized_keys" || /bin/echo "$key" >> "$home/.ssh/authorized_keys"
+    /usr/sbin/chown "$user:$group" "$home/.ssh/authorized_keys"
+    /bin/chmod 600 "$home/.ssh/authorized_keys"
+    /bin/launchctl enable system/com.openssh.sshd
+    /bin/launchctl bootstrap system /System/Library/LaunchDaemons/ssh.plist 2>/dev/null || :
+    /bin/echo "Remote login configured for $user (uid=$uid)"
+fi
 /usr/bin/pmset -a displaysleep 0 sleep 0 || /usr/bin/logger -t UniXNUAutoLogin 'pmset failed'
 /usr/bin/sudo -H -u "$user" /usr/bin/defaults -currentHost write com.apple.screensaver idleTime -int 0 || /usr/bin/logger -t UniXNUAutoLogin 'Screensaver preference failed'
 changed=0
@@ -46,6 +60,7 @@ fi
 /bin/echo "Automatic login configured for $user; changed=$changed"
 /usr/bin/pmset -g custom || :
 /usr/bin/pmset -g batt || :
+/sbin/ifconfig || :
 /usr/sbin/sysadminctl -autologin status 2>&1 || :
 /usr/bin/defaults read /Library/Preferences/com.apple.loginwindow 2>&1 || :
 /usr/bin/defaults read /Library/Preferences/com.apple.screensaver 2>&1 || :
@@ -74,6 +89,7 @@ def main():
     parser.add_argument('output', type=Path)
     parser.add_argument('--user', required=True)
     parser.add_argument('--capture-graphics', action='store_true', help='capture 120 seconds of fresh graphics logs during boot')
+    parser.add_argument('--ssh-public-key', type=Path, help='enable Remote Login for this existing account with the supplied public key')
     parser.add_argument('--password-stdin', action='store_true', required=True,
                         help='read the existing account password from standard input')
     args = parser.parse_args()
@@ -107,6 +123,11 @@ def main():
                  ('Library/LaunchDaemons/org.unixnu.autologin.plist', 0o644, plistlib.dumps(job)),
                  ('Library/LaunchDaemons/org.unixnu.graphics-log.plist', 0o644, plistlib.dumps(capture)),
                  ('Library/LaunchDaemons/org.unixnu.desktop-awake.plist', 0o644, plistlib.dumps(awake))]
+    if args.ssh_public_key:
+        key = args.ssh_public_key.read_text().strip().split()
+        if len(key) < 2 or key[0] != 'ssh-ed25519' or not re.fullmatch(r'[A-Za-z0-9+/=]+', key[1]):
+            parser.error('require an OpenSSH Ed25519 public key')
+        additions.append((prefix + 'authorized-key', 0o600, (' '.join(key[:2]) + '\n').encode()))
     names = {name for name, _, _ in additions}
     files = [entry for entry in files if entry[0] not in names] + additions
     os.umask(0o077)
