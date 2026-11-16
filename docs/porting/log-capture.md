@@ -230,18 +230,18 @@ access can use the same runner structure with ADB commands.
 
 For recovery charging, `python3 scripts/arm-sheng-recovery-return.py --serial <serial> --seconds 7200` arms a fastboot return timer. Running it again renews the monotonic deadline.
 
-For sheng's two-hour macOS priming image, run from the device checkout:
+For a timed sheng macOS image, run from the device checkout:
 
 ```sh
 SERIAL=<serial> READER=<sheng-linux-log.img> OUT=<capture-directory> \
   scripts/run-sheng-unattended.sh <boot.img> 7500
 ```
 
-For the first installation, add `USERDATA=/path/to/userdata.sparse`. The runner checks the sheng product and full-partition sparse geometry, writes userdata, then starts the timed boot and log capture. Subsequent priming runs use the preserved-Data image with `USERDATA` unset.
+For the first installation, add `USERDATA=/path/to/userdata.sparse`. The runner checks the sheng product and full-partition sparse geometry, writes userdata, then starts the timed boot and log capture. Subsequent runs use the preserved-Data image with `USERDATA` unset.
 
 The runner assigns a six-character `build-tag` beginning with `s` and matches it against the captured header. The letter prefix keeps XNU's boot-argument parser in string mode. `cycle.json` records the expected tag, capture match, boot acknowledgement, elapsed test and reader time, the reader exit status and the final command-responsive fastboot state.
 
-The host runner keeps the Mac awake for the capture cycle. The image uses `autoreset=7200 diag=1 diag-export=6900`. Its macOS lab agent waits for this boot's whole-system `prime.log` pass with `complete=1`, then runs a fixed animation. The root job captures memory, swap, mounts and battery state, requests an export through `kern.unixnu_diag_request`, and reboots after `kern.unixnu_diag_status` reports `2`. The agent clears Finder and System Settings saved-window state before priming. The six-minute animation covers the 120-second export budget. A low battery also requests capture and return. The Linux reader has its own 300-second return timer.
+The host runner keeps the Mac awake. A two-hour session uses `autoreset=7200 diag=1 diag-export=6900`; the Linux reader has its own 300-second return timer. The runner refreshes the selected slot's bootability and retry budget before each RAM boot. `cycle.json` records the final fastboot response.
 
 `scripts/repack-sheng-boot.py INPUT OUTPUT --partition-bytes <bytes>` fits a payload to the measured boot partition. Use `--kernel-arg NAME=VALUE` or `--remove-arg NAME` to change an XNU argument. The first installation uses `data-reset=1`; subsequent priming runs retain Data and the build-specific shader checkpoints.
 
@@ -259,11 +259,9 @@ For Actions builds, `scripts/fetch-actions-artifact.py OWNER/REPOSITORY RUN_ID A
 
 For an installed root with unchanged OS images and policies, dispatch `macos-lab.yml` with `root_storage=false` to build boot, kernel and payload artifacts. The default also builds the userdata image.
 
-The preparer uses ICD metadata from the matching Turnip build and builds the native Core Animation scene with a 120 Hz preferred frame-rate range. It adds the signed tools and current lab scripts to the addon, appends their code identities to the owner trust bundle, and creates a 256 MiB RAM payload. Add `--preserve-data` when continuing an existing priming pass. After priming, the agent runs numeric and paired native-throughput checks with a 180-second process budget, then starts the fixed scene. Tool output is captured in `agent.log`.
+The preparer accepts `--core <resolved-tree>` and uses ICD metadata from the matching Turnip build, adds signed tools and the Shader Cache app, and appends their code identities to the owner trust bundle. Use `--manual-session --preserve-data --autoreset 7200` for a manual desktop session with the firmware return timer. Shader Cache is available in Applications; the user starts compilation from its window. `--shader-cache-view` opens that window, `--graphics-view` opens System Settings, and `--graphics-comparison` runs the fixed interaction capture.
 
 The logical FAT is 256 MiB. With matching firmware, sheng stores it as independently compressed 1 MiB UEFI chunks (`UNXNFAT1`); encoded ramdisks must fit the 190 MiB board limit. `UniXNURamDiskDxe` exposes the logical FAT through a 1 MiB read cache.
-
-A completed priming pass with failures, or the 105-minute priming deadline, requests diagnostic export and returns the device to fastboot.
 
 The unattended runner confirms readiness with a bounded `fastboot getvar product` request. A boot acknowledgement timeout starts the image return wait; the final state requires a successful command response.
 
