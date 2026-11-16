@@ -180,6 +180,10 @@ The candidate names and the display or kernelcache inputs come from the device r
 
 The workflow runs kernel, userdata and payload. Package, firmware and boot image commands run locally on supported macOS or Linux hosts. Check the workflow and account runner settings before using hosted builds.
 
+### Sheng macOS lab
+
+The [sheng macOS lab workflow](https://github.com/UniXNU/UniXNU-sheng/actions/workflows/macos-lab.yml) selects the core checkout through `core_ref`, which defaults to `main`. Use a branch, tag or full 40-character commit SHA. Set it to the local core revision for a matching CI build. `root_storage=false` builds the boot image while retaining the installed root storage and Data.
+
 ## Linux host
 
 The installer supports apt, dnf, pacman and zypper on glibc Linux. Use `--package-manager none` with prepared dependencies and `--llvm-config FILE` for a specific host LLVM. See [Linux requirements](/guide/requirements#linux).
