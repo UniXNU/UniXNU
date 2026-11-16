@@ -1,10 +1,6 @@
-// Probe the CoreImage blur path that iconservicesagent aborts in (MPSImageUnaryKernel.mm line 335 on the tablet).
-// Run on the tablet: osascript -l JavaScript tablet-ci-blur-probe.js [sigma ...]
-// A Metal assertion (MTLReportFailure) prints its full text to this process's stderr, which the system log redacts.
-// Environment: CI_ENABLE_METAL_GPU / FORCE_SOFTWARE_RENDERER are passed through to CoreImage as given;
-// PROBE_SOFTWARE=1 creates every context with kCIContextUseSoftwareRenderer (CoreImage's CPU renderer).
-// The input is a checkerboard (a solid colour blurs to itself and may never reach the blur kernel); every sigma is tried
-// at 128, 512 and 1024 px, in a fresh context each time, so the first failing size and sigma are the last lines printed.
+// Render checkerboard Gaussian blurs at 128, 512 and 1024 pixels.
+// Run: osascript -l JavaScript tablet-ci-blur-probe.js [sigma ...]
+// PROBE_SOFTWARE=1 selects the Core Image software renderer.
 ObjC.import('Foundation');
 ObjC.import('CoreImage');
 

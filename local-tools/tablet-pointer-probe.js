@@ -1,11 +1,6 @@
-// Pointer drift on the sheng macOS test images (2026-11-15): the user sees the pointer jump further than the hand moved.
-// This samples the pointer position the window system holds (NSEvent mouseLocation) every 5 ms, waits for the first movement,
-// then records every change for the given number of seconds. If the position itself leaps, the jump is on the input side
-// (controller reports, HID, pointer acceleration); if it moves in even steps while the screen shows the pointer elsewhere, the
-// jump is in drawing. The controller sends about 20 touchpad frames a second (docs/zh/devices/sheng.md:510), so the gaps between
-// position changes are reported too.
-// Run on the tablet: osascript -l JavaScript tablet-pointer-probe.js [seconds] [threshold_px] [csv_path] [wait_seconds]
-// The CSV holds one line per position change: milliseconds since the first movement, x, y.
+// Sample window-system pointer coordinates every 5 ms and report movement intervals.
+// Run: osascript -l JavaScript tablet-pointer-probe.js [seconds] [threshold_px] [csv_path] [wait_seconds]
+// The CSV stores milliseconds from the first movement, x and y.
 ObjC.import('AppKit');
 ObjC.import('Foundation');
 
