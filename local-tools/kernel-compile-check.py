@@ -27,12 +27,13 @@ def main():
     parser.add_argument('-I', dest='includes', action='append', default=[])
     parser.add_argument('--tree', type=Path, required=True, help='resolved XNU build tree')
     args = parser.parse_args()
+    args.tree = args.tree.resolve()
     obj = args.tree / 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837'
     recipe = obj / ('osfmk/DEVELOPMENT/startup.o.json' if args.c else 'iokit/DEVELOPMENT/IOPlatformExpert.cpo.json')
     if not recipe.is_file():
         raise SystemExit(f'{recipe}: no compile record (is the build volume mounted?)')
     record = json.loads(recipe.read_text().strip().rstrip(','))
-    out = args.out or Path(tempfile.gettempdir())
+    out = (args.out or Path(tempfile.gettempdir())).resolve()
     out.mkdir(parents=True, exist_ok=True)
     destination = out / (args.source.stem + '.o')
     command, arguments, index = [], record['arguments'], 0
