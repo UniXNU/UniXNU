@@ -36,6 +36,7 @@ def write_manifest(ctx, modules, patch_order, files):
         revisions[f'{kind}:{name}'] = revision
     manifest = {'device': ctx.name, 'os_profile': ctx.work.parent.name, 'configuration': ctx.config_name,
                 'revisions': revisions, 'patches': [str(path) for path in patch_order],
+                'kernel_command_line': command_line(ctx),
                 'kernel_command_line_bytes': len(command_line(ctx)),
                 'outputs': {name: {'bytes': path.stat().st_size, 'sha256': sha256_file(path)} for name, path in files.items()}}
     runtime = ctx.work / 'runtime/inputs.json'

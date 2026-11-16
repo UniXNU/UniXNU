@@ -6,7 +6,7 @@ import platform
 import shutil
 import sys
 
-from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, tree, userdata, vendor_boot
+from . import bootimg, components, feeds, firmware, ipsw, kernel, package, patches, payload, pipeline, profiles, runtime, toolchain, tree, userdata, vendor_boot
 from .config import LOCAL_KINDS, Context, parse_config
 from .util import Error, expand, git, log
 
@@ -27,6 +27,8 @@ def common():
     p.add_argument('--local-module', action='append', metavar='[KIND:]NAME=PATH', help='use PATH for one module (beats everything)')
     p.add_argument('--uefi', metavar='DIR', help='Mu-Silicium checkout for the device (uefi-sheng); or UNIXNU_UEFI')
     p.add_argument('--edk2', metavar='DIR', help='Mu_Basecore checkout; or UNIXNU_EDK2')
+    p.add_argument('--kernel-sdk', metavar='DIR', help='exported iPhoneOS SDK for kernel and prelink; or UNIXNU_KERNEL_SDK')
+    p.add_argument('--kernel-tools', metavar='DIR', help='exported toolchain bin directory for kernel and prelink; or UNIXNU_KERNEL_TOOLS')
     p.add_argument('--kernelcache', metavar='FILE', help='original decompressed kernelcache; or UNIXNU_KERNELCACHE')
     p.add_argument('--skip-prelink', action='store_true', help='kernel/prelink: copy the built native kernel to kernel.macho without adding kernelcache kexts')
     p.add_argument('--skip-preflight', action='store_true', help='skip the board preflight scripts of the firmware step')
@@ -171,11 +173,11 @@ def cmd_build(ctx):
         runtime.prepare(ctx, kernel_build='kernel' in steps)
     elif 'kernel' in steps and ctx.args.data_ramdisk:
         runtime.bind_seed(ctx, Path(ctx.args.data_ramdisk).expanduser().resolve(), kernel_build=True)
-    if 'kernel' in steps:
-        kernel.build(ctx, modules)
-        kernel.prelink(ctx)
-    elif 'prelink' in steps:
-        kernel.prelink(ctx)
+    if 'kernel' in steps or 'prelink' in steps:
+        with toolchain.environment(ctx):
+            if 'kernel' in steps:
+                kernel.build(ctx, modules)
+            kernel.prelink(ctx)
     if 'package' in steps:
         package.build(ctx, modules, ctx.args.target)
     if 'payload' in steps:

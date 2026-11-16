@@ -15,6 +15,11 @@ def main():
         raise error
 
     for directory, dirs, files in os.walk(mount, followlinks=False, onerror=failed):
+        relative_dir = Path(directory).relative_to(mount).as_posix()
+        # Account databases and initial user homes are Data state. Shipped
+        # application and framework libraries remain in the image scan.
+        if relative_dir == 'System/Library/Templates/Data':
+            dirs[:] = [name for name in dirs if name not in ('private', 'Users')]
         if Path(directory) == mount:
             dirs[:] = [name for name in dirs if name not in ('.Trashes', '.Spotlight-V100', '.fseventsd')]
         for name in files:
