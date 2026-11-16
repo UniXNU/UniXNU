@@ -11,13 +11,13 @@
   },
   "translator": {
     "repository": "https://github.com/steelbrain/metal2vulkan",
-    "commit": "f3c9f748ce94ede0bddb3626654e1d8b0bb31797",
+    "commit": "a5a0ecbd30aeeba46f4f5ad80c7112fdaccf112b",
     "branch": "development",
     "clone": "depth 1, blob filter, checked out source",
     "files": {
       "README.md": "7fdda13d0b2bb73779b97186acb6f36dca75506cefe41b03214685d25bb0ae10",
       "Cargo.toml": "878c6ad5ce7efba58955114fe0c7a61a7372c9304b3ea244bc370cf158e5ad13",
-      "crates/metal2vulkan/src/device/policy.rs": "68c88c06b7f97dae3a8fcb8488879bd87d2fbb9cd2c4db2b81f5ce47149a0fcd"
+      "crates/metal2vulkan/src/device/policy.rs": "68f07927f0df1c5882e69d041db79fa108be8112aa9744076b9f092826e73562"
     }
   },
   "mesa": {
