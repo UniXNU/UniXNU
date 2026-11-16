@@ -1,7 +1,11 @@
 """Ordered XNU patch series and target-local source preparation."""
 import hashlib
 import json
+import os
+import tempfile
 import shutil
+
+from pathlib import Path
 
 from .profiles import resolve_path
 from .util import Error, git, log, run
@@ -30,7 +34,7 @@ def plan(ctx, modules):
     return result
 
 
-def prepare(ctx, modules):
+def prepare(ctx, modules, env=None):
     selected = plan(ctx, modules)
     module = modules.get(('refer', 'xnu'))
     if not module or module.path is None:
@@ -48,20 +52,36 @@ def prepare(ctx, modules):
     if previous != signature or not (work / '.git').is_dir():
         log(f'kernel: prepare XNU {revision[:12]}')
         stamp.unlink(missing_ok=True)
-        if work.exists():
-            shutil.rmtree(work)
         work.parent.mkdir(parents=True, exist_ok=True)
-        run(['git', 'clone', '--quiet', '--shared', '--no-checkout', module.path, work])
-        git(work, 'checkout', '--quiet', '--detach', revision)
-        for path in selected:
-            log(f'kernel: patch {path.name}')
+        with tempfile.TemporaryDirectory(prefix='xnu-previous-', dir=work.parent) as directory:
+            previous = Path(directory) / 'source'
+            if work.exists() or work.is_symlink():
+                work.rename(previous)
             try:
-                git(work, 'apply', str(path))
-            except Error as error:
-                shutil.rmtree(work)
-                raise Error(f'XNU patch {path}: {error}') from error
-        # A fresh clone lacks the public headers newer xnu omits (TrustCache among them); archives compile against it before the kernel build.
-        run(['python3', ctx.tree / 'scripts/prepare-xnu-source.py'], cwd=ctx.tree)
+                run(['git', 'clone', '--quiet', '--shared', '--no-checkout', module.path, work])
+                git(work, 'checkout', '--quiet', '--detach', revision)
+                for path in selected:
+                    log(f'kernel: patch {path.name}')
+                    git(work, 'apply', str(path))
+                run(['python3', ctx.tree / 'scripts/prepare-xnu-source.py'], cwd=ctx.tree, env=env)
+                # Unchanged source and restored headers retain their timestamps,
+                # so make can reuse the matching compiled objects.
+                for directory, folders, files in os.walk(work):
+                    folders[:] = [name for name in folders if name != '.git']
+                    for name in files:
+                        current = Path(directory) / name
+                        old = previous / current.relative_to(work)
+                        if current.is_symlink() or old.is_symlink() or not old.is_file():
+                            continue
+                        stat = old.stat()
+                        if current.stat().st_size == stat.st_size and current.read_bytes() == old.read_bytes():
+                            os.utime(current, ns=(stat.st_atime_ns, stat.st_mtime_ns))
+            except Exception:
+                if work.exists():
+                    shutil.rmtree(work)
+                if previous.exists() or previous.is_symlink():
+                    previous.rename(work)
+                raise
         stamp.write_text(json.dumps(signature, indent=2) + '\n')
     patch_list = ctx.work / 'xnu-patches.list'
     patch_list.write_text(''.join(str(path) + '\n' for path in selected))

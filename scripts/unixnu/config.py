@@ -29,10 +29,10 @@ def load_toml(path):
         raise Error(f'{path}: {error}') from None
 
 
-BUILD_PATHS = {'device', 'out', 'uefi', 'edk2', 'kernelcache', 'kernel',
+BUILD_PATHS = {'clang_bin', 'kernel_sdk', 'kernel_tools', 'device', 'out', 'uefi', 'edk2', 'kernelcache', 'kernel',
                'trust_cache', 'owner_trust_cache', 'data_ramdisk', 'gpu_addon',
                'dtb', 'fd', 'ramdisk', 'output'}
-BUILD_ENV = {'device': 'UNIXNU_DEVICE', 'out': 'UNIXNU_OUT', 'uefi': 'UNIXNU_UEFI',
+BUILD_ENV = {'clang_bin': 'CLANG_BIN', 'kernel_sdk': 'UNIXNU_KERNEL_SDK', 'kernel_tools': 'UNIXNU_KERNEL_TOOLS', 'device': 'UNIXNU_DEVICE', 'out': 'UNIXNU_OUT', 'uefi': 'UNIXNU_UEFI',
              'edk2': 'UNIXNU_EDK2', 'kernelcache': 'UNIXNU_KERNELCACHE',
              'dtb': 'UNIXNU_DTB', 'ipsw': 'UNIXNU_IPSW',
              'unique_chip_id': 'UNIXNU_UNIQUE_CHIP_ID', 'jobs': 'JOBS'}

@@ -43,6 +43,7 @@ def version_env(modules, ctx=None):
             env[variable] = xnu[key]
     if ctx and ctx.schema_version == 2:
         profile = ctx.board.get('os', {})
+        env['UNIXNU_OS_PROFILE'] = str(ctx.profile_roots['os'] / 'profile.toml')
         for key, variable in (('xnu_revision', 'UNIXNU_XNU_COMMIT'), ('xnu_version', 'UNIXNU_XNU_VERSION'),
                               ('darwin', 'UNIXNU_XNU_DARWIN'), ('driverkit_tag', 'UNIXNU_DRIVERKIT_TAG'),
                               ('trustcache_tag', 'UNIXNU_TRUSTCACHE_TAG')):
@@ -192,7 +193,7 @@ def build(ctx, modules):
     env.update(xnu_env(ctx))
     env.update(version_env(modules, ctx))
     if ctx.schema_version == 2:
-        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules))
+        env['UNIXNU_PATCH_LIST'] = str(patches.prepare(ctx, modules, env=env))
         generated = ctx.tree / 'build/generated'
         generated.mkdir(parents=True, exist_ok=True)
         env['UNIXNU_GENERATED_DIR'] = str(generated)

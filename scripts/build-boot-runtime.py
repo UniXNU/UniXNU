@@ -76,8 +76,6 @@ def make_prime_list(request, work, os_root):
 
     def collect(mount, prefix):
         command = [sys.executable, str(ROOT / 'scripts/list-metal-libraries.py'), str(mount), prefix]
-        if os.geteuid() != 0:
-            command = ['sudo', '-n', *command]
         return set(subprocess.check_output(command, text=True).splitlines())
 
     for image in request['prime_images']:
@@ -118,7 +116,7 @@ def build_plugin(target):
     script('build-turnip-darwin.py', '--target', target)
     # Replay is a diagnostic capture from a host GPU simulation, not a runtime
     # dependency. Do not require unrelated test fixtures in a release build.
-    script('build-adreno-metal-plugin.py', '--target', target, '--no-replay')
+    script('build-adreno-metal-plugin.py', '--target', target, '--no-replay', '--reuse-bridge')
     return ROOT / 'build' / {'ios27': 'adreno-metal-plugin27', 'macos27': 'adreno-metal-plugin-macos27'}.get(target, 'adreno-metal-plugin')
 
 
@@ -432,6 +430,26 @@ def main():
             addon = out / 'template-addon.bin'
             candidate.replace(addon)
         test_scripts = os.environ.get('UNIXNU_MACOS_TEST')
+        if request.get('target') == 'macos27' and addon is not None:
+            jobs = work / 'desktop-jobs'
+            jobs.mkdir()
+            command = ("source='/Library/GPUBundles/Shader Cache.app'; "
+                       "destination='/Applications/Shader Cache.app'; "
+                       '[ -d "$source" ] || exit 1; /bin/mkdir -p /Applications; '
+                       'if [ -L "$destination" ] || [ ! -e "$destination" ]; then '
+                       '/bin/ln -sfn "$source" "$destination"; fi')
+            (jobs / 'org.unixnu.shader-cache.install.plist').write_bytes(plistlib.dumps(dict(
+                Label='org.unixnu.shader-cache.install', RunAtLoad=True,
+                ProgramArguments=['/bin/sh', '-c', command]), fmt=plistlib.FMT_XML))
+            directories = ['Library/LaunchDaemons', jobs]
+            manual = work / 'desktop-share'
+            manual.mkdir()
+            (manual / 'manual-session').write_text('0\n' if test_scripts else '1\n')
+            directories += ['test/share', manual]
+            candidate = work / 'desktop-addon.bin'
+            script('addon-add-dir.py', addon, candidate, *directories)
+            addon = out / 'desktop-addon.bin'
+            candidate.replace(addon)
         if request.get('target') == 'macos27' and addon is not None and test_scripts:
             # Unattended testing only (never set for a release): UNIXNU_MACOS_TEST names a directory with daemon.sh (run as root at
             # boot) and/or agent.sh (run in the user's session after login). They go to /private/var/ngpu/test with a launchd job
