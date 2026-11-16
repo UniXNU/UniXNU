@@ -4,4 +4,4 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [kerrinz/UniXNU-zorn](https://github.com/kerrinz/UniXNU-zorn) | [Redmi K80（zorn）](/zh/devices/zorn) | 适配记录 | SM8650 |
+| [kerrinz/UniXNU-zorn](https://github.com/kerrinz/UniXNU-zorn) | [Redmi K80（zorn）](/zh/devices/zorn) | 记录待补齐 | SM8650 |

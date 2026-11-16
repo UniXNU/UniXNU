@@ -6,7 +6,7 @@
 
 Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from the pixelios-kernel research port, which boots XNU 8796 with the iOS 16.7 userland on this phone; this repository restates them in UniXNU format. No UniXNU image has been built or booted for this board yet.
 
-源记录: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/b952bbcac4196aeab8b577848e26429eb074a905/porting.toml), `b952bbcac4196aeab8b577848e26429eb074a905`.
+源记录: [porting.toml](https://github.com/tuxmanxd/UniXNU-bluejay/blob/e2a3b3f9dee3e25ccff1912cda82b2471e48d77d/porting.toml), `e2a3b3f9dee3e25ccff1912cda82b2471e48d77d`.
 
 本页按设备记录自动生成。
 
@@ -178,13 +178,13 @@ Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from 
 ### 硬件与依赖
 
 - DRAM banks measured: 0x80000000 \(2 GiB, carve-outs\), 0x880000000 and 0x900000000 \(2 GiB each, contiguous, no reserved range inside\).
-- XNU range: 0x884000000 size 0xfc000000 \(the high pair after the firmware payload window\).
+- XNU range: 0x884000000 size 0xf0000000 \(the high pair after the firmware payload window, 3840 MiB, 137.9 MiB under the 0xF89F6000 run measured with the kernel image still held\).
 - USB DMA carve-out: 0xf8800000 size 0x1000000 \(ABL, no-map\).
 
 ### 配置
 
-- One memory node for the high range only: reg = &lt;0x8 0x84000000 0x0 0xfc000000&gt;.
-- payload.adt.owned\_memory\_size = 0xfc000000; dram\_size = 0xfc000000.
+- One memory node for the high range only: reg = &lt;0x8 0x84000000 0x0 0xf0000000&gt;.
+- payload.adt.owned\_memory\_size = 0xf0000000; dram\_size = 0xf0000000.
 - The first 64 MiB of the high range \(0x880000000\) is the firmware payload window: reserved in the UEFI map, outside XNU's node.
 - reserved-memory/framebuffer@fac00000 is no-map.
 
@@ -201,7 +201,7 @@ Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from 
 
 ### 完成条件
 
-- XNU sees 0xfc000000 bytes of owned memory, boots past pmap setup, and the framebuffer, USB carve-outs and payload window stay untouched.
+- XNU sees 0xf0000000 bytes of owned memory, boots past pmap setup, and the framebuffer, USB carve-outs and payload window stay untouched.
 
 ### 当前范围
 
@@ -550,7 +550,7 @@ Google Pixel 6a \(bluejay, Tensor G1\) port scaffold. Hardware values come from 
 ### 配置
 
 - \[userdata\] first\_lba 2290150, last\_lba 31130618, lba\_bytes 4096.
-- \[payload\] volume BLUEJAY, 54 MiB \(kernel field, not ramdisk\), loader firmware, dram\_size 0xfc000000, kernel\_args -v serial=3 debug=0x14e keepsyms=1.
+- \[payload\] volume BLUEJAY, 54 MiB \(kernel field, not ramdisk\), loader firmware, dram\_size 0xf0000000, kernel\_args -v serial=3 debug=0x14e keepsyms=1.
 - \[bootimg.image\] base 0, kernel\_offset 0x8000, tags\_offset 0x100, pagesize 4096, header\_version 4, kernel\_compression none.
 
 ### 操作步骤

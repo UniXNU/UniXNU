@@ -1,0 +1,203 @@
+schema_version = 1
+
+[device]
+name = "g0345d"
+soc = "msm8996"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Experimental GREE G0345D port. Historical M42/v185 reaches kalloc_init fixed-zone creation boundaries; complete XNU and userland startup remain unverified. This curated source snapshot does not yet reproduce its legacy firmware/container from a clean checkout."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["SoftwareAES"]
+paths = ["board.toml", "feeds.toml", "unixnu.lock", "source-pins.toml", "local.toml.example", "configs/*", "docs/provenance/*", "scripts/check-repository.py", "ci/*", ".gitignore", ".gitattributes", "LICENSE", "NOTICE", ".github/*"]
+inputs = ["GREE G0345D MSM8996 v3.1 board inputs and the ipados-17.7.11-21H461 profile.", "Pinned MSM8996 feed and tested midopix tools fork; selected shared components retain their existing IDs."]
+configuration = ["board.toml uses schema_version=2 and the g0345d kit/defconfig/DTS.", "Preserve all 51 active device patches and their exact series order; inherited g0245d filenames and source symbols are intentional.", "SoftwareAES is selected with source corecrypto/pthread and prelinked crypto bootstrap; functional OS crypto is not qualified."]
+procedure = ["Review source-pins.toml, feeds.toml, unixnu.lock and the functional source snapshot before resolving a tree.", "Use the pinned tools checkout for defconfig, fetch and status review; run the repository integrity and structured-record checks."]
+findings = ["The device identity is G0345D throughout board, DTS and configuration; the inherited G0245D source names must not be globally renamed.", "Current official components.toml lacks the MSM8996-specific IDs; record validation uses the official schema with an explicitly pinned fork catalog rather than dropping selected components.", "The base commits plus retained local deltas identify provenance; they do not by themselves certify a clean end-to-end reproduction.", "Publication preserves the owner-created GitHub initial commit and archives its original license without replacing inherited source licensing."]
+completion = ["All selected components and their catalog dependencies have structured owning areas and all referenced local evidence exists.", "Future host verification requires a complete source revision, exact command and accessible clean-checkout result."]
+limits = ["Only implemented/planned levels are assigned; historical dirty-tree results do not identify a complete device-verified published revision.", "Stock upstream reusable-workflow/catalog compatibility and complete companion-firmware publication remain pending."]
+next_action = ["Complete the companion firmware export and upstream component registration before claiming standard release or official catalog acceptance."]
+evidence = [{ kind = "source", reference = "board.toml", result = "G0345D identity, selected components and ordered source layers are configured." }, { kind = "source", reference = "docs/provenance/source-snapshot.json", result = "Hashes preserve the exact active functional inputs copied from the M42 worktree." }, { kind = "source", reference = "docs/provenance/github-initial-license.md", result = "Records the initial remote commit, archived license blob and retained source licensing." }]
+
+[[area]]
+id = "firmware"
+status = "planned"
+components = ["DarwinBoot"]
+paths = ["docs/firmware-dependency.md", "docs/hardware.md"]
+inputs = ["Legacy edk2-msm8998 based G0345D firmware with local platform, FdtLib, SimpleInit, BootShim and DarwinBoot changes.", "Fixed FD at 0x91700000, size 0x600000; firmware-owned memory and inherited RGB888 scanout."]
+configuration = ["board.toml names g0345d.dsc and the GCC5 FD location as legacy metadata, not a working current Mu-Silicium recipe.", "The standard firmware integration and exact companion source delta are not yet published."]
+procedure = ["Read the recorded firmware baselines and missing local changes in docs/firmware-dependency.md.", "Export a separate companion firmware repository with reviewed sources, licenses, pins and a clean build recipe before resuming firmware work."]
+findings = ["Historical temporary boot reached DarwinBoot-to-XNU handoff, but this device repository alone cannot reproduce that firmware state.", "The current legacy FDF retains early RAW fixtures; its ordinary build.sh output does not reproduce the frozen M42 Android v0 container."]
+completion = ["A pinned companion repository reproduces the intended FD and loader handoff with documented lawful inputs.", "A new hardware result names the exact firmware, image and complete source revision."]
+limits = ["The selected catalog DarwinBoot revision is not a complete description of the locally adapted nested firmware loader.", "PSCI, power ownership and general firmware services are not qualified as complete device functions."]
+next_action = ["Publish the full legacy firmware delta separately and reconcile DSC/FDF and BootShim with the official release interface."]
+evidence = [{ kind = "source", reference = "docs/firmware-dependency.md", result = "Records the firmware baselines, missing changes and exact reproduction limits." }]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmCpu", "ArmDTPlatform"]
+paths = ["dts/g0345d.dts", "patches/xnu/zzz-g0245d-v125-disable-apple-regs.patch", "patches/xnu/zzz-g0245d-v130-rtclock-marks.patch"]
+inputs = ["Four Kryo CPUs; shared affinities, GIC ranges, timer inputs and interrupt descriptions from the pinned msm8996.dtsi.", "ARMv8.0 boot-CPU target; secondary CPUs and PAN must remain disabled."]
+configuration = ["CONFIG_XNU_ARM_DT_PLATFORM=y and CONFIG_XNU_ARMCPU=y; CONFIG_XNU_ARMCPU_SECONDARY and CONFIG_XNU_NATIVE_PAN are unset.", "The device DTS explicitly disables cpu1, cpu2 and cpu3."]
+procedure = ["Review the pinned SoC DTS and resolved CPU/GIC/timer inputs together with the device overrides.", "Keep boot-CPU diagnostics stable; qualify interrupt delivery, timer behavior and GIC 3-cell specifiers before proposing SMP."]
+findings = ["Historical M42 executes on the boot CPU through early VM startup into kalloc_init.", "ARMv8.1 PAN assumptions are disabled for Kryo; visible progress does not establish timer/IPI or secondary-core correctness."]
+completion = ["Boot CPU source configuration is consistent with ARMv8.0 and the board identity.", "Functional qualification requires measured timer/IRQ delivery and, separately, secondary-core/IPI results."]
+limits = ["CPU1-3, SMP, GIC/IPIs and sustained scheduling are not device-verified.", "No interactive XNU or userland execution has been reached."]
+next_action = ["Resolve the current allocator interval before changing CPU topology; later capture timer/IRQ behavior with exact firmware and source revisions."]
+evidence = [{ kind = "source", reference = "configs/g0345d_defconfig", result = "Selects boot CPU/platform sources and disables PAN/secondary CPU gates." }, { kind = "source", reference = "dts/g0345d.dts", result = "Provides the board overrides and keeps secondary cores disabled." }]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["ArmSmmu4K"]
+paths = ["dts/g0345d.dts", "patches/xnu/zzz-g0245d-v133-post-vm-physmap-paints.patch", "patches/xnu/zzz-g0245d-v134-arm-vm-init-inner-marks.patch", "patches/xnu/zzz-g0245d-v135-arm-vm-init-bisect.patch", "patches/xnu/zzz-g0245d-v137-maxmem-path.patch", "patches/xnu/zzz-g0345d-v161-fb-l1-index-fix.patch", "patches/xnu/zzz-g0345d-v169-172-fb-slot.patch", "patches/xnu/zzz-g0345d-v177-l2-store-split.patch", "patches/xnu/zzz-g0345d-v178-bootstrap-l2-va.patch", "patches/xnu/zzz-g0345d-v179-full-framebuffer-slot.patch"]
+inputs = ["4 GiB DRAM beginning at 0x80000000 and the stock firmware/modem/peripheral/framebuffer reservations.", "ArmSmmu4K is a selected dependency of Adreno530; DMA stream ownership and controller data paths remain incomplete."]
+configuration = ["Keep the fixed FD reservation at 0x91700000/0x600000 and the framebuffer reservation at 0x83401000/0x23ff000.", "CONFIG_XNU_DT_PANIC_REGION=y avoids a BCM2837 fixed panic-RAM assumption."]
+procedure = ["Review all board and inherited SoC reservations before any memory-map change.", "Use the retained VM/framebuffer ladder and allocator probes to distinguish early mapping progress from later allocation behavior."]
+findings = ["Historical framebuffer marks survive the early VM transition and M42 reaches allocator initialization.", "The current reservation overlaps and reusable/no-map pool semantics have been retained, not newly validated or reconciled during repository preparation.", "No general DMA/SMMU correctness follows from visible framebuffer probes."]
+completion = ["Source describes the board DRAM and protected firmware windows without changing the frozen diagnostic layout.", "Complete memory qualification needs reconciled reservations, allocation progress and independently measured DMA/cache/SMMU behavior."]
+limits = ["Fixed-zone creation has not been observed to return; the precise fault or progress condition is unknown.", "SMMU stream IDs, DMA widths and cache policy for working peripherals are not qualified."]
+next_action = ["After explicit resumption, distinguish policy, size-class and zone-creation boundaries before changing allocator or DMA behavior."]
+evidence = [{ kind = "source", reference = "dts/g0345d.dts", result = "Preserves DRAM, firmware and device reservations." }, { kind = "source", reference = "docs/bringup/M41-kalloc-metadata-audit.md", result = "Historical on-disk metadata analysis did not establish corrupt fixed-view metadata as the cause." }]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = ["NativeUfs8996", "VerifiedRoot"]
+paths = ["docs/hardware.md"]
+inputs = ["Stock 64 GB UFS 2.0 geometry: 4096-byte LBAs, six LUNs, userdata on LUN0 at 74312..14530554.", "UFS host/PHY clocks, resets, power, SMMU stream ownership, DMA and a compatible root/Data policy require qualification."]
+configuration = ["ufshc is enabled in the device DTS and NativeUfs8996 is force-loaded through CONFIG_XNU_EXTRA_LD_ARCHIVES.", "VerifiedRoot is included as the catalog dependency; it does not establish a mounted or authenticated root volume."]
+procedure = ["Keep the current register-probe scaffold separate from claims of block I/O.", "Document clocks/PHY/SMMU and use read-only identification, LUN/GPT and transfer evidence before root or persistent Data work."]
+findings = ["The NativeUfs8996 archive is selected and linked as a scaffold.", "Historical temporary boot uses the RAM FAT payload, so it provides no evidence of UFS transfers or mounted root/Data."]
+completion = ["Read-only UFS identification and repeated transfers agree with the stock LUN/GPT geometry.", "Root verification and persistent Data need separate complete-source device evidence and an explicitly authorized storage policy."]
+limits = ["No UFS data path, root mount, persistent Data, PHY or DMA validation.", "Flashing or writing device partitions is outside this snapshot workflow."]
+next_action = ["Complete the host/PHY/clock/SMMU input map and a read-only transfer design after the early-kernel blocker is resolved."]
+evidence = [{ kind = "source", reference = "configs/g0345d_defconfig", result = "Records the linked UFS scaffold without enabling a proven storage path." }, { kind = "source", reference = "docs/hardware.md", result = "Separates stock geometry from unverified XNU storage behavior." }]
+
+[[area]]
+id = "display"
+status = "implemented"
+components = []
+paths = ["patches/xnu/zzz-g0245d-v141-console-width.patch", "patches/xnu/zzz-g0245d-v143-force-video-console.patch", "patches/xnu/zzz-g0245d-v144-force-fb-map.patch", "patches/xnu/zzz-g0245d-v147-console-24bpp.patch", "patches/xnu/zzz-g0245d-v148-text-console.patch", "patches/xnu/zzz-g0245d-v149-fb-marks.patch", "patches/xnu/zzz-g0245d-v150-marks-visible.patch", "patches/xnu/zzz-g0345d-v165-black-console.patch"]
+inputs = ["Inherited RGB888 scanout: 1080x2160, stride 3240 bytes, physical framebuffer 0x83401000.", "Stock splash reservation is 0x23ff000 bytes; exact panel/backlight/native modesetting remains unqualified."]
+configuration = ["Retain 24-bit console/probe handling and the board splash reservation.", "GopFramebuffer is not selected; direct diagnostic writes do not imply an OS display driver."]
+procedure = ["Decode photo cells against the matching probe map and exact kernel disassembly.", "Distinguish diagnostic scanout writes from native MDP/DSI presentation and brightness control."]
+findings = ["M42 photos contain consistent direct framebuffer markers, including phase 0x4107 and count 1127.", "A 32-bit-pixel assumption is incompatible with the inherited three-byte RGB scanout."]
+completion = ["Probe cells consistently decode using the documented geometry and exact patch version.", "Native display qualification separately requires timing, panel/backlight control and OS presentation results."]
+limits = ["No native display/presentation, brightness, panel identification or GPU scanout qualification.", "Original photographs are not distributed; text decodes and source references are retained."]
+next_action = ["Preserve the working diagnostic geometry while resolving allocator startup; qualify native display later."]
+evidence = [{ kind = "source", reference = "patches/xnu/zzz-g0245d-v147-console-24bpp.patch", result = "Contains the inherited three-byte console handling." }, { kind = "source", reference = "docs/bringup/M42-photo-result.md", result = "Retains the historical photo decode and its limitations." }]
+
+[[area]]
+id = "input"
+status = "planned"
+components = ["Blsp8996"]
+paths = ["docs/hardware.md"]
+inputs = ["MSM8996 BLSP/QUP v2 transport and the enabled blsp2_i2c6 node.", "Sensor protocol, exact touch IC/firmware, pins, clocks, interrupts, contact IDs and coordinate transform remain to be identified."]
+configuration = ["Blsp8996 archive is force-loaded as a linked transport scaffold.", "No native touch/HID component or end-to-end input path is qualified."]
+procedure = ["Establish read-only bus/sensor identity before implementing sensor commands.", "Record interrupt behavior, report framing, contact tracking and display-coordinate mapping before OS input integration."]
+findings = ["BLSP scaffold selection is inherited from the MSM8996 port; it is not evidence of touch reports."]
+completion = ["Repeated contact reports, IDs and release events map correctly to the 1080x2160 display and reach the OS input interface."]
+limits = ["No sensor protocol, firmware, touch interrupt or OS input validation."]
+next_action = ["Collect the exact board sensor/bus input map once early-kernel startup is resolved."]
+evidence = [{ kind = "source", reference = "configs/g0345d_defconfig", result = "Records the linked BLSP scaffold only." }]
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = ["Adreno530", "Msm8996Platform"]
+paths = ["docs/hardware.md"]
+inputs = ["Adreno 530 / A5xx on MSM8996, platform power/clock votes, firmware and SMMU ownership.", "Submission queues, interrupts, fences, userspace frontend ABI and presentation remain unimplemented or unqualified for this board."]
+configuration = ["gpu is enabled in the DTS and Adreno530 is force-loaded as a scaffold.", "ArmSmmu4K dependency is covered by the memory area; A5xx must not inherit A740/GMU assumptions."]
+procedure = ["Document A5xx-specific power/firmware/SMMU resources and restrict initial probes to reviewed operations.", "Qualify submission, fence completion and OS frontend independently of direct framebuffer writes."]
+findings = ["The selected archive is a register-probe scaffold; visible white cells are CPU framebuffer writes."]
+completion = ["Board-specific firmware/power/SMMU inputs are pinned and measured; repeated submissions and fences succeed through a compatible OS interface."]
+limits = ["No GPU execution, native frontend, rendering or GPU presentation validation.", "Msm8996Platform is an embedded kit and does not produce a standalone archive."]
+next_action = ["Finish the A5xx resource/firmware inventory before implementing or claiming a data path."]
+evidence = [{ kind = "source", reference = "board.toml", result = "Preserves Adreno530 and Msm8996Platform selection without substituting another GPU generation." }, { kind = "source", reference = "configs/g0345d_defconfig", result = "Records the explicit scaffold archive link." }]
+
+[[area]]
+id = "network"
+status = "planned"
+components = []
+paths = ["docs/status.md"]
+inputs = ["Exact Wi-Fi/Bluetooth device, bus, firmware, interrupts, power and DMA inputs require board-specific identification."]
+configuration = ["No qualified network component or OS network interface is selected by this snapshot."]
+procedure = ["Identify the controller and lawful firmware source before selecting a shared transport.", "Measure association and packet transfer through the OS interface separately from controller enumeration."]
+findings = ["No network result is established by the early boot or framebuffer evidence."]
+completion = ["Pinned board inputs and source support sustained bidirectional packet transfer and reconnect/reset behavior."]
+limits = ["No Wi-Fi association, Bluetooth functionality, network DMA or packet validation."]
+next_action = ["Inventory the exact network hardware and firmware after the early-kernel blocker is addressed."]
+evidence = [{ kind = "source", reference = "docs/status.md", result = "Records that network functionality remains unverified." }]
+
+[[area]]
+id = "cellular"
+status = "planned"
+components = []
+paths = ["docs/status.md"]
+inputs = ["The phone has a modem region; modem firmware and EFS/NV, SIM, transport, power/reset and data-path inputs require qualification."]
+configuration = ["The DTS reserves modem memory but no qualified cellular component is selected."]
+procedure = ["Identify board-specific modem boot, QRTR/QMI or alternative transport, EFS/NV ownership and DMA before integration.", "Keep private SIM/modem identity and EFS/NV contents outside public repositories."]
+findings = ["A reserved modem range is not evidence of modem startup, network registration or a data session."]
+completion = ["Exact firmware/source evidence demonstrates modem boot, SIM identity handling, registration, data sessions and reset behavior."]
+limits = ["No cellular transport, registration, IPA/QMAP, packet transfer or reset validation."]
+next_action = ["Document the actual MSM8996 modem transport and resource ownership before choosing a reusable implementation."]
+evidence = [{ kind = "source", reference = "dts/g0345d.dts", result = "Preserves the modem reservation without claiming a cellular driver." }]
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["docs/status.md"]
+inputs = ["Board DSP, codec, firmware services, clocks, power and playback/capture routes remain to be identified."]
+configuration = ["No qualified native audio component or route is configured."]
+procedure = ["Inventory codec/DSP inputs and lawful firmware before selecting a driver.", "Measure playback and capture through OS interfaces with explicit route and clock evidence."]
+findings = ["No audio conclusion follows from temporary boot or framebuffer progress."]
+completion = ["Playback and capture work with documented routes, clock policy and sustained device evidence."]
+limits = ["No DSP, codec, playback or capture validation."]
+next_action = ["Record the board-specific audio topology after early startup is resolved."]
+evidence = [{ kind = "source", reference = "docs/status.md", result = "Keeps audio as unverified future work." }]
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["docs/status.md", "docs/hardware.md"]
+inputs = ["PMIC identifiers, regulator/clock ownership, battery units, thermal policy and firmware-mediated power transitions."]
+configuration = ["Retain board PMIC IDs and the sleep-disabled ADT default; no native power-management claim."]
+procedure = ["Map firmware-owned regulators/clocks and battery reporting before adding transitions.", "Qualify reset/shutdown/suspend/resume independently and preserve diagnostic recovery."]
+findings = ["Temporary RAM boot and visible diagnostic marks do not qualify battery, thermal or suspend behavior."]
+completion = ["Measured battery units and documented regulator/clock ownership support explicitly tested power transitions."]
+limits = ["No complete power, charging, thermal or suspend/resume validation."]
+next_action = ["Identify PMIC resources and transition ownership before native power work."]
+evidence = [{ kind = "source", reference = "board.toml", result = "Records sleep-disabled ADT defaults and legacy firmware metadata." }]
+
+[[area]]
+id = "packaging"
+status = "planned"
+components = ["XnuPrelink"]
+paths = ["scripts/package.sh", "scripts/repack_production_payload.py", "package/*", "proprietary-files.txt", "patches/unixnu/*"]
+inputs = ["OS profile ipados-17.7.11-21H461, exact XNU/feed/tool pins and 51 active device patches.", "Historical M34 template, frozen FD/container, OEM DTB bundle, native Mach-O, ADT and 24 MiB FAT payload; restricted binaries are not distributed."]
+configuration = ["Historical kernel construction uses --skip-prelink; selecting XnuPrelink does not establish a qualified Apple kernelcache/ABI path.", "The official package.sh template is retained and board metadata selects g0345d_defconfig; standard release integration is pending.", "Historical Android v0 geometry: kernel_size 54773873, page4096, ramdisk25165824 at0x343e000, image79945728 bytes."]
+procedure = ["Review external-input hashes and the companion firmware gap before attempting standard packaging.", "Use the strict repacker only with the matching private template, kernel/payload and actual ADT manifest hash; its check-only mode writes no image.", "Do not run new builds, produce images or operate the device during this repository preparation task."]
+findings = ["Historical M42 retains its recorded image and payload hashes; a full clean-source release recipe is not yet available.", "The OEM appended DTB bundle is not generated by compiling dts/g0345d.dts.", "Ordinary legacy firmware output and the official current release pipeline must not be treated as interchangeable with the frozen container."]
+completion = ["A clean checkout and pinned, lawful external inputs produce both standard release artifacts with validated geometry and manifests.", "A package workflow must report unmet prerequisites honestly until those artifact checks pass."]
+limits = ["No successful standard macOS end-to-end release is claimed; companion firmware delta and input extraction/provenance are incomplete.", "The fixed M34 template and OEM/Apple images are not included, so this repository alone cannot recreate M42."]
+next_action = ["Complete separate firmware publication and lawful input reconstruction, then verify the standard release entry point on an explicitly authorized build task."]
+evidence = [{ kind = "source", reference = "scripts/package.sh", result = "Provides the unchanged official release delegation interface." }, { kind = "source", reference = "docs/evidence/g0345d-payload-M42-v185.img.json", result = "Historical manifest records the frozen container and M42 artifact identities." }, { kind = "source", reference = "docs/firmware-dependency.md", result = "Explains why the current snapshot does not reproduce a clean standard release." }]
+
+[[area]]
+id = "diagnostics"
+status = "implemented"
+components = []
+paths = ["patches/xnu/*", "scripts/extract_startup_table.py", "docs/evidence/*", "docs/bringup/*"]
+inputs = ["Exact M42/v185 kernel disassembly, STARTUP ordering, framebuffer probe map and independent photo decodes.", "Historical sanitized command logs and artifact hashes; no original photograph or device identifiers are distributed."]
+configuration = ["Preserve 51 active patches, large-cell phase/value probes and kalloc/startup ladders.", "Only temporary fastboot boot is allowed for future explicitly resumed hardware tests; keep FD, kernel_size and kernel/container layout fixed."]
+procedure = ["Match the source/disassembly and image hash to the probe map before interpreting cells.", "Compare independent decodes and separate visible return boundaries from hypotheses about the internal fault.", "Physical UART capture remains unverified; do not infer text console output from white diagnostic cells."]
+findings = ["M42 decodes phase0x4107/value0x0467=1127; callback index878 is _kalloc_init at0xfffffff0079d6f94, argNULL.", "Fixed parsing, assertions, first qsort and fixed iterators returned; fixed-zone creation and adjacent boundaries have not been observed to return.", "Sending/Booting OKAY only establishes historical transfer/command acceptance, not complete XNU startup.", "The user stopped experiments after M42 analysis; no M43 or new hardware result is part of repository preparation."]
+completion = ["Each decode identifies its exact image/source map, calibration, observed cells and inference limits.", "Future host/device status upgrades require a complete 40-character source revision, command and accessible matching log."]
+limits = ["Historical dirty worktrees do not identify a complete published firmware/device/tools revision; evidence is retained as source-referenced history.", "The exact failing instruction, size class and stopped-versus-slow-progress condition remain unknown."]
+next_action = ["When testing is explicitly resumed, add narrowly scoped policy/size-class/zone-creation boundary measurements without bypassing allocator initialization."]
+evidence = [{ kind = "source", reference = "docs/bringup/M42-photo-result.md", result = "Retains the primary historical decode and boundary interpretation." }, { kind = "source", reference = "docs/bringup/M42-photo-independent.md", result = "Retains the independent matching decode." }, { kind = "source", reference = "docs/evidence/M42-v185-fastboot.log.txt", result = "Retains sanitized historical temporary-boot command results." }, { kind = "source", reference = "patches/xnu/zzz-g0345d-v185-fixed-view-probes.patch", result = "Implements the M42 fixed-view boundary probes." }]

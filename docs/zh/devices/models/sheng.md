@@ -57,4 +57,5 @@
 | [yeyingjun-codes/UniXNU-sheng](https://github.com/yeyingjun-codes/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yeyingjun-codes\)](/zh/devices/sheng-yeyingjun-codes) | 记录待补齐 | SM8550 |
 | [yuchengl326-ship-it/UniXNU-sheng](https://github.com/yuchengl326-ship-it/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yuchengl326-ship-it\)](/zh/devices/sheng-yuchengl326-ship-it) | 适配记录 | SM8550 |
 | [yuyaukong/UniXNU-sheng](https://github.com/yuyaukong/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(yuyaukong\)](/zh/devices/sheng-yuyaukong) | 仓库链接 | SM8550 |
+| [YuYu12138-117/UniXNU-sheng-build](https://github.com/YuYu12138-117/UniXNU-sheng-build) | [Xiaomi Pad 6S Pro \(YuYu12138-117\)](/zh/devices/sheng-yuyu12138-117) | 适配记录 | SM8550 |
 | [zy-xyz/UniXNU-sheng](https://github.com/zy-xyz/UniXNU-sheng) | [Xiaomi Pad 6S Pro \(zy-xyz\)](/zh/devices/sheng-zy-xyz) | 适配记录 | SM8550 |

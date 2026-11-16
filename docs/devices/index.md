@@ -62,6 +62,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/devices/models/flashlm) | flashlm | SM8150 | 1 |
 | [Xiaomi 13](/devices/models/fuxi) | fuxi | SM8550 | 17 |
 | [Gree G0245D \(格力手机 / 色界\)](/devices/models/g0245d) | g0245d | msm8996 | 1 |
+| [Gree G0345D \(格力手机 G3\)](/devices/models/g0345d) | g0345d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/devices/models/garnet) | garnet | SM7435 | 1 |
 | [Motorola Moto G 5G](/devices/models/gauguin) | gauguin | SM7225 | 1 |
 | [OnePlus Ace 5](/devices/models/giulia) | giulia | SM8650 | 2 |
@@ -152,7 +153,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/devices/models/ruby) | ruby | MT6877 | 1 |
 | [Xiaomi MIX Flip](/devices/models/ruyi) | ruyi | SM8650 | 3 |
 | [Xiaomi Mi 6](/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 54 |
+| [Xiaomi Pad 6S Pro](/devices/models/sheng) | sheng (community) | SM8550 | 55 |
 | [Xiaomi Pad 6S Pro \(macOS\)](/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/devices/models/shennong) | shennong | SM8650 | 4 |
 | [Xiaomi Mi 8 SE](/devices/models/sirius) | sirius | SDM710 | 4 |
@@ -185,6 +186,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Xiaomi Redmi Pad SE 11"](/devices/models/xun) | xun | SM6225 | 1 |
 | [Redmi Pad format-2 qualification candidate; boot Mu and cust UniXNU must remain separate](/devices/models/yunluo) | yunluo | MT6789 | 1 |
 | [Microsoft Surface Duo 2](/devices/models/zeta) | zeta | SM8350 | 1 |
+| [Xiaomi 12 Pro](/devices/models/zeus) | zeus | SM8450 | 1 |
 | [Xiaomi MIX Fold 2 \(zizhan, SM8475\): UniXNU bring-up derived from Pong](/devices/models/zizhan) | zizhan | SM8475 | 1 |
 | [Redmi K80](/devices/models/zorn) | zorn | SM8650 | 1 |
 
