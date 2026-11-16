@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupts, timer and GOP framebuffer through Mu-Silicium diziPkg. No hardware boot evidence yet.
 
-Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/981f51b5f09d0b5ddc74e48e0b56c413c29bfd3c/porting.toml), `981f51b5f09d0b5ddc74e48e0b56c413c29bfd3c`.
+Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/porting.toml), `086323017b8e09462f800df0b9c04c56756f1662`.
 
 This page is generated from the device record.
 
@@ -65,7 +65,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/981f51b5f09d0b5ddc74e48e0b56c413c29bfd3c/board.toml)
+- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -205,7 +205,9 @@ Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
 - The GPT read gives userdata at 0x35a228-0x1d13ffa on LUN 0, matching fastboot's partition size.
 - DMA straight into caller pages powered the tablet off; native-ufs-zero-copy=0 keeps all DMA in the host buffer.
 - With native-ufs-allow-unverified=1 and dizi-ufs-unverified-root.patch the iPadOS 17.7.11 OS volume \(04769D26\) mounts read-only from userdata and launchd starts.
-- launchd stops at dyld: libSystem.B.dylib is only in the dyld shared cache of the SystemOS cryptex, which is not mounted yet. A DarwinBoot window above 4 GiB \(0x7A000000 at 0x840000000\) stops at setconf with no interrupts.
+- Without SystemOS launchd stopped at dyld: libSystem.B.dylib is only in the dyld shared cache of the SystemOS cryptex. A DarwinBoot window above 4 GiB \(0x7A000000 at 0x840000000\) stops at setconf with no interrupts.
+- 2026-11-16: dizi-systemos-union.patch turns on UniXNU's owner SystemOS union \(XNU\_OWNER\_CACHE\_MOUNT, CACHE\_STARTUP, UNION\_SYSTEMOS\) and boot manifest; ShengUfs answers native\_verified\_block\_volume\_device, root\_authorized and manifest\_sha384 for UFS window volumes only with native-ufs-allow-unverified=1. The SystemOS volume \(8846FE78\) mounts as a read-only union over / and launchd loads.
+- mount\(8\) exited 66 on a missing boot-manifest-hash; /chosen now gets one built from placeholder per-volume digests \(SHA-384 of a tag and the UUID\). launchd then runs 17 processes \(fsck, mount, keybagd, usermanagerd, apfs\_boot\_util, seputil and others\) and stops at the critical tzinit: /private/var is read-only \(errno 30\), so there is no Data volume.
 
 ### Completion criteria
 
@@ -215,15 +217,17 @@ Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for dizi.
+- The OS and SystemOS volumes are not authenticated, and the boot-manifest-hash is a placeholder, not an Apple manifest digest. No writable Data volume.
 
 ### Next action
 
-- Mount the SystemOS cryptex window before launchd \(UniXNU owner SystemOS union\).
+- Mount a writable Data volume at /private/var \(UFS-backed region of userdata, or a RAM seed\).
 
 ### Evidence
 
-- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/981f51b5f09d0b5ddc74e48e0b56c413c29bfd3c/patches/drivers/ShengUfs-dizi.patch)
+- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/patches/drivers/ShengUfs-dizi.patch)
+- `device`: [2026-11-16: SystemOS mount returned; launchd ran 17 processes and stopped at tzinit \(read-only /private/var\)](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/0d560de946ba7ce41b4687677d3baabca165a677)
+  Command: <code>fastboot boot boot.img</code>. Revision: `0d560de946ba7ce41b4687677d3baabca165a677`.
 
 ## Display {#display}
 
@@ -462,7 +466,8 @@ Collect evidence using the next action.
 
 ### Development findings
 
-- Collect the first image assembly observation, its cause when established, and the resulting implementation decision.
+- The kernel links ShengUfs with patches/drivers/ShengUfs-dizi.patch applied in drivers/ShengUfs; the patch now also carries the unverified volume queries for the SystemOS union \(2026-11-16\).
+- The boot image is a 60.5 MB boot.img with the 56 MiB FAT payload after the LZ4 vendor ramdisk; it fits the 100 MiB boot partition and is only started with fastboot boot.
 
 ### Completion criteria
 

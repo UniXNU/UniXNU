@@ -1,6 +1,6 @@
 # Samsung Galaxy S20 FE
 
-[Camgobeg/UniXNU-r8q](https://github.com/Camgobeg/UniXNU-r8q)
+[Camgobeg/Unixnu-r8q](https://github.com/Camgobeg/Unixnu-r8q)
 
 Complete and validate [porting.toml](/porting/records) in the device repository to publish its subsystem record.
 

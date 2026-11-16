@@ -4,4 +4,4 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [Camgobeg/UniXNU-r8q](https://github.com/Camgobeg/UniXNU-r8q) | [Samsung Galaxy S20 FE](/zh/devices/r8q) | 记录待补齐 | SM8250 |
+| [Camgobeg/Unixnu-r8q](https://github.com/Camgobeg/Unixnu-r8q) | [Samsung Galaxy S20 FE](/zh/devices/r8q) | 记录待补齐 | SM8250 |

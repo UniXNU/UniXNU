@@ -310,6 +310,11 @@
     "title_zh": "guamp"
   },
   {
+    "name": "models/hawaii",
+    "title": "hawaii",
+    "title_zh": "hawaii"
+  },
+  {
     "name": "models/haydn",
     "title": "haydn",
     "title_zh": "haydn"
