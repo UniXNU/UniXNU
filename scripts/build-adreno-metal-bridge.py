@@ -22,6 +22,7 @@ parser.add_argument('--source', type=Path, default=SOURCE, help='Use an exact pi
 parser.add_argument('--manifest-only', action='store_true',
                     help='write build/adreno-metal-bridge/Cargo.toml (patched source, fixtures) and stop before cargo, for `cargo fetch`')
 parser.add_argument('--reuse-current', action='store_true', help='reuse the existing archive when its target and complete bridge sources match')
+parser.add_argument('--check-runtime-draws', action='store_true', help='enable the runtime draw-state comparison assertions')
 args = parser.parse_args()
 SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
@@ -89,6 +90,7 @@ manifest.write_text('\n'.join([
     # The render server's display thread spends most of a frame in the runtime, much of it in small functions across the
     # translator's crates: one optimisation unit with link-time optimisation lets them inline across crate boundaries.
     '[profile.release]', 'panic = "unwind"', 'debug = 1', 'lto = "fat"', 'codegen-units = 1', '',
+    *(['[profile.release.package.metal2vulkan-runtime]', 'debug-assertions = true', ''] if args.check_runtime_draws else []),
 ]))
 if args.manifest_only:
     print(manifest)
@@ -102,7 +104,8 @@ if not Path(cargo_path).is_file():
 cargo = [cargo_path, '+1.98.0'] + (['-Z', 'build-std=std,panic_unwind'] if ARM64E else [])
 # The translator source the runtime is built from (its pin and recorded patches), which keys the shader cache: shader priming keeps what it
 # finished while this stays the same (PrimeShaders.h).
-runtime_id = hashlib.sha256((PIN + '\n' + states[-1]).encode()).hexdigest()[:32]
+runtime_input = PIN + '\n' + states[-1] + ('\nchecked-draws' if args.check_runtime_draws else '')
+runtime_id = hashlib.sha256(runtime_input.encode()).hexdigest()[:32]
 component_id = subprocess.check_output(['git', '-C', str(ROOT / 'drivers/AdrenoMetal'), 'rev-parse', 'HEAD'], text=True).strip()
 identity = dict(target=args.target, translator=PIN, source_tree=states[-1], component=component_id,
                 runtime=runtime_id,
