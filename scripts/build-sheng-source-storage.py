@@ -69,6 +69,7 @@ def main():
     parser.add_argument('--storage-source', type=Path)
     parser.add_argument('--policy-dir', type=Path,
                         help='Directory containing OS/ and SystemOS/ signed policies and verification.json')
+    parser.add_argument('--check-inputs', action='store_true', help='Validate policy and source inputs without compiling')
     args = parser.parse_args()
     tree = args.tree.resolve()
     device = (args.device or tree).resolve()
@@ -222,6 +223,12 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
                     if (directory / 'BootLatencyTrace.c').is_file()), None)
     if latency:
         sources.append(latency)
+    if args.check_inputs:
+        missing = [str(source) for source in sources if not source.is_file()]
+        if missing:
+            parser.error('source inputs missing: ' + ', '.join(missing))
+        print(f'Source storage inputs - {len(manifests)} policies - {len(sources)} sources - PASS')
+        return
     objects, inputs = [], {}
     objcopy = tool('llvm-objcopy')
     for source in sources:

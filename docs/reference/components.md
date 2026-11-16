@@ -52,6 +52,15 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 
 Kernel-stage recipes run in dependency order. `[kernel] archives` can place `component:<ID>` markers among auxiliary commands. Payload, firmware, prelink, and embedded entries describe their corresponding integration stages.
 
+When an archive command compiles a selected component with board-specific ABI bindings, declare its owner in `[kernel.embedded_components]`:
+
+```toml
+[kernel.embedded_components]
+SoftwareAES = "build-gop-legacy-display-27.py"
+```
+
+The command must occur once in `archives`. It builds and links the component instead of its standalone recipe.
+
 The device's `include` array replaces the inherited array. List the required
 selection in full; dependencies are added by the resolver. Inspect the resolved
 selection, source revisions, local overrides, and build order:

@@ -116,6 +116,16 @@ def archive_plan(ctx):
         return [('script', entry) for entry in entries]
     specs = {spec['id']: spec for spec in ctx.component_specs}
     required = {name for name, spec in specs.items() if spec.get('build') and spec.get('build_stage', 'kernel') == 'kernel'}
+    providers = ctx.board.get('kernel', {}).get('embedded_components', {})
+    if not isinstance(providers, dict):
+        raise Error('[kernel] embedded_components must map component IDs to archive commands')
+    for identifier, command in providers.items():
+        if identifier not in specs:
+            raise Error(f'[kernel] embedded_components: component {identifier} is not selected')
+        if not isinstance(command, str) or command.startswith('component:') or entries.count(command) != 1:
+            raise Error(f'[kernel] embedded_components: {identifier} needs one matching archive command')
+        if 'component:' + identifier in entries:
+            raise Error(f'[kernel] embedded_components: {identifier} also has a standalone recipe')
     result, visited = [], set()
 
     def add_component(identifier):
@@ -124,6 +134,8 @@ def archive_plan(ctx):
         spec = specs.get(identifier)
         if spec is None:
             raise Error(f'[kernel] archives: component {identifier} is not selected')
+        if identifier in providers:
+            raise Error(f'[kernel] archives: {identifier} is needed before its embedded provider')
         for dependency in spec.get('dependencies', []):
             add_component(dependency)
         visited.add(identifier)
@@ -133,11 +145,18 @@ def archive_plan(ctx):
     explicit = any(entry.startswith('component:') for entry in entries)
     if not explicit:
         for identifier in specs:
-            add_component(identifier)
+            if identifier not in providers:
+                add_component(identifier)
     for entry in entries:
         if entry.startswith('component:'):
             add_component(entry[len('component:'):])
         else:
+            # The board command owns ABI binding and linking for these sources.
+            for identifier, command in providers.items():
+                if command == entry:
+                    for dependency in specs[identifier].get('dependencies', []):
+                        add_component(dependency)
+                    visited.add(identifier)
             result.append(('script', entry))
     missing = required - visited
     if missing:
@@ -172,6 +191,35 @@ def build_archives(ctx, env):
     for key, value in sorted(xnu_env(ctx).items()):
         if key.endswith('_ARCHIVE') and value.endswith('.a') and not Path(value).is_file():
             raise Error(f'{key}: {value} not found; supply the archive or its build recipe')
+
+
+def preflight(ctx):
+    """Reject missing archive inputs before runtime or kernel compilation."""
+    missing = []
+    commands = [entry['build'] if kind == 'component' else shlex.split(entry)
+                for kind, entry in archive_plan(ctx)]
+    commands += [spec['build'] for spec in ctx.component_specs if spec.get('build') and
+                 spec.get('build_stage', 'kernel') != 'kernel']
+    runtime = ctx.board.get('payload', {}).get('runtime', {})
+    commands += [shlex.split(runtime[name]) for name in
+                 ('tool', 'data_seed_tool', 'audio_tool', 'wifi_tool', 'bluetooth_tool') if runtime.get(name)]
+    commands += [shlex.split(command) for command in runtime.get('firmware_tools', [])]
+    for parts in commands:
+        command = Path(parts[0])
+        if command.suffix in ('.py', '.sh'):
+            source = command if command.is_absolute() else ctx.tree / (command if command.parts[0] == 'scripts' else Path('scripts') / command)
+            if not source.is_file():
+                missing.append(str(source))
+    for spec in ctx.component_specs:
+        module = ctx.modules[(spec['kind'], spec['id'])]
+        for name in spec.get('source_files', []):
+            if module.path is None or not (module.path / name).is_file():
+                missing.append(f'{spec["id"]}/{name}')
+    if missing:
+        raise Error('Build inputs missing:\n  ' + '\n  '.join(missing))
+    from . import root_policies
+    root_policies.prepare(ctx)
+    log(f'kernel preflight: {len(ctx.component_specs)} selected components - archive inputs present')
 
 
 def build(ctx, modules):
