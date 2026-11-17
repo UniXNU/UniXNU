@@ -167,6 +167,8 @@ def cmd_build(ctx):
             return
     if 'kernel' in steps:
         ctx.need_config()
+    if 'payload' in steps:
+        payload.begin_build(ctx)
     if 'firmware' in steps:
         need_uefi(ctx)   # fail before fetching anything
         firmware.preflight_toolchain(ctx)
@@ -185,6 +187,7 @@ def cmd_build(ctx):
     if 'payload' in steps:
         ctx.uefi = ctx.option('uefi', 'UNIXNU_UEFI')
         payload.build(ctx)
+        payload.finish_build(ctx)
     if 'firmware' in steps:
         firmware.build(ctx, modules, need_uefi(ctx), package.edk2_dir(ctx, modules), ctx.args.target)
 
@@ -203,6 +206,8 @@ def cmd_bootimg(ctx):
     elif not ctx.args.ramdisk and payload.paths(ctx)[1].is_file():
         ramdisk = payload.paths(ctx)[1]
         log(f'ramdisk: {ramdisk} (use --ramdisk none for an empty one)')
+    if ctx.args.ramdisk != 'none' and (not ctx.args.ramdisk or ramdisk.resolve() == payload.paths(ctx)[1].resolve()):
+        payload.require_complete(ctx)
     if ramdisk is None:
         log('ramdisk: empty; build payload or pass --ramdisk FILE to include configured boot entries')
     bootimg.build(ctx, uefi, fd, dtb, ramdisk, expand(ctx.args.output) if ctx.args.output else None)
