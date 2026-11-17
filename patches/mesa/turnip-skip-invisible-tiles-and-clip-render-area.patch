@@ -1,0 +1,246 @@
+diff --git a/src/freedreno/vulkan/tu_clear_blit.cc b/src/freedreno/vulkan/tu_clear_blit.cc
+index 5d5573c..0840ddb 100644
+--- a/src/freedreno/vulkan/tu_clear_blit.cc
++++ b/src/freedreno/vulkan/tu_clear_blit.cc
+@@ -5270,6 +5270,8 @@ tu_CmdClearAttachments(VkCommandBuffer commandBuffer,
+ {
+    VK_FROM_HANDLE(tu_cmd_buffer, cmd, commandBuffer);
+ 
++   cmd->state.rp.scissor_bounds_disabled = true;
++
+    for (uint32_t j = 0; j < attachmentCount; j++) {
+       if ((pAttachments[j].aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0)
+          continue;
+@@ -6165,7 +6167,7 @@ store_3d_blit(struct tu_cmd_buffer *cmd,
+    }
+ }
+ 
+-static bool
++bool
+ tu_attachment_store_unaligned(struct tu_cmd_buffer *cmd, uint32_t a)
+ {
+    struct tu_physical_device *phys_dev = cmd->device->physical_device;
+diff --git a/src/freedreno/vulkan/tu_clear_blit.h b/src/freedreno/vulkan/tu_clear_blit.h
+index 37942c3..f51f9dd 100644
+--- a/src/freedreno/vulkan/tu_clear_blit.h
++++ b/src/freedreno/vulkan/tu_clear_blit.h
+@@ -103,6 +103,9 @@ tu_choose_gmem_layout(struct tu_cmd_buffer *cmd);
+ bool
+ tu_attachment_unpadded(struct tu_cmd_buffer *cmd, const struct tu_image_view *iview);
+ 
++bool
++tu_attachment_store_unaligned(struct tu_cmd_buffer *cmd, uint32_t a);
++
+ /* Telemetry of the tile-memory side of GMEM loads and stores (tu_gmem_side_stats): site 0 a 3D store's source, 1 a 3D load's source,
+  * 2 a 2D store's source, 3 an input attachment read from tile memory, 4 an event blit load, 5 an event blit store (swap 0xff: the
+  * blit event's own tile side).
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.cc b/src/freedreno/vulkan/tu_cmd_buffer.cc
+index a729da1..ac3511c 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.cc
++++ b/src/freedreno/vulkan/tu_cmd_buffer.cc
+@@ -4001,6 +4001,8 @@ tu_cmd_render_tiles(struct tu_cmd_buffer *cmd,
+                      continue;
+                } else {
+                   tu_calc_bin_visibility(cmd, tile, fdm_offsets);
++                  if (!tile->visible_views)
++                     continue;
+                   tu_identity_frag_area(cmd, tile);
+                }
+ 
+@@ -4310,6 +4312,150 @@ tu_render_mode_stats(uint64_t out[8])
+       out[i] = p_atomic_read(&tu_render_mode_counts[i]);
+ }
+ 
++static void
++tu_union_scissor_bounds(struct tu_render_pass_state *rp,
++                        int32_t x1, int32_t y1, int32_t x2, int32_t y2)
++{
++   if (rp->scissor_bounds_disabled || x1 >= x2 || y1 >= y2)
++      return;
++
++   if (!rp->scissor_bounds_valid) {
++      rp->scissor_min_x = x1;
++      rp->scissor_min_y = y1;
++      rp->scissor_max_x = x2;
++      rp->scissor_max_y = y2;
++      rp->scissor_bounds_valid = true;
++   } else {
++      rp->scissor_min_x = MIN2(rp->scissor_min_x, x1);
++      rp->scissor_min_y = MIN2(rp->scissor_min_y, y1);
++      rp->scissor_max_x = MAX2(rp->scissor_max_x, x2);
++      rp->scissor_max_y = MAX2(rp->scissor_max_y, y2);
++   }
++}
++
++static void
++tu_record_draw_scissor(struct tu_cmd_buffer *cmd)
++{
++   struct tu_render_pass_state *rp = &cmd->state.rp;
++   if (rp->scissor_bounds_disabled)
++      return;
++
++   /* Static pipeline scissors leave dynamic_graphics_state.vp unpopulated, and FDM/per-layer viewports transform bins per view. */
++   if ((cmd->state.pipeline_draw_states & (1u << TU_DYNAMIC_STATE_SCISSOR)) ||
++       cmd->state.has_fdm || cmd->state.per_layer_viewport ||
++       cmd->vk.dynamic_graphics_state.vp.scissor_count != 1) {
++      rp->scissor_bounds_disabled = true;
++      return;
++   }
++
++   const VkRect2D &sc = cmd->vk.dynamic_graphics_state.vp.scissors[0];
++   const int64_t sx1 = sc.offset.x;
++   const int64_t sy1 = sc.offset.y;
++   const int64_t sx2 = sx1 + (int64_t) sc.extent.width;
++   const int64_t sy2 = sy1 + (int64_t) sc.extent.height;
++   tu_union_scissor_bounds(rp,
++                           (int32_t) CLAMP(sx1, 0, (int64_t) INT32_MAX),
++                           (int32_t) CLAMP(sy1, 0, (int64_t) INT32_MAX),
++                           (int32_t) CLAMP(sx2, 0, (int64_t) INT32_MAX),
++                           (int32_t) CLAMP(sy2, 0, (int64_t) INT32_MAX));
++}
++
++static void
++tu_clip_render_area_by_scissors(struct tu_cmd_buffer *cmd)
++{
++   static const bool clip_enabled =
++      debug_get_bool_option("NATIVE_TURNIP_CLIP_RENDER_AREA", true);
++   if (!clip_enabled)
++      return;
++
++   const struct tu_render_pass *pass = cmd->state.pass;
++   const struct tu_render_pass_state *rp = &cmd->state.rp;
++   if (!pass || pass->subpass_count != 1 || pass->has_fdm ||
++       pass->num_views > 1 || cmd->state.per_layer_render_area ||
++       cmd->state.fdm_subsampled)
++      return;
++
++   const struct tu_subpass *subpass = &pass->subpasses[0];
++   if (subpass->resolve_count || subpass->unresolve_count ||
++       subpass->custom_resolve)
++      return;
++
++   if (rp->scissor_bounds_disabled || rp->drawcall_count == 0 ||
++       rp->xfb_used || rp->has_tess ||
++       cmd->state.occlusion_query_may_be_running ||
++       rp->has_prim_generated_query_in_rp ||
++       rp->has_vtx_stats_query_in_rp ||
++       rp->has_zpass_done_sample_count_write_in_rp ||
++       cmd->state.prim_counters_running != 0)
++      return;
++
++   const VkRect2D orig = cmd->state.render_areas[0];
++   if (orig.offset.x < 0 || orig.offset.y < 0 ||
++       orig.extent.width == 0 || orig.extent.height == 0)
++      return;
++
++   for (unsigned i = 0; i < pass->attachment_count; i++) {
++      const struct tu_render_pass_attachment *att = &pass->attachments[i];
++      /* Stored attachments keep prior pixels outside the scissor only when loaded and never cleared on load. */
++      if (att->store && (!att->load || att->clear_mask))
++         return;
++      if (att->store_stencil && (!att->load_stencil || att->clear_mask))
++         return;
++   }
++
++   const uint32_t align_w = MAX2(cmd->device->physical_device->info->gmem_align_w, 1u);
++   const uint32_t align_h = MAX2(cmd->device->physical_device->info->gmem_align_h, 1u);
++   const int32_t orig_x1 = orig.offset.x;
++   const int32_t orig_y1 = orig.offset.y;
++   const int32_t orig_x2 = (int32_t) MIN2((int64_t) orig_x1 + orig.extent.width, (int64_t) INT32_MAX);
++   const int32_t orig_y2 = (int32_t) MIN2((int64_t) orig_y1 + orig.extent.height, (int64_t) INT32_MAX);
++   if (orig_x1 >= orig_x2 || orig_y1 >= orig_y2)
++      return;
++
++   int32_t ix1 = orig_x1, iy1 = orig_y1, ix2 = orig_x1, iy2 = orig_y1;
++   if (rp->scissor_bounds_valid) {
++      ix1 = MAX2(rp->scissor_min_x, orig_x1);
++      iy1 = MAX2(rp->scissor_min_y, orig_y1);
++      ix2 = MIN2(rp->scissor_max_x, orig_x2);
++      iy2 = MIN2(rp->scissor_max_y, orig_y2);
++   }
++
++   int32_t ax1, ay1, ax2, ay2;
++   if (!rp->scissor_bounds_valid || ix1 >= ix2 || iy1 >= iy2) {
++      /* Empty effective draw region: keep one aligned non-empty granule so lazy transient attachments stay in GMEM. */
++      ax1 = orig_x1;
++      ay1 = orig_y1;
++      ax2 = (int32_t) MIN2((int64_t) orig_x2, ALIGN_POT((uint64_t) orig_x1 + 1, align_w));
++      ay2 = (int32_t) MIN2((int64_t) orig_y2, ALIGN_POT((uint64_t) orig_y1 + 1, align_h));
++   } else {
++      ax1 = MAX2(ix1 & ~(int32_t)(align_w - 1), orig_x1);
++      ay1 = MAX2(iy1 & ~(int32_t)(align_h - 1), orig_y1);
++      ax2 = (int32_t) MIN2((int64_t) orig_x2, ALIGN_POT((uint64_t) ix2, align_w));
++      ay2 = (int32_t) MIN2((int64_t) orig_y2, ALIGN_POT((uint64_t) iy2, align_h));
++   }
++
++   if (ax1 >= ax2 || ay1 >= ay2 ||
++       (ax1 == orig_x1 && ay1 == orig_y1 && ax2 == orig_x2 && ay2 == orig_y2))
++      return;
++
++   cmd->state.render_areas[0] = (VkRect2D) {
++      { ax1, ay1 },
++      { (uint32_t)(ax2 - ax1), (uint32_t)(ay2 - ay1) },
++   };
++
++   if (cmd->state.gmem_layout == TU_GMEM_LAYOUT_FULL) {
++      for (unsigned i = 0; i < pass->attachment_count; i++) {
++         const struct tu_render_pass_attachment *att = &pass->attachments[i];
++         if (!cmd->state.attachments[i] || (!att->store && !att->store_stencil))
++            continue;
++         if (tu_attachment_store_unaligned(cmd, i)) {
++            cmd->state.render_areas[0] = orig;
++            return;
++         }
++      }
++   }
++}
++
+ template <chip CHIP>
+ void
+ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
+@@ -4318,6 +4464,8 @@ tu_cmd_render(struct tu_cmd_buffer *cmd_buffer,
+    if (cmd_buffer->state.rp.has_tess)
+       tu6_lazy_emit_tessfactor_addr<CHIP>(cmd_buffer);
+ 
++   tu_clip_render_area_by_scissors(cmd_buffer);
++
+    tu_autotune::rp_key_opt rp_key = cmd_buffer->device->autotune->emit_preempt_latency_tracking_rp_hash(cmd_buffer);
+ 
+    tu_autotune::rp_ctx_t rp_ctx = NULL;
+@@ -6431,6 +6579,11 @@ tu_render_pass_state_merge(struct tu_render_pass_state *dst,
+    dst->sysmem_single_prim_mode |= src->sysmem_single_prim_mode;
+    dst->draw_cs_writes_to_cond_pred |= src->draw_cs_writes_to_cond_pred;
+    dst->shared_viewport |= src->shared_viewport;
++   dst->scissor_bounds_disabled |= src->scissor_bounds_disabled;
++   if (!dst->scissor_bounds_disabled && src->scissor_bounds_valid) {
++      tu_union_scissor_bounds(dst, src->scissor_min_x, src->scissor_min_y,
++                              src->scissor_max_x, src->scissor_max_y);
++   }
+ 
+    dst->drawcall_bandwidth_per_sample_sum +=
+       src->drawcall_bandwidth_per_sample_sum;
+@@ -8615,6 +8768,7 @@ tu6_draw_common(struct tu_cmd_buffer *cmd,
+        (cmd->state.dirty & ~TU_CMD_DIRTY_COMPUTE_DESC_SETS)) {
+       dynamic_draw_state_dirty = tu_emit_draw_state<CHIP>(cmd);
+    }
++   tu_record_draw_scissor(cmd);
+ 
+    /* Primitive restart value works in non-indexed draws, we have to disable
+     * prim restart for such draws since we may read stale restart index.
+diff --git a/src/freedreno/vulkan/tu_cmd_buffer.h b/src/freedreno/vulkan/tu_cmd_buffer.h
+index 71d4745..5f7dec8 100644
+--- a/src/freedreno/vulkan/tu_cmd_buffer.h
++++ b/src/freedreno/vulkan/tu_cmd_buffer.h
+@@ -326,6 +326,12 @@ struct tu_render_pass_state
+    /* Track whether conditional predicate for COND_REG_EXEC is changed in draw_cs */
+    bool draw_cs_writes_to_cond_pred;
+ 
++   /* Bounding box of draw scissors when every draw in the pass uses one dynamic scissor. */
++   bool scissor_bounds_valid;
++   bool scissor_bounds_disabled;
++   int32_t scissor_min_x, scissor_min_y;
++   int32_t scissor_max_x, scissor_max_y;
++
+    uint32_t drawcall_count;
+ 
+    /* The pass's heaviest fragment shader (by ir3 instruction count) and the vertices of its non-indirect draws: what the host's pass record

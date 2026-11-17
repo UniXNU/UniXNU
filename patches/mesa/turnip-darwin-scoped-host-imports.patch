@@ -1,0 +1,255 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+index 5d93747..ffce949 100644
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -155,6 +155,106 @@ tu_darwin_bo_cache_stats(uint64_t out[8])
+ static NativeAdrenoAbiPriority dw_priority;
+ static bool dw_priority_known;
+ 
++/* Call-site host-import permissions (1 read-only IO-coherent, 3 read+write) and live import registry for scoped maintenance. */
++static thread_local uint32_t darwin_host_import_permissions = 3u;
++extern "C" __attribute__((visibility("default"))) void tu_darwin_set_host_import_permissions(uint32_t permissions);
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_set_host_import_permissions(uint32_t permissions)
++{
++   darwin_host_import_permissions = permissions == 1u ? 1u : 3u;
++}
++
++struct darwin_host_import_entry {
++   struct tu_device *dev;
++   uintptr_t base;
++   uint64_t size;
++   uint64_t handle;
++   uint32_t permissions;
++};
++static pthread_mutex_t darwin_host_imports_lock = PTHREAD_MUTEX_INITIALIZER;
++static struct darwin_host_import_entry *darwin_host_imports;
++static unsigned darwin_host_import_count, darwin_host_import_capacity;
++
++static void
++darwin_host_import_register(struct tu_device *dev, void *pointer, uint64_t size, uint64_t handle, uint32_t permissions)
++{
++   pthread_mutex_lock(&darwin_host_imports_lock);
++   if (darwin_host_import_count == darwin_host_import_capacity) {
++      const unsigned cap = darwin_host_import_capacity ? darwin_host_import_capacity * 2 : 64;
++      struct darwin_host_import_entry *grown = (struct darwin_host_import_entry *)
++         realloc(darwin_host_imports, cap * sizeof(*grown));
++      if (grown) {
++         darwin_host_imports = grown;
++         darwin_host_import_capacity = cap;
++      }
++   }
++   if (darwin_host_import_count < darwin_host_import_capacity) {
++      darwin_host_imports[darwin_host_import_count++] = {
++         dev, (uintptr_t)pointer, size, handle, permissions,
++      };
++   }
++   pthread_mutex_unlock(&darwin_host_imports_lock);
++}
++
++static void
++darwin_host_import_unregister(struct tu_device *dev, uint64_t handle)
++{
++   pthread_mutex_lock(&darwin_host_imports_lock);
++   for (unsigned i = darwin_host_import_count; i-- > 0;) {
++      if (darwin_host_imports[i].dev == dev && darwin_host_imports[i].handle == handle) {
++         darwin_host_imports[i] = darwin_host_imports[--darwin_host_import_count];
++         break;
++      }
++   }
++   pthread_mutex_unlock(&darwin_host_imports_lock);
++}
++
++static void
++darwin_host_import_purge_device(struct tu_device *dev)
++{
++   pthread_mutex_lock(&darwin_host_imports_lock);
++   for (unsigned i = darwin_host_import_count; i-- > 0;) {
++      if (darwin_host_imports[i].dev == dev)
++         darwin_host_imports[i] = darwin_host_imports[--darwin_host_import_count];
++   }
++   pthread_mutex_unlock(&darwin_host_imports_lock);
++}
++
++enum { DARWIN_SCOPED_IMPORT_MAX = 64 };
++struct darwin_scoped_submit_state {
++   bool active;
++   uint32_t count;
++   uintptr_t ptrs[DARWIN_SCOPED_IMPORT_MAX];
++   uint32_t modes[DARWIN_SCOPED_IMPORT_MAX];
++};
++static thread_local struct darwin_scoped_submit_state darwin_scoped_submit;
++
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_begin_scoped_submit(const void *const *ptrs, const uint32_t *modes, uint32_t count);
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_begin_scoped_submit(const void *const *ptrs, const uint32_t *modes, uint32_t count)
++{
++   if (count > DARWIN_SCOPED_IMPORT_MAX || (count && (!ptrs || !modes))) {
++      darwin_scoped_submit.active = false;
++      darwin_scoped_submit.count = 0;
++      return;
++   }
++   darwin_scoped_submit.active = true;
++   darwin_scoped_submit.count = count;
++   for (uint32_t i = 0; i < count; i++) {
++      darwin_scoped_submit.ptrs[i] = (uintptr_t)ptrs[i];
++      darwin_scoped_submit.modes[i] = (modes[i] & 2u) ? 3u : 1u;
++   }
++}
++
++extern "C" __attribute__((visibility("default"))) void tu_darwin_end_scoped_submit(void);
++extern "C" __attribute__((visibility("default"))) void
++tu_darwin_end_scoped_submit(void)
++{
++   darwin_scoped_submit.active = false;
++   darwin_scoped_submit.count = 0;
++}
++
+ static kern_return_t
+ dw_call(uint32_t method, const void *in, size_t in_size, void *out,
+         size_t out_size)
+@@ -1012,7 +1112,8 @@ darwin_bo_init_host(struct tu_device *dev, struct tu_bo **out_bo, void *pointer,
+       darwin_free_iova(dev, iova, size);
+       return vk_errorf(dev, VK_ERROR_INVALID_EXTERNAL_HANDLE, "BoImport failed: 0x%x", kr);
+    }
+-   NativeAdrenoAbiBoMap map = {.handle = reply.handle, .iova = iova, .permissions = 3u, .writeback = 0, .shareability = 2};
++   const uint32_t permissions = darwin_host_import_permissions == 1u ? 1u : 3u;
++   NativeAdrenoAbiBoMap map = {.handle = reply.handle, .iova = iova, .permissions = permissions, .writeback = 0, .shareability = 2};
+    NativeAdrenoAbiBoMapReply mapped = {};
+    kr = dw_call(NativeAdrenoMethodBoMap, &map, sizeof(map), &mapped, sizeof(mapped));
+    if (kr != KERN_SUCCESS) {
+@@ -1032,8 +1133,10 @@ darwin_bo_init_host(struct tu_device *dev, struct tu_bo **out_bo, void *pointer,
+    };
+    bo->darwin_handle = reply.handle;
+    bo->darwin_token = 0;
++   bo->darwin_read_only = permissions == 1u;
+    bo->map = pointer;
+    bo->never_unmap = true;
++   darwin_host_import_register(dev, pointer, size, reply.handle, permissions);
+    tu_dump_bo_init(dev, bo);
+    TU_RMV(bo_allocate, dev, bo);
+    *out_bo = bo;
+@@ -1158,6 +1261,8 @@ darwin_bo_finish(struct tu_device *dev, struct tu_bo *bo)
+     * the VMA mutex for the same reason. */
+    const struct tu_bo gone = *bo;
+    memset(bo, 0, sizeof(*bo));
++   if (!gone.darwin_alloc_size)
++      darwin_host_import_unregister(dev, gone.darwin_handle);
+    darwin_reap_locked(dev, retire);
+    if (retire->count == retire->capacity && retire->failure == VK_SUCCESS) {
+       /* The ring grows, its records in order from the head. */
+@@ -1485,15 +1590,69 @@ tu_darwin_submit_ring_read(uint32_t from, struct tu_darwin_submit_rec *out, uint
+    return n;
+ }
+ 
+-/* One kernel submission of up to NativeAdrenoAbiMaxBuffers indirect buffers; while the kernel's ring has no room (kIOReturnBusy, as msm
+- * waits for ring space) it waits for this client's oldest job, or yields when none is in flight. */
++static bool
++darwin_resolve_scoped_submit(struct tu_device *dev,
++                             NativeAdrenoAbiSubmitBuffer out[DARWIN_SCOPED_IMPORT_MAX],
++                             unsigned *out_count)
++{
++   *out_count = 0;
++   if (!darwin_scoped_submit.active)
++      return false;
++
++   unsigned n = 0;
++   pthread_mutex_lock(&darwin_host_imports_lock);
++   for (uint32_t i = 0; i < darwin_scoped_submit.count; i++) {
++      const uintptr_t ptr = darwin_scoped_submit.ptrs[i];
++      const struct darwin_host_import_entry *found = NULL;
++      for (unsigned j = darwin_host_import_count; j-- > 0;) {
++         const struct darwin_host_import_entry *e = &darwin_host_imports[j];
++         if (e->dev == dev && ptr >= e->base && (uint64_t)(ptr - e->base) < e->size) {
++            found = e;
++            break;
++         }
++      }
++      if (!found) {
++         pthread_mutex_unlock(&darwin_host_imports_lock);
++         return false;
++      }
++      const uint32_t mode = (found->permissions == 1u) ? 1u : darwin_scoped_submit.modes[i];
++      bool dup = false;
++      for (unsigned k = 0; k < n; k++) {
++         if (out[k].handle == found->handle) {
++            out[k].bytes = (out[k].bytes == 3u || mode == 3u) ? 3u : 1u;
++            dup = true;
++            break;
++         }
++      }
++      if (!dup) {
++         out[n++] = (NativeAdrenoAbiSubmitBuffer) {
++            .handle = found->handle,
++            .iova = 0,
++            .bytes = mode,
++         };
++      }
++   }
++   pthread_mutex_unlock(&darwin_host_imports_lock);
++   *out_count = n;
++   return true;
++}
++
++/* One kernel submission of up to NativeAdrenoAbiMaxBuffers indirect buffers (and optional trailing scoped host-import entries);
++ * while the kernel's ring has no room (kIOReturnBusy, as msm waits for ring space) it waits for this client's oldest job, or yields when none is in flight. */
+ static VkResult
+ darwin_submit_chunk(struct tu_queue *queue, const NativeAdrenoAbiSubmitBuffer *entries,
+-                    unsigned count, uint32_t *fence, struct tu_darwin_submit_rec *rec)
++                    unsigned count, const NativeAdrenoAbiSubmitBuffer *scoped_imports,
++                    unsigned scoped_count, bool use_scoped,
++                    uint32_t *fence, struct tu_darwin_submit_rec *rec)
+ {
+    struct tu_device *dev = queue->device;
+    NativeAdrenoAbiSubmit req = {};
+    req.buffer_count = count;
++   if (use_scoped) {
++      req.reserved = NativeAdrenoSubmitScopedImports | (uint32_t)scoped_count;
++      for (unsigned i = 0; i < scoped_count; i++)
++         req.buffers[count + i] = scoped_imports[i];
++   }
+    req.queue = 0;
+    for (unsigned i = 0; i < count; i++)
+       req.buffers[i] = entries[i];
+@@ -1553,12 +1712,18 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+       const NativeAdrenoAbiSubmitBuffer *all =
+          util_dynarray_element(&submit->commands, NativeAdrenoAbiSubmitBuffer, 0);
+       bool inside = false;
++      NativeAdrenoAbiSubmitBuffer scoped_imports[DARWIN_SCOPED_IMPORT_MAX];
++      unsigned scoped_count = 0;
++      const bool use_scoped = darwin_resolve_scoped_submit(dev, scoped_imports, &scoped_count) &&
++                              scoped_count < (unsigned)NativeAdrenoAbiMaxBuffers;
++      const unsigned max_ibs = use_scoped ? ((unsigned)NativeAdrenoAbiMaxBuffers - scoped_count)
++                                          : (unsigned)NativeAdrenoAbiMaxBuffers;
+       if (total > darwin_split_counts[3])
+          p_atomic_set(&darwin_split_counts[3], total);
+-      if (total > NativeAdrenoAbiMaxBuffers)
++      if (total > max_ibs)
+          p_atomic_inc(&darwin_split_counts[0]);
+       for (unsigned at = 0, count = 0; at < total; at += count) {
+-         count = MIN2(total - at, (unsigned)NativeAdrenoAbiMaxBuffers);
++         count = MIN2(total - at, max_ibs);
+          if (at + count < total) {
+             /* The kernel ends every submission with both threads selected and concurrent binning on, and starts the next one with a
+              * thread synchronization (NativeAdrenoRing's a7xx_submit framing). A command stream cut in two would run its second
+@@ -1581,7 +1746,10 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+             }
+          }
+          uint32_t chunk_fence = 0;
+-         VkResult result = darwin_submit_chunk(queue, all + at, count, &chunk_fence, &rec);
++         VkResult result = darwin_submit_chunk(queue, all + at, count,
++                                               use_scoped ? scoped_imports : NULL,
++                                               use_scoped ? scoped_count : 0,
++                                               use_scoped, &chunk_fence, &rec);
+          if (result != VK_SUCCESS)
+             return result;
+          rec.chunks++;
+@@ -1654,6 +1822,7 @@ darwin_device_finish(struct tu_device *dev)
+ {
+    /* Closing the connection makes the kernel drain the GPU and free every object this client created. */
+    dw_close_connection();
++   darwin_host_import_purge_device(dev);
+    struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+    if (retire) {
+       /* Some CreateDevice failure paths already destroyed the VMA heap/mutex.
