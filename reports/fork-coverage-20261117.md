@@ -15,7 +15,7 @@ The [file table](fork-coverage-20261117.csv) compares every branch of the eight 
 
 The [branch table](fork-branches-20261117.csv) identifies all 58 branch revisions. The [complete file table](fork-file-inventory-20261117.csv) lists all 1,287 distinct file differences. The table lists the 249 variants changed by the fork, deduplicated by repository, path and both tree entries. Differences caused exclusively by newer upstream code are recorded in the full inventory.
 
-The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. Main selects development `cda5fd8f027f29f1213961de4eb11a7726c61bf6` with `0058-main-optimizations-on-development-cda5fd8f.patch`.
+The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. Main selects development `33186454573ae3c8c1af7ef2e0fcdcf217f5eb07` with `0061-main-optimizations-on-development-33186454.patch`.
 
 `已合入` identifies merged source with recorded validation. `待设备验证` identifies input and platform sleep behavior awaiting physical validation. Each row links the relevant source and names its current implementation or PR.
 
