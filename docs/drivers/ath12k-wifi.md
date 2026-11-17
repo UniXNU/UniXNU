@@ -67,6 +67,15 @@ Changes of at least 3 dB publish link updates. SNR is floored at zero.
 | `log-gpu=0 log-display=0` | Skip GPU/display diagnostic collection |
 | Automatic reset | Disabled in the current temporary image |
 
+## macOS 27.3 scan results
+
+Named scans carry their requested frequencies to the supplicant. WifiNet returns
+0x8e8-byte records with a continuous-clock timestamp at 0x8d0. Held network ages
+include sleep; the joined network reports zero age. The module expires entries
+unheard for two minutes, and sheng omits entries older than 60 seconds.
+Authentication and the first 15 seconds of a link retain their channel; settled
+links refresh requested channels at intervals of at least 20 seconds.
+
 ## Verification
 
 From Ath12kWifi, run the checks affected by a change:
