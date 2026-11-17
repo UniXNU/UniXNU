@@ -397,3 +397,30 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [Reference device record](/devices/sheng)
 
 The panic renderer keeps its first-panic claim in the current kernel’s zeroed BSS. A warm reboot can retain framebuffer pixels; those pixels do not determine whether the new boot may display and export its panic. The final byte of the 2,048-byte panic text buffer is reserved for the claim.
+
+## Inspection tools
+
+`local-tools/` contains commands for built images and captured desktop data.
+
+| Tool | Input and result |
+| --- | --- |
+| `adt-chosen.py` | Prints DarwinBoot properties and ranges from a payload ADT. |
+| `kernel-compile-check.py` | Compiles one source using the selected tree's XNU record; `--tree` names that tree. |
+| `record-build-provenance.py` | Records source, toolchain, arguments and outputs; `--core`, `--device` and `--uefi` select the checkouts. |
+| `recover-root-policies.py` | Matches a payload's signed headers and public owner key to `--verification-from`; `--write` writes the selected destination. |
+| `tablet-ci-blur-probe.js` | Runs Core Image blur and reports its result. |
+| `tablet-icon-stress.js` | Renders application icons at several sizes and counts failures. |
+| `tablet-pointer-probe.js` | Saves window-system pointer coordinates and times, including an initial position during an idle capture. |
+| `pointer-csv-stats.py` | Reports movement intervals, step lengths and changes after a pause. |
+| `touchpad-timing.py` | Decodes `ShengTouchpadTiming` from standard input; `--since HEX` compares an earlier record. |
+| `ocr-frames.swift` | Recognizes frame text; `--boxes` adds coordinates and `--fast` selects Vision's fast recognition mode. |
+
+Run JXA probes with `osascript -l JavaScript`. Pointer samples describe window-system coordinates; cover report timing comes from the device registry.
+
+```sh
+python3 local-tools/kernel-compile-check.py SOURCE --tree /path/to/resolved-tree
+osascript -l JavaScript local-tools/tablet-pointer-probe.js 30 40 pointer.csv 300
+python3 local-tools/pointer-csv-stats.py pointer.csv --pause 60 --big 150
+ssh TABLET 'ioreg -r -c ShengKeyboardCover -l -d 1' | python3 local-tools/touchpad-timing.py
+swift local-tools/ocr-frames.swift --fast --boxes FRAME.jpg
+```
