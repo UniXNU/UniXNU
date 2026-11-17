@@ -4,4 +4,4 @@
 
 | 仓库 | 设备页面 | 文档 | SoC |
 | --- | --- | --- | --- |
-| [zc47796741-pixel/UniXNU-gts9uwifi](https://github.com/zc47796741-pixel/UniXNU-gts9uwifi) | [三星 Galaxy Tab S9 Ultra Wi-Fi（gts9uwifi）](/zh/devices/gts9uwifi) | 记录待补齐 | SM8550 |
+| [Zc4777/UniXNU-gts9uwifi](https://github.com/Zc4777/UniXNU-gts9uwifi) | [三星 Galaxy Tab S9 Ultra Wi-Fi（gts9uwifi）](/zh/devices/gts9uwifi) | 记录待补齐 | SM8550 |
