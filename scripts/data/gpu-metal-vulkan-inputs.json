@@ -11,7 +11,7 @@
   },
   "translator": {
     "repository": "https://github.com/steelbrain/metal2vulkan",
-    "commit": "cda5fd8f027f29f1213961de4eb11a7726c61bf6",
+    "commit": "51280732aa8c2e86240fb5f73669f86798de9893",
     "branch": "development",
     "clone": "depth 1, blob filter, checked out source",
     "files": {
