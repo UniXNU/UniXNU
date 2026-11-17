@@ -145,7 +145,7 @@
 | [QEMU virt](/zh/devices/models/qemu) | qemu | QEMU virt | 1 |
 | [OPPO R11](/zh/devices/models/r11) | r11 | SDM660 | 2 |
 | [Samsung Galaxy S20 FE](/zh/devices/models/r8q) | r8q | SM8250 | 1 |
-| [Redmi K20 Pro / Mi 9T Pro](/zh/devices/models/raphael) | raphael | SM8150 | 5 |
+| [Redmi K20 Pro / Mi 9T Pro](/zh/devices/models/raphael) | raphael | SM8150 | 6 |
 | [Realme 5 Pro](/zh/devices/models/rmx1971) | rmx1971 | SDM710 | 1 |
 | [realme GT2 Master Explorer \(RMX3551\): UniXNU UEFI bring-up](/zh/devices/models/rmx3551) | rmx3551 | SM8475 | 1 |
 | [realme GT5 240W \(RMX3823\), kalama, 24 GiB, 1240x2772 AMOLED](/zh/devices/models/rmx3823) | rmx3823 | SM8550 | 1 |

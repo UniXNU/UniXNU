@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, the menu and DarwinBoot hand off to XNU, and the prelinked kernel reaches PE\_init\_iokit. Storage, display, input and GPU drivers are the remaining work.
 
-Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/bcd4771270ce62815985d89ed17d17cf1099e38d/porting.toml), `bcd4771270ce62815985d89ed17d17cf1099e38d`.
+Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/49d6b075523491a1ba5a7c9b498b4e9f78d9155b/porting.toml), `49d6b075523491a1ba5a7c9b498b4e9f78d9155b`.
 
 This page is generated from the device record.
 
@@ -49,6 +49,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - The prelinked payload is the working architecture: it is written to HIDDEN \(mmcblk0p21, 60 MiB FAT16, label UNIXNU\) and loaded from EFI/UniXNU/Payloads/kernel.macho because the 49 MiB image cannot fit the 14 MiB ramdisk.
 - The prelinked AppleARMPlatform ships an AppleARMCPU personality with IONameMatch cpu; IODTPlatformExpert matches by prefix and would claim the Exynos /cpus. The kernel artifact is rewritten byte-for-byte to xpu before it is written to HIDDEN.
 - The prelink roots are trimmed to the software, security and storage closure plus AppleARMPlatform and ApplePMGR; the display, GPU and media kexts wait for Apple hardware and are excluded until the Exynos drivers exist.
+- The board now carries the measured USERDATA geometry \(first 8013824, last 61057023, 512-byte sectors\) with the OS/SystemOS SHNGROOT windows, the OS volume UUID 04769D26-2CA0-4825-B443-E2E5F88300F2, and the same UUID as the ADT root match. The userdata image build and flash are separate from the kernel build.
 
 ### Completion criteria
 
@@ -101,7 +102,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/bcd4771270ce62815985d89ed17d17cf1099e38d/PHASE0.md)
+- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/49d6b075523491a1ba5a7c9b498b4e9f78d9155b/PHASE0.md)
   Command: <code>manual boot of the SM-T585; the photos are recorded in the workspace</code>. Revision: `f45b68897f5f48da0026881847d9204680c9dd24`.
 
 ## CPU and interrupts {#cpu}
@@ -200,6 +201,10 @@ Collect evidence using the next action.
 - USERDATA is mmcblk0p23 at LBA 8,013,824 with 53,043,200 sectors; HIDDEN is mmcblk0p21 at LBA 7,880,704 with 122,880 sectors. The read-only bsd\_init probe prints the controller state and reads LBA 0/1 through the PIO FIFO.
 - No block driver or root mount exists yet; the first goal is the GPT signature \(EFI PART\) from the probe, then IOBlockStorageDevice publication.
 - The same probe is also reachable from arm\_init behind an emmc-probe=1 boot argument, so the eMMC state can be read even while the prelinked kernel still hangs inside IOKit.
+- E2 passed on the tablet: with the 64-bit FIFO item width and a DTO check, LBA0 returns mbr=aa55 and LBA1 starts with EFI PART \(20494645 54524150\). The probe is now gated behind bsd-emmc-probe=1 so bsd\_init can continue by default.
+- NativeDwMmc is a read-only PIO IOBlockStorageDevice over the USERDATA window. It takes the FIFO item width from HCON, requires DTO, and links through a device build script, a kernel personality in KernelConfigTables.cpp and a build-script archive block. The dwmmc0 node is exported by the SoC DTS.
+- The first driver build stopped at -Werror because seven register constants were unused; only the constants the transport actually touches remain. The bootstrap kernel link warning about the mockfs vnodeop descriptor is the expected first-pass link without archives and does not fail the release.
+- A source IOBlockStorageDevice cannot link against the native kernel: the class lives in the prelinked IOStorageFamily kext. The device vendors the recorded absolute symbols for the pinned iPadOS 17.7.11 21H461 kernelcache \(f18b4df8..., already -0x1000000 slid\) and re-archives the driver object with them, the same pattern the alioth/marble repositories use.
 
 ### Completion criteria
 
@@ -459,6 +464,7 @@ Collect evidence using the next action.
 - The package step always fails at strip on the 49 MiB prelinked Mach-O; the prelinked-kernel artifact is uploaded with if: always\(\) and is the image written to HIDDEN.
 - The payload step patches a copy of the prelinked kernel with the entry bars and the framebuffer panic screen before strip fails; that stage copy is uploaded with the raw kernel and is preferred when staging, because it renders panic arguments on the panel without a serial console.
 - The prelink series now also carries the boot-phase trace squares \(startup/bootstrap\) and the boot-argument-gated early eMMC probe, so one image answers both the IOKit hang and the storage question.
+- The prelink artifact upload now includes the stage kernel \(panic screen\), the stage ADT, and the driver archive path; the device build script compiles NativeDwMmc against the kernel compile record and the 0004 patch links it with the NativeDwMmc personality.
 - The payload builder now generates the ADT sidecar before the strip step, so a failed prelinked package still yields a fresh kernel.macho.adt next to the patched kernel; staging the ADT is opt-in until it is compared with the working one.
 - Device XNU patches are generated against the post-arch-series source, not the pristine XNU tree: offline-component-load-probes.patch inserts its probes between the bsd\_init comment and the function, so a context built from the pristine file no longer applies.
 - The boot-phase squares showed the prelinked kernel completing PE\_lockdown\_iokit and then stopping before bsd\_init. The only blocking call between them is kperf\_init\_early\(\)-&gt;ml\_wait\_max\_cpus\(\); the native ArmCpu path does not call ml\_set\_max\_cpus\(\) on this board, so the boot now marks the maximum CPU count set explicitly before the VM restrictions and kperf.

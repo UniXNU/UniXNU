@@ -538,3 +538,51 @@ next_action = [
 ]
 evidence = []
 
+[[area]]
+id = "platform-expert"
+status = "implemented"
+components = ["ArmDTPlatform"]
+paths = ["board.toml", "configs/raphael_defconfig", "porting.toml"]
+inputs = [
+  "The arm64 iPadOS 18.7.12 kernelcache staged by scripts/stage-arm64-kernelcache.py",
+  "ArmDTPlatform from components.toml (repository https://github.com/UniXNU/ArmDTPlatform.git, revision 417ff95d6a6e8607ddea9309ec45c3bfd4a67c60)",
+]
+configuration = [
+  "board.toml [kernel] archives lists component:ArmDTPlatform between the corecrypto archives and the raphael CPU/pthread archives, so archive_plan expands its build recipe at that ordered position",
+  "configs/raphael_defconfig sets CONFIG_XNU_ARM_DT_PLATFORM=y; build-xnu-4k-baseline.sh reads XNU_ARM_DT_PLATFORM and appends -Wl,-force_load,$ROOT/build/armdt-platform/libArmDTPlatform.a",
+  "configs/raphael_defconfig sets CONFIG_XNU_TRUST_CACHE_RUNTIME=y; build-xnu-4k-baseline.sh passes it as startup.o_CFLAGS_ADD=-DXNU_NATIVE_TRUST_CACHE and invalidates startup.o when the mode changes",
+]
+procedure = [
+  "Run ./unixnu build kernel -D ../UniXNU-raphael in CI (macos-26-intel); the bootstrap pass leaves the compile records build-arm-driver.py needs, then build_archives runs before the linking pass",
+]
+findings = [
+  "A panic screen compiled into the kernel's own framebuffer mapping (scripts/xnu-panic-screen.c via patch-xnu-entry-probe.py --panic-screen) turned an invisible hang into readable text on raphael hardware; two successive screens identified two distinct stops",
+  "First panic screen: 'image4 interface not available @kern_trustcache.c:584' with the frame 0xfffffff007a0d8f4, the return address of bl _load_static_trust_cache in _kernel_bootstrap_thread. _trust_cache_runtime_init at 0xfffffff0077a49cc loads PE_state+0x148 and branches to _trust_cache_runtime_init.cold.3 when it is null, which is the case on a non-Apple bootloader",
+  "Second panic screen after the diagnostic image skipped the trust-cache calls: 'Unable to find driver for this platform: \"J171AP\" @IOPlatformExpert.cpp:2369' at _IOPanicPlatform::start (0xfffffff0079711e0), i.e. no IODTPlatformExpert subclass probed successfully for the injected device tree",
+  "nm on the shipped formal-kernel.macho (55,156,736 bytes, the CI prelinked candidate) contains no ArmDTPlatform, armdt_platform_configured, AppleARMPE or AppleARMIO symbol, while raphael timer symbols from the device patch series are present; the native kernel is in the image but no platform expert was linked into it",
+  "Root cause: board.toml [kernel] archives listed only build-corecrypto-14.py (twice), build-raphael-cpu.py and build-raphael-pthread.py. kernel.py archive_plan only appends a component archive when the board lists it as component:ID, so ArmDTPlatform was never built or force-loaded despite [components].include naming it",
+  "Second root cause: the raphael machine config defines BCM2837 (patches/xnu-darwin24/machine-config-bcm2837.patch line 57), so startup.c's '#ifndef BCM2837' compiled the whole trust-cache runtime block out. patches/xnu/native-trust-cache-runtime.patch widens that guard to include XNU_NATIVE_TRUST_CACHE, and is applied automatically by the build script's patches/xnu/*.patch loop, but the defconfig never set CONFIG_XNU_TRUST_CACHE_RUNTIME",
+  "The staged OS profile carries only profile.toml; cmd_defconfig merges [kernel] config_fragments (arch and soc) with the board defconfig and never reads profiles/os/<name>/configs/, so the ipados.config of the 17.7.11 profile does not apply here",
+  "Third and decisive root cause: the soc fragment configs/sm8150.config of guowenye/UniXNU-sm8150-common (commit f8bc872) turns all eight switches off under 'Compilation-only bootstrap: platform consumers are not yet qualified', and cmd_defconfig concatenates arch then soc then this defconfig, so the soc 'n' values won. The first CI attempt set only CONFIG_XNU_ARM_DT_PLATFORM and CONFIG_XNU_TRUST_CACHE_RUNTIME in the defconfig, which was enough for the trust-cache switch but left CONFIG_XNU_BUILD_ARCHIVES=n inherited from the soc fragment: build_archives() returned before the loop, no component archive was built, and the log jumps from 'prepare storage headers' straight to 'prelink' with no component-* or archive-* line",
+  "Because ARM_DT_PLATFORM was still 1 while libArmDTPlatform.a did not exist, the guard at build-xnu-4k-baseline.sh:641 (test -f on the archive) also means the port would not have linked it even if it had tried; the archive has to be produced first",
+  "The first run with archives enabled also proved that board.toml named two scripts that never existed in either tree: build_raphael-cpu.py and build-raphael-pthread.py. archive_plan resolved them as scripts under tree/scripts and build_archives raised 'archive-04-build-raphael-cpu: build script missing'. They were never load-bearing because XNU_BUILD_ARCHIVES had always been n, so the whole step was skipped and the dead references were never exercised. UniXNU's own recipes are build-cpu-desktop-kernel.py and build-libpthread-kernel.py, and the soc fragment disables both XNU_ARMCPU and XNU_SOURCE_PTHREAD anyway, so the archive list is now corecrypto twice plus component:ArmDTPlatform",
+  "With archives enabled, component-ArmDTPlatform ran and build-arm-driver.py returned without an error before the missing-script failure, so the IOPlatformExpert.cpo.json record that recipe consumes is present after the bootstrap pass",
+  "Two diagnostic images used a nop in place of bl _trust_cache_runtime_init/_load_static_trust_cache and a ret at KLDBootstrap::loadSecurityExtensions. Those are probes, not the fix; the configuration changes above are the port's real answer to both stops",
+]
+completion = [
+  "The kernel links libArmDTPlatform.a (armdt_platform_configured present) and keeps the trust-cache runtime path",
+]
+limits = [
+  "The platform expert still needs the device tree ArmDTPlatform::configure requires (/cpus, /arm-io, /defaults, /options and a /chosen CHRP NVRAM proxy); devicetree.py synthesises chosen, nvram-proxy-data, cpus, arm-io, defaults and options from dts/raphael.dts, but that arm-io must carry the real SM8150 hardware nodes for anything downstream to attach",
+  "A driver that probes successfully is not a booted SpringBoard; display, storage, input and the userspace handoff remain unproven on this device",
+]
+next_action = [
+  "Run the CI build without --skip-prelink and confirm armdt_platform_configured and the xnu_load_trust_cache path are present in kernel.macho",
+  "Boot that image and read the next panic screen, if any",
+]
+evidence = [
+  { kind = "source", reference = "configs/raphael_defconfig", result = "Sets CONFIG_XNU_ARM_DT_PLATFORM=y and CONFIG_XNU_TRUST_CACHE_RUNTIME=y; unixnu.config.parse_config returns both as True for this file" },
+  { kind = "source", reference = "board.toml", result = "[kernel] archives names component:ArmDTPlatform after the two corecrypto recipes; kernel.archive_plan expands it as ('component', ArmDTPlatform) at that ordered position" },
+  { kind = "source", reference = "https://github.com/UniXNU/ArmDTPlatform.git", result = "Revision 417ff95d6a6e8607ddea9309ec45c3bfd4a67c60 is the IODTPlatformExpert subclass matching IOProviderClass IOPlatformExpertDevice with IONameMatch device-tree" },
+]
+

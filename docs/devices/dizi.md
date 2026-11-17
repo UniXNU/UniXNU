@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupts, timer and GOP framebuffer through Mu-Silicium diziPkg. No hardware boot evidence yet.
 
-Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/porting.toml), `086323017b8e09462f800df0b9c04c56756f1662`.
+Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/porting.toml), `8b7d7c4d251dec54958cd63b72b95dcdd7c6d664`.
 
 This page is generated from the device record.
 
@@ -50,6 +50,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - board.toml carries the bring-up component set, config fragments, patch series, device tree, Mu-Silicium firmware paths and a 56 MiB payload that fits the 100 MiB boot partition.
 - The ADT declares vmm-present = 1: dizi firmware publishes no Apple PMGR and AMFI otherwise panics with 'AMFI: No PMGR?' at ConfigurationSettings.cpp:235.
 - 2026-11-15: kernel\_args default to cpus=8 smp=1; \[kernel\] archives add ShengUfs, its KDK-free bindings \(candidate kernel without ShengUfs\), the PMGR bridge and the boot-progress page; \[userdata\] holds the GPT range 0x35a228-0x1d13ffa; ruan's 2.75 GiB window does not fit dizi's UEFI map, and the 1952 MiB window above 4 GiB stops at setconf, so the default window stays.
+- 2026-11-17: board.toml adds the RamBlock component and its archives \(component:RamBlock, NativeRamBlock bindings\), packed\_data\_ramdisk = true, \[userdata\] partition = 'unixnu' with the unixnu range, native-ufs-partition=unixnu in kernel\_args, and records the failed memory windows; dizi\_defconfig links build/ram-block/libRamBlock.a.
 
 ### Completion criteria
 
@@ -65,7 +66,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/board.toml)
+- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -163,7 +164,9 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Development findings
 
-- Collect the first memory and dma observation, its cause when established, and the resulting implementation decision.
+- dizi's low DRAM bank has almost no free memory \(diziPkg MemoryMapLib\), so DarwinBoot's window starts in the 0x840000000 run \(UEFI: 0x7AB00000 bytes\).
+- 2026-11-17: windows of 0x7A000000, 0x78000000 and 0x40000000 all froze the tablet about one second into BSD \(clock stopped, irq=0\), with or without the Data seed and with ShengUfs DMA kept below 0x850000000. The default 256 MiB window works; launchd's daemons then get jetsam-killed.
+- Linux \(OrangeFox, /proc/iomem\) has 0x840000000-0x8baafffff, 0x8bb100000-0x8bcefffff and 0x8c0000000-0x8ffffffff as System RAM, so the larger windows lay in RAM given to HLOS; the 6 MB hole 0x8bab00000-0x8bb0fffff explains only the 0x7A000000 window. The cause of the freeze is open.
 
 ### Completion criteria
 
@@ -171,11 +174,11 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for dizi.
+- XNU gets 256 MiB; daemons and SpringBoard are killed by jetsam.
 
 ### Next action
 
-- Inventory the required memory and dma inputs before implementation.
+- Find why windows above 256 MiB freeze one second into BSD, then grow the window inside 0x840000000-0x8baafffff.
 
 ### Evidence
 
@@ -185,7 +188,7 @@ Collect evidence using the next action.
 
 `implemented`
 
-Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
+Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`, `RamBlock`.
 
 ### Hardware and dependencies
 
@@ -208,6 +211,9 @@ Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
 - Without SystemOS launchd stopped at dyld: libSystem.B.dylib is only in the dyld shared cache of the SystemOS cryptex. A DarwinBoot window above 4 GiB \(0x7A000000 at 0x840000000\) stops at setconf with no interrupts.
 - 2026-11-16: dizi-systemos-union.patch turns on UniXNU's owner SystemOS union \(XNU\_OWNER\_CACHE\_MOUNT, CACHE\_STARTUP, UNION\_SYSTEMOS\) and boot manifest; ShengUfs answers native\_verified\_block\_volume\_device, root\_authorized and manifest\_sha384 for UFS window volumes only with native-ufs-allow-unverified=1. The SystemOS volume \(8846FE78\) mounts as a read-only union over / and launchd loads.
 - mount\(8\) exited 66 on a missing boot-manifest-hash; /chosen now gets one built from placeholder per-volume digests \(SHA-384 of a tag and the UUID\). launchd then runs 17 processes \(fsck, mount, keybagd, usermanagerd, apfs\_boot\_util, seputil and others\) and stops at the critical tzinit: /private/var is read-only \(errno 30\), so there is no Data volume.
+- 2026-11-17: writable Data on /private/var. dizi-data-volume.patch turns on the owner Data mount with XNU\_NATIVE\_RAM\_BLOCK; NativeRamBlock \(component RamBlock, KDK-free bindings\) serves the payload's packed Data seed \(make-data-seed.py\), whose APFS volume UUID comes from data-uuid=&lt;UUID&gt;. Without a persistent store a seed above 2 GiB refuses writes \(device is not ready\), and a seed of 512 MB or more hashes every page at start and resets the tablet at setconf; a 128 MB seed works.
+- 2026-11-17: dual boot. GPT entry 21 \(userdata, 0x35a228-0x1d13ffa\) was split with sgdisk from an unofficial OrangeFox \(fox\_dizi\) started with fastboot boot: entry 22 unixnu \(0x35a228-0xb5a227, 32 GiB\) keeps the iPadOS root in place, entry 21 userdata \(0xb5a228-0x1d13ffa, 70.9 GiB, original GUIDs\) is Android's. ShengUfs finds the root by name with native-ufs-partition=unixnu. HyperOS 3 boots on the new userdata after fastboot erase userdata and metadata.
+- ShengUfs reports each driver stage on the boot-progress page \(ufs: ...\); native-ufs-dma-max=&lt;address&gt; limits the host DMA memory \(off by default\).
 
 ### Completion criteria
 
@@ -217,17 +223,19 @@ Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`.
 
 ### Current limits
 
-- The OS and SystemOS volumes are not authenticated, and the boot-manifest-hash is a placeholder, not an Apple manifest digest. No writable Data volume.
+- The OS and SystemOS volumes are not authenticated, and the boot-manifest-hash is a placeholder, not an Apple manifest digest. Data lives in RAM: 128 MB, lost on reboot.
 
 ### Next action
 
-- Mount a writable Data volume at /private/var \(UFS-backed region of userdata, or a RAM seed\).
+- Keep Data changes in a UFS store inside unixnu \(data-persist\), and hash only nonzero seed pages so a larger Data volume starts.
 
 ### Evidence
 
-- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/086323017b8e09462f800df0b9c04c56756f1662/patches/drivers/ShengUfs-dizi.patch)
+- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/patches/drivers/ShengUfs-dizi.patch)
 - `device`: [2026-11-16: SystemOS mount returned; launchd ran 17 processes and stopped at tzinit \(read-only /private/var\)](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/0d560de946ba7ce41b4687677d3baabca165a677)
   Command: <code>fastboot boot boot.img</code>. Revision: `0d560de946ba7ce41b4687677d3baabca165a677`.
+- `device`: [2026-11-17: root from unixnu, Data mount returned, about 85 processes, SpringBoard started; Android boots from the new userdata](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/357c534a38b3f527fb7736a5d326f81129211a0e)
+  Command: <code>fastboot boot boot.img</code>. Revision: `357c534a38b3f527fb7736a5d326f81129211a0e`.
 
 ## Display {#display}
 
@@ -468,6 +476,7 @@ Collect evidence using the next action.
 
 - The kernel links ShengUfs with patches/drivers/ShengUfs-dizi.patch applied in drivers/ShengUfs; the patch now also carries the unverified volume queries for the SystemOS union \(2026-11-16\).
 - The boot image is a 60.5 MB boot.img with the 56 MiB FAT payload after the LZ4 vendor ramdisk; it fits the 100 MiB boot partition and is only started with fastboot boot.
+- 2026-11-17: the ShengUfs patch adds stage markers, native-ufs-dma-max and native-ufs-partition; package/BootProgressRuanStubs.c adds ml\_static\_mfree\_prepare for NativeRamBlock's weak import.
 
 ### Completion criteria
 
@@ -503,7 +512,7 @@ Collect evidence using the next action.
 
 ### Development findings
 
-- Collect the first diagnostics observation, its cause when established, and the resulting implementation decision.
+- 2026-11-17: package/BootProgressRuanStubs.c gains ml\_static\_mfree\_prepare \(returns false: the loader keeps the Data seed pages\), which NativeRamBlock weak-imports and the static kernel link needs.
 
 ### Completion criteria
 
