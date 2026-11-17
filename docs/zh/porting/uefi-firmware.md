@@ -12,6 +12,8 @@ UEFI 固件移植来自 Mu-Silicium，提供 UniXNU 和 DarwinBoot 使用的服�
 4. 构建 payload，再按[启动镜像集成](#启动镜像集成)打包。启动前检查 `boot/boot.json` 和打包的 payload。
 5. 在设备上按[验证](#验证)确认配置中的菜单项和 DarwinBoot 交接。菜单项缺失时按[负载发现](#payload-discovery)逐项检查。
 
+CLANGPDB 要求 Clang 与 LLD 的版本一致。`CLANG_BIN` 目录须包含可执行的 `clang`、`lld-link`、`llvm-lib` 和 `llvm-rc`。固件工具链会在其他构建阶段开始前检查。
+
 ## 必需的集成 {#required-integration}
 
 选择设备后，从 UniXNU 仓库构建固件：

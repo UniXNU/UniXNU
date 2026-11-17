@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 
 from .config import load_toml
-from .util import Error, clang_bin, git, log, run, tool
+from .util import Error, clang_bin, git, log, run, tool, validate_clang_bin
 
 
 def uefi_config(ctx, uefi):
@@ -18,6 +18,12 @@ def uefi_config(ctx, uefi):
 def fd_path(ctx, uefi, target='DEBUG'):
     fw = ctx.board['firmware']
     return uefi / fw['fd'].format(target=target)
+
+
+def preflight_toolchain(ctx):
+    """Resolve the firmware toolchain before starting other requested builds."""
+    selected = ctx.option('clang_bin', 'CLANG_BIN')
+    ctx.firmware_clang_bin = validate_clang_bin(selected) if selected else clang_bin(ctx.work / 'toolchain')
 
 
 def build(ctx, modules, uefi, edk2, target='DEBUG'):
@@ -51,11 +57,9 @@ def build(ctx, modules, uefi, edk2, target='DEBUG'):
     env = dict(os.environ, WORKSPACE=str(uefi), EDK_TOOLS_PATH=str(tools), CONF_PATH=str(conf), PACKAGES_PATH=packages,
                PYTHON_COMMAND='python3',
                PATH=os.pathsep.join([str(tools / 'BinWrappers/PosixLike'), str(tools / 'Source/C/bin'), os.environ['PATH']]))
-    selected_tools = ctx.option('clang_bin', 'CLANG_BIN')
-    if selected_tools:
-        env['CLANG_BIN'] = str(selected_tools) + '/'
-    elif 'CLANG_BIN' not in env:
-        env['CLANG_BIN'] = clang_bin(ctx.work / 'toolchain')
+    if not getattr(ctx, 'firmware_clang_bin', None):
+        preflight_toolchain(ctx)
+    env['CLANG_BIN'] = ctx.firmware_clang_bin
     # EDK II embeds the build time; pin it to the commit time so the same sources give the same firmware.
     env.setdefault('SOURCE_DATE_EPOCH', git(uefi, 'log', '-1', '--format=%ct').strip())
     applied = []
