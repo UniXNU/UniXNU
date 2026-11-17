@@ -173,6 +173,8 @@ def cmd_build(ctx):
         need_uefi(ctx)   # fail before fetching anything
         firmware.preflight_toolchain(ctx)
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
+    if 'kernel' in steps:
+        kernel.preflight(ctx)
     if 'payload' in steps or 'runtime' in steps:
         runtime.prepare(ctx, kernel_build='kernel' in steps)
     elif 'kernel' in steps and ctx.args.data_ramdisk:

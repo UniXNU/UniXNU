@@ -50,6 +50,15 @@ include = ["ArmDTPlatform", "ArmCpu", "Adreno740", "AdrenoMetal", "GopFramebuffe
 
 内核阶段构建命令按依赖顺序运行。`[kernel] archives` 可以在辅助命令之间用 `component:<ID>` 指定组件位置。payload、固件、预链接和嵌入式条目描述对应阶段的集成。
 
+辅助命令按板级 ABI 编译选中的组件时，在 `[kernel.embedded_components]` 中声明构建归属：
+
+```toml
+[kernel.embedded_components]
+SoftwareAES = "build-gop-legacy-display-27.py"
+```
+
+该命令须在 `archives` 中出现一次，负责组件的编译和链接，替代独立构建命令。
+
 设备的 `include` 数组替换继承的数组。完整列出所需组件，解析器补全依赖。查看组件
 选择、源码版本、本地覆盖和构建顺序：
 
