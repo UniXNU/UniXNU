@@ -12,6 +12,8 @@ For repeated builds, save paths in [unixnu.local.toml](/reference/configuration#
 4. Build the payload, then follow [boot-image integration](#boot-image-integration). Check `boot/boot.json` and the packaged payload before booting.
 5. On the device, confirm the configured menu entry and DarwinBoot handoff using [verification](#verification). If the entry is absent, work through [payload discovery](#payload-discovery).
 
+CLANGPDB requires matching Clang and LLD releases. `CLANG_BIN` must contain executable `clang`, `lld-link`, `llvm-lib` and `llvm-rc`. The firmware toolchain is checked before other requested build stages.
+
 ## Required integration
 
 Build firmware from the UniXNU checkout after selecting the device:

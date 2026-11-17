@@ -169,6 +169,7 @@ def cmd_build(ctx):
         ctx.need_config()
     if 'firmware' in steps:
         need_uefi(ctx)   # fail before fetching anything
+        firmware.preflight_toolchain(ctx)
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
     if 'payload' in steps or 'runtime' in steps:
         runtime.prepare(ctx, kernel_build='kernel' in steps)

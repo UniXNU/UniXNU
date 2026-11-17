@@ -77,6 +77,24 @@ def git(repo, *args, capture=True):
 CLANGPDB_TOOLS = ('clang', 'lld-link', 'llvm-lib', 'llvm-rc')
 
 
+def validate_clang_bin(directory):
+    """Validate EDK II tools and return its required slash-terminated prefix."""
+    directory = expand(directory)
+    for name in CLANGPDB_TOOLS:
+        binary = directory / name
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            raise Error(f'CLANGPDB tool missing or not executable: {binary}')
+    versions = []
+    for name in ('clang', 'lld-link'):
+        output = run([directory / name, '--version'], capture=True)
+        match = re.search(r'\b(\d+\.\d+\.\d+)\b', output)
+        versions.append(match.group(1) if match else '')
+    if not versions[0] or versions[0] != versions[1]:
+        raise Error(f'CLANGPDB requires matching LLVM and LLD releases (clang {versions[0]}, LLD {versions[1]}); '
+                    'set CLANG_BIN to a directory containing matching clang, lld-link, llvm-lib and llvm-rc')
+    return str(directory) + '/'
+
+
 def clang_bin(directory):
     """Link EDK II's CLANGPDB tools using the LLVM installation's COFF compiler."""
     directory = Path(directory)
@@ -84,18 +102,10 @@ def clang_bin(directory):
     llvm_compiler = Path(tool('llvm-lib', 'brew install llvm')).resolve().parent / 'clang'
     compiler = str(llvm_compiler) if llvm_compiler.is_file() else tool('clang', 'brew install llvm')
     linker = tool('lld-link', 'brew install lld')
-    versions = []
-    for binary in (compiler, linker):
-        text = run([binary, '--version'], capture=True)
-        match = re.search(r'\b(\d+\.\d+\.\d+)\b', text)
-        versions.append(match.group(1) if match else '')
-    if not versions[0] or versions[0] != versions[1]:
-        raise Error(f'CLANGPDB requires matching LLVM and LLD releases (clang {versions[0]}, LLD {versions[1]}); '
-                    'set CLANG_BIN to a directory containing matching clang, lld-link, llvm-lib and llvm-rc')
     for name in CLANGPDB_TOOLS:
         link = directory / name
         target = compiler if name == 'clang' else linker if name == 'lld-link' else tool(name, 'brew install llvm lld')
         if link.is_symlink() or link.exists():
             link.unlink()
         link.symlink_to(target)
-    return str(directory) + '/'
+    return validate_clang_bin(directory)
