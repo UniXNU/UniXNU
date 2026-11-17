@@ -43,3 +43,5 @@ python3 /path/to/AdrenoMetal/tools/audit-runtime-fast-paths.py \
 ```
 
 `--runtime-policy /path/to/runtime-policy.log` attaches the captured device profile and runtime check results. The report enumerates policy fields, consumer overrides, owning source references, Turnip options and the math vocabulary defined by `Math::float_stems()`, `BinOp::ALL` and `PrecisionNote`. The development `be905fd8` source audit resolved all 25 policy fields and 19 Turnip options.
+
+The driver-condition inventory enumerates every variant of `DriverDeviation`, `DriverWorkaround` and `DriverFact`, with declaration lines and qualified source references. Development `e3959de8` declares 35 deviations, 28 workarounds and 46 facts. The report includes the constant-read conditions `UniformBufferPerLaneReadsSerialize` and `ExternalUniformReadsSkipACache`.
