@@ -11,6 +11,21 @@ Use the [bring-up checkpoints](/porting/bring-up) to identify the stage being te
 | Storage | Reserved log region, kernel writer and a Linux or recovery reader | Kernel message buffer and diagnostic snapshots |
 | Repeated tests | Working log retrieval and return to bootloader | One evidence directory per boot |
 
+### Previous sheng run
+
+When `log=1` starts the UFS writer, it retains the previous run's header,
+message buffer, newest 64 slots and startup checkpoints before writing the new
+run. Retrieve and decode that bounded snapshot from macOS:
+
+```sh
+sysctl -b kern.unixnu_prev_log > previous.bin
+python3 ../UniXNU-sheng/scripts/read-sheng-log.py --prev previous.bin --out previous
+```
+
+The v0 Linux reader builder accepts `--os-version VALUE` for bootloaders that
+require an OS version and patch level in the Android header. Its default uses
+the release image's value.
+
 ## 1. Include the firmware log exporter {#firmware-setup}
 
 Prepare the firmware checkout using [UEFI integration](/porting/uefi-firmware).

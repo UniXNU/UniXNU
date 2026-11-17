@@ -10,6 +10,19 @@
 | 存储 | 预留日志区域、内核写入器和 Linux 或 recovery 读取器 | 内核消息缓冲和诊断快照 |
 | 重复测试 | 可用的日志读取与返回 bootloader 功能 | 每次启动独立的证据目录 |
 
+### Sheng 上一次启动
+
+`log=1` 启动 UFS 日志写入器时，会在写入新日志前保留上一次启动的头、消息缓冲、
+最新 64 个槽位及启动检查点。在 macOS 中获取并解码这份有界快照：
+
+```sh
+sysctl -b kern.unixnu_prev_log > previous.bin
+python3 ../UniXNU-sheng/scripts/read-sheng-log.py --prev previous.bin --out previous
+```
+
+v0 Linux 读取器的构建脚本支持 `--os-version VALUE`，用于要求 Android 启动头包含 OS
+版本和补丁级别的 bootloader。默认沿用发行镜像的字段值。
+
 ## 1. 集成固件日志导出器 {#firmware-setup}
 
 按 [UEFI 集成](/zh/porting/uefi-firmware)准备固件仓库。

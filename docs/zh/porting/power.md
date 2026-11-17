@@ -216,6 +216,20 @@ SM8550 上的调频输入：
 
 **结果：** 频率请求和电源转换产生可观察效果，并保持依赖设备正常运行。
 
+### Sheng 平台睡眠
+
+`platform-sleep=1` 选择板级 XNU 睡眠 hook 和 ArmCpu 挂起路径。辅助 CPU 通过
+PSCI CPU_OFF 关闭，启动 CPU 等待开盖、电源键或 `platform-sleep-wake-after=<秒数>`
+指定的期限。被拒绝的中断会被确认，唤醒后恢复保存的中断使能状态。睡眠期间，板级
+回调每 10 秒喂一次已接管的固件看门狗。
+
+开盖或按电源键会请求完整唤醒。背光等待两帧显示后恢复，最长等待 1500 ms；没有帧计数时
+等待 600 ms。触摸板报告间隔超过 60 ms 时重新建立触点位置。合盖时释放屏幕触点，
+后续触摸报告在开盖后恢复。
+
+[设备记录](https://github.com/UniXNU/UniXNU-sheng/blob/main/porting.toml)
+列出了这些路径的构建检查和设备验证证据。
+
 ## 6. 构建并验证接口
 
 按[驱动接入步骤](/zh/porting/drivers#build-integration)加入源码、ABI 绑定、初始化调用和归档输入。

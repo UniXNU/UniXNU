@@ -267,6 +267,23 @@ On SM8550 the governors use these inputs:
 **Result:** frequency requests and power transitions have observed effects and
 preserve the dependent devices' operation.
 
+### Sheng platform sleep
+
+`platform-sleep=1` selects the board's XNU sleep hook and ArmCpu suspend path.
+Secondary CPUs use PSCI CPU_OFF. The boot CPU waits for the lid, power key or
+`platform-sleep-wake-after=<seconds>` deadline, acknowledges rejected interrupts
+and restores the saved interrupt enables on wake. Board ticks feed the inherited
+firmware watchdog every 10 seconds while asleep.
+
+Opening the lid or pressing the power key requests a full wake. The backlight
+returns after two presented frames, with a 1500 ms timeout; a display without
+frame counters uses a 600 ms delay. A touchpad report gap above 60 ms starts a
+new contact position. A closed cover releases touchscreen contacts and gates
+later reports until it opens.
+
+The [device record](https://github.com/UniXNU/UniXNU-sheng/blob/main/porting.toml)
+identifies the build checks and device evidence for these paths.
+
 ## 6. Build and verify the interfaces
 
 Follow [driver build integration](/porting/drivers#build-integration) to add the
