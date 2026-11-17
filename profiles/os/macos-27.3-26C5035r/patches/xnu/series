@@ -59,3 +59,4 @@ arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-swapin-io-priority.patch
 ../xnu-12377/cshash-signed-text-revalidation.patch
 ../xnu-12377/cshash-compressed-text-revalidation.patch
+../xnu-12377/macos-addon-applications.patch

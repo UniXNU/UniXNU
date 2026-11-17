@@ -59,7 +59,7 @@ Source and packaging: [AdrenoMetal](https://github.com/UniXNU/AdrenoMetal/pull/3
 
 On macOS, open **Shader Cache** and click **Start** to compile the system inventory. The window shows library progress, compiled functions, failures and missing inputs. **Stop** finishes the current compilation before stopping. Starting again keeps successful checkpoints and retries failed entries. Administrator authorization gives the worker access to the shared system cache. Closing the window keeps the requested task running.
 
-The app is installed at `/Library/GPUBundles/Shader Cache.app`; the sheng lab exposes it in `/Applications`. Build it with the macOS plugin:
+The macOS addon installs `/Applications/Shader Cache.app` and a login agent that registers it with LaunchServices in each Aqua session. Registration does not start shader compilation. Build it with the macOS plugin:
 
 ```sh
 python3 scripts/build-adreno-metal-plugin.py --target macos27 --no-replay

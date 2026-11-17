@@ -1,0 +1,14 @@
+Install Applications/ addon entries into the macOS Data applications directory.
+Keep GPU bundle trust protection limited to GPUBundles/ entries.
+--- a/bsd/kern/kern_exec.c
++++ b/bsd/kern/kern_exec.c
+@@ -8692,7 +8692,8 @@
+ 		 * server's driver directory Audio/Plug-Ins/HAL). Both are written with the kernel's context, so a protected file can be
+ 		 * replaced on a later boot. */
+ 		const bool bundle_file = !strncmp(name, "GPUBundles/", sizeof("GPUBundles/") - 1);
+-		const bool library_file = bundle_file || !strncmp(name, "Library/", sizeof("Library/") - 1);
++		const bool library_file = bundle_file || !strncmp(name, "Library/", sizeof("Library/") - 1) ||
++		    !strncmp(name, "Applications/", sizeof("Applications/") - 1);
+ 		snprintf(path, sizeof(path), bundle_file ? "/Library/%s" : library_file ? "/%s" : "/private/var/ngpu/%s", name);
+ 		vfs_context_t file_ctx = library_file ? vfs_context_kernel() : ctx;
+ #else
