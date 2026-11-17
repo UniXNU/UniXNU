@@ -170,6 +170,10 @@ cp out/<device>/<os_profile>/<config>/kernel/kernel.macho \
 
 workflow 运行 kernel、userdata 和 payload。package、firmware 和 boot image 命令在受支持的 macOS 或 Linux 主机上执行。使用托管构建前检查 workflow 和账户 runner 配置。
 
+### Sheng macOS lab
+
+[sheng macOS lab workflow](https://github.com/UniXNU/UniXNU-sheng/actions/workflows/macos-lab.yml) 通过 `core_ref` 选择核心仓库版本，默认为 `main`。输入分支、标签或完整的 40 位 commit SHA，与本地核心仓库版本一致即可使用相同源码构建。`root_storage=false` 构建启动镜像，保留设备上已安装的根存储和 Data。
+
 ## Linux 主机
 
 安装脚本在 glibc Linux 上支持 apt、dnf、pacman 和 zypper。依赖已准备好时使用 `--package-manager none`，指定主机 LLVM 时使用 `--llvm-config FILE`。详见 [Linux 要求](/zh/guide/requirements#linux)。
