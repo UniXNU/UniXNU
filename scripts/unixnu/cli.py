@@ -175,18 +175,28 @@ def cmd_build(ctx):
     modules = prepare(ctx, steps + (['kernel'] if 'prelink' in steps else []))
     if 'kernel' in steps:
         kernel.preflight(ctx)
+    source_gpu_abi = None
+    builds_kernel = 'kernel' in steps or 'prelink' in steps
+    if 'payload' in steps:
+        runtime_spec = ctx.board.get('payload', {}).get('runtime')
+        if (runtime_spec and runtime_spec.get('enabled', True) and
+                runtime_spec.get('gpu_addon', True) and not ctx.args.gpu_addon):
+            source_gpu_abi = kernel.adreno_abi_sha256(ctx)
+        if source_gpu_abi and not builds_kernel:
+            kernel.require_adreno_abi(expand(ctx.args.kernel or ctx.work / 'kernel/kernel.macho'), source_gpu_abi)
     if 'payload' in steps or 'runtime' in steps:
         runtime.prepare(ctx, kernel_build='kernel' in steps)
     elif 'kernel' in steps and ctx.args.data_ramdisk:
         runtime.bind_seed(ctx, Path(ctx.args.data_ramdisk).expanduser().resolve(), kernel_build=True)
-    if 'kernel' in steps or 'prelink' in steps:
+    if builds_kernel:
         with toolchain.environment(ctx):
-            if 'kernel' in steps:
-                kernel.build(ctx, modules)
-            kernel.prelink(ctx)
+            adreno_abi = kernel.build(ctx, modules) if 'kernel' in steps else None
+            kernel.prelink(ctx, adreno_abi)
     if 'package' in steps:
         package.build(ctx, modules, ctx.args.target)
     if 'payload' in steps:
+        if source_gpu_abi and builds_kernel:
+            kernel.require_adreno_abi(expand(ctx.args.kernel or ctx.work / 'kernel/kernel.macho'), source_gpu_abi)
         ctx.uefi = ctx.option('uefi', 'UNIXNU_UEFI')
         payload.build(ctx)
         payload.finish_build(ctx)
