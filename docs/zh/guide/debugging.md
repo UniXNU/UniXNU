@@ -396,3 +396,30 @@ jq . out/<device>/<os_profile>/<config>/boot/boot.json
 - [参考设备记录](/zh/devices/sheng)
 
 panic 显示器在本轮内核清零的 BSS 中记录首次 panic。热重启可以保留显存内容，旧画面不影响新一轮显示和导出 panic。2,048 字节 panic 文本缓冲区的最后一个字节用于记录该状态。
+
+## 检查工具
+
+`local-tools/` 提供构建产物和桌面采样的检查命令。
+
+| 工具 | 输入与结果 |
+| --- | --- |
+| `adt-chosen.py` | 从 payload ADT 打印 DarwinBoot 属性和范围。 |
+| `kernel-compile-check.py` | 使用所选构建树的 XNU 编译记录编译单个源文件，`--tree` 指定构建树。 |
+| `record-build-provenance.py` | 记录源码、工具链、参数和输出，`--core`、`--device`、`--uefi` 指定检出目录。 |
+| `recover-root-policies.py` | 将 payload 中的签名头和公开 owner key 与 `--verification-from` 匹配，`--write` 写入指定目录。 |
+| `tablet-ci-blur-probe.js` | 执行 Core Image 模糊并报告结果。 |
+| `tablet-icon-stress.js` | 按多种尺寸渲染应用图标并统计失败数量。 |
+| `tablet-pointer-probe.js` | 保存窗口系统的指针坐标和时间，静止采样也保留初始坐标。 |
+| `pointer-csv-stats.py` | 统计移动间隔、位移和停顿后的变化。 |
+| `touchpad-timing.py` | 从标准输入解码 `ShengTouchpadTiming`，`--since HEX` 与之前的记录比较。 |
+| `ocr-frames.swift` | 识别帧中文字，`--boxes` 输出坐标，`--fast` 选择 Vision 快速识别模式。 |
+
+JXA 工具通过 `osascript -l JavaScript` 运行。指针采样记录窗口系统坐标，键盘盖报告时序从设备注册表读取。
+
+```sh
+python3 local-tools/kernel-compile-check.py SOURCE --tree /path/to/resolved-tree
+osascript -l JavaScript local-tools/tablet-pointer-probe.js 30 40 pointer.csv 300
+python3 local-tools/pointer-csv-stats.py pointer.csv --pause 60 --big 150
+ssh TABLET 'ioreg -r -c ShengKeyboardCover -l -d 1' | python3 local-tools/touchpad-timing.py
+swift local-tools/ocr-frames.swift --fast --boxes FRAME.jpg
+```
