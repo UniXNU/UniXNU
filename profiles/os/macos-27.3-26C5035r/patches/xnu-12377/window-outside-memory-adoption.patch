@@ -619,3 +619,21 @@ diff --color -ruN a/osfmk/vm/pmap.h b/osfmk/vm/pmap.h
  
  #if HAS_MTE
  extern bool pmap_is_tagged_page(ppnum_t);
+
+--- a/osfmk/mach/arm/thread_status.h
++++ b/osfmk/mach/arm/thread_status.h
+@@ -342,9 +342,14 @@
+ #endif /* CONFIG_DTRACE */
+ 
+ #if DEBUG || DEVELOPMENT
+ #define HAS_ADD_SAVED_STATE_PC          1
+ #endif
+ 
++/* Platform memory probes recover from refused loads in RELEASE kernels too. */
++#ifndef HAS_ADD_SAVED_STATE_PC
++#define HAS_ADD_SAVED_STATE_PC          1
++#endif
++
+ 
+ static inline boolean_t
+ is_thread_state32(const arm_unified_thread_state_t *its)
