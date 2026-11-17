@@ -6,3 +6,4 @@ Browse device documentation and porting records from each repository.
 | --- | --- | --- | --- |
 | [dmnakzkahziamnk-a11y/UniXNU-sagit](https://github.com/dmnakzkahziamnk-a11y/UniXNU-sagit) | [Xiaomi Mi 6 \(sagit\)](/devices/sagit) | Device notes | MSM8998 |
 | [ilertnost/unixnu-sagit](https://github.com/ilertnost/unixnu-sagit) | [Xiaomi Mi 6 \(sagit\), Snapdragon 835, 4 or 6 GB \(ilertnost\)](/devices/sagit-ilertnost) | Record pending | MSM8998 |
+| [xiahaor/unixnu-sagit](https://github.com/xiahaor/unixnu-sagit) | [Xiaomi Mi 6 \(sagit\), Snapdragon 835, 4 or 6 GB \(xiahaor\)](/devices/sagit-xiahaor) | Record pending | MSM8998 |

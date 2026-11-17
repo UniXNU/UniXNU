@@ -6,7 +6,7 @@
 
 Redmi K20 Pro / Mi 9T Pro \(raphael, SM8150\) arm64 UniXNU port, targeting ipados-18.7.12-22H390 \(Darwin 24.6.0\).
 
-Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/porting.toml), `3c6847a875254e5bb4bf216894ca361bb3d7a243`.
+Source record: [porting.toml](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/porting.toml), `f16ce447b49adf258491ccc0e08212ac476ba694`.
 
 This page is generated from the device record.
 
@@ -25,7 +25,7 @@ This page is generated from the device record.
 | [Power](#power) | `planned` |
 | [Image assembly](#packaging) | `host-verified` |
 | [Diagnostics](#diagnostics) | `planned` |
-| [platform-expert](#platform-expert) | `implemented` |
+| [platform-expert](#platform-expert) | `device-verified` |
 
 ## Configuration {#configuration}
 
@@ -88,8 +88,8 @@ Components: `ArmDTPlatform`.
 
 ### Evidence
 
-- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/board.toml)
-- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/feeds.toml)
+- `source`: [Format 2 board definition with the arm64 ipados-18.7.12-22H390 profile \(iOS 18.7.12 payload for the root image, staged iPadOS 18.7.12 arm64 kernelcache for prelink\) and raphael\_defconfig mapping.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/board.toml)
+- `source`: [Pinned shared SM8150 source used as the soc profile.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/feeds.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -153,9 +153,9 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `source`: [jobs.build runs on macos-26 \(Xcode, cctools, lzfse\) and produces kernel.macho; jobs.firmware runs on ubuntu-24.04 with needs: build, packs that run's kernel into the payload volume, installs it as Aloha's ramdisk and verifies the result with scripts/check-bootimg-ramdisk.py.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/.github/workflows/build.yml)
-- `source`: [Patches both Aloha DSC variants and the FDF to compile UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD, teaches PlatformBuild\*.py about ALOHA\_EXTRA\_PACKAGES, and with --payload installs the volume over PythonLibs/emptyramdisk.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/scripts/stage-aloha-unixnu.py)
-- `device`: [UniXNU draws its menu on raphael: blue title, Input/Tools on the right, and the footer reads "built-in configuration", which is Config.c:1595 falling back because no \\EFI\\UniXNU\\unixnu.toml volume was present.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/docs/evidence/2026-11-14-aloha-unixnu-menu.md)
+- `source`: [jobs.build runs on macos-26 \(Xcode, cctools, lzfse\) and produces kernel.macho; jobs.firmware runs on ubuntu-24.04 with needs: build, packs that run's kernel into the payload volume, installs it as Aloha's ramdisk and verifies the result with scripts/check-bootimg-ramdisk.py.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/.github/workflows/build.yml)
+- `source`: [Patches both Aloha DSC variants and the FDF to compile UniXNU, UniXNUDxe, UniXNURamDiskDxe and DarwinBoot into the FD, teaches PlatformBuild\*.py about ALOHA\_EXTRA\_PACKAGES, and with --payload installs the volume over PythonLibs/emptyramdisk.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/scripts/stage-aloha-unixnu.py)
+- `device`: [UniXNU draws its menu on raphael: blue title, Input/Tools on the right, and the footer reads "built-in configuration", which is Config.c:1595 falling back because no \\EFI\\UniXNU\\unixnu.toml volume was present.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/docs/evidence/2026-11-14-aloha-unixnu-menu.md)
   Command: <code>fastboot flash boot aloha-unixnu.img, then photograph the UniXNU boot menu on the handset</code>. Revision: `dc881bab4a5c44206ecb6802ef2cb8a58349169c`.
 - `host`: [Both jobs pass in one run: build compiles the kernel on macos-26, firmware installs device-tree-compiler and mtools, builds the 192 MiB payload volume, stages it over PythonLibs/emptyramdisk, builds Aloha, and asserts in step 17 that the boot image ramdisk is the payload. The artifact aloha-raphael-bootimg carries SM8150\_EFI.fd \(3145728 B\), payload.img \(201326592 B\) and xiaomi-raphael.img \(204840960 B\); scripts/check-bootimg-ramdisk.py reports the ramdisk is the payload volume at offset 0x35a000.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
   Command: <code>gh api -X POST repos/Aruvelut-123/UniXNU-raphael/actions/workflows/build.yml/dispatches -f ref=main -f 'inputs[build_kernel]=true' -f 'inputs[build_firmware]=true' -f 'inputs[unique_chip_id]=0123456789ABCDEF'</code>. Revision: `43803ea568627dd054c7ae5a3ade9d446f4e2d7d`.
@@ -542,7 +542,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `source`: [Parses the v0-v2 boot image header, locates the ramdisk by page-aligned kernel size and exits non-zero unless those bytes equal the payload volume. Against the baseline image it reports a 6-byte ramdisk holding b'dummy\\n', which is exactly the placeholder that produced the built-in configuration menu.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/scripts/check-bootimg-ramdisk.py)
+- `source`: [Parses the v0-v2 boot image header, locates the ramdisk by page-aligned kernel size and exits non-zero unless those bytes equal the payload volume. Against the baseline image it reports a 6-byte ramdisk holding b'dummy\\n', which is exactly the placeholder that produced the built-in configuration menu.](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/scripts/check-bootimg-ramdisk.py)
 - `host`: [The Aloha workflow on ubuntu-24.04 reached the XNU kernel step and failed there with 'unifdef not found on PATH', which is the measurement that moved the kernel build back to the macOS job.](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577)
   Command: <code>gh api repos/Aruvelut-123/UniXNU-raphael/actions/runs/43613243577/jobs --jq '.jobs[].steps[] | &#123;name,conclusion&#125;'</code>. Revision: `8dd26ff2a7fc82e8ae3aae13645a8d3d22ea1f7c`.
 - `host`: [The folded workflow completes end to end: jobs.build \(macos-26\) compiles the kernel and records its sha256, jobs.firmware \(ubuntu-24.04\) downloads that artifact, refuses to continue on a hash mismatch, and produces aloha-raphael-bootimg. Downloaded and re-checked locally, the boot image's ramdisk is byte-identical to payload.img \(201326592 bytes at offset 0x35a000\).](https://github.com/Aruvelut-123/UniXNU-raphael/actions/runs/43620004865)
@@ -611,7 +611,7 @@ Collect evidence using the next action.
 
 ## platform-expert {#platform-expert}
 
-`implemented`
+`device-verified`
 
 Components: `ArmDTPlatform`.
 
@@ -643,26 +643,33 @@ Components: `ArmDTPlatform`.
 - Because ARM\_DT\_PLATFORM was still 1 while libArmDTPlatform.a did not exist, the guard at build-xnu-4k-baseline.sh:641 \(test -f on the archive\) also means the port would not have linked it even if it had tried; the archive has to be produced first
 - The first run with archives enabled also proved that board.toml named two scripts that never existed in either tree: build\_raphael-cpu.py and build-raphael-pthread.py. archive\_plan resolved them as scripts under tree/scripts and build\_archives raised 'archive-04-build-raphael-cpu: build script missing'. They were never load-bearing because XNU\_BUILD\_ARCHIVES had always been n, so the whole step was skipped and the dead references were never exercised. UniXNU's own recipes are build-cpu-desktop-kernel.py and build-libpthread-kernel.py, and the soc fragment disables both XNU\_ARMCPU and XNU\_SOURCE\_PTHREAD anyway, so the archive list is now corecrypto twice plus component:ArmDTPlatform
 - With archives enabled, component-ArmDTPlatform ran and build-arm-driver.py returned without an error before the missing-script failure, so the IOPlatformExpert.cpo.json record that recipe consumes is present after the bootstrap pass
+- Fourth root cause, and the reason the 06:46 run still shipped a kernel with no ArmDTPlatform despite archives running: every -Wl,-force\_load block in build-xnu-4k-baseline.sh is indented inside 'if \[ "$&\#123;XNU\_SOURCE\_CORECRYPTO14:-0&\#125;" = 1 \] &amp;&amp; \[ "$BOOTSTRAP" = 0 \]; then' at line 606, which does not close until well past the ArmDTPlatform branch at 641-646. The soc fragment also turns XNU\_SOURCE\_CORECRYPTO14 off, so the archive was built at 06:47:31-06:48:04 and then simply never linked. Restoring the arch fragment's CONFIG\_XNU\_SOURCE\_CORECRYPTO14=y admits the whole block; the corecrypto recipe that block test -f checks is build/corecrypto-2023/libcorecrypto\_kernel\_noasm-namespaced.a, which the second --namespace archive entry already produces, and XNU\_CRYPTO\_BOOTSTRAP="prelinked" still strips the duplicate provider via prng\_random.o\_CFLAGS\_ADD=-UXNU\_SOURCE\_CORECRYPTO14
+- Fifth root cause, and the one behind every Unable-to-find-driver screen since archives started linking: the archive is force-loaded, so the ArmDTPlatform class and its 36 symbols are in the kernel, but gIOKernelConfigTables had no IOClass = ArmDTPlatform entry. Dumping the built table shows only RaphaelBootCpu, IOPanicPlatform and IOExclaveProxy, and a grep for the ArmDTPlatform IOClass counts 0. A bundled class with no personality never probes, so the score-0 IOPanicPlatform fallback wins and panics. Upstream patches/xnu/armvirt-platform-personality.patch registers exactly this personality \(IOProviderClass IOPlatformExpertDevice, IONameMatch device-tree, IOProbeScore 5000\), but the raphael series never carried that hunk; patches/xnu/raphael-dt-platform-personality.patch adds it after raphael-bootcpu.patch, whose RaphaelBootCpu entry it anchors on
+- Kernel size alone cannot show whether a component archive linked: the 44024269099 and 44032715635 kernels are both 55,156,736 bytes with different sha256, so the file is rebuilt every run and only the symbol/string content distinguishes a linked driver from an unlinked one. 'strings \| grep ArmDTPlatform' returning 0 is the reliable check here
 - Two diagnostic images used a nop in place of bl \_trust\_cache\_runtime\_init/\_load\_static\_trust\_cache and a ret at KLDBootstrap::loadSecurityExtensions. Those are probes, not the fix; the configuration changes above are the port's real answer to both stops
 
 ### Completion criteria
 
-- The kernel links libArmDTPlatform.a \(armdt\_platform\_configured present\) and keeps the trust-cache runtime path
+- The kernel links libArmDTPlatform.a and keeps the trust-cache runtime path; the 44041220171 kernel carries 36 ArmDTPlatform strings including the IODTPlatformExpert meta-class and the 'required /cpus, /arm-io, /defaults or /options node is absent' diagnostic
+- PE\_init\_platform reaches AMFI on the real device: the r81 screen says 'AMFI: no amfi-only-platform-code device tree node\!' instead of 'Unable to find driver for this platform'. AMFI is checked in PE\_init\_platform, which runs before IOKit matching, so this proves the device tree was loaded and the early platform path ran; it does NOT prove any platform expert matched
 
 ### Current limits
 
 - The platform expert still needs the device tree ArmDTPlatform::configure requires \(/cpus, /arm-io, /defaults, /options and a /chosen CHRP NVRAM proxy\); devicetree.py synthesises chosen, nvram-proxy-data, cpus, arm-io, defaults and options from dts/raphael.dts, but that arm-io must carry the real SM8150 hardware nodes for anything downstream to attach
 - A driver that probes successfully is not a booted SpringBoard; display, storage, input and the userspace handoff remain unproven on this device
+- The panic screen is not part of the XNU build. scripts/xnu-panic-screen.c is freestanding code that scripts/patch-nobars.py --panic-screen copies into unused kernel padding and wires panic\(\) to, so a CI-built kernel has no on-screen panic until that post-processing step runs against the CI output
 
 ### Next action
 
-- Run the CI build without --skip-prelink and confirm armdt\_platform\_configured and the xnu\_load\_trust\_cache path are present in kernel.macho
-- Boot that image and read the next panic screen, if any
+- Flash the next CI image with the AMFI /chosen properties and read where the kernel stops
+- If the next screen still names J171AP at IOPlatformExpert.cpp:2369, the personality is registered but its IONameMatch does not match the provider name; then read provider-&gt;getName\(\) at the panic and widen the match rather than the device tree
 
 ### Evidence
 
-- `source`: [Sets CONFIG\_XNU\_ARM\_DT\_PLATFORM=y and CONFIG\_XNU\_TRUST\_CACHE\_RUNTIME=y; unixnu.config.parse\_config returns both as True for this file](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/configs/raphael_defconfig)
-- `source`: [\[kernel\] archives names component:ArmDTPlatform after the two corecrypto recipes; kernel.archive\_plan expands it as \('component', ArmDTPlatform\) at that ordered position](https://github.com/Aruvelut-123/UniXNU-raphael/blob/3c6847a875254e5bb4bf216894ca361bb3d7a243/board.toml)
+- `source`: [Restates CONFIG\_XNU\_BUILD\_ARCHIVES=y, CONFIG\_XNU\_SOURCE\_CORECRYPTO14=y, CONFIG\_XNU\_ARM\_DT\_PLATFORM=y and CONFIG\_XNU\_TRUST\_CACHE\_RUNTIME=y; unixnu.config.parse\_config returns all four True, overriding the soc fragment's n](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/configs/raphael_defconfig)
+- `source`: [\[kernel\] archives is the two corecrypto recipes plus component:ArmDTPlatform; \[adt.chosen.u32\] carries the certificate/security-mode and amfi-only-platform-code properties AMFI reads off /chosen](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/board.toml)
 - `source`: [Revision 417ff95d6a6e8607ddea9309ec45c3bfd4a67c60 is the IODTPlatformExpert subclass matching IOProviderClass IOPlatformExpertDevice with IONameMatch device-tree](https://github.com/UniXNU/ArmDTPlatform.git)
+- `device`: [On-screen panic moves from 'Unable to find driver for this platform' to 'AMFI: no amfi-only-platform-code device tree node\! @AppleMobileFileIntegrity.cpp:5307', so the platform expert now probes and PE\_init\_platform reaches AMFI](https://github.com/Aruvelut-123/UniXNU-raphael/blob/f16ce447b49adf258491ccc0e08212ac476ba694/evidence/r81-boot-record.txt)
+  Command: <code>strings -a kernel.macho | grep -c ArmDTPlatform</code>. Revision: `6db5be1bbf663c0a50e0d1617c832777e77820e6`.
 
 </div>

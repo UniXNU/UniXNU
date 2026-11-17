@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | [0721GPT/UniXNU-fuxi](https://github.com/0721GPT/UniXNU-fuxi) | [Xiaomi 13 \(0721GPT\)](/zh/devices/fuxi-0721gpt) | 仓库链接 | SM8550 |
 | [chipppppppps/unixnu-fuxi](https://github.com/chipppppppps/unixnu-fuxi) | [Xiaomi 13 \(chipppppppps\)](/zh/devices/fuxi-chipppppppps) | 适配记录 | SM8550 |
+| [hannana-26/unixnu-fuxi](https://github.com/hannana-26/unixnu-fuxi) | [Xiaomi 13 \(hannana-26\)](/zh/devices/fuxi-hannana-26) | 记录待补齐 | SM8550 |
 | [hanzi123-bilp/unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi) | [Xiaomi 13 \(hanzi123-bilp\)](/zh/devices/fuxi-hanzi123-bilp) | 仓库链接 | SM8550 |
 | [kashewaro/unixnu-fuxi](https://github.com/kashewaro/unixnu-fuxi) | [Xiaomi 13 \(kashewaro\)](/zh/devices/fuxi-kashewaro) | 适配记录 | SM8550 |
 | [Kerfand/UniXNU-fuxi](https://github.com/Kerfand/UniXNU-fuxi) | [Xiaomi 13 \(Kerfand\)](/zh/devices/fuxi-kerfand) | 仓库链接 | SM8550 |

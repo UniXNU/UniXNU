@@ -4,9 +4,9 @@
 
 <div v-pre>
 
-Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, the menu and DarwinBoot hand off to XNU, and the prelinked kernel reaches PE\_init\_iokit. Storage, display, input and GPU drivers are the remaining work.
+Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, DarwinBoot hands off to the prelinked XNU, NativeDwMmc reads the eMMC and publishes the USERDATA SHNGROOT windows, and the kernel mounts the APFS OS volume and reaches /sbin/launchd. DECON/DSI display, touch and the T830 GPU are the remaining work.
 
-源记录: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/49d6b075523491a1ba5a7c9b498b4e9f78d9155b/porting.toml), `49d6b075523491a1ba5a7c9b498b4e9f78d9155b`.
+源记录: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/porting.toml), `65b0182f6a96fb73b36249a9c45a1cb9974bbe12`.
 
 本页按设备记录自动生成。
 
@@ -16,7 +16,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 | [固件与启动](#firmware) | `device-verified` |
 | [CPU 与中断](#cpu) | `planned` |
 | [内存与 DMA](#memory) | `planned` |
-| [存储与根卷](#storage) | `planned` |
+| [存储与根卷](#storage) | `device-verified` |
 | [显示](#display) | `planned` |
 | [输入](#input) | `planned` |
 | [GPU](#gpu) | `planned` |
@@ -50,6 +50,12 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 - The prelinked AppleARMPlatform ships an AppleARMCPU personality with IONameMatch cpu; IODTPlatformExpert matches by prefix and would claim the Exynos /cpus. The kernel artifact is rewritten byte-for-byte to xpu before it is written to HIDDEN.
 - The prelink roots are trimmed to the software, security and storage closure plus AppleARMPlatform and ApplePMGR; the display, GPU and media kexts wait for Apple hardware and are excluded until the Exynos drivers exist.
 - The board now carries the measured USERDATA geometry \(first 8013824, last 61057023, 512-byte sectors\) with the OS/SystemOS SHNGROOT windows, the OS volume UUID 04769D26-2CA0-4825-B443-E2E5F88300F2, and the same UUID as the ADT root match. The userdata image build and flash are separate from the kernel build.
+- The package workflow takes a userdata boolean: when set it builds the OS/SystemOS root image before the kernel package step and uploads userdata-root.img separately, so the kernel artifact is unaffected by the optional image build.
+- The ADT generator dropped \#address-cells/\#size-cells from hardware nodes. That was invisible until the first node with an interrupts property \(dwmmc0\) made IODTMapInterruptsSharing call IODTGetICellCounts on the GIC; the missing cell count faulted in IODeviceTreeAlloc. Patch 0006 adds both properties to the generated ADT.
+- The GIC phandle was emitted as phandle, but XNU's IODT support indexes interrupt parents by AAPL,phandle. IODTFindInterruptParent returned NULL and IODTGetICellCounts\(NULL\) faulted. Patch 0007 renames the generated hardware phandle to AAPL,phandle; the value is packed from the FDT's phandle before the output key changes, since the FDT has no AAPL,phandle property to read.
+- With the phandle fixed the kernel reached bsd\_init and stayed in its root-mount retry loop with no panic: vfs\_mountroot returned an error that the console cannot show. The diagnostic now paints attempts 283-286 and panics on the third failure with the errno and rootdevice, while the MC window reader marks the first APFS read and any failed window read.
+- The first root-probe build failed the bootstrap kernel pass on an implicit gtaxllte\_fb\_mark declaration, which then stopped the corecrypto archive with 'No XNU symbol names'. The probe declares the helper before use; device patches that call a kernel helper must carry their own extern.
+- The root-mount probe shows no third-attempt panic after several minutes, so vfs\_mountroot is either succeeding or blocking. The boot now paints 290 after a successful mount, 291 after set\_rootvnode and 292 before load\_init\_program, so the next photo distinguishes a mounted root from a wait.
 
 ### 完成条件
 
@@ -102,7 +108,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 证据
 
-- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/49d6b075523491a1ba5a7c9b498b4e9f78d9155b/PHASE0.md)
+- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/PHASE0.md)
   Command: <code>manual boot of the SM-T585; the photos are recorded in the workspace</code>. Revision: `f45b68897f5f48da0026881847d9204680c9dd24`.
 
 ## CPU 与中断 {#cpu}
@@ -181,7 +187,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ## 存储与根卷 {#storage}
 
-`planned`
+`device-verified`
 
 ### 硬件与依赖
 
@@ -205,6 +211,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 - NativeDwMmc is a read-only PIO IOBlockStorageDevice over the USERDATA window. It takes the FIFO item width from HCON, requires DTO, and links through a device build script, a kernel personality in KernelConfigTables.cpp and a build-script archive block. The dwmmc0 node is exported by the SoC DTS.
 - The first driver build stopped at -Werror because seven register constants were unused; only the constants the transport actually touches remain. The bootstrap kernel link warning about the mockfs vnodeop descriptor is the expected first-pass link without archives and does not fail the release.
 - A source IOBlockStorageDevice cannot link against the native kernel: the class lives in the prelinked IOStorageFamily kext. The device vendors the recorded absolute symbols for the pinned iPadOS 17.7.11 21H461 kernelcache \(f18b4df8..., already -0x1000000 slid\) and re-archives the driver object with them, the same pattern the alioth/marble repositories use.
+- NativeDwMmcWindow publishes each SHNGROOT manifest window \(OS, SystemOS\) as its own 512-byte IOBlockStorageDevice, after the parent start returns, so IOStorageFamily can create the IOMedia that APFS probes. The driver checks the manifest SHA-256 and exposes only 512-byte flag-1 windows; framebuffer markers 40-43 report start, first sector, manifest and window service.
 
 ### 完成条件
 
@@ -222,7 +229,8 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 证据
 
-按下一步操作收集证据。
+- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/PHASE0.md)
+  Command: <code>manual boot of the SM-T585; photos IMG_7754-IMG_7762 record the MSHC panic and the root-mount markers</code>. Revision: `c2452fb48cf8b4d78b9a810a32f0dd464580de96`.
 
 ## 显示 {#display}
 

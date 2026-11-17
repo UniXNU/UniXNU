@@ -540,9 +540,9 @@ evidence = []
 
 [[area]]
 id = "platform-expert"
-status = "implemented"
+status = "device-verified"
 components = ["ArmDTPlatform"]
-paths = ["board.toml", "configs/raphael_defconfig", "porting.toml"]
+paths = ["board.toml", "configs/raphael_defconfig", "patches/xnu/series", "patches/xnu/raphael-dt-platform-personality.patch", "porting.toml", "evidence/*.txt"]
 inputs = [
   "The arm64 iPadOS 18.7.12 kernelcache staged by scripts/stage-arm64-kernelcache.py",
   "ArmDTPlatform from components.toml (repository https://github.com/UniXNU/ArmDTPlatform.git, revision 417ff95d6a6e8607ddea9309ec45c3bfd4a67c60)",
@@ -567,22 +567,28 @@ findings = [
   "Because ARM_DT_PLATFORM was still 1 while libArmDTPlatform.a did not exist, the guard at build-xnu-4k-baseline.sh:641 (test -f on the archive) also means the port would not have linked it even if it had tried; the archive has to be produced first",
   "The first run with archives enabled also proved that board.toml named two scripts that never existed in either tree: build_raphael-cpu.py and build-raphael-pthread.py. archive_plan resolved them as scripts under tree/scripts and build_archives raised 'archive-04-build-raphael-cpu: build script missing'. They were never load-bearing because XNU_BUILD_ARCHIVES had always been n, so the whole step was skipped and the dead references were never exercised. UniXNU's own recipes are build-cpu-desktop-kernel.py and build-libpthread-kernel.py, and the soc fragment disables both XNU_ARMCPU and XNU_SOURCE_PTHREAD anyway, so the archive list is now corecrypto twice plus component:ArmDTPlatform",
   "With archives enabled, component-ArmDTPlatform ran and build-arm-driver.py returned without an error before the missing-script failure, so the IOPlatformExpert.cpo.json record that recipe consumes is present after the bootstrap pass",
+  "Fourth root cause, and the reason the 06:46 run still shipped a kernel with no ArmDTPlatform despite archives running: every -Wl,-force_load block in build-xnu-4k-baseline.sh is indented inside 'if [ \"${XNU_SOURCE_CORECRYPTO14:-0}\" = 1 ] && [ \"$BOOTSTRAP\" = 0 ]; then' at line 606, which does not close until well past the ArmDTPlatform branch at 641-646. The soc fragment also turns XNU_SOURCE_CORECRYPTO14 off, so the archive was built at 06:47:31-06:48:04 and then simply never linked. Restoring the arch fragment's CONFIG_XNU_SOURCE_CORECRYPTO14=y admits the whole block; the corecrypto recipe that block test -f checks is build/corecrypto-2023/libcorecrypto_kernel_noasm-namespaced.a, which the second --namespace archive entry already produces, and XNU_CRYPTO_BOOTSTRAP=\"prelinked\" still strips the duplicate provider via prng_random.o_CFLAGS_ADD=-UXNU_SOURCE_CORECRYPTO14",
+  "Fifth root cause, and the one behind every Unable-to-find-driver screen since archives started linking: the archive is force-loaded, so the ArmDTPlatform class and its 36 symbols are in the kernel, but gIOKernelConfigTables had no IOClass = ArmDTPlatform entry. Dumping the built table shows only RaphaelBootCpu, IOPanicPlatform and IOExclaveProxy, and a grep for the ArmDTPlatform IOClass counts 0. A bundled class with no personality never probes, so the score-0 IOPanicPlatform fallback wins and panics. Upstream patches/xnu/armvirt-platform-personality.patch registers exactly this personality (IOProviderClass IOPlatformExpertDevice, IONameMatch device-tree, IOProbeScore 5000), but the raphael series never carried that hunk; patches/xnu/raphael-dt-platform-personality.patch adds it after raphael-bootcpu.patch, whose RaphaelBootCpu entry it anchors on",
+  "Kernel size alone cannot show whether a component archive linked: the 44024269099 and 44032715635 kernels are both 55,156,736 bytes with different sha256, so the file is rebuilt every run and only the symbol/string content distinguishes a linked driver from an unlinked one. 'strings | grep ArmDTPlatform' returning 0 is the reliable check here",
   "Two diagnostic images used a nop in place of bl _trust_cache_runtime_init/_load_static_trust_cache and a ret at KLDBootstrap::loadSecurityExtensions. Those are probes, not the fix; the configuration changes above are the port's real answer to both stops",
 ]
 completion = [
-  "The kernel links libArmDTPlatform.a (armdt_platform_configured present) and keeps the trust-cache runtime path",
+  "The kernel links libArmDTPlatform.a and keeps the trust-cache runtime path; the 44041220171 kernel carries 36 ArmDTPlatform strings including the IODTPlatformExpert meta-class and the 'required /cpus, /arm-io, /defaults or /options node is absent' diagnostic",
+  "PE_init_platform reaches AMFI on the real device: the r81 screen says 'AMFI: no amfi-only-platform-code device tree node!' instead of 'Unable to find driver for this platform'. AMFI is checked in PE_init_platform, which runs before IOKit matching, so this proves the device tree was loaded and the early platform path ran; it does NOT prove any platform expert matched",
 ]
 limits = [
   "The platform expert still needs the device tree ArmDTPlatform::configure requires (/cpus, /arm-io, /defaults, /options and a /chosen CHRP NVRAM proxy); devicetree.py synthesises chosen, nvram-proxy-data, cpus, arm-io, defaults and options from dts/raphael.dts, but that arm-io must carry the real SM8150 hardware nodes for anything downstream to attach",
   "A driver that probes successfully is not a booted SpringBoard; display, storage, input and the userspace handoff remain unproven on this device",
+  "The panic screen is not part of the XNU build. scripts/xnu-panic-screen.c is freestanding code that scripts/patch-nobars.py --panic-screen copies into unused kernel padding and wires panic() to, so a CI-built kernel has no on-screen panic until that post-processing step runs against the CI output",
 ]
 next_action = [
-  "Run the CI build without --skip-prelink and confirm armdt_platform_configured and the xnu_load_trust_cache path are present in kernel.macho",
-  "Boot that image and read the next panic screen, if any",
+  "Flash the next CI image with the AMFI /chosen properties and read where the kernel stops",
+  "If the next screen still names J171AP at IOPlatformExpert.cpp:2369, the personality is registered but its IONameMatch does not match the provider name; then read provider->getName() at the panic and widen the match rather than the device tree",
 ]
 evidence = [
-  { kind = "source", reference = "configs/raphael_defconfig", result = "Sets CONFIG_XNU_ARM_DT_PLATFORM=y and CONFIG_XNU_TRUST_CACHE_RUNTIME=y; unixnu.config.parse_config returns both as True for this file" },
-  { kind = "source", reference = "board.toml", result = "[kernel] archives names component:ArmDTPlatform after the two corecrypto recipes; kernel.archive_plan expands it as ('component', ArmDTPlatform) at that ordered position" },
+  { kind = "source", reference = "configs/raphael_defconfig", result = "Restates CONFIG_XNU_BUILD_ARCHIVES=y, CONFIG_XNU_SOURCE_CORECRYPTO14=y, CONFIG_XNU_ARM_DT_PLATFORM=y and CONFIG_XNU_TRUST_CACHE_RUNTIME=y; unixnu.config.parse_config returns all four True, overriding the soc fragment's n" },
+  { kind = "source", reference = "board.toml", result = "[kernel] archives is the two corecrypto recipes plus component:ArmDTPlatform; [adt.chosen.u32] carries the certificate/security-mode and amfi-only-platform-code properties AMFI reads off /chosen" },
   { kind = "source", reference = "https://github.com/UniXNU/ArmDTPlatform.git", result = "Revision 417ff95d6a6e8607ddea9309ec45c3bfd4a67c60 is the IODTPlatformExpert subclass matching IOProviderClass IOPlatformExpertDevice with IONameMatch device-tree" },
+  { kind = "device", reference = "evidence/r81-boot-record.txt", result = "On-screen panic moves from 'Unable to find driver for this platform' to 'AMFI: no amfi-only-platform-code device tree node! @AppleMobileFileIntegrity.cpp:5307', so the platform expert now probes and PE_init_platform reaches AMFI", command = "strings -a kernel.macho | grep -c ArmDTPlatform", revision = "6db5be1bbf663c0a50e0d1617c832777e77820e6" },
 ]
 

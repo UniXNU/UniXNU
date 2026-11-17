@@ -1,0 +1,211 @@
+schema_version = 1
+
+[device]
+name = "dodge"
+soc = "SM8750"
+os_profile = "ipados-17.7.11-21H461"
+summary = "OnePlus 13 PJZ110 (dodge, SM8750). Skip Setup and turn the on-screen HUD off for normal use. Display, touch, storage boot, and GPU scanout are device-observed. Network, audio, and long-term stability are not claimed."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["NativeKeyStoreEvents"]
+paths = ["board.toml", "feeds.toml", "configs/dodge_defconfig", "components.toml", "unixnu.lock", "upstream.rev", ".gitmodules", "local.toml.example"]
+inputs = ["OnePlus 13 PJZ110, OPLUS codename dodge, SM8750, iPadOS 17.7.11 (21H461)."]
+configuration = ["schema_version=2. Board name dodge. Defconfig dodge_defconfig."]
+procedure = ["From a UniXNU checkout: defconfig dodge_defconfig -D <this repository>; fetch; status."]
+findings = ["The published board name is dodge. Process logs stay in the private backup."]
+completion = ["board.toml, feeds, and the defconfig name the same device."]
+limits = ["This record does not publish private build logs or device identifiers."]
+next_action = ["Keep the public tree limited to the files needed to build and boot."]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Board name, SoC, and OS profile are dodge / SM8750 / ipados-17.7.11-21H461." },
+]
+
+[[area]]
+id = "firmware"
+status = "implemented"
+components = ["PaganiDarwinBoot"]
+paths = ["proprietary-files.txt", "patches/uefi-bds-trace.patch", "patches/uefi-keypad-tpl.patch", "patches/mu-basecore-dxe-trace.patch"]
+inputs = ["Embedded UEFI payload. Firmware binaries are not stored in this repository."]
+configuration = ["The boot image embeds the payload. Firmware hashes stay in proprietary-files.txt."]
+procedure = ["Build firmware, then payload and bootimg from the selected device tree."]
+findings = ["Temporary boot is the supported trial path. Do not flash the partition that holds the installed system."]
+completion = ["Firmware publishes a framebuffer and the documented memory reservations."]
+limits = ["The standard initrd path is not separately claimed."]
+next_action = ["Keep firmware blobs out of the public tree."]
+evidence = [
+  { kind = "source", reference = "proprietary-files.txt", result = "Required firmware inputs are listed by hash, not embedded." },
+]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["PaganiArmCpu", "PaganiArmDTPlatform"]
+paths = ["dts/dodge.dts", "patches/xnu/series"]
+inputs = ["SM8750 CPU topology and GICv3 from the board device tree."]
+configuration = ["Eight CPUs are selected by the board kernel arguments."]
+procedure = ["Resolve the device tree, then build the kernel with the device patch series."]
+findings = ["The board boots far enough to reach Setup and the desktop on this device."]
+completion = ["All selected CPUs come online without a scheduler lock panic."]
+limits = ["Sustained multi-core stress is not claimed."]
+next_action = ["Leave scheduler experiments in the private tree."]
+evidence = [
+  { kind = "source", reference = "dts/dodge.dts", result = "The board DTS identifies OnePlus 13 PJZ110 on SM8750." },
+]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = ["NativeRamBlock"]
+paths = ["dts/dodge.dts", "package/PaganiPeripherals.h"]
+inputs = ["Board memory window from the device tree."]
+configuration = ["RAM disk and reserved ranges follow board.toml."]
+procedure = ["Build the payload with the selected RAM Data input. Do not commit that input."]
+findings = ["The desktop path uses the packed RAM disk already selected by the board."]
+completion = ["The kernel accepts the documented memory window."]
+limits = ["A larger allocation is not claimed."]
+next_action = ["Do not publish RAM Data images."]
+evidence = [
+  { kind = "source", reference = "board.toml", result = "Memory and payload settings stay in the board file." },
+]
+
+[[area]]
+id = "storage"
+status = "implemented"
+components = ["NativeUfs", "NativeVirtioBlock", "PaganiVerifiedRoot", "NativeAES"]
+paths = ["proprietary-files.txt", "patches/xnu/series"]
+inputs = ["UFS root and a packed APFS RAM disk. Partition images are local inputs."]
+configuration = ["native-ufs-root=1 and offline-apfs-load=1."]
+procedure = ["Prepare RAM Data locally, then build payload and bootimg."]
+findings = ["The device reaches userspace from the packed root. Erase can reboot. Swipe-to-power-off can power off."]
+completion = ["Root mount and shutdown do not hit the dead-parent vnode underflow."]
+limits = ["Write qualification of the installed userdata partition is not claimed."]
+next_action = ["Keep backup and shrink tools in the private tree."]
+evidence = [
+  { kind = "source", reference = "patches/xnu/series", result = "The device patch series includes the dead-parent vnode fix." },
+]
+
+[[area]]
+id = "display"
+status = "implemented"
+components = ["NativeMobileDisplay", "PaganiPanel"]
+paths = ["dts/dodge.dts", "package/PaganiPeripherals.h"]
+inputs = ["OnePlus 13 panel timing and the legacy framebuffer."]
+configuration = ["Panel and legacy display arguments are in board.toml. Normal use turns the HUD off."]
+procedure = ["Boot with the published arguments. Skip Setup. Disable the on-screen HUD."]
+findings = ["With the HUD off, the low frame-rate symptom is resolved for normal use on this device."]
+completion = ["The panel shows Setup and the desktop without the diagnostic overlay."]
+limits = ["This record does not publish frame traces or probe output."]
+next_action = ["Keep display probes in the private tree."]
+evidence = [
+  { kind = "source", reference = "package/PaganiPeripherals.h", result = "Panel and peripheral wiring is board-owned." },
+]
+
+[[area]]
+id = "input"
+status = "implemented"
+components = ["PaganiInput", "QcomGeniSpi"]
+paths = ["package/PaganiPeripherals.h", "dts/dodge.dts"]
+inputs = ["Buttons and the board touch controller."]
+configuration = ["pagani-buttons=1 and pagani-touch=1."]
+procedure = ["Boot and confirm buttons and touch after Setup is skipped."]
+findings = ["Touch and buttons are usable on the device-observed desktop path."]
+completion = ["Press, release, and basic navigation work."]
+limits = ["Gesture coverage and long sessions are not claimed."]
+next_action = ["Do not publish touch-debug captures."]
+evidence = [
+  { kind = "source", reference = "package/PaganiPeripherals.h", result = "Input rails and the touch bus are described with the board peripherals." },
+]
+
+[[area]]
+id = "gpu"
+status = "implemented"
+components = ["Adreno830", "AdrenoNext"]
+paths = ["dts/dodge.dts", "components.toml"]
+inputs = ["SM8750 Adreno 830. The Metal addon is a local input and is not stored here."]
+configuration = ["GPU handoff and the addon switch are in board.toml. Color correction stays on the scanout path."]
+procedure = ["Supply the addon locally, build payload, and boot."]
+findings = ["GPU scanout is part of the device-observed path. Later GPU probes stay private."]
+completion = ["Frames reach the panel through the GPU handoff without falling back to the CPU copy."]
+limits = ["Addon binaries, pipeline caches, and shader packs are not published."]
+next_action = ["Keep addon build history in the private repository."]
+evidence = [
+  { kind = "source", reference = "components.toml", result = "The A830 kernel components are selected by this device repository." },
+]
+
+[[area]]
+id = "network"
+status = "not-applicable"
+components = []
+paths = ["README.md"]
+inputs = ["No network controller is selected."]
+configuration = ["No network component is enabled."]
+procedure = ["Do not claim Wi-Fi, cellular, or USB networking from this tree."]
+findings = ["Network is outside this publication."]
+completion = ["No network component is required for the published boot path."]
+limits = ["Network is not implemented here."]
+next_action = ["Add a network area only when a controller is selected."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "not-applicable"
+components = []
+paths = ["README.md"]
+inputs = ["No audio controller is selected."]
+configuration = ["No audio component is enabled."]
+procedure = ["Do not claim speaker, headphone, or microphone support."]
+findings = ["Audio is outside this publication."]
+completion = ["No audio component is required for the published boot path."]
+limits = ["Audio is not implemented here."]
+next_action = ["Add an audio area only when a controller is selected."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "implemented"
+components = ["ShengPlatformPower", "Sm8750Platform"]
+paths = ["patches/xnu/series", "dts/dodge.dts"]
+inputs = ["PSCI system off and reset."]
+configuration = ["Shutdown uses the platform halt path."]
+procedure = ["Verify erase reboot and swipe-to-power-off on a temporary boot."]
+findings = ["Erase can reboot. Swipe-to-power-off can power the device off."]
+completion = ["The halt timer calls the platform restart path before panic."]
+limits = ["Battery gauge and charging control are not claimed."]
+next_action = ["Do not publish power-management probe logs."]
+evidence = [
+  { kind = "source", reference = "patches/xnu/series", result = "The device patch series includes the platform halt and reset timeout fix." },
+]
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["NativePrelink"]
+paths = ["board.toml", "feeds.toml", "unixnu.lock"]
+inputs = ["Kernel, trust cache, RAM Data, and optional GPU addon. Only the source pins are published."]
+configuration = ["Output is out/dodge/ipados-17.7.11-21H461/dodge/."]
+procedure = ["defconfig, fetch, kernel, payload, bootimg. Keep generated images out of git."]
+findings = ["The public tree does not contain IPSW, kernelcache, trust cache, RAM Data, or addon binaries."]
+completion = ["A temporary boot image can be assembled from local inputs."]
+limits = ["Image bytes are not part of this repository."]
+next_action = ["Ignore generated output."]
+evidence = [
+  { kind = "source", reference = "feeds.toml", result = "Source pins are recorded without build products." },
+]
+
+[[area]]
+id = "diagnostics"
+status = "implemented"
+components = ["BootProgress", "Stage7Probe"]
+paths = ["board.toml", "README.md"]
+inputs = ["Boot progress can draw an overlay. Normal use does not need it."]
+configuration = ["Turn the HUD off after Setup. Do not publish probe switches."]
+procedure = ["Skip Setup, then disable the HUD."]
+findings = ["The usable path is skip Setup and HUD off. Probe history stays in the private backup."]
+completion = ["The desktop remains usable with the HUD disabled."]
+limits = ["This repository does not publish HUD captures or probe logs."]
+next_action = ["Remove probe code from the public tree only after the boot path no longer references it."]
+evidence = [
+  { kind = "source", reference = "README.md", result = "The public instructions name the device and keep process history out of this record." },
+]

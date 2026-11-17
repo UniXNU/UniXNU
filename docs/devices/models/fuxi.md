@@ -6,6 +6,7 @@ Browse device documentation and porting records from each repository.
 | --- | --- | --- | --- |
 | [0721GPT/UniXNU-fuxi](https://github.com/0721GPT/UniXNU-fuxi) | [Xiaomi 13 \(0721GPT\)](/devices/fuxi-0721gpt) | Repository link | SM8550 |
 | [chipppppppps/unixnu-fuxi](https://github.com/chipppppppps/unixnu-fuxi) | [Xiaomi 13 \(chipppppppps\)](/devices/fuxi-chipppppppps) | Porting record | SM8550 |
+| [hannana-26/unixnu-fuxi](https://github.com/hannana-26/unixnu-fuxi) | [Xiaomi 13 \(hannana-26\)](/devices/fuxi-hannana-26) | Record pending | SM8550 |
 | [hanzi123-bilp/unixnu-fuxi](https://github.com/hanzi123-bilp/unixnu-fuxi) | [Xiaomi 13 \(hanzi123-bilp\)](/devices/fuxi-hanzi123-bilp) | Repository link | SM8550 |
 | [kashewaro/unixnu-fuxi](https://github.com/kashewaro/unixnu-fuxi) | [Xiaomi 13 \(kashewaro\)](/devices/fuxi-kashewaro) | Porting record | SM8550 |
 | [Kerfand/UniXNU-fuxi](https://github.com/Kerfand/UniXNU-fuxi) | [Xiaomi 13 \(Kerfand\)](/devices/fuxi-kerfand) | Repository link | SM8550 |

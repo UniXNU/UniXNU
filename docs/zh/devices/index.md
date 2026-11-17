@@ -47,7 +47,7 @@
 | [小米 8](/zh/devices/models/dipper) | dipper | SDM845 | 1 |
 | [Redmi K50 Ultra \(diting/SM8475\): UniXNU bring-up from the Pong baseline](/zh/devices/models/diting) | diting | SM8475 | 3 |
 | [Xiaomi Redmi Pad Pro \(dizi\); ruan unverified](/zh/devices/models/dizi) | dizi | SM7435 | 1 |
-| [OnePlus 13 CPH2653: iPhone iOS 16 source preparation](/zh/devices/models/dodge) | dodge | SM8750 | 1 |
+| [OnePlus 13 CPH2653: iPhone iOS 16 source preparation](/zh/devices/models/dodge) | dodge | SM8750 | 2 |
 | [DroidVM 客户机（Gunyah 上的 crosvm）](/zh/devices/models/droidvm) | droidvm | crosvm-gunyah | 3 |
 | [OnePlus 5T](/zh/devices/models/dumpling) | dumpling | MSM8998 | 1 |
 | [Rongyue E5](/zh/devices/models/e5) | e5 | UMS9621 | 1 |
@@ -60,7 +60,7 @@
 | [一加 15T](/zh/devices/models/fairlady) | fairlady | SM8850 | 1 |
 | [一加 6T](/zh/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/zh/devices/models/flashlm) | flashlm | SM8150 | 1 |
-| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 17 |
+| [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 18 |
 | [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 1 |
 | [Gree G0345D \(格力手机 G3\)](/zh/devices/models/g0345d) | g0345d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/zh/devices/models/garnet) | garnet | SM7435 | 1 |
@@ -130,7 +130,7 @@
 | [vivo iQOO Neo 855 \(V1936A, PD1936\), SM8150 v2, 1080x2340 AMOLED @62Hz, UFS 3.x](/zh/devices/models/pd1936) | pd1936 | SM8150 | 1 |
 | [vivo iQOO 7 V2049A early XNU bring-up](/zh/devices/models/pd2049) | pd2049 | SM8350 | 1 |
 | [Sony Xperia 1 II](/zh/devices/models/pdx203) | pdx203 | SM8250 | 2 |
-| [Redmi Turbo 3 / Poco F6](/zh/devices/models/peridot) | peridot | SM8635 | 3 |
+| [Redmi Turbo 3 / Poco F6](/zh/devices/models/peridot) | peridot | SM8635 | 4 |
 | [OPPO Find X7 Ultra（PHY120）](/zh/devices/models/phy120) | phy120 | SM8650 | 1 |
 | [小米平板 8 Pro](/zh/devices/models/piano) | piano | SM8750 | 5 |
 | [Redmi K30 5G](/zh/devices/models/picasso) | picasso | SM7250 | 9 |
@@ -153,8 +153,8 @@
 | [Xiaomi Redmi K70 Ultra \(rothko, MediaTek Dimensity 9300\)](/zh/devices/models/rothko) | rothko | MT6989 | 1 |
 | [Xiaomi Redmi Note 12 Pro 5G \(ruby, MediaTek Dimensity 1080 / MT6877\)](/zh/devices/models/ruby) | ruby | MT6877 | 1 |
 | [小米 MIX Flip](/zh/devices/models/ruyi) | ruyi | SM8650 | 3 |
-| [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 2 |
-| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 56 |
+| [小米 6](/zh/devices/models/sagit) | sagit | MSM8998 | 3 |
+| [小米平板 6S Pro](/zh/devices/models/sheng) | sheng（社区） | SM8550 | 57 |
 | [小米平板 6S Pro（macOS）](/zh/devices/models/sheng-macos) | sheng-macos | SM8550 | 1 |
 | [Xiaomi 14 Pro 23116PN5BC](/zh/devices/models/shennong) | shennong | SM8650 | 4 |
 | [小米 8 SE](/zh/devices/models/sirius) | sirius | SDM710 | 4 |
@@ -167,7 +167,7 @@
 | [Lenovo Xiaoxin Pad 12.1 \(2025\), Lenovo TB365FC \(board cava\_prc\_consumer\_wifi\)](/zh/devices/models/tb365fc) | tb365fc | MT6835 | 1 |
 | [Lenovo Xiaoxin Pad Pro 12.7 \(2023\) / TB371FC](/zh/devices/models/tb371fc) | tb371fc | SM8250 | 1 |
 | [Lenovo TB375FC \(MT6897 / MT8792\)](/zh/devices/models/tb375fc) | tb375fc | MT6897 | 1 |
-| [Lenovo Xiaoxin Pad Pro GT \(TB710FU\)](/zh/devices/models/tb710fu) | tb710fu | SM8650 | 1 |
+| [Lenovo Xiaoxin Pad Pro GT \(TB710FU\)](/zh/devices/models/tb710fu) | tb710fu | SM8650, SM8650Q-AB | 2 |
 | [Xiaomi 12S Ultra \(thor\): UniXNU UEFI bring-up](/zh/devices/models/thor) | thor | SM8475 | 1 |
 | [小米 10S](/zh/devices/models/thyme) | thyme | SM8250 | 2 |
 | [Motorola moto s30 pro](/zh/devices/models/tundra) | tundra | SM8350 | 1 |

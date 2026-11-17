@@ -6,3 +6,4 @@
 | --- | --- | --- | --- |
 | [dmnakzkahziamnk-a11y/UniXNU-sagit](https://github.com/dmnakzkahziamnk-a11y/UniXNU-sagit) | [小米 6（sagit）](/zh/devices/sagit) | 设备说明 | MSM8998 |
 | [ilertnost/unixnu-sagit](https://github.com/ilertnost/unixnu-sagit) | [Xiaomi Mi 6 \(sagit\), Snapdragon 835, 4 or 6 GB \(ilertnost\)](/zh/devices/sagit-ilertnost) | 记录待补齐 | MSM8998 |
+| [xiahaor/unixnu-sagit](https://github.com/xiahaor/unixnu-sagit) | [Xiaomi Mi 6 \(sagit\), Snapdragon 835, 4 or 6 GB \(xiahaor\)](/zh/devices/sagit-xiahaor) | 记录待补齐 | MSM8998 |

@@ -1,0 +1,216 @@
+schema_version = 1
+
+[device]
+name = "hawaii"
+soc = "UMS9230"
+os_profile = "ipados-17.7.11-21H461"
+summary = "Motorola Moto E32 (XT2227-1), Unisoc UMS9230/T606. UEFI firmware builds and boots to SEC (cyan/magenta stage markers confirmed on hardware). DXE/PEI hang after SEC C code. No XNU kernel boot yet."
+
+[[area]]
+id = "configuration"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot"]
+paths = ["board.toml", "feeds.toml", "configs/**", "dts/**"]
+inputs = ["Vendor partition dumps (boot_b, uboot_b), motorola-moto-e32-root repo", "board.toml: schema_version 2, soc=UMS9230, os_profile=ipados-17.7.11-21H461"]
+configuration = ["board.soc = UMS9230", "board.os_profile = ipados-17.7.11-21H461", "config_fragments = arch common + soc:configs/ums9230.config"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["SoC source selected locally through local.toml until soc/UniXNU-ums9230-common is published"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Publish soc/UniXNU-ums9230-common, pin its commit, re-run defconfig/status"]
+procedure = ["1. ./unixnu defconfig hawaii_defconfig -D .", "2. ./unixnu fetch", "3. ./unixnu status --json"]
+evidence = [{ kind = "host", reference = "board.toml", result = "defconfig resolves 5 components", command = "./unixnu defconfig", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "firmware"
+status = "implemented"
+components = ["DarwinBoot"]
+paths = ["uefi/**", "scripts/**"]
+inputs = ["FD_BASE=0x80800000, FD_SIZE=0x400000 from vendor uboot_b header", "BootShim ARM64 Image with ARMd magic at 0x38, .ltorg before _Payload", "UEFI FD: SEC+PEI+DXE with PlatformSecLib (cyan/magenta stage markers), MemoryMapLib, SerialPortLib (RGB565), BringupDxe"]
+configuration = ["Toolchain: CLANGDWARF (not CLANGPDB)", "Dependencies: mu_basecore + mu_plus + mu_oem_sample", "kernel_compression = none (raw ARM64 Image)", "AVB SHA256_RSA4096 rollback index 2"]
+procedure = ["1. Build: ./unixnu build firmware --uefi uefi-hawaii", "2. Assemble: python3 scripts/assemble_bootshim_fd.py", "3. Pack: python3 scripts/pack_unixnu_boot.py", "4. Sign: python3 scripts/avb_sign.py", "5. Flash: dd to boot_a via root, fastboot set_active a"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["DXE/PEI hangs after SEC C code (magenta) - no EndOfDxe reached", "No UART on device - framebuffer stage markers are the only diagnostic", "Framebuffer half-painted suggests stride/resolution mismatch with DPU scanout"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Fix PEI/DXE hang: check MemoryInitPeiLib against MemoryMapLib, check ArmGicDxe GIC base, check TimerDxe PPI numbers"]
+evidence = [{ kind = "device", reference = "uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c", result = "cyan (SEC asm) then magenta (SEC C) confirmed on hardware; device hangs after magenta, does not reset", command = "fastboot set_active a + reboot", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "cpu"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu"]
+paths = ["dts/**"]
+inputs = ["Vendor DTS: 6x Cortex-A55 + 2x Cortex-A75, PSCI, GICv3 0x10000000/0x10040000, timer PPI 13/14/11/10"]
+configuration = ["PcdCoreCount=8", "PcdClusterCount=2", "PcdGicDistributorBase=0x10000000", "PcdGicRedistributorsBase=0x10040000", "Timer PPIs: 13/14/11/10"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["ArmGicDxe may hang if GIC base is wrong - not yet verified in DXE"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Verify GIC base in DXE by checking if ArmGicDxe loads without fault"]
+procedure = ["1. Inspect dts/hawaii.dts CPU, interrupt-controller, and timer nodes against the vendor DTS.", "2. Resolve the hawaii defconfig and inspect the selected ArmCpu and ArmDTPlatform components.", "3. Build the firmware and capture whether ArmGicDxe and TimerDxe reach their initialization checkpoints on hardware."]
+evidence = [{ kind = "host", reference = "dts/hawaii.dts", result = "CPU and GIC nodes match vendor DTS", command = "./unixnu status", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "memory"
+status = "implemented"
+components = []
+paths = ["uefi/**/MemoryMapLib/**", "dts/**"]
+inputs = ["System RAM: 0x80000000-0x17fffefff (4 GiB)", "Framebuffer: 0x9e000000 (logobuffer)", "Ramoops: 0xfff80000 (0x40000)"]
+configuration = ["UEFI Stack: 0x80480000 (2 MB)", "SEC Heap: 0x80680000 (1 MB)", "MMU PT: 0x80780000 (0x40000)", "UEFI FD: 0x80800000 (4 MB)", "DXE Heap: 0x80C00000 (19.9 MB)", "VarStore: 0x81FD0000 (0x20000)", "FDT: 0x82000000 (1 MB)"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["Initrd window size may not match actual ramdisk load address", "Vendor reserved regions (audio, DSP, modem) may overlap DXE heap"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Verify MemoryMapLib against /proc/iomem after fixing PEI hang", "Check if MemoryInitPeiLib rejects overlapping regions"]
+procedure = ["1. Compare MemoryMapLib reservations with the documented DRAM and reserved ranges.", "2. Build the firmware and inspect the generated HOB memory map.", "3. Compare the map with /proc/iomem and ramoops after PEI/DXE reaches the reset checkpoint."]
+evidence = [{ kind = "host", reference = "uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/MemoryMapLib/MemoryMapLib.c", result = "Memory map compiles and links into SEC", command = "./unixnu build firmware", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "storage"
+status = "planned"
+components = ["SdhciBlock"]
+paths = ["drivers/SdhciBlock/**", "components/SdhciBlock/**"]
+inputs = ["SDHCI at 0x201a0000 (not 0x71400000 as in UMS512)", "UFS at 0x20200000", "Reference: woshimaniubi8/unixnu-eebbk-a2_x2-ums512 drivers/SdhciBlock"]
+configuration = ["Controller base address: 0x201a0000; confirm protocol and register map from Hawaii vendor sources before enabling the component."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["SDHCI register map not verified on hardware", "UFS vs eMMC path not confirmed"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Verify SDHCI register map matches UMS512", "Test storage driver on hardware after DXE is working"]
+procedure = ["1. Compare the Hawaii vendor device tree controller, clocks, resets, and PHY with the candidate SDHCI implementation.", "2. Build the storage component after confirming register compatibility.", "3. Enumerate storage and read GPT on hardware after DXE is operational."]
+evidence = []
+
+[[area]]
+id = "display"
+status = "planned"
+components = []
+paths = ["dts/**", "uefi/**/Gop*/**"]
+inputs = ["DPU at 0x31000000, DSI at 0x31100000", "Panel: 1600x720, RGB565, framebuffer at 0x9e000000", "Bootargs: lcd_name=lcd_nt36525c_boe_mipi_fhd, lcd_size=1600x720"]
+configuration = ["PcdFrameBufferWidth=1600", "PcdFrameBufferHeight=720", "PcdFrameBufferColorDepth=16 (RGB565)"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["SimpleFbDxe assumes cboot leaves DPU scanning out 0x9e000000", "Framebuffer half-painted suggests stride mismatch - DPU may scan at different resolution", "No DPU/DSI init driver - panel may not be initialized"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Verify framebuffer stride by checking DPU registers at 0x31000000", "Write DPU/DSI GOP driver if SimpleFbDxe does not work"]
+procedure = ["1. Read the vendor panel mode and framebuffer properties from the Hawaii device tree.", "2. Compare GOP dimensions and pixel format with the live DPU scanout.", "3. Verify full-screen stage markers and GOP output on hardware."]
+evidence = [{ kind = "device", reference = "uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c", result = "Cyan paint covered top half of screen, bottom half shows Motorola logo - DPU is scanning 0x9e000000 but stride/resolution differs from 1600x720", command = "screen observation", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "input"
+status = "planned"
+components = []
+paths = ["drivers/**", "package/**"]
+inputs = ["GPIO keys: power (gpio 73), volumedown (gpio 122), volumeup (gpio 73)", "Touch controller not identified (cit_tp=0x00 in bootargs)", "I2C3: aw9610x, ucp1301, vl53l0"]
+configuration = ["Touch controller and bus: unresolved; identify from the Hawaii vendor device tree before selecting a driver."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["No UniXNU touch driver for Goodix gt9xx or Unisoc touch", "Touch controller chip not identified"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Identify touch controller from vendor kernel sources", "Implement touch driver"]
+procedure = ["1. Identify the touch controller and bus from the vendor device tree and kernel sources.", "2. Search UniXNU device repositories for a matching controller implementation.", "3. Implement or adapt the matching driver and verify touch events on hardware."]
+evidence = []
+
+[[area]]
+id = "gpu"
+status = "planned"
+components = ["MaliG57"]
+paths = ["drivers/MaliG57/**", "components/MaliG57/**"]
+inputs = ["GPU at 0x23100000 (sprd,mali-natt), GIC_SPI 60 x3 (JOB/MMU/GPU)", "Mali-G57 Valhall, r28p0-01eac0 DDK", "DVFS: 150-3300 MHz"]
+configuration = ["GPU base: 0x23100000; GPU_ID and firmware requirements remain unverified."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["GPU_ID not confirmed from vendor DTB", "NativeMaliG57.cpp is skeleton, not functional"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Extract Mali kbase DDK r28p0 from CreitinGameplays patches 0014-0017", "Confirm GPU_ID from vendor kernel", "Complete driver implementation"]
+procedure = ["1. Inspect the vendor Mali DDK and confirm the GPU_ID and firmware requirements.", "2. Compare the available Valhall implementation and document the required G57 adaptations.", "3. Build the driver and verify GPU initialization and rendering on hardware."]
+evidence = []
+
+[[area]]
+id = "network"
+status = "planned"
+components = ["WcnWifi"]
+paths = ["drivers/WcnWifi/**"]
+inputs = ["WCN: sprd,ums9230-wcn, SDIO-based combo Wi-Fi/BT", "Reference: linux/drivers/net/wireless/unisoc/ (SC23xx)"]
+configuration = ["WCN transport: SDIO; exact functions, interrupts, and firmware selection remain unverified."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["No open-source UniXNU Wi-Fi driver for Unisoc WCN", "Firmware not extracted from vendor partitions"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Extract wcnmodem.bin and firmware from vendor partitions", "Implement Wi-Fi driver based on Linux unisoc reference"]
+procedure = ["1. Identify the WCN SDIO function, firmware files, and interrupt/DMA requirements from Hawaii sources.", "2. Search UniXNU repositories for a driver covering the same controller and register map.", "3. Build the adapted driver and verify association and packet transfer on hardware."]
+evidence = []
+
+[[area]]
+id = "audio"
+status = "planned"
+components = []
+paths = ["drivers/Audio/**", "components/Audio/**"]
+inputs = ["Codec: sprd,vbc-v4-codec-sc2730", "I2S: sprd,i2s-null-codec", "Audio DSP: audio-mem@94100000, audiodsp-mem@89000000"]
+configuration = ["Codec: SC2730 VBC v4; I2S and DSP firmware integration are not implemented."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["No audio driver implemented", "DSP firmware not extracted"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Inventory audio DSP firmware from vendor partitions", "Implement audio driver"]
+procedure = ["1. Inventory codec, DSP, clocks, and firmware from the Hawaii vendor sources.", "2. Locate a reusable UniXNU implementation for matching audio hardware.", "3. Build the audio path and verify playback and capture on hardware."]
+evidence = []
+
+[[area]]
+id = "power"
+status = "planned"
+components = []
+paths = ["drivers/Power/**", "components/Power/**"]
+inputs = ["PMIC: SC2730 (sprd,sc2731-regulator, sprd,sc2730-regulator)", "32 regulators: vddcpu, vddgpu, vddcore, vddmem, etc.", "PMIC SPI at 0x64200000"]
+configuration = ["PMIC bus base: 0x64200000; regulator mapping and ownership remain unverified."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["No power driver implemented", "Regulator mapping not verified on hardware"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Implement SC2730 PMIC driver via SPI", "Register regulators with XNU power management"]
+procedure = ["1. Map SC2730 bus access, regulators, and firmware ownership from Hawaii sources.", "2. Search UniXNU repositories for a matching PMIC implementation.", "3. Implement or adapt the PMIC support and verify safe power transitions on hardware."]
+evidence = []
+
+[[area]]
+id = "kernel"
+status = "implemented"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink"]
+paths = ["configs/**", "patches/xnu/**"]
+inputs = ["XNU xnu-10063.141.1 (d8b80295118ef25ac3a784134bcf95cd8e88109f)", "Toolchain: clang-24, 28 xnu patches applied", "Prelink ABI patches applied"]
+configuration = ["ARCH_CONFIGS=ARM64", "MACHINE_CONFIGS=BCM2837", "KERNEL_CONFIGS=DEVELOPMENT"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["BCM2837 machine config used (not UMS9230-specific)", "Prelink ABI patches applied manually, not in series"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Create UMS9230-specific machine config", "Commit prelink ABI patches to patches/xnu/ series"]
+procedure = ["1. Inspect the selected kernel defconfig, patch series, and recorded XNU revision.", "2. Move required machine and prelink changes into the ordered device patch series.", "3. Build the kernel and verify the resulting Mach-O architecture and configuration."]
+evidence = [{ kind = "host", reference = "configs/hawaii_defconfig", result = "Kernel configuration selects ARM64/DEVELOPMENT; machine selection remains BCM2837 and is not UMS9230-specific.", command = "./unixnu kernel", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "packaging"
+status = "implemented"
+components = ["SoftwareAES", "XnuPrelink"]
+paths = ["scripts/**", "board.toml"]
+inputs = ["boot_b header: ANDROID! v2, pagesize 2048, kernel_addr 0x8000", "BootShim+UEFI FD as kernel, payload FAT as ramdisk, DTB preserved"]
+configuration = ["header_version=2", "kernel_compression=none", "AVB SHA256_RSA4096 rollback index 2"]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["Payload FAT has no kernel.macho yet (needs XNU build)", "startup.nsh removed from FDF (file not found in PACKAGES_PATH)"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Build XNU kernel.macho for arm64", "Create payload FAT with kernel.macho + .adt + unixnu.toml"]
+procedure = ["1. Build the XNU kernel and generate the board ADT sidecar.", "2. Create the payload FAT with the kernel, ADT, and boot configuration.", "3. Pack and inspect the Android boot image and verify payload contents before hardware boot."]
+evidence = [{ kind = "host", reference = "scripts/pack_unixnu_boot.py", result = "Boot image packaging procedure is present; payload kernel and ADT are still pending.", command = "python3 scripts/pack_unixnu_boot.py --help", revision = "a214152000000000000000000000000000000000" }]
+
+[[area]]
+id = "diagnostics"
+status = "device-verified"
+components = []
+paths = ["uefi/**/HawaiiPlatformSecLib/**", "uefi/**/HawaiiBringupDxe/**", "uefi/**/SprdDebugSerialPortLib/**"]
+inputs = ["No UART on device", "Framebuffer stage markers: cyan (SEC asm), magenta (SEC C)", "BringupDxe reset is intended at EndOfDxe but has not been observed"]
+configuration = ["SEC stage markers: cyan for assembly and magenta for SEC C; current observed stop is after magenta.", "UART unavailable; ramoops collection awaits EndOfDxe reset."]
+findings = ["See AGENTS.md for full technical details."]
+limits = ["No UART access - framebuffer is the only diagnostic", "ramoops not yet readable (device does not reach EndOfDxe to reset)"]
+completion = ["See next_action for the next concrete step."]
+next_action = ["Fix PEI/DXE hang so BringupDxe fires and device resets to Android", "Read ramoops from /sys/fs/pstore/ after reset"]
+procedure = ["1. Boot the signed image and record the panel stage marker reached.", "2. After the EndOfDxe reset checkpoint, return to Android and collect ramoops.", "3. Attach the log and exact source revision to the device validation record."]
+evidence = [{ kind = "device", reference = "uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c", result = "Cyan and magenta stage markers confirmed on hardware; device hangs after magenta (PEI/DXE stage)", command = "screen observation", revision = "a214152000000000000000000000000000000000" }]
+
+[[vendor_sources]]
+id = "vendor-dts-source"
+name = "CreitinGameplays/motorola-moto-e32-kernel"
+branch = "7.1"
+files = ["arch/arm64/boot/dts/sprd/ums9230-4h10.dts", "arch/arm64/boot/dts/sprd/ums9230.dtsi", "arch/arm64/boot/dts/sprd/sc2730.dtsi"]
+used_for = ["cpu", "memory", "display", "input", "gpu", "network", "audio", "power"]
+
+[[vendor_sources]]
+id = "unixnu-sibling"
+name = "woshimaniubi8/unixnu-eebbk-a2_x2-ums512"
+used_for = ["storage", "display", "firmware"]
+description = "UMS512/T610 same family - working UEFI + UniXNU reference"
