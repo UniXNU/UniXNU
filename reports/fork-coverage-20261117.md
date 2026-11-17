@@ -17,9 +17,9 @@ The [branch table](fork-branches-20261117.csv) identifies all 58 branch revision
 
 The integration target is the 8 GiB sheng configuration with Android boot header v0 and the manual Shader Cache application. Main selects development `be905fd8992417edf146792036d666c126baa093` with `0057-main-optimizations-on-development-be905fd8.patch`.
 
-`已合入` identifies merged source with recorded validation. `待 CI 验证` identifies locally built and device-checked candidates awaiting their complete macOS CI build. `待设备验证` identifies input and platform sleep behavior awaiting physical validation. Each row links the relevant source and names its current implementation or PR.
+`已合入` identifies merged source with recorded validation. `待设备验证` identifies input and platform sleep behavior awaiting physical validation. Each row links the relevant source and names its current implementation or PR.
 
-The old runtime overlays contain 457 added-function references. Their remaining mappings use shared Directory permission handling for chunks, inline scaled half division, and the restored system-layer chunk reader. The chunk reader reconstructed a 300,000-byte record through the actual SystemLayer implementation and refused a writable chunk. Its device capture retained complete widget and Settings backgrounds and returned to fastboot. Source: [AdrenoMetal #53](https://github.com/UniXNU/AdrenoMetal/pull/53), [UniXNU #290](https://github.com/UniXNU/UniXNU/pull/290).
+The old runtime overlays contain 457 added-function references. Their remaining mappings use shared Directory permission handling for chunks, inline scaled half division, and the restored system-layer chunk reader. The chunk reader reconstructed a 300,000-byte record through the actual SystemLayer implementation and refused a writable chunk. Its device capture retained complete widget and Settings backgrounds and returned to fastboot. The complete macOS CI build passed: [43978179270](https://github.com/UniXNU/UniXNU-sheng/actions/runs/43978179270). Source: [AdrenoMetal #53](https://github.com/UniXNU/AdrenoMetal/pull/53), [UniXNU #290](https://github.com/UniXNU/UniXNU/pull/290).
 
 Generate the complete inventory with:
 
