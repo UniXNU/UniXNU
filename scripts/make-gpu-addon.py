@@ -19,6 +19,7 @@ loader accepts (a 256 MiB ramdisk does not start the firmware), and the kernel a
 Layout, little endian: "NGPUADD2", u32 count, u32 0, u64 total bytes; per file u32 path bytes (with its NUL, at most 160), u32 mode,
 u64 size, u64 compressed size, the path padded to 8 bytes, the zlib stream padded to 8 bytes."""
 import os
+import plistlib
 import struct
 import sys
 import zlib
@@ -101,7 +102,15 @@ def main():
             sys.exit('Build the macOS Shader Cache app with the matching plugin')
         for path in sorted(p for p in application.rglob('*') if p.is_file()):
             mode = 0o755 if path.parent.name == 'MacOS' else 0o644
-            files.append(('GPUBundles/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
+            files.append(('Applications/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
+        registration = application / 'Contents/MacOS/ShaderCacheRegister'
+        if not registration.is_file():
+            sys.exit('Build the Shader Cache LaunchServices registration helper with the matching app')
+        job = dict(Label='org.unixnu.ShaderCache.register', RunAtLoad=True,
+                   LimitLoadToSessionType='Aqua', ProcessType='Background',
+                   ProgramArguments=['/Applications/Shader Cache.app/Contents/MacOS/ShaderCacheRegister'])
+        files.append(('Library/LaunchAgents/org.unixnu.ShaderCache.register.plist', 0o644,
+                      plistlib.dumps(job, fmt=plistlib.FMT_XML)))
     if cache_export:   # the plugin sends its cache directory to the UFS log (CacheExport.h)
         files.append((f'{prefix}/NativeAdrenoMetal.cacheexport', 0o644, b'1\n'))
     if pipeline_pack:
