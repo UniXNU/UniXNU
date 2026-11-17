@@ -56,11 +56,13 @@ class NativeKernelTests(unittest.TestCase):
                     self.assertEqual(output.read_bytes(), b'old image')
                     self.assertEqual(json.loads(output.with_suffix('.json').read_text()), {'old': True})
                 else:
-                    self.assertEqual(kernel.prelink(ctx), output)
+                    self.assertEqual(kernel.prelink(ctx, adreno_abi='built ABI'), output)
                     self.assertEqual(output.read_bytes(), b'new image')
             report = json.loads(output.with_suffix('.failed.json' if fail else '.json').read_text())
             self.assertEqual(report['output'], str(output.resolve()))
             self.assertEqual(report['map'], str(output.with_suffix('.map.json').resolve()))
+            if not fail:
+                self.assertEqual(report['adreno_abi_sha256'], 'built ABI')
             self.assertEqual(list(output.parent.glob('.prelink-*')), [])
 
     def test_skip_prelink_keeps_bytes_and_does_not_fetch_ipsw(self):
@@ -73,12 +75,40 @@ class NativeKernelTests(unittest.TestCase):
                                   args=parser().parse_args(['prelink', '--skip-prelink']),
                                   board={'kernel': {'prelink': {'kernel': 'native'}}})
             with patch.object(kernel.ipsw, 'Ipsw', side_effect=AssertionError('must not fetch')):
-                output = kernel.prelink(ctx)
+                output = kernel.prelink(ctx, adreno_abi='built ABI')
+                kernel.prelink(ctx)
+                kernel.require_adreno_abi(output, 'built ABI')
+                source.write_bytes(data + b'different kernel')
+                kernel.prelink(ctx)
+                with self.assertRaisesRegex(Error, 'does not match the Adreno ABI'):
+                    kernel.require_adreno_abi(output, 'built ABI')
+                source.write_bytes(data)
+                kernel.prelink(ctx, adreno_abi='built ABI')
             self.assertEqual(output.read_bytes(), data)
             report = json.loads(output.with_suffix('.json').read_text())
             self.assertTrue(report['prelink_skipped'])
             self.assertFalse(report['kernelcache_kexts_added'])
             self.assertEqual(report['candidate_sha256'], hashlib.sha256(data).hexdigest())
+
+    def test_source_gpu_addon_requires_matching_abi_and_kernel(self):
+        with tempfile.TemporaryDirectory() as directory:
+            image = Path(directory) / 'kernel.macho'
+            image.write_bytes(b'prepared kernel')
+            record = image.with_suffix('.json')
+            metadata = {'candidate_sha256': hashlib.sha256(image.read_bytes()).hexdigest()}
+            record.write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(Error, 'does not match the Adreno ABI'):
+                kernel.require_adreno_abi(image, 'new ABI')
+            metadata['adreno_abi_sha256'] = 'old ABI'
+            record.write_text(json.dumps(metadata))
+            with self.assertRaisesRegex(Error, 'does not match the Adreno ABI'):
+                kernel.require_adreno_abi(image, 'new ABI')
+            metadata['adreno_abi_sha256'] = 'new ABI'
+            record.write_text(json.dumps(metadata))
+            kernel.require_adreno_abi(image, 'new ABI')
+            image.write_bytes(b'replaced kernel')
+            with self.assertRaisesRegex(Error, 'does not match the Adreno ABI'):
+                kernel.require_adreno_abi(image, 'new ABI')
 
     def test_bad_input_preserves_previous_image_and_record(self):
         with tempfile.TemporaryDirectory() as directory:
