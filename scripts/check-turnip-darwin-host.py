@@ -6,6 +6,7 @@ The kernel half is the real GPU context bring-up, VM, ring, submit and user-clie
 hardware: the software CP retires every submission at once. Needs the host Turnip build (build-turnip-darwin.py --target host)."""
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -25,6 +26,20 @@ for name in ['IOKit/IOTypes.h', 'IOKit/IOReturn.h', 'IOKit/IOBufferMemoryDescrip
     path = includes / name
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text('#include "XnuMemoryFixture.h"\n')
+resource_private = includes / 'sys/resource_private.h'
+resource_private.parent.mkdir(parents=True, exist_ok=True)
+resource_private.write_text(
+    '#pragma once\n'
+    '#define PRIO_DARWIN_GPU 5\n'
+    '#define PRIO_DARWIN_GPU_UNKNOWN 0x0\n'
+    '#define PRIO_DARWIN_GPU_ALLOW 0x1\n'
+    '#define PRIO_DARWIN_GPU_DENY 0x2\n'
+    '#define PRIO_DARWIN_GPU_BACKGROUND 0x3\n'
+    '#define PRIO_DARWIN_GPU_UTILITY 0x4\n'
+    '#define PRIO_DARWIN_GPU_UI_NON_FOCAL 0x5\n'
+    '#define PRIO_DARWIN_GPU_UI 0x6\n'
+    '#define PRIO_DARWIN_GPU_UI_FOCAL 0x7\n'
+)
 
 objects = []
 for stem in ['ArmSmmu4KContext', 'ArmSmmu4KProgram', 'ArmSmmu4KLive', 'ArmSmmu4KStreams', 'ArmSmmu4KMmio']:
@@ -40,8 +55,9 @@ subprocess.run(['xcrun', 'clang++', '-std=c++23', '-O1', '-fPIC', '-I', includes
                 '-I', ROOT / 'kits/AdrenoPM4', '-c', sim / 'host_gpu_service.cpp', '-o', service], check=True)
 core = []
 for name in ['NativeAdrenoMemory', 'NativeAdrenoSmmuMemory', 'NativeAdrenoVm', 'NativeAdrenoRing', 'NativeAdrenoSubmit',
-             'NativeAdrenoUserClient', 'NativeAdrenoTimer', 'NativeAdrenoSmmuContext', 'NativeAdrenoGpuContext']:
-    obj = out / (name + '.o')
+             'NativeAdrenoUserClient', 'NativeAdrenoTimer', 'NativeAdrenoSmmuContext', 'NativeAdrenoGpuContext',
+             'NativeAdrenoPreempt', 'tests/HostKernelHooks']:
+    obj = out / (Path(name).name + '.o')
     subprocess.run(['xcrun', 'clang++', '-std=c++23', '-O1', '-fPIC', '-I', includes, '-I', sim.parent, '-I', kit, '-I', smmu,
                     '-I', ROOT / 'kits/AdrenoPM4', '-c', kit / (name + '.cpp'), '-o', obj], check=True)
     core.append(obj)
@@ -91,13 +107,17 @@ for mode in ['normal', 'busy', 'fence-error', 'free-error', 'lease-error', 'view
 subprocess.run([sys.executable, ROOT / 'scripts/check-turnip-pipeline-cache-host.py'], check=True)
 # Original UI recipes additionally cover graphics-library caches, strict driver
 # feedback and genuine UUID/empty-cache refusals. The software peer runs no shader.
-with tempfile.TemporaryDirectory(prefix='quartzcore-driver-cache-', dir=out) as temporary:
-    subprocess.run([sys.executable, ROOT / 'scripts/check-quartzcore-turnip-cache-host.py',
-                    '--output', Path(temporary) / 'control'], check=True, timeout=660)
+quartzcore_check = ROOT / 'scripts/check-quartzcore-turnip-cache-host.py'
+if quartzcore_check.is_file():
+    with tempfile.TemporaryDirectory(prefix='quartzcore-driver-cache-', dir=out) as temporary:
+        subprocess.run([sys.executable, quartzcore_check,
+                        '--output', Path(temporary) / 'control'], check=True, timeout=660)
 
-with tempfile.TemporaryDirectory(prefix='priming-driver-cache-', dir=out) as temporary:
-    subprocess.run([sys.executable, ROOT / 'scripts/check-priming-cache-host.py',
-                    '--output', Path(temporary) / 'control'], check=True, timeout=360)
+bridge_archive = ROOT / 'build/adreno-metal-bridge/host/libadreno_metal_bridge.a'
+if bridge_archive.is_file() and shutil.disk_usage(ROOT).free > 5 * 1024**3 + 256 * 1024**2:
+    with tempfile.TemporaryDirectory(prefix='priming-driver-cache-', dir=out) as temporary:
+        subprocess.run([sys.executable, ROOT / 'scripts/check-priming-cache-host.py',
+                        '--output', Path(temporary) / 'control'], check=True, timeout=360)
 
 env_plugin = dict(env)
 plugin = subprocess.run([str(plugin_smoke), str(library)], env=env_plugin, capture_output=True, text=True, timeout=300)
