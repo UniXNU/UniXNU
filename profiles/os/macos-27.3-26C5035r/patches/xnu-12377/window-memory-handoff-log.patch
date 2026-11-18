@@ -1,0 +1,99 @@
+Expose the memory handoff totals for platform diagnostics. Preserve memory adoption policy.
+
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+index 6f6c66f..8030a5d 100644
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -398,6 +398,8 @@ SECURITY_READ_ONLY_LATE(vm_map_address_t)               arm_vm_outside_va;
+ SECURITY_READ_ONLY_LATE(vm_map_address_t)               arm_vm_outside_va_end;
+ SECURITY_READ_ONLY_LATE(static arm_vm_excluded_range_t) arm_vm_outside_table[ARM_VM_OUTSIDE_RANGES];
+ SECURITY_READ_ONLY_LATE(static unsigned int)            arm_vm_outside_count;
++SECURITY_READ_ONLY_LATE(static uint64_t)                arm_vm_outside_offered_bytes;
++SECURITY_READ_ONLY_LATE(static uint64_t)                arm_vm_outside_table_limit_bytes;
+ 
+ /*
+  * Bounds of the kernelcache; used for accounting.
+@@ -645,7 +647,11 @@ arm_vm_outside_add(uint64_t base, uint64_t end, const uint8_t *reserved, unsigne
+ 	/* Whole pages only; a page partly outside the run is not the kernel's. */
+ 	base = (base + PAGE_MASK) & ~((uint64_t)PAGE_MASK);
+ 	end &= ~((uint64_t)PAGE_MASK);
+-	if (base >= end || arm_vm_outside_count >= ARM_VM_OUTSIDE_RANGES) {
++	if (base >= end) {
++		return;
++	}
++	if (arm_vm_outside_count >= ARM_VM_OUTSIDE_RANGES) {
++		arm_vm_outside_table_limit_bytes += end - base;
+ 		return;
+ 	}
+ 	arm_vm_outside_table[arm_vm_outside_count].base = base;
+@@ -680,6 +686,7 @@ arm_vm_outside_init(void)
+ 		if (end <= base || base < gDramBase || end > gPhysBase) {
+ 			continue;
+ 		}
++		arm_vm_outside_offered_bytes += end - base;
+ 		arm_vm_outside_add(base, end, reserved, reserved_size, 0);
+ 	}
+ 	for (unsigned int i = 0; i < arm_vm_outside_count; i++) {
+@@ -703,6 +710,16 @@ arm_vm_outside_init(void)
+ 	arm_vm_outside_end = high;
+ }
+ 
++/* Offered bytes are measured before the fixed reservation and page alignment filters. */
++void arm_vm_outside_accounting(uint64_t *offered, uint64_t *table_limit);
++
++void
++arm_vm_outside_accounting(uint64_t *offered, uint64_t *table_limit)
++{
++	*offered = arm_vm_outside_offered_bytes;
++	*table_limit = arm_vm_outside_table_limit_bytes;
++}
++
+ /* The runs of memory outside the span, in the order the loader listed them; false past the last. */
+ bool
+ arm_vm_outside_range(unsigned int index, pmap_paddr_t *base, pmap_paddr_t *end)
+diff --git a/osfmk/arm64/machine_routines.c b/osfmk/arm64/machine_routines.c
+index aad2778..fb308e9 100644
+--- a/osfmk/arm64/machine_routines.c
++++ b/osfmk/arm64/machine_routines.c
+@@ -2323,6 +2323,30 @@ ml_memory_probe(vm_offset_t va)
+ }
+ 
+ extern bool arm_vm_outside_range(unsigned int index, pmap_paddr_t *base, pmap_paddr_t *end);
++extern void arm_vm_outside_accounting(uint64_t *offered, uint64_t *table_limit);
++
++size_t unixnu_memory_handoff_log(char *text, size_t capacity);
++
++size_t
++unixnu_memory_handoff_log(char *text, size_t capacity)
++{
++	const boot_args *args = (const boot_args *)PE_state.bootArgs;
++	uint64_t offered, table_limit;
++
++	if (args == NULL || capacity == 0) {
++		return 0;
++	}
++	arm_vm_outside_accounting(&offered, &table_limit);
++	int length = snprintf(text, capacity,
++	    "[memory handoff] window 0x%llx+0x%llx usable %llu outside offered %llu "
++	    "adopted %llu refused %llu table-limit %llu hw.memsize %llu bytes",
++	    (unsigned long long)args->physBase, (unsigned long long)args->memSize,
++	    (unsigned long long)args->memSizeActual, (unsigned long long)offered,
++	    (unsigned long long)ptoa_64(ml_outside_memory_pages),
++	    (unsigned long long)ptoa_64(ml_outside_memory_refused),
++	    (unsigned long long)table_limit, (unsigned long long)max_mem_actual);
++	return length > 0 ? MIN((size_t)length, capacity - 1) : 0;
++}
+ 
+ __startup_func
+ static void
+@@ -2362,6 +2386,10 @@ ml_adopt_outside_memory(void)
+ 	ml_outside_memory_pages = adopted;
+ 	ml_outside_memory_refused = refused;
+ 	printf("memory outside the span: %u pages adopted, %u refused\n", adopted, refused);
++	char text[256];
++	if (unixnu_memory_handoff_log(text, sizeof(text)) != 0) {
++		printf("%s\n", text);
++	}
+ }
+ STARTUP(EARLY_BOOT, STARTUP_RANK_MIDDLE, ml_adopt_outside_memory);
+ 
