@@ -50,8 +50,9 @@ The host tests supply a fake bus. The kernel probe supplies the GENI SPI transfe
 6. Reject blobs above the palm node count.
 7. Compute a weighted centroid per blob.
 8. Apply edge compensation.
-9. Track contacts across frames with a radius and a down/up threshold.
+9. Track contacts across frames using distance and signal thresholds. A new contact requires at least two sensor nodes above the noise floor.
 10. Confirm tip-down on the second scan and report the first position so HID can identify edge starts.
+11. Update the panel reference after eight complete scans without a finger or palm.
 
 During a pinch, distinct peaks assigned to established fingers stay separate. A quiet matrix releases the contacts. A partial dropout can retain the last reported position for up to three scans and rejoin near the predicted position.
 
