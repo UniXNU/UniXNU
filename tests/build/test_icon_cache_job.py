@@ -41,7 +41,8 @@ class IconCacheJob(unittest.TestCase):
         path.write_text(text)
 
     def clear(self):
-        return subprocess.run(['/bin/sh', '-c', RUNTIME.ICON_CACHE_FUNCTION + 'clear_stale_icon_caches "$1"', 'test', str(self.root)],
+        command = RUNTIME.ICON_CACHE_FUNCTION + 'restart_icon_services() { :; }\nclear_stale_icon_caches "$1"'
+        return subprocess.run(['/bin/sh', '-c', command, 'test', str(self.root)],
                               capture_output=True, text=True).returncode
 
     def test_stores_go_once_per_plugin_build_and_other_caches_stay(self):
@@ -54,21 +55,21 @@ class IconCacheJob(unittest.TestCase):
         self.assertTrue((self.root / STAMP).read_text().strip())
 
         system, index, user, _, _ = self.stores()
-        self.assertEqual(self.clear(), 1)
+        self.assertEqual(self.clear(), 0)
         self.assertTrue(system.exists() and index.exists() and user.exists())
 
         self.build('{"component": "two"}\n')
         self.assertEqual(self.clear(), 0)
         self.assertFalse(system.exists() or index.exists() or user.exists())
-        self.assertEqual(self.clear(), 1)
+        self.assertEqual(self.clear(), 0)
 
     def test_an_image_without_the_plugin_keeps_its_stores(self):
         paths = self.stores()
-        self.assertEqual(self.clear(), 1)
+        self.assertEqual(self.clear(), 0)
         self.assertTrue(all(path.exists() for path in paths))
         self.assertFalse((self.root / STAMP).exists())
 
-    def test_the_job_runs_as_root_at_boot_and_restarts_the_icon_services_only_after_a_clear(self):
+    def test_the_job_runs_as_root_at_boot_for_manual_sessions(self):
         job = RUNTIME.icon_cache_job()
         self.assertEqual(job['Label'], 'org.unixnu.icon-cache.generation')
         self.assertIs(job['RunAtLoad'], True)
@@ -76,8 +77,7 @@ class IconCacheJob(unittest.TestCase):
         self.assertEqual(job['ProgramArguments'][:2], ['/bin/sh', '-c'])
         command = job['ProgramArguments'][2]
         self.assertTrue(command.startswith(RUNTIME.ICON_CACHE_FUNCTION))
-        self.assertIn('clear_stale_icon_caches "" && { /usr/bin/pkill -TERM -x iconservicesagent; /usr/bin/pkill -TERM -x iconservicesd; }',
-                      command)
+        self.assertIn('/private/var/ngpu/test/share/manual-session', command)
 
 
 if __name__ == '__main__':
