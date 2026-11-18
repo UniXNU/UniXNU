@@ -256,6 +256,51 @@ def sign_launchd_cache(path):
                 detached_signature_sha256=hashlib.sha256(signature.read_bytes()).hexdigest())
 
 
+# The manual desktop invalidates rendered icons once per GPU build. The generation
+# is recorded only after both stores and service restart requests are handled.
+ICON_CACHE_FUNCTION = r"""restart_icon_services() {
+    for service in iconservicesd iconservicesagent; do
+        status=0
+        /usr/bin/pkill -TERM -x "$service" || status=$?
+        [ "$status" -le 1 ] || return "$status"
+    done
+}
+
+clear_stale_icon_caches() (
+    root=$1
+    build="$root/Library/GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json"
+    state="$root/private/var/db/unixnu"
+    marker="$state/icon-cache-build"
+    [ -f "$build" ] || exit 0
+    identity=$(/usr/bin/shasum -a 256 < "$build") || exit 1
+    [ "$identity" != "$(/bin/cat "$marker" 2>/dev/null)" ] || exit 0
+    [ ! -d "$marker" ] || exit 1
+    /bin/mkdir -p "$state" || exit 1
+    stamp=$(/usr/bin/mktemp "$state/.icon-cache-build.XXXXXXXX") || exit 1
+    trap '/bin/rm -f "$stamp"' EXIT
+    printf '%s\n' "$identity" > "$stamp" || exit 1
+
+    /bin/rm -rf "$root/Library/Caches/com.apple.iconservices.store" || exit 1
+    folders="$root/private/var/folders"
+    if [ -d "$folders" ]; then
+        /usr/bin/find -P "$folders" -mindepth 4 -maxdepth 4 \
+            \( -path '*/C/com.apple.iconservices' -o -path '*/C/com.apple.iconservices.store' \) \
+            -execdir /bin/rm -rf -- {} + || exit 1
+    fi
+    restart_icon_services || exit 1
+    /bin/mv -f "$stamp" "$marker"
+)
+"""
+
+
+def icon_cache_job():
+    """Refresh icon stores on a manual desktop boot."""
+    command = ICON_CACHE_FUNCTION + (
+        '[ "$(/bin/cat /private/var/ngpu/test/share/manual-session 2>/dev/null)" = 1 ] || exit 0\n'
+        'clear_stale_icon_caches ""')
+    return dict(Label='org.unixnu.icon-cache.generation', RunAtLoad=True, ProgramArguments=['/bin/sh', '-c', command])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--request', type=Path, required=True)
@@ -441,6 +486,9 @@ def main():
             (jobs / 'org.unixnu.shader-cache.install.plist').write_bytes(plistlib.dumps(dict(
                 Label='org.unixnu.shader-cache.install', RunAtLoad=True,
                 ProgramArguments=['/bin/sh', '-c', command]), fmt=plistlib.FMT_XML))
+            if not test_scripts:
+                (jobs / 'org.unixnu.icon-cache.generation.plist').write_bytes(
+                    plistlib.dumps(icon_cache_job(), fmt=plistlib.FMT_XML))
             directories = ['Library/LaunchDaemons', jobs]
             manual = work / 'desktop-share'
             manual.mkdir()
