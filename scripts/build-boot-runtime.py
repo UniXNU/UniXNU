@@ -256,6 +256,34 @@ def sign_launchd_cache(path):
                 detached_signature_sha256=hashlib.sha256(signature.read_bytes()).hexdigest())
 
 
+# macOS keeps the icons it has rendered: in /Library/Caches/com.apple.iconservices.store and in every user's cache directory. Many
+# are rendered through the GPU plugin, so one a plugin rendered wrongly stays wrong after the plugin is corrected (System Settings
+# kept showing its sidebar symbols as empty plates). The stores are dropped once whenever the plugin's build record changes and
+# iconservices renders them again; the plugin's own cache under com.apple.iconservicesagent stays. UniXNU-sheng's unattended lab
+# (scripts/macos-lab/daemon.sh) does the same for its boots; a manual session leaves that script before it gets there.
+ICON_CACHE_FUNCTION = """clear_stale_icon_caches() {
+    root=$1
+    build="$root/Library/GPUBundles/NativeAdrenoMetal.bundle/Contents/Resources/gpu-build.json"
+    state="$root/private/var/db/unixnu"
+    [ -r "$build" ] || return 1
+    identity=$(/usr/bin/shasum -a 256 < "$build") || return 1
+    [ "$identity" = "$(/bin/cat "$state/icon-cache-build" 2>/dev/null)" ] && return 1
+    /bin/rm -rf "$root/Library/Caches/com.apple.iconservices.store"
+    for cache in "$root"/private/var/folders/*/*/C; do
+        /bin/rm -rf "$cache/com.apple.iconservices" "$cache/com.apple.iconservices.store"
+    done
+    /bin/mkdir -p "$state" && /bin/echo "$identity" > "$state/icon-cache-build"
+}
+"""
+
+
+def icon_cache_job():
+    """The boot job (root) that drops the icon stores of another plugin build and restarts the two services that hold them."""
+    command = ICON_CACHE_FUNCTION + ('clear_stale_icon_caches "" && { /usr/bin/pkill -TERM -x iconservicesagent; '
+                                     '/usr/bin/pkill -TERM -x iconservicesd; }; exit 0')
+    return dict(Label='org.unixnu.icon-cache.generation', RunAtLoad=True, ProgramArguments=['/bin/sh', '-c', command])
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--request', type=Path, required=True)
@@ -441,6 +469,7 @@ def main():
             (jobs / 'org.unixnu.shader-cache.install.plist').write_bytes(plistlib.dumps(dict(
                 Label='org.unixnu.shader-cache.install', RunAtLoad=True,
                 ProgramArguments=['/bin/sh', '-c', command]), fmt=plistlib.FMT_XML))
+            (jobs / 'org.unixnu.icon-cache.generation.plist').write_bytes(plistlib.dumps(icon_cache_job(), fmt=plistlib.FMT_XML))
             directories = ['Library/LaunchDaemons', jobs]
             manual = work / 'desktop-share'
             manual.mkdir()
