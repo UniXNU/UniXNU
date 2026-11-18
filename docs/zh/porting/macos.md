@@ -178,6 +178,8 @@ sheng 刷入全新 userdata 后，选择 **Initialize macOS Data and boot**，
 
 sheng 的 macOS 桌面配置从选定源码构建 BootShim、板级固件和 DarwinBoot。256 MiB 逻辑 payload 使用分块压缩，启动镜像上限为 193 MiB。菜单在一秒后选择 **Boot**。`autoreset=7200` 和 `uefi-watchdog=1` 提供固件返回计时，`diag-export=7140` 在期限前保存启动日志。Shader Cache 安装到应用程序目录，显示编译进度。
 
+手动启动桌面时，GPU 插件版本变化会触发系统和用户图标缓存重建。
+
 制作 seed 的参数：
 
 | 参数 | 作用 |

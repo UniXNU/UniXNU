@@ -25,6 +25,8 @@ Uniform shader arrays span the aligned device uniform range limit. This covers t
 
 Unused owned image backing is reused by pooled and dedicated images. Extra spares have no byte limit, expire after ten seconds, and go sooner under memory pressure or when a new block cannot be made. Blocks are freed off the releasing thread on the runtime's free thread, and on the releasing thread once its queue is full. An allocation failure releases kept spares and waits for posted frees before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
 
+On macOS, the runtime checks caller page access before comparing or writing back copied no-copy buffers. When the pages are unavailable, it retains the copy.
+
 ## Native half arithmetic
 
 On A740, half FMA uses float32 multiply-add followed by conversion to half, with a one-half-ULP bound for normal half operands and results. Half division scales both operands by the same power of two to keep the native divisor in `[2^-14, 2^14]`: large divisors use `2^-2`, small divisors use `2^10`. Normal operands and results follow Vulkan's 2.5-half-ULP bound; the device's float controls determine denormal behavior.

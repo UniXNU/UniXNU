@@ -190,6 +190,8 @@ creation option.
 
 The sheng macOS desktop profile builds its BootShim, board firmware and DarwinBoot from the selected sources. Its 256 MiB logical payload uses chunk compression and fits the 193 MiB boot-image limit. The menu selects **Boot** after one second. `autoreset=7200` and `uefi-watchdog=1` provide the firmware return timer; `diag-export=7140` retains the boot log before the deadline. Shader Cache is installed in Applications and shows compilation progress.
 
+On manual desktop boots, a change in the GPU plugin build refreshes the system and user icon stores.
+
 Seed creation options:
 
 | Argument | Effect |
