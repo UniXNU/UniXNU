@@ -6,7 +6,7 @@
 
 Motorola Moto E32 \(XT2227-1\), Unisoc UMS9230/T606. UEFI firmware builds and boots to SEC \(cyan/magenta stage markers confirmed on hardware\). DXE/PEI hang after SEC C code. No XNU kernel boot yet.
 
-Source record: [porting.toml](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/porting.toml), `eb2668c0b81183a5554117079eee6ea7d9aa95b2`.
+Source record: [porting.toml](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/porting.toml), `41547c5b0d5b0842cdc64a410b0591cdb6bef998`.
 
 This page is generated from the device record.
 
@@ -68,7 +68,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `host`: [defconfig resolves 5 components](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/board.toml)
+- `host`: [defconfig resolves 5 components](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/board.toml)
   Command: <code>./unixnu defconfig</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Firmware and boot {#firmware}
@@ -118,7 +118,7 @@ Components: `DarwinBoot`.
 
 ### Evidence
 
-- `device`: [cyan \(SEC asm\) then magenta \(SEC C\) confirmed on hardware; device hangs after magenta, does not reset](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
+- `device`: [cyan \(SEC asm\) then magenta \(SEC C\) confirmed on hardware; device hangs after magenta, does not reset](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
   Command: <code>fastboot set_active a + reboot</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## CPU and interrupts {#cpu}
@@ -163,7 +163,7 @@ Components: `ArmDTPlatform`, `ArmCpu`.
 
 ### Evidence
 
-- `host`: [CPU and GIC nodes match vendor DTS](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/dts/hawaii.dts)
+- `host`: [CPU and GIC nodes match vendor DTS](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/dts/hawaii.dts)
   Command: <code>./unixnu status</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Memory and DMA {#memory}
@@ -212,7 +212,7 @@ Components: `ArmDTPlatform`, `ArmCpu`.
 
 ### Evidence
 
-- `host`: [Memory map compiles and links into SEC](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/MemoryMapLib/MemoryMapLib.c)
+- `host`: [Memory map compiles and links into SEC](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/MemoryMapLib/MemoryMapLib.c)
   Command: <code>./unixnu build firmware</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Storage and root {#storage}
@@ -302,7 +302,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [Cyan paint covered top half of screen, bottom half shows Motorola logo - DPU is scanning 0x9e000000 but stride/resolution differs from 1600x720](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
+- `device`: [Cyan paint covered top half of screen, bottom half shows Motorola logo - DPU is scanning 0x9e000000 but stride/resolution differs from 1600x720](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
   Command: <code>screen observation</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Input {#input}
@@ -563,7 +563,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`.
 
 ### Evidence
 
-- `host`: [Kernel configuration selects ARM64/DEVELOPMENT; machine selection remains BCM2837 and is not UMS9230-specific.](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/configs/hawaii_defconfig)
+- `host`: [Kernel configuration selects ARM64/DEVELOPMENT; machine selection remains BCM2837 and is not UMS9230-specific.](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/configs/hawaii_defconfig)
   Command: <code>./unixnu kernel</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Image assembly {#packaging}
@@ -609,7 +609,7 @@ Components: `SoftwareAES`, `XnuPrelink`.
 
 ### Evidence
 
-- `host`: [Boot image packaging procedure is present; payload kernel and ADT are still pending.](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/scripts/pack_unixnu_boot.py)
+- `host`: [Boot image packaging procedure is present; payload kernel and ADT are still pending.](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/scripts/pack_unixnu_boot.py)
   Command: <code>python3 scripts/pack_unixnu_boot.py --help</code>. Revision: `a214152000000000000000000000000000000000`.
 
 ## Diagnostics {#diagnostics}
@@ -653,7 +653,7 @@ Components: `SoftwareAES`, `XnuPrelink`.
 
 ### Evidence
 
-- `device`: [Cyan and magenta stage markers confirmed on hardware; device hangs after magenta \(PEI/DXE stage\)](https://github.com/lu4nn3ry/hawaii-unixnu/blob/eb2668c0b81183a5554117079eee6ea7d9aa95b2/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
+- `device`: [Cyan and magenta stage markers confirmed on hardware; device hangs after magenta \(PEI/DXE stage\)](https://github.com/lu4nn3ry/hawaii-unixnu/blob/41547c5b0d5b0842cdc64a410b0591cdb6bef998/uefi-hawaii/Platforms/Unisoc/hawaiiPkg/Library/HawaiiPlatformSecLib/HawaiiPlatformSec.c)
   Command: <code>screen observation</code>. Revision: `a214152000000000000000000000000000000000`.
 
 </div>

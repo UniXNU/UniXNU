@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, DarwinBoot hands off to the prelinked XNU, NativeDwMmc reads the eMMC and publishes the USERDATA SHNGROOT windows, and the kernel mounts the APFS OS volume and reaches /sbin/launchd. DECON/DSI display, touch and the T830 GPU are the remaining work.
 
-Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/porting.toml), `65b0182f6a96fb73b36249a9c45a1cb9974bbe12`.
+Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/porting.toml), `3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73`.
 
 This page is generated from the device record.
 
@@ -17,7 +17,7 @@ This page is generated from the device record.
 | [CPU and interrupts](#cpu) | `planned` |
 | [Memory and DMA](#memory) | `planned` |
 | [Storage and root](#storage) | `device-verified` |
-| [Display](#display) | `planned` |
+| [Display](#display) | `implemented` |
 | [Input](#input) | `planned` |
 | [GPU](#gpu) | `planned` |
 | [Network](#network) | `planned` |
@@ -49,6 +49,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - The prelinked payload is the working architecture: it is written to HIDDEN \(mmcblk0p21, 60 MiB FAT16, label UNIXNU\) and loaded from EFI/UniXNU/Payloads/kernel.macho because the 49 MiB image cannot fit the 14 MiB ramdisk.
 - The prelinked AppleARMPlatform ships an AppleARMCPU personality with IONameMatch cpu; IODTPlatformExpert matches by prefix and would claim the Exynos /cpus. The kernel artifact is rewritten byte-for-byte to xpu before it is written to HIDDEN.
 - The prelink roots are trimmed to the software, security and storage closure plus AppleARMPlatform and ApplePMGR; the display, GPU and media kexts wait for Apple hardware and are excluded until the Exynos drivers exist.
+- The display bring-up starts by restoring IOMobileGraphicsFamily and IOSurface to the prelink closure and uploading the prelink plan JSON, so the legacy display ABI audit can derive its extents from this board's own candidate.
 - The board now carries the measured USERDATA geometry \(first 8013824, last 61057023, 512-byte sectors\) with the OS/SystemOS SHNGROOT windows, the OS volume UUID 04769D26-2CA0-4825-B443-E2E5F88300F2, and the same UUID as the ADT root match. The userdata image build and flash are separate from the kernel build.
 - The package workflow takes a userdata boolean: when set it builds the OS/SystemOS root image before the kernel package step and uploads userdata-root.img separately, so the kernel artifact is unaffected by the optional image build.
 - The ADT generator dropped \#address-cells/\#size-cells from hardware nodes. That was invisible until the first node with an interrupts property \(dwmmc0\) made IODTMapInterruptsSharing call IODTGetICellCounts on the GIC; the missing cell count faulted in IODeviceTreeAlloc. Patch 0006 adds both properties to the generated ADT.
@@ -108,7 +109,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/PHASE0.md)
+- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/PHASE0.md)
   Command: <code>manual boot of the SM-T585; the photos are recorded in the workspace</code>. Revision: `f45b68897f5f48da0026881847d9204680c9dd24`.
 
 ## CPU and interrupts {#cpu}
@@ -229,29 +230,39 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/65b0182f6a96fb73b36249a9c45a1cb9974bbe12/PHASE0.md)
+- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/PHASE0.md)
   Command: <code>manual boot of the SM-T585; photos IMG_7754-IMG_7762 record the MSHC panic and the root-mount markers</code>. Revision: `c2452fb48cf8b4d78b9a810a32f0dd464580de96`.
 
 ## Display {#display}
 
-`planned`
+`implemented`
+
+Components: `GopFramebuffer`.
 
 ### Hardware and dependencies
 
-- Identify the display hardware, resources and existing component interfaces for this board.
+- The UEFI GOP hands off 1200x1920, 32 bpp, 4800-byte rows at the physical base; DarwinBoot records v\_display=1.
+- The original IOMobileGraphicsFamily and IOSurface are in the prelink closure; the display ABI audit identifies the 358-slot IOMobileFramebufferLegacy class and its nine abstract leaves.
 
 ### Configuration
 
-- Record the board.toml fields, DTS properties and defconfig values used for display.
+- board.toml \[kernel.prelink\] roots include com.apple.iokit.IOMobileGraphicsFamily and com.apple.iokit.IOSurface; \[components\] includes GopFramebuffer; \[payload\] kernel\_args enable offline-legacy-phase=4, GOP, validation, CPU transfer, retirement, registration and a 60 Hz vsync tick.
+- configs/gtaxllte\_defconfig sets CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y.
+- The workflow builds one reference kernel with a bootstrap probe archive, then rebuilds scripts/build-gop-legacy-display.py against that prelink plan and relinks the final kernel.
 
 ### Procedure
 
-- Follow the display stage in the porting guide and record the actual commands.
+- Build the display kernel with scripts/package.sh --os 17 --prelink=true; download the prelinked-kernel artifact.
+- Flash the kernel and ADT to HIDDEN and replace EFI/UniXNU/unixnu.toml with host/write-unixnu-config.py so the display boot arguments are active.
+- Boot and read the bottom-row markers 295-305, then the first frame in the GOP.
 
 ### Development findings
 
-- Only the UEFI GOP framebuffer is used: DECON/DSI, backlight and touch are not programmed by XNU.
-- The stage bars prove the framebuffer mapping and the UEFI mode are usable before the display driver exists.
+- The original IOMobileGraphicsFamily \_\_TEXT\_EXEC base is 0xfffffff00576c000 \(slide -0x1000000\) and its text SHA-256 is 2e044ee68c1650397e1435234ca6459206262e4c7ed709cb7131c6f664f9bd9b, matching the sheng/pipa legacy ABI reference without rebasing.
+- The audit passes on this profile's prelinked candidate: 358 vtable slots, nine abstract leaves and the exact original surface, vsync and refresh-setter bytes.
+- The backend uses the firmware GOP with QuartzCore's CPU renderer: NativeLegacyDisplay copies each validated full-frame BGRA/RGBA16F surface into the scanout mapping and retires it through the original completion body.
+- The pinned GopFramebuffer e47c1b8 source is vendored because the workflow's UniXNU submodule is b0d812d, whose ioav/hotplug calls this board does not implement.
+- The GPU trace, UFS DPU and Adreno fence symbols are stubbed because the T830 has no driver; the probe markers 295-305 report the display lifecycle on the framebuffer.
 
 ### Completion criteria
 
@@ -259,15 +270,17 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for this example board.
+- Only the UEFI GOP is used: DECON/DSI, panel power, backlight and touch are not programmed by XNU. The render server draws with the CPU; the T830 GPU is a separate port.
+- The static trust cache, SystemOS union and Data volume are not configured yet.
 
 ### Next action
 
-- Inventory the required display inputs before implementation.
+- Boot the display kernel and confirm markers 295-305 and the first GOP frame; then add touch and the T830 GPU.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `host`: [The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/docs/display-plan.md)
+  Command: <code>python3.12 scripts/audit-mobile-graphics-legacy.py in the audit tree; the same checks are run by scripts/build-gop-legacy-display.py</code>. Revision: `006b531f56f2a6abd1691289a5ee0c22595836aa`.
 
 ## Input {#input}
 
