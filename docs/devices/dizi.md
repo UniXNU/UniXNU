@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupts, timer and GOP framebuffer through Mu-Silicium diziPkg. No hardware boot evidence yet.
 
-Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/porting.toml), `8b7d7c4d251dec54958cd63b72b95dcdd7c6d664`.
+Source record: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/porting.toml), `c8e2efed50cefa9db0d44a5dec9a92e0638a4919`.
 
 This page is generated from the device record.
 
@@ -15,7 +15,7 @@ This page is generated from the device record.
 | [Configuration](#configuration) | `implemented` |
 | [Firmware and boot](#firmware) | `implemented` |
 | [CPU and interrupts](#cpu) | `device-verified` |
-| [Memory and DMA](#memory) | `planned` |
+| [Memory and DMA](#memory) | `device-verified` |
 | [Storage and root](#storage) | `implemented` |
 | [Display](#display) | `planned` |
 | [Input](#input) | `implemented` |
@@ -51,6 +51,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - The ADT declares vmm-present = 1: dizi firmware publishes no Apple PMGR and AMFI otherwise panics with 'AMFI: No PMGR?' at ConfigurationSettings.cpp:235.
 - 2026-11-15: kernel\_args default to cpus=8 smp=1; \[kernel\] archives add ShengUfs, its KDK-free bindings \(candidate kernel without ShengUfs\), the PMGR bridge and the boot-progress page; \[userdata\] holds the GPT range 0x35a228-0x1d13ffa; ruan's 2.75 GiB window does not fit dizi's UEFI map, and the 1952 MiB window above 4 GiB stops at setconf, so the default window stays.
 - 2026-11-17: board.toml adds the RamBlock component and its archives \(component:RamBlock, NativeRamBlock bindings\), packed\_data\_ramdisk = true, \[userdata\] partition = 'unixnu' with the unixnu range, native-ufs-partition=unixnu in kernel\_args, and records the failed memory windows; dizi\_defconfig links build/ram-block/libRamBlock.a.
+- 2026-11-18: board.toml adds owned\_memory\_outside\_ranges = 16, owned\_memory\_outside\_reserved \(low bank, HYP Reserved, iomem holes 0x8bab00000+6M and 0x8bcf00000+49M\) and memory-outside=3 in kernel\_args.
 
 ### Completion criteria
 
@@ -66,7 +67,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Evidence
 
-- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/board.toml)
+- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/board.toml)
 
 ## Firmware and boot {#firmware}
 
@@ -148,7 +149,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ## Memory and DMA {#memory}
 
-`planned`
+`device-verified`
 
 ### Hardware and dependencies
 
@@ -167,6 +168,7 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 - dizi's low DRAM bank has almost no free memory \(diziPkg MemoryMapLib\), so DarwinBoot's window starts in the 0x840000000 run \(UEFI: 0x7AB00000 bytes\).
 - 2026-11-17: windows of 0x7A000000, 0x78000000 and 0x40000000 all froze the tablet about one second into BSD \(clock stopped, irq=0\), with or without the Data seed and with ShengUfs DMA kept below 0x850000000. The default 256 MiB window works; launchd's daemons then get jetsam-killed.
 - Linux \(OrangeFox, /proc/iomem\) has 0x840000000-0x8baafffff, 0x8bb100000-0x8bcefffff and 0x8c0000000-0x8ffffffff as System RAM, so the larger windows lay in RAM given to HLOS; the 6 MB hole 0x8bab00000-0x8bb0fffff explains only the 0x7A000000 window. The cause of the freeze is open.
+- 2026-11-18: dizi-memory-outside.patch \(ruan-memory-outside.patch, unchanged\) with memory-outside=3 adopts the DRAM above the 256 MiB window; board.toml lists 16 outside ranges and keeps out the low bank, HYP Reserved and the two iomem holes. The boot-progress page shows mem=3784M+352xM, about 104 processes run with no jetsam kills, and SpringBoard now crashes with SIGTRAP \(ns 2 code 5\) instead.
 
 ### Completion criteria
 
@@ -174,15 +176,17 @@ Components: `ArmDTPlatform`, `ArmCpu`, `SoftwareAES`, `XnuPrelink`, `DarwinBoot`
 
 ### Current limits
 
-- XNU gets 256 MiB; daemons and SpringBoard are killed by jetsam.
+- The window itself stays at 256 MiB; windows above it froze the tablet one second into BSD, cause unknown.
 
 ### Next action
 
-- Find why windows above 256 MiB freeze one second into BSD, then grow the window inside 0x840000000-0x8baafffff.
+- Display and key store for SpringBoard; later find why larger DarwinBoot windows freeze.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `source`: [ruan-memory-outside.patch, unchanged; owned\_memory\_outside\_\* in board.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/patches/xnu/dizi-memory-outside.patch)
+- `device`: [2026-11-18: mem=3784M+352xM on the boot-progress page, about 104 processes, no jetsam kills](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/f4c4e343845807456e71953d062e0d5d32d94ba1)
+  Command: <code>fastboot boot boot.img</code>. Revision: `f4c4e343845807456e71953d062e0d5d32d94ba1`.
 
 ## Storage and root {#storage}
 
@@ -231,7 +235,7 @@ Components: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`, `RamBlock`.
 
 ### Evidence
 
-- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/8b7d7c4d251dec54958cd63b72b95dcdd7c6d664/patches/drivers/ShengUfs-dizi.patch)
+- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/patches/drivers/ShengUfs-dizi.patch)
 - `device`: [2026-11-16: SystemOS mount returned; launchd ran 17 processes and stopped at tzinit \(read-only /private/var\)](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/0d560de946ba7ce41b4687677d3baabca165a677)
   Command: <code>fastboot boot boot.img</code>. Revision: `0d560de946ba7ce41b4687677d3baabca165a677`.
 - `device`: [2026-11-17: root from unixnu, Data mount returned, about 85 processes, SpringBoard started; Android boots from the new userdata](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/357c534a38b3f527fb7736a5d326f81129211a0e)
@@ -477,6 +481,10 @@ Collect evidence using the next action.
 - The kernel links ShengUfs with patches/drivers/ShengUfs-dizi.patch applied in drivers/ShengUfs; the patch now also carries the unverified volume queries for the SystemOS union \(2026-11-16\).
 - The boot image is a 60.5 MB boot.img with the 56 MiB FAT payload after the LZ4 vendor ramdisk; it fits the 100 MiB boot partition and is only started with fastboot boot.
 - 2026-11-17: the ShengUfs patch adds stage markers, native-ufs-dma-max and native-ufs-partition; package/BootProgressRuanStubs.c adds ml\_static\_mfree\_prepare for NativeRamBlock's weak import.
+- 2026-11-18: dual boot from slot b. All slot-b firmware equals slot a \(sha256 per partition, OrangeFox\); boot\_b holds the UniXNU image and vbmeta\_b has verification off. fastboot set\_active b boots UniXNU. With boot\_b at one retry and not successful the bootloader boots it once and falls back to slot a \(Android\) on the next reboot.
+- 2026-11-18: recovery\_a cannot start UniXNU: the bootloader drops to fastboot for a recovery image with its own kernel, also with stock os\_version \(stock recovery has no kernel\).
+- dualboot/ksu-module is a KernelSU module whose Action runs the one-shot switch: bootctl \(AOSP, HIDL boot@1.2, bundled because HyperOS has none\) makes slot b active, sgdisk sets boot\_b to one retry, it checks the flags read 000F and otherwise switches back to slot a. Tested on HyperOS 3 with the Caramel v2 kernel \(KernelSU 3.3.0\): iPadOS once, then Android.
+- 2026-11-18: patches/xnu/series adds dizi-memory-outside.patch \(ruan-memory-outside.patch from the ruan port, unchanged; it applies cleanly after the dizi patches\).
 
 ### Completion criteria
 
@@ -513,6 +521,7 @@ Collect evidence using the next action.
 ### Development findings
 
 - 2026-11-17: package/BootProgressRuanStubs.c gains ml\_static\_mfree\_prepare \(returns false: the loader keeps the Data seed pages\), which NativeRamBlock weak-imports and the static kernel link needs.
+- 2026-11-18: BootProgressRuanStubs.c drops its arm\_vm\_outside\_\* and ml\_outside\_memory\_\* stand-ins; dizi-memory-outside.patch defines them, so the page shows the adopted outside memory \(mem=...+...M\).
 
 ### Completion criteria
 

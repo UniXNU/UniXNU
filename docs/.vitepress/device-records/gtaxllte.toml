@@ -113,7 +113,7 @@ evidence = [
 
 [[area]]
 id = "display"
-status = "implemented"
+status = "device-verified"
 components = ["GopFramebuffer"]
 paths = ["drivers/GopFramebuffer", "package/LegacyDisplayProbe.cpp", "scripts/build-gop-legacy-display.py", "docs/display-plan.md", "package/*Display*", "package/*Framebuffer*", "package/*Backlight*", "package/AppleARMBacklight.cpp", "package/GeniI2c*", "scripts/*display*", "scripts/*gop*", "scripts/*framebuffer*"]
 inputs = [
@@ -135,13 +135,16 @@ findings = [
   "The audit passes on this profile's prelinked candidate: 358 vtable slots, nine abstract leaves and the exact original surface, vsync and refresh-setter bytes.",
   "The backend uses the firmware GOP with QuartzCore's CPU renderer: NativeLegacyDisplay copies each validated full-frame BGRA/RGBA16F surface into the scanout mapping and retires it through the original completion body.",
   "The pinned GopFramebuffer e47c1b8 source is vendored because the workflow's UniXNU submodule is b0d812d, whose ioav/hotplug calls this board does not implement.",
-  "The GPU trace, UFS DPU and Adreno fence symbols are stubbed because the T830 has no driver; the probe markers 295-305 report the display lifecycle on the framebuffer.",
+  "The GPU trace, UFS DPU and Adreno fence symbols are stubbed because the T830 has no driver; the probe markers 295-305 and the full-width stage bars report the display lifecycle on the framebuffer.",
+  "The first sequence registered the native subclass before IOKitBSDInit and stalled bsd_autoconf after the display object was retained. Registering and starting the display from the late probe (after IOKitBSDInit) reached startHardware, start and registerService on hardware.",
+  "The on-device stage bars show prepare/registration/init, late probe, Surface, GOP nub, startHardware and registerService (silver) with no failure bar; the first compositor swap (bright green) has not occurred because userland presentation is not running yet.",
 ]
 completion = ["A known frame appears with correct geometry and colors, then userland presentation and backlight controls work."]
-limits = ["Only the UEFI GOP is used: DECON/DSI, panel power, backlight and touch are not programmed by XNU. The render server draws with the CPU; the T830 GPU is a separate port.", "The static trust cache, SystemOS union and Data volume are not configured yet."]
-next_action = ["Boot the display kernel and confirm markers 295-305 and the first GOP frame; then add touch and the T830 GPU."]
+limits = ["Only the UEFI GOP is used: DECON/DSI, panel power, backlight and touch are not programmed by XNU. The render server draws with the CPU; the T830 GPU is a separate port.", "The display service registers, but no compositor frame has been submitted: the static trust cache, SystemOS union and Data volume are not configured yet, so backboardd/SpringBoard cannot present the UI."]
+next_action = ["Add the static trust cache and the Data/SystemOS startup to get a compositor frame; then add touch and the T830 GPU."]
 evidence = [
   { kind = "host", reference = "docs/display-plan.md", result = "The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.", command = "python3.12 scripts/audit-mobile-graphics-legacy.py in the audit tree; the same checks are run by scripts/build-gop-legacy-display.py", revision = "006b531f56f2a6abd1691289a5ee0c22595836aa" },
+  { kind = "device", reference = "PHASE0.md", result = "The prelinked display kernel prepares the display, finds the IOSurface root, starts the GOP nub, reaches startHardware/start and publishes the IOMobileFramebuffer service (full-width bars through the silver registration stage, no dark-red failure, no first-swap bar).", command = "manual boot of the SM-T585 in TWRP-flashed HIDDEN kernel; photos IMG_7776/IMG_7777 show the stage bars", revision = "3ba51af27445a7c29369b6c2abd7d1ee8412aabb" },
 ]
 
 [[area]]
@@ -160,20 +163,33 @@ evidence = []
 
 [[area]]
 id = "gpu"
-status = "planned"
+status = "implemented"
 components = []
-paths = ["package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
-inputs = ["Identify the gpu hardware, resources and existing component interfaces for this board."]
-configuration = ["Record the board.toml fields, DTS properties and defconfig values used for gpu."]
-procedure = ["Follow the gpu stage in the porting guide and record the actual commands."]
+paths = ["package/MaliT830Probe.cpp", "package/*Gpu*", "package/*Gmu*", "package/*Adreno*", "scripts/*adreno*", "scripts/*gpu*", "scripts/*metal*", "scripts/*turnip*", "scripts/*air*"]
+inputs = [
+  "The stock DTS GPU node is mali@11400000, reg 0x11400000+0x5000, compatible arm,mali, power-domain pd-g3d@10484000, interrupts JOB 282, MMU 283, GPU 281.",
+  "The stock kernel reports Mali-T830 0x0830 r0p1. The CMU_G3D block is at 0x11460000.",
+]
+configuration = [
+  "A read-only Mali-T830 probe (package/MaliT830Probe.cpp) runs from the display late probe when gtaxllte-mali-probe=1; it reads the G3D power-domain state, CMU_G3D and, only while the domain is on, the GPU ID/version/status.",
+  "The probe is compiled into the display archive and panics with the register values; no GPU write is performed.",
+]
+procedure = [
+  "Boot the display kernel with gtaxllte-mali-probe=1; photograph the panic screen.",
+  "Record the G3D/CMU/GPU values; remove the probe argument before normal boots.",
+]
 findings = [
   "The Mali-T830 is Midgard v5 with a Job Manager; Mesa PanVK has no arch 5 backend, so the GPU needs a new PanVK backend and a NativeMali JM driver.",
-  "The GPU plan lives in a separate repository; no GPU code or hardware access runs in this image yet.",
+  "M2 read-only probe on the SM-T585: pd=0x0000000f/0x0003000f (G3D domain on), CMU_G3D mux=0x00200000, div=0, gate=0x000001ff/0x0000007f, gpu=0x08300010, L2=0x07100206, core=0. The T830 ID 0x0830 and the powered GPU are readable without any write.",
+  "The G3D domain and CMU_G3D gates are already on at UniXNU handoff; M3 can start with the soft reset/MMU/WRITE_VALUE path and keep a rollback power-down sequence.",
+  "The GPU plan and source fork live in UniXNU-mali-t830; the Mesa PanVK arch-5 backend is the M1 host build, the NativeMali JM kernel is the M3 device path.",
 ]
 completion = ["GPU submissions complete, mapping/fence handling is correct, a known image renders, and the selected Metal client presents it."]
-limits = ["Hardware inputs and implementation are pending for this example board."]
-next_action = ["Inventory the required gpu inputs before implementation."]
-evidence = []
+limits = ["M2 is read-only and panics for the no-UART record. No GPU write, MMU, job, PanVK device or Metal path exists yet; the visible UI also needs the missing iPad Data/Preboot seed."]
+next_action = ["M3: port the G52 NativeMali JM base to the T830 v5 job header and Exynos 7870, then soft reset, MMU enable and one WRITE_VALUE job with a fence."]
+evidence = [
+  { kind = "device", reference = "PHASE0.md", result = "The read-only T830 probe read the G3D domain on (pd=0x0000000f/0x0003000f), CMU_G3D mux/div/gates (0x00200000/0/0x1ff/0x7f), GPU ID 0x08300010 (T830 0x0830 r0p1), L2 features 0x07100206 and core features 0 on the SM-T585.", command = "manual boot of the display kernel with gtaxllte-mali-probe=1; panic photo IMG_7780", revision = "a8ca317267c9c7df7b5ec6515f8b78c49a242309" },
+]
 
 [[area]]
 id = "network"

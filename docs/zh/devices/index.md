@@ -80,7 +80,7 @@
 | [三星 Galaxy S7 Edge](/zh/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
 | [OnePlus 7T Pro \(HD1910/HD1911/HD1913\)](/zh/devices/models/hotdog) | hotdog | SM8150 | 1 |
 | [小米 14](/zh/devices/models/houji) | houji | SM8650 | 4 |
-| [一加 Ace 5 Pro](/zh/devices/models/hummer) | hummer | SM8750 | 1 |
+| [一加 Ace 5 Pro](/zh/devices/models/hummer) | hummer | SM8750 | 2 |
 | [一加 8 Pro](/zh/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [小米 13 Ultra](/zh/devices/models/ishtar) | ishtar | SM8550 | 3 |
 | [联想小新 Pad Pro 2021](/zh/devices/models/j716f) | j716f | SM8250 | 2 |

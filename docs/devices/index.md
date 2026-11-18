@@ -80,7 +80,7 @@ Follow [Build and boot](/building), [porting steps](/porting/steps) and [log cap
 | [Samsung Galaxy S7 Edge](/devices/models/hero2lte) | hero2lte | Exynos 8890 | 1 |
 | [OnePlus 7T Pro \(HD1910/HD1911/HD1913\)](/devices/models/hotdog) | hotdog | SM8150 | 1 |
 | [Xiaomi 14](/devices/models/houji) | houji | SM8650 | 4 |
-| [OnePlus Ace 5 Pro](/devices/models/hummer) | hummer | SM8750 | 1 |
+| [OnePlus Ace 5 Pro](/devices/models/hummer) | hummer | SM8750 | 2 |
 | [OnePlus 8 Pro](/devices/models/instantnoodlep) | instantnoodlep | SM8250 | 3 |
 | [Xiaomi 13 Ultra](/devices/models/ishtar) | ishtar | SM8550 | 3 |
 | [Lenovo Xiaoxin Pad Pro 2021](/devices/models/j716f) | j716f | SM8250 | 2 |

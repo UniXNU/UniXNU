@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, DarwinBoot hands off to the prelinked XNU, NativeDwMmc reads the eMMC and publishes the USERDATA SHNGROOT windows, and the kernel mounts the APFS OS volume and reaches /sbin/launchd. DECON/DSI display, touch and the T830 GPU are the remaining work.
 
-Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/porting.toml), `3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73`.
+Source record: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/porting.toml), `0e16d478871ab04d25c44b5a3404d12415a169b6`.
 
 This page is generated from the device record.
 
@@ -17,9 +17,9 @@ This page is generated from the device record.
 | [CPU and interrupts](#cpu) | `planned` |
 | [Memory and DMA](#memory) | `planned` |
 | [Storage and root](#storage) | `device-verified` |
-| [Display](#display) | `implemented` |
+| [Display](#display) | `device-verified` |
 | [Input](#input) | `planned` |
-| [GPU](#gpu) | `planned` |
+| [GPU](#gpu) | `implemented` |
 | [Network](#network) | `planned` |
 | [Audio](#audio) | `planned` |
 | [Power](#power) | `planned` |
@@ -109,7 +109,7 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/PHASE0.md)
+- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
   Command: <code>manual boot of the SM-T585; the photos are recorded in the workspace</code>. Revision: `f45b68897f5f48da0026881847d9204680c9dd24`.
 
 ## CPU and interrupts {#cpu}
@@ -230,12 +230,12 @@ Collect evidence using the next action.
 
 ### Evidence
 
-- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/PHASE0.md)
+- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
   Command: <code>manual boot of the SM-T585; photos IMG_7754-IMG_7762 record the MSHC panic and the root-mount markers</code>. Revision: `c2452fb48cf8b4d78b9a810a32f0dd464580de96`.
 
 ## Display {#display}
 
-`implemented`
+`device-verified`
 
 Components: `GopFramebuffer`.
 
@@ -262,7 +262,9 @@ Components: `GopFramebuffer`.
 - The audit passes on this profile's prelinked candidate: 358 vtable slots, nine abstract leaves and the exact original surface, vsync and refresh-setter bytes.
 - The backend uses the firmware GOP with QuartzCore's CPU renderer: NativeLegacyDisplay copies each validated full-frame BGRA/RGBA16F surface into the scanout mapping and retires it through the original completion body.
 - The pinned GopFramebuffer e47c1b8 source is vendored because the workflow's UniXNU submodule is b0d812d, whose ioav/hotplug calls this board does not implement.
-- The GPU trace, UFS DPU and Adreno fence symbols are stubbed because the T830 has no driver; the probe markers 295-305 report the display lifecycle on the framebuffer.
+- The GPU trace, UFS DPU and Adreno fence symbols are stubbed because the T830 has no driver; the probe markers 295-305 and the full-width stage bars report the display lifecycle on the framebuffer.
+- The first sequence registered the native subclass before IOKitBSDInit and stalled bsd\_autoconf after the display object was retained. Registering and starting the display from the late probe \(after IOKitBSDInit\) reached startHardware, start and registerService on hardware.
+- The on-device stage bars show prepare/registration/init, late probe, Surface, GOP nub, startHardware and registerService \(silver\) with no failure bar; the first compositor swap \(bright green\) has not occurred because userland presentation is not running yet.
 
 ### Completion criteria
 
@@ -271,16 +273,18 @@ Components: `GopFramebuffer`.
 ### Current limits
 
 - Only the UEFI GOP is used: DECON/DSI, panel power, backlight and touch are not programmed by XNU. The render server draws with the CPU; the T830 GPU is a separate port.
-- The static trust cache, SystemOS union and Data volume are not configured yet.
+- The display service registers, but no compositor frame has been submitted: the static trust cache, SystemOS union and Data volume are not configured yet, so backboardd/SpringBoard cannot present the UI.
 
 ### Next action
 
-- Boot the display kernel and confirm markers 295-305 and the first GOP frame; then add touch and the T830 GPU.
+- Add the static trust cache and the Data/SystemOS startup to get a compositor frame; then add touch and the T830 GPU.
 
 ### Evidence
 
-- `host`: [The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/3100b6a717d4606fafd4a6bd0ccd9d7f5e2f1e73/docs/display-plan.md)
+- `host`: [The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/docs/display-plan.md)
   Command: <code>python3.12 scripts/audit-mobile-graphics-legacy.py in the audit tree; the same checks are run by scripts/build-gop-legacy-display.py</code>. Revision: `006b531f56f2a6abd1691289a5ee0c22595836aa`.
+- `device`: [The prelinked display kernel prepares the display, finds the IOSurface root, starts the GOP nub, reaches startHardware/start and publishes the IOMobileFramebuffer service \(full-width bars through the silver registration stage, no dark-red failure, no first-swap bar\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+  Command: <code>manual boot of the SM-T585 in TWRP-flashed HIDDEN kernel; photos IMG_7776/IMG_7777 show the stage bars</code>. Revision: `3ba51af27445a7c29369b6c2abd7d1ee8412aabb`.
 
 ## Input {#input}
 
@@ -320,24 +324,29 @@ Collect evidence using the next action.
 
 ## GPU {#gpu}
 
-`planned`
+`implemented`
 
 ### Hardware and dependencies
 
-- Identify the gpu hardware, resources and existing component interfaces for this board.
+- The stock DTS GPU node is mali@11400000, reg 0x11400000+0x5000, compatible arm,mali, power-domain pd-g3d@10484000, interrupts JOB 282, MMU 283, GPU 281.
+- The stock kernel reports Mali-T830 0x0830 r0p1. The CMU\_G3D block is at 0x11460000.
 
 ### Configuration
 
-- Record the board.toml fields, DTS properties and defconfig values used for gpu.
+- A read-only Mali-T830 probe \(package/MaliT830Probe.cpp\) runs from the display late probe when gtaxllte-mali-probe=1; it reads the G3D power-domain state, CMU\_G3D and, only while the domain is on, the GPU ID/version/status.
+- The probe is compiled into the display archive and panics with the register values; no GPU write is performed.
 
 ### Procedure
 
-- Follow the gpu stage in the porting guide and record the actual commands.
+- Boot the display kernel with gtaxllte-mali-probe=1; photograph the panic screen.
+- Record the G3D/CMU/GPU values; remove the probe argument before normal boots.
 
 ### Development findings
 
 - The Mali-T830 is Midgard v5 with a Job Manager; Mesa PanVK has no arch 5 backend, so the GPU needs a new PanVK backend and a NativeMali JM driver.
-- The GPU plan lives in a separate repository; no GPU code or hardware access runs in this image yet.
+- M2 read-only probe on the SM-T585: pd=0x0000000f/0x0003000f \(G3D domain on\), CMU\_G3D mux=0x00200000, div=0, gate=0x000001ff/0x0000007f, gpu=0x08300010, L2=0x07100206, core=0. The T830 ID 0x0830 and the powered GPU are readable without any write.
+- The G3D domain and CMU\_G3D gates are already on at UniXNU handoff; M3 can start with the soft reset/MMU/WRITE\_VALUE path and keep a rollback power-down sequence.
+- The GPU plan and source fork live in UniXNU-mali-t830; the Mesa PanVK arch-5 backend is the M1 host build, the NativeMali JM kernel is the M3 device path.
 
 ### Completion criteria
 
@@ -345,15 +354,16 @@ Collect evidence using the next action.
 
 ### Current limits
 
-- Hardware inputs and implementation are pending for this example board.
+- M2 is read-only and panics for the no-UART record. No GPU write, MMU, job, PanVK device or Metal path exists yet; the visible UI also needs the missing iPad Data/Preboot seed.
 
 ### Next action
 
-- Inventory the required gpu inputs before implementation.
+- M3: port the G52 NativeMali JM base to the T830 v5 job header and Exynos 7870, then soft reset, MMU enable and one WRITE\_VALUE job with a fence.
 
 ### Evidence
 
-Collect evidence using the next action.
+- `device`: [The read-only T830 probe read the G3D domain on \(pd=0x0000000f/0x0003000f\), CMU\_G3D mux/div/gates \(0x00200000/0/0x1ff/0x7f\), GPU ID 0x08300010 \(T830 0x0830 r0p1\), L2 features 0x07100206 and core features 0 on the SM-T585.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+  Command: <code>manual boot of the display kernel with gtaxllte-mali-probe=1; panic photo IMG_7780</code>. Revision: `a8ca317267c9c7df7b5ec6515f8b78c49a242309`.
 
 ## Network {#network}
 
