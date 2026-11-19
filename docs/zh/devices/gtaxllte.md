@@ -6,7 +6,7 @@
 
 Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI, DarwinBoot hands off to the prelinked XNU, NativeDwMmc reads the eMMC and publishes the USERDATA SHNGROOT windows, and the kernel mounts the APFS OS volume and reaches /sbin/launchd. DECON/DSI display, touch and the T830 GPU are the remaining work.
 
-源记录: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/porting.toml), `0e16d478871ab04d25c44b5a3404d12415a169b6`.
+源记录: [porting.toml](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/porting.toml), `6c5f5fa313391ce51543ffc41736827f045d3ac2`.
 
 本页按设备记录自动生成。
 
@@ -109,7 +109,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 证据
 
-- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+- `device`: [S-Boot loads the UniXNU UEFI, the menu boots, DarwinBoot hands off to the prelinked kernel, and the early framebuffer bars appear on the panel.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/PHASE0.md)
   Command: <code>manual boot of the SM-T585; the photos are recorded in the workspace</code>. Revision: `f45b68897f5f48da0026881847d9204680c9dd24`.
 
 ## CPU 与中断 {#cpu}
@@ -213,6 +213,9 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 - The first driver build stopped at -Werror because seven register constants were unused; only the constants the transport actually touches remain. The bootstrap kernel link warning about the mockfs vnodeop descriptor is the expected first-pass link without archives and does not fail the release.
 - A source IOBlockStorageDevice cannot link against the native kernel: the class lives in the prelinked IOStorageFamily kext. The device vendors the recorded absolute symbols for the pinned iPadOS 17.7.11 21H461 kernelcache \(f18b4df8..., already -0x1000000 slid\) and re-archives the driver object with them, the same pattern the alioth/marble repositories use.
 - NativeDwMmcWindow publishes each SHNGROOT manifest window \(OS, SystemOS\) as its own 512-byte IOBlockStorageDevice, after the parent start returns, so IOStorageFamily can create the IOMedia that APFS probes. The driver checks the manifest SHA-256 and exposes only 512-byte flag-1 windows; framebuffer markers 40-43 report start, first sector, manifest and window service.
+- No public prebuilt iPad7,1 17.7.11 Data or Preboot seed was found. A fresh Data volume is generated instead from the OS image's unchanged /private/var template: prepare-owner-data-fixture.py creates the 32 MiB APFS volume, packed\_ramdisk.pack makes the packed seed, and seed-data-grow.py grows it to 8 GiB. The seed keeps the same 611,715 bytes of original template and publishes volume UUID 76BACD4A-80F1-48F0-B5B6-5A3DE1F123A5; the packed 1,040,512-byte image is data/owner-data-8g.dbr.
+- Preboot is not needed for this first userland bring-up: the SystemOS cryptex is already a whole-disk SHNGROOT window, so the original owner cache mount can mount it as APFS and union its dyld cache over /. The fresh-seed tooling creates a Data volume only, and the SystemOS volume UUID 8846FE78-2910-4297-AF97-D59BB6F8FC16 is the cache identity the mount asks for.
+- The IPSW StaticTrustCache and Cryptex1,SystemTrustCache IM4P payloads are the two unchanged original trust modules, not either file alone. DarwinBoot's ValidTrustCaches accepts them only as a version-2 bundle with a module-offset table; the raw trst IM4P was the earlier Compromised Data failure. data/original-static-system.bundle has the exact static \(da88460e...\) and System \(d121ba89...\) module hashes.
 
 ### 完成条件
 
@@ -226,11 +229,11 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 下一步
 
-- Inventory the required storage and root inputs before implementation.
+- Boot the prelinked kernel with gtaxllte-allow-unverified=1, the packed Data seed and the original static+System trust bundle; then check launchd, backboardd and the first SpringBoard frame.
 
 ### 证据
 
-- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+- `device`: [NativeDwMmc publishes the USERDATA SHNGROOT OS/SystemOS windows and XNU mounts the OS volume at the root-matching UUID, reaching load\_init\_program \(markers 290-292\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/PHASE0.md)
   Command: <code>manual boot of the SM-T585; photos IMG_7754-IMG_7762 record the MSHC panic and the root-mount markers</code>. Revision: `c2452fb48cf8b4d78b9a810a32f0dd464580de96`.
 
 ## 显示 {#display}
@@ -281,9 +284,9 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 证据
 
-- `host`: [The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/docs/display-plan.md)
+- `host`: [The legacy display ABI audit and every hardcoded family, surface, vsync and refresh byte check pass on this profile's prelinked candidate.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/docs/display-plan.md)
   Command: <code>python3.12 scripts/audit-mobile-graphics-legacy.py in the audit tree; the same checks are run by scripts/build-gop-legacy-display.py</code>. Revision: `006b531f56f2a6abd1691289a5ee0c22595836aa`.
-- `device`: [The prelinked display kernel prepares the display, finds the IOSurface root, starts the GOP nub, reaches startHardware/start and publishes the IOMobileFramebuffer service \(full-width bars through the silver registration stage, no dark-red failure, no first-swap bar\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+- `device`: [The prelinked display kernel prepares the display, finds the IOSurface root, starts the GOP nub, reaches startHardware/start and publishes the IOMobileFramebuffer service \(full-width bars through the silver registration stage, no dark-red failure, no first-swap bar\).](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/PHASE0.md)
   Command: <code>manual boot of the SM-T585 in TWRP-flashed HIDDEN kernel; photos IMG_7776/IMG_7777 show the stage bars</code>. Revision: `3ba51af27445a7c29369b6c2abd7d1ee8412aabb`.
 
 ## 输入 {#input}
@@ -347,6 +350,7 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 - M2 read-only probe on the SM-T585: pd=0x0000000f/0x0003000f \(G3D domain on\), CMU\_G3D mux=0x00200000, div=0, gate=0x000001ff/0x0000007f, gpu=0x08300010, L2=0x07100206, core=0. The T830 ID 0x0830 and the powered GPU are readable without any write.
 - The G3D domain and CMU\_G3D gates are already on at UniXNU handoff; M3 can start with the soft reset/MMU/WRITE\_VALUE path and keep a rollback power-down sequence.
 - The GPU plan and source fork live in UniXNU-mali-t830; the Mesa PanVK arch-5 backend is the M1 host build, the NativeMali JM kernel is the M3 device path.
+- M3 first write on the SM-T585: the Panfrost v5 software reset completed \(reset=0, GPU\_INT\_RAWSTAT=0x100\), with pd=0x0000000f/0x0003000f, CMU\_G3D 0x00200000/0/0x1ff/0x7f, gpu=0x08300010 and l2=0x07100206.
 
 ### 完成条件
 
@@ -358,12 +362,14 @@ Samsung Galaxy Tab A 10.1 \(2016\) LTE \(SM-T585\). S-Boot loads the UniXNU UEFI
 
 ### 下一步
 
-- M3: port the G52 NativeMali JM base to the T830 v5 job header and Exynos 7870, then soft reset, MMU enable and one WRITE\_VALUE job with a fence.
+- M3: port the G52 NativeMali JM base to the T830 v5, keep the confirmed soft reset, then enable the MMU and submit one WRITE\_VALUE job with a software fence.
 
 ### 证据
 
-- `device`: [The read-only T830 probe read the G3D domain on \(pd=0x0000000f/0x0003000f\), CMU\_G3D mux/div/gates \(0x00200000/0/0x1ff/0x7f\), GPU ID 0x08300010 \(T830 0x0830 r0p1\), L2 features 0x07100206 and core features 0 on the SM-T585.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/0e16d478871ab04d25c44b5a3404d12415a169b6/PHASE0.md)
+- `device`: [The read-only T830 probe read the G3D domain on \(pd=0x0000000f/0x0003000f\), CMU\_G3D mux/div/gates \(0x00200000/0/0x1ff/0x7f\), GPU ID 0x08300010 \(T830 0x0830 r0p1\), L2 features 0x07100206 and core features 0 on the SM-T585.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/PHASE0.md)
   Command: <code>manual boot of the display kernel with gtaxllte-mali-probe=1; panic photo IMG_7780</code>. Revision: `a8ca317267c9c7df7b5ec6515f8b78c49a242309`.
+- `device`: [The M3 probe issued the first T830 write: GPU\_INT\_MASK/CLEAR and GPU\_CMD\_SOFT\_RESET completed \(reset=0, GPU\_INT\_RAWSTAT=0x00000100\); GPU\_ID remained 0x08300010.](https://github.com/ahmedraafat-official/UniXNU-gtaxllte/blob/6c5f5fa313391ce51543ffc41736827f045d3ac2/PHASE0.md)
+  Command: <code>manual boot of the display kernel with gtaxllte-mali-probe=1 gtaxllte-mali-reset=1; panic photo IMG_7784</code>. Revision: `2b5731ab9f99a1e1d4f49f4c303031658075e998`.
 
 ## 网络 {#network}
 

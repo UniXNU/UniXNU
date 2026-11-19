@@ -6,7 +6,7 @@
 
 Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupts, timer and GOP framebuffer through Mu-Silicium diziPkg. No hardware boot evidence yet.
 
-源记录: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/porting.toml), `c8e2efed50cefa9db0d44a5dec9a92e0638a4919`.
+源记录: [porting.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/porting.toml), `87bcefbff7bc922b74ececd4c04e5331dc353317`.
 
 本页按设备记录自动生成。
 
@@ -17,12 +17,12 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 | [CPU 与中断](#cpu) | `device-verified` |
 | [内存与 DMA](#memory) | `device-verified` |
 | [存储与根卷](#storage) | `implemented` |
-| [显示](#display) | `planned` |
+| [显示](#display) | `implemented` |
 | [输入](#input) | `implemented` |
 | [GPU](#gpu) | `planned` |
 | [网络](#network) | `planned` |
 | [音频](#audio) | `planned` |
-| [电源](#power) | `planned` |
+| [电源](#power) | `implemented` |
 | [镜像组装](#packaging) | `planned` |
 | [诊断](#diagnostics) | `planned` |
 
@@ -52,6 +52,8 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 - 2026-11-15: kernel\_args default to cpus=8 smp=1; \[kernel\] archives add ShengUfs, its KDK-free bindings \(candidate kernel without ShengUfs\), the PMGR bridge and the boot-progress page; \[userdata\] holds the GPT range 0x35a228-0x1d13ffa; ruan's 2.75 GiB window does not fit dizi's UEFI map, and the 1952 MiB window above 4 GiB stops at setconf, so the default window stays.
 - 2026-11-17: board.toml adds the RamBlock component and its archives \(component:RamBlock, NativeRamBlock bindings\), packed\_data\_ramdisk = true, \[userdata\] partition = 'unixnu' with the unixnu range, native-ufs-partition=unixnu in kernel\_args, and records the failed memory windows; dizi\_defconfig links build/ram-block/libRamBlock.a.
 - 2026-11-18: board.toml adds owned\_memory\_outside\_ranges = 16, owned\_memory\_outside\_reserved \(low bank, HYP Reserved, iomem holes 0x8bab00000+6M and 0x8bcf00000+49M\) and memory-outside=3 in kernel\_args.
+- 2026-11-18: board.toml adds GopFramebuffer and AppleKeyStoreState, the keystore and display archive steps, the display and key store boot args \(no -v\) and \[adt.chosen.u32\] display-scale = 2; dizi\_defconfig sets CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y and links libKeyStoreProbe.a.
+- 2026-11-19: board.toml adds ruan\_touch=1, garnet\_buttons=1, ruan-cpufreq=2, ruan-usbdbg=1, offline-hid-input=1, sheng-touch-hid=1 and sheng-touch-split=1.
 
 ### 完成条件
 
@@ -67,7 +69,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 证据
 
-- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/board.toml)
+- `source`: [unixnu status resolves soc sm7435, profile ipados-17.7.11-21H461 and the dizi patch order](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/board.toml)
 
 ## 固件与启动 {#firmware}
 
@@ -169,6 +171,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 - 2026-11-17: windows of 0x7A000000, 0x78000000 and 0x40000000 all froze the tablet about one second into BSD \(clock stopped, irq=0\), with or without the Data seed and with ShengUfs DMA kept below 0x850000000. The default 256 MiB window works; launchd's daemons then get jetsam-killed.
 - Linux \(OrangeFox, /proc/iomem\) has 0x840000000-0x8baafffff, 0x8bb100000-0x8bcefffff and 0x8c0000000-0x8ffffffff as System RAM, so the larger windows lay in RAM given to HLOS; the 6 MB hole 0x8bab00000-0x8bb0fffff explains only the 0x7A000000 window. The cause of the freeze is open.
 - 2026-11-18: dizi-memory-outside.patch \(ruan-memory-outside.patch, unchanged\) with memory-outside=3 adopts the DRAM above the 256 MiB window; board.toml lists 16 outside ranges and keeps out the low bank, HYP Reserved and the two iomem holes. The boot-progress page shows mem=3784M+352xM, about 104 processes run with no jetsam kills, and SpringBoard now crashes with SIGTRAP \(ns 2 code 5\) instead.
+- 2026-11-19: package/SmmuBypass.h is the ruan port's current SMMU stream helper, used by the USB debug link \(replacing the sheng-era copy\); dizi's UFS keeps the firmware's mapping \(native-ufs-smmu-reuse=1\).
 
 ### 完成条件
 
@@ -184,7 +187,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 证据
 
-- `source`: [ruan-memory-outside.patch, unchanged; owned\_memory\_outside\_\* in board.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/patches/xnu/dizi-memory-outside.patch)
+- `source`: [ruan-memory-outside.patch, unchanged; owned\_memory\_outside\_\* in board.toml](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/patches/xnu/dizi-memory-outside.patch)
 - `device`: [2026-11-18: mem=3784M+352xM on the boot-progress page, about 104 processes, no jetsam kills](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/f4c4e343845807456e71953d062e0d5d32d94ba1)
   Command: <code>fastboot boot boot.img</code>. Revision: `f4c4e343845807456e71953d062e0d5d32d94ba1`.
 
@@ -192,7 +195,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 `implemented`
 
-组件: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`, `RamBlock`.
+组件: `ShengUfs`, `VerifiedRoot`, `VirtioMmioBlock`, `RamBlock`, `AppleKeyStoreState`.
 
 ### 硬件与依赖
 
@@ -218,6 +221,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 - 2026-11-17: writable Data on /private/var. dizi-data-volume.patch turns on the owner Data mount with XNU\_NATIVE\_RAM\_BLOCK; NativeRamBlock \(component RamBlock, KDK-free bindings\) serves the payload's packed Data seed \(make-data-seed.py\), whose APFS volume UUID comes from data-uuid=&lt;UUID&gt;. Without a persistent store a seed above 2 GiB refuses writes \(device is not ready\), and a seed of 512 MB or more hashes every page at start and resets the tablet at setconf; a 128 MB seed works.
 - 2026-11-17: dual boot. GPT entry 21 \(userdata, 0x35a228-0x1d13ffa\) was split with sgdisk from an unofficial OrangeFox \(fox\_dizi\) started with fastboot boot: entry 22 unixnu \(0x35a228-0xb5a227, 32 GiB\) keeps the iPadOS root in place, entry 21 userdata \(0xb5a228-0x1d13ffa, 70.9 GiB, original GUIDs\) is Android's. ShengUfs finds the root by name with native-ufs-partition=unixnu. HyperOS 3 boots on the new userdata after fastboot erase userdata and metadata.
 - ShengUfs reports each driver stage on the boot-progress page \(ufs: ...\); native-ufs-dma-max=&lt;address&gt; limits the host DMA memory \(off by default\).
+- 2026-11-18: AppleKeyStore stand-in \(UniXNU AppleKeyStoreState + package/KeyStoreProbe.cpp from the ruan port, scripts/build-keystore-probe.py\) started before launchd by dizi-keystore-probe.patch with aks=1 offline-key-events=1, for keybagd, init\_data\_protection and usermanagerd. With it and the display, SpringBoard reaches the lock screen.
 
 ### 完成条件
 
@@ -235,7 +239,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 证据
 
-- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/c8e2efed50cefa9db0d44a5dec9a92e0638a4919/patches/drivers/ShengUfs-dizi.patch)
+- `source`: [dizi changes to ShengUfs: stream, SMMU reuse, zero-copy switch, unverified root, unverified volume queries](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/patches/drivers/ShengUfs-dizi.patch)
 - `device`: [2026-11-16: SystemOS mount returned; launchd ran 17 processes and stopped at tzinit \(read-only /private/var\)](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/0d560de946ba7ce41b4687677d3baabca165a677)
   Command: <code>fastboot boot boot.img</code>. Revision: `0d560de946ba7ce41b4687677d3baabca165a677`.
 - `device`: [2026-11-17: root from unixnu, Data mount returned, about 85 processes, SpringBoard started; Android boots from the new userdata](https://github.com/vildangil/UniXNU-Dizi-Ruan/commit/357c534a38b3f527fb7736a5d326f81129211a0e)
@@ -243,17 +247,17 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ## 显示 {#display}
 
-`planned`
+`implemented`
 
 组件: `GopFramebuffer`.
 
 ### 硬件与依赖
 
-- Identify the display hardware, resources and existing component interfaces for this board.
+- The firmware GOP framebuffer: 1600x2560 32-bit at 0xB8000000 \(diziPkg Display Reserved\), the same as ruan's.
 
 ### 配置
 
-- Record the board.toml fields, DTS properties and defconfig values used for display.
+- CONFIG\_XNU\_NATIVE\_LEGACY\_DISPLAY=y; \[kernel\] archives build-gop-legacy-display.py; components GopFramebuffer.
 
 ### 操作步骤
 
@@ -261,7 +265,11 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 开发经验
 
-- Collect the first display observation, its cause when established, and the resulting implementation decision.
+- 2026-11-18: GopFramebuffer NativeLegacyDisplay is bound to the original IOMobileFramebufferLegacy \(21H461\) by scripts/build-gop-legacy-display.py and package/LegacyDisplayProbe.cpp, both from the ruan port \(commit 5ce47b1, display path only\), with ruan's gopfb-vsync-poll, gopfb-fb-wc and gopfb-retire-transfer fixes. Every pinned address and instruction matched dizi's kernel.
+- Boot args offline-mobile-graphics-load, offline-legacy-register/phase=4/gop/pm/validate/transfer/cpu-present, vsync=60 and fb-wc=1; no -v, which makes the console text mode so backboardd never presents. /chosen display-scale 2.
+- 2026-11-18 on the tablet: backboardd drew the Apple logo, then the lock screen; 5765 frames copied, all accepted \(sw a5765 r0\), 12-30 ms per copy. SpringBoard then restarted \(spinner\).
+- 2026-11-19: with the full ruan sync the lock screen shows the date, time and battery, SpringBoard stays up \(SB x1\); PosterBoard crashes \(NSInternalInconsistencyException\), so the background is black.
+- 2026-11-19: the ruan port's SY7758 backlight driver \(RuanBacklight.cpp, GENI I2C\) is built and started by the display probe; its effect on dizi is not observed yet.
 
 ### 完成条件
 
@@ -269,15 +277,15 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 当前范围
 
-- Hardware inputs and implementation are pending for dizi.
+- CPU copy only \(no GPU\); no touch input yet; SpringBoard restarts after the lock screen.
 
 ### 下一步
 
-- Inventory the required display inputs before implementation.
+- Disable the crash-looping launchd jobs in the Data seed \(ruan list\), then port touch input.
 
 ### 证据
 
-按下一步操作收集证据。
+- `source`: [binds NativeLegacyDisplay to the original IOMobileFramebufferLegacy; 50 pinned checks pass at build](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/scripts/build-gop-legacy-display.py)
 
 ## 输入 {#input}
 
@@ -299,6 +307,8 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 - UniXNU menu: Volume Up, Volume Down and Power work through the PMIC/SPMI key reader in Mu-Silicium diziPkg/Library/UniXNULibDizi \(from the old-ChatGPT build\). Each press must be held about one second \(2026-11-15\).
 - No touch or button input in XNU yet.
+- 2026-11-19: the ruan port's HakiOS NT36532 touch driver \(RuanTouch.c, hakios.novatek\_ruan.h\) runs with ruan\_touch=1 and dizi's BOE firmware \(novatek\_ts\_fw\_boe.bin, the same panel as ruan: xiaomi n83 35 02 0a cphy nt36532 boe; scripts/make-touch-fw-header.py, kept out of git\). The controller reports \(tp305, raw coordinates\), but without offline-hid-input=1 the HID publisher stays at stage 0 \(hid0\), so iPadOS gets no touches; the args are added.
+- garnet\_buttons=1 \(RuanButtons.c, PMIC power and volume keys\) works in iPadOS: the bottom banner counts presses.
 
 ### 完成条件
 
@@ -306,11 +316,11 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 当前范围
 
-- Hardware inputs and implementation are pending for dizi.
+- Touch reaches the controller; delivery to iPadOS is not confirmed yet.
 
 ### 下一步
 
-- Inventory the required input inputs before implementation.
+- Confirm touches reach iPadOS with offline-hid-input=1 sheng-touch-hid=1 sheng-touch-split=1.
 
 ### 证据
 
@@ -334,7 +344,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 开发经验
 
-- Collect the first gpu observation, its cause when established, and the resulting implementation decision.
+- 2026-11-19: the ruan port's Adreno 710 headers \(AdrenoHfi.h, RuanA710\*.h, RuanGmu\*.h, RuanGpuPowerBoard.h, UsbDebugGpu.h\) are copied because the USB debug link and display probe include them; the GPU code itself \(RuanGpuPower.c, AdrenoHfi.c\) is not built on dizi, needs Qualcomm's GPU firmware and is experimental on ruan. BootProgressRuanStubs.c answers its entry points with 'not ready'.
 
 ### 完成条件
 
@@ -370,7 +380,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 开发经验
 
-- Collect the first network observation, its cause when established, and the resulting implementation decision.
+- 2026-11-19: package/RuanWifiProbe.h is the ruan port's Wi-Fi status header, included by its boot-progress page; dizi does not build the probe \(ruan's review: a status stub\). Wi-Fi is not started.
 
 ### 完成条件
 
@@ -406,7 +416,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 开发经验
 
-- Collect the first audio observation, its cause when established, and the resulting implementation decision.
+- 2026-11-19: package/RuanAudioProbe.h is the ruan port's audio status header, included by its boot-progress page; dizi does not build the probe \(ruan's review: a status stub that touches no hardware\). Audio is not started.
 
 ### 完成条件
 
@@ -426,7 +436,7 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ## 电源 {#power}
 
-`planned`
+`implemented`
 
 ### 硬件与依赖
 
@@ -442,7 +452,8 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 开发经验
 
-- Collect the first power observation, its cause when established, and the resulting implementation decision.
+- 2026-11-19: the ruan port's fuel-gauge battery \(RuanBattery.c, HakiosBattery.cpp, PM7250B\) publishes an IOPMPowerSource; the lock screen shows the battery level \(81 %\). ruan-cpufreq=2 \(RuanCpuFreq.c\) votes 1958/2400 MHz.
+- When iPadOS went to sleep, XNU panicked restarting a core \(cpu 1 failed to start @processor.c:774\). scripts/seed-data-ruan-prefs.py writes ruan's no-dim, no-lock-on-AC and no-idle-sleep preferences and 18 disabled launchd jobs into the Data seed; with it the screen stays on.
 
 ### 完成条件
 
@@ -450,15 +461,15 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 ### 当前范围
 
-- Hardware inputs and implementation are pending for dizi.
+- CPU cores cannot be restarted after sleep, so sleep is turned off in the Data seed.
 
 ### 下一步
 
-- Inventory the required power inputs before implementation.
+- Find why a core does not come back after sleep \(PSCI CPU\_ON under Gunyah\).
 
 ### 证据
 
-按下一步操作收集证据。
+- `source`: [ruan fuel gauge; battery level on the lock screen 2026-11-19](https://github.com/vildangil/UniXNU-Dizi-Ruan/blob/87bcefbff7bc922b74ececd4c04e5331dc353317/package/RuanBattery.c)
 
 ## 镜像组装 {#packaging}
 
@@ -485,6 +496,8 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 - 2026-11-18: recovery\_a cannot start UniXNU: the bootloader drops to fastboot for a recovery image with its own kernel, also with stock os\_version \(stock recovery has no kernel\).
 - dualboot/ksu-module is a KernelSU module whose Action runs the one-shot switch: bootctl \(AOSP, HIDL boot@1.2, bundled because HyperOS has none\) makes slot b active, sgdisk sets boot\_b to one retry, it checks the flags read 000F and otherwise switches back to slot a. Tested on HyperOS 3 with the Caramel v2 kernel \(KernelSU 3.3.0\): iPadOS once, then Android.
 - 2026-11-18: patches/xnu/series adds dizi-memory-outside.patch \(ruan-memory-outside.patch from the ruan port, unchanged; it applies cleanly after the dizi patches\).
+- 2026-11-18: patches/xnu/series adds dizi-keystore-probe.patch \(regenerated against dizi's tree; the ruan patch's context is its RAM-root code\).
+- 2026-11-19: scripts/seed-data-ruan-prefs.py \(run as root\) adds ruan's Data preferences and disabled jobs to a packed seed; scripts/make-touch-fw-header.py builds the touch firmware header in .cache/hakios-fw.
 
 ### 完成条件
 
@@ -522,6 +535,8 @@ Xiaomi Redmi Pad Pro \(dizi\), SM7435 \(Parrot\). Bring-up stage: CPU, interrupt
 
 - 2026-11-17: package/BootProgressRuanStubs.c gains ml\_static\_mfree\_prepare \(returns false: the loader keeps the Data seed pages\), which NativeRamBlock weak-imports and the static kernel link needs.
 - 2026-11-18: BootProgressRuanStubs.c drops its arm\_vm\_outside\_\* and ml\_outside\_memory\_\* stand-ins; dizi-memory-outside.patch defines them, so the page shows the adopted outside memory \(mem=...+...M\).
+- 2026-11-18: the native\_legacy\_\* stand-ins leave BootProgressRuanStubs.c; LegacyDisplayProbe.cpp and NativeLegacyDisplay define them, and the bottom banner shows copies, swaps and vsync.
+- 2026-11-19: the ruan port's board code is synced \(scripts/build-boot-progress-ruan.py\): its current boot-progress page, crash banner \(BootFaultProbe.c\), boot reset \(BootReset.c\), touch, buttons, battery, backlight, CPU frequency, HID publisher and USB debug link. Left out: its RAM root, the Adreno 710 bring-up \(needs Qualcomm firmware\) and the Wi-Fi/audio status stubs; BootProgressRuanStubs.c stands in for them. The USB debug link runs \(usb e2829 r1110\) but the Mac never configures it \(c0\).
 
 ### 完成条件
 

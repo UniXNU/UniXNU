@@ -61,7 +61,7 @@
 | [一加 6T](/zh/devices/models/fajita) | fajita | SDM845 | 2 |
 | [LG V50 ThinQ \(LM-V500, flashlm\)](/zh/devices/models/flashlm) | flashlm | SM8150 | 1 |
 | [小米 13](/zh/devices/models/fuxi) | fuxi | SM8550 | 18 |
-| [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 1 |
+| [Gree G0245D \(格力手机 / 色界\)](/zh/devices/models/g0245d) | g0245d | msm8996 | 2 |
 | [Gree G0345D \(格力手机 G3\)](/zh/devices/models/g0345d) | g0345d | msm8996 | 1 |
 | [Preliminary garnet bring-up; not bootable](/zh/devices/models/garnet) | garnet | SM7435 | 1 |
 | [摩托罗拉 Moto G 5G](/zh/devices/models/gauguin) | gauguin | SM7225 | 1 |
