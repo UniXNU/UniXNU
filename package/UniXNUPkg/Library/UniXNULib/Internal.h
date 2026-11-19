@@ -54,6 +54,17 @@ UniXNULog (
   ...
   );
 
+/**
+  Bring-up probe: publish a short ASCII line describing the menu state as the
+  UniXNUInfo UEFI variable, for the firmware diagnostics afterwards. Removed
+  once the menu is confirmed on hardware.
+**/
+VOID
+EFIAPI
+UniXNUProbeInfo (
+  IN CONST CHAR8  *Text
+  );
+
 // ---------------------------------------------------------------------------
 // TOML subset (Toml.c)
 // ---------------------------------------------------------------------------
@@ -516,6 +527,7 @@ typedef struct {
   UINTN                           ContentTop;       ///< Top of the plugin content region.
   UINTN                           ContentBottom;    ///< Bottom of the plugin content region.
   UINTN                           VisibleRows;
+  UINTN                           ScrollFirst;      ///< First entry index drawn.
   UINTN                           TextColumns;      ///< Text mode only.
   UINTN                           TextRows;
   CHAR16                          Info[96];         ///< Injection summary line.
