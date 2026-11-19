@@ -222,6 +222,20 @@ def preflight(ctx):
     log(f'kernel preflight: {len(ctx.component_specs)} selected components - archive inputs present')
 
 
+def adreno_abi_sha256(ctx):
+    header = ctx.tree / 'drivers/Adreno740/NativeAdrenoABI.h'
+    return sha256_file(header) if header.is_file() else None
+
+
+def require_adreno_abi(image, abi_sha256):
+    record_path = image.with_suffix('.json')
+    record = json.loads(record_path.read_text()) if record_path.is_file() else {}
+    if (record.get('adreno_abi_sha256') != abi_sha256 or not image.is_file() or
+            record.get('candidate_sha256') != sha256_file(image)):
+        raise Error('The kernel does not match the Adreno ABI used by the source-built GPU addon. '
+                    'Run unixnu build kernel runtime payload with the same OS and Data seed.')
+
+
 def build(ctx, modules):
     log('kernel: XNU')
     script = ctx.tree / 'scripts/build-xnu-4k-baseline.sh'
@@ -269,11 +283,16 @@ def build(ctx, modules):
         log('kernel: prepare storage headers')
         run(['python3', ctx.tree / 'scripts/prepare-storage-headers.py'], cwd=ctx.tree, env=env,
             log_file=ctx.logs / 'storage-headers.log')
+    config = ctx.need_config()
+    adreno_abi = adreno_abi_sha256(ctx) if config.get('XNU_NATIVE_ADRENO') and config.get('XNU_BUILD_ARCHIVES') else None
     build_archives(ctx, env)
     run(['bash', script], cwd=ctx.tree, env=env, log_file=ctx.logs / 'kernel.log')
+    if adreno_abi and adreno_abi != adreno_abi_sha256(ctx):
+        raise Error('Adreno ABI changed during the kernel build; rerun the build from a stable source tree')
+    return adreno_abi
 
 
-def stage_native(kernel, output):
+def stage_native(kernel, output, adreno_abi=None):
     """Stage the native executable unchanged for bring-up without prelinked kexts."""
     data = kernel.read_bytes()
     if len(data) < 32 or struct.unpack_from('<II', data) != (0xfeedfacf, 0x100000c) or struct.unpack_from('<I', data, 12)[0] != 2:
@@ -282,6 +301,8 @@ def stage_native(kernel, output):
     record = {'mode': 'native-only', 'format': 'MH_EXECUTE', 'native': str(kernel.resolve()),
               'native_sha256': digest, 'candidate_sha256': digest, 'candidate_bytes': len(data),
               'prelink_skipped': True, 'kernelcache_kexts_added': False, 'boot_verified': False}
+    if adreno_abi:
+        record['adreno_abi_sha256'] = adreno_abi
     output.parent.mkdir(parents=True, exist_ok=True)
     for path, contents in ((output, data), (output.with_suffix('.json'), (json.dumps(record, indent=2) + '\n').encode())):
         name = None
@@ -312,7 +333,7 @@ def check_prelink_regressions(record, policy):
         raise Error('prelink lacks required absolute adapter branch relocations')
 
 
-def prelink(ctx):
+def prelink(ctx, adreno_abi=None):
     """Produce out/<device>/kernel/kernel.macho from the XNU build and the original kernelcache."""
     spec = ctx.board.get('kernel', {}).get('prelink')
     if not spec:
@@ -321,8 +342,16 @@ def prelink(ctx):
     if not kernel.is_file():
         raise Error(f'{kernel} not found; run "unixnu build kernel" first')
     output = ctx.work / 'kernel/kernel.macho'
+    previous_record = output.with_suffix('.json')
+    # Re-prelinking preserves the recorded ABI only for the same native binary.
+    if adreno_abi is None and previous_record.is_file():
+        previous = json.loads(previous_record.read_text())
+        previous_abi = previous.get('adreno_abi_sha256')
+        native_sha = previous.get('inputs', {}).get('native_sha256', previous.get('native_sha256'))
+        if previous_abi and native_sha == sha256_file(kernel):
+            adreno_abi = previous_abi
     if getattr(ctx.args, 'skip_prelink', False):
-        return stage_native(kernel, output)
+        return stage_native(kernel, output, adreno_abi)
     log('kernel: prelink')
     cache = ctx.option('kernelcache', 'UNIXNU_KERNELCACHE') or (expand(ctx.tree / spec['kernelcache']) if spec.get('kernelcache') else None)
     if not cache:
@@ -367,6 +396,8 @@ def prelink(ctx):
             if record_path.is_file():
                 record = json.loads(record_path.read_text())
                 record['output'] = str(output.resolve())
+                if adreno_abi:
+                    record['adreno_abi_sha256'] = adreno_abi
                 if record.get('map') == str(candidate_map.resolve()):
                     record['map'] = str(saved_map.resolve())
                 record_path.write_text(json.dumps(record, indent=2) + '\n')
