@@ -6,6 +6,7 @@ arch:../../../patches/xnu-12377/darwin26-syscalls.patch
 arch:../../../patches/xnu-12377/darwin26-kpi.patch
 arch:../../../patches/xnu-12377/darwin26-shared-region.patch
 ../xnu-12377/macos-machine-config.patch
+../xnu-12377/macos-disable-ios-cs-enforcement.patch
 ../xnu-12377/macos-target-kernel.patch
 ../xnu-12377/macos-darwin26-kpi.patch
 ../xnu-12377/macos-owner-data-firmlinks.patch
