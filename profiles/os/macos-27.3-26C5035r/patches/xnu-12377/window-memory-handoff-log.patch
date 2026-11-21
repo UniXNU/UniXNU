@@ -86,12 +86,14 @@ index aad2778..fb308e9 100644
  
  __startup_func
  static void
-@@ -2362,6 +2386,10 @@ ml_adopt_outside_memory(void)
+@@ -2362,6 +2386,12 @@ ml_adopt_outside_memory(void)
  	ml_outside_memory_pages = adopted;
  	ml_outside_memory_refused = refused;
  	printf("memory outside the span: %u pages adopted, %u refused\n", adopted, refused);
 +	char text[256];
-+	if (unixnu_memory_handoff_log(text, sizeof(text)) != 0) {
++	uint32_t diagnostics = 0;
++	if (PE_parse_boot_argn("diag", &diagnostics, sizeof(diagnostics)) && diagnostics == 1 &&
++	    unixnu_memory_handoff_log(text, sizeof(text)) != 0) {
 +		printf("%s\n", text);
 +	}
  }
