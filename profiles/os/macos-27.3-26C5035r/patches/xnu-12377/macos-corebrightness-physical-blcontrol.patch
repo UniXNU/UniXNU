@@ -1,0 +1,24 @@
+--- a/bsd/kern/hvg_sysctl.c
++++ b/bsd/kern/hvg_sysctl.c
+@@ -28,6 +28,7 @@
+ 
+ #include <sys/sysctl.h>
+ #include <libkern/libkern.h>
++#include <sys/proc.h>
+ #include <kern/hvg_hypercall.h>
+ #include <stdbool.h>
+ 
+@@ -141,6 +142,13 @@ sysctl_vmm_present(__unused struct sysctl_oid *oidp,
+ #if defined(__arm64__)
+ 	extern int IODTGetDefault(const char *key, void *infoAddr, unsigned int infoSize );
+ 	(void) IODTGetDefault("vmm-present", &vmm_present, sizeof(vmm_present));
++	if (vmm_present) {
++		char procname[17] = {};
++		proc_selfname(procname, sizeof(procname));
++		if (strcmp(procname, "corebrightnessd") == 0) {
++			vmm_present = 0;
++		}
++	}
+ #elif defined(__x86_64__)
+ 	extern boolean_t cpuid_vmm_present(void);
+ 	vmm_present = cpuid_vmm_present();
