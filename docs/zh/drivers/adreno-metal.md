@@ -138,3 +138,5 @@ python3 scripts/check-native-metal-frontend-host.py
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。
 
 `python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` 将当前静态库、构建标识和组件源码打包，供 CI 复用。
+
+Darwin后端依据`NativeAdrenoParamsOwnedCoherent`枚举cached/coherent内存，与CPU映射模式保持一致。校准时间戳在原生GMU时钟探测成功后启用。DEBUG日志记录内存和时钟能力来源。本地一致性内存测试配置需要`gpu-owned-coherent=1`，渲染仍待实机验证。

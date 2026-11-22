@@ -156,3 +156,5 @@ With `gpu-trace=1`, kernel event 65 identifies the Metal device and command queu
 Detailed latency records identify slow encoder calls, callback invoke addresses and resource destruction. Kernel sampling of the render, encode and completion threads correlates upstream waits.
 
 With `diag=1`, encoding batch end records (type 14, phase 3) store encoding-thread CPU microseconds in field `d`. Compare this with paired start/end wall time to distinguish work from waits. `TUC` reports Turnip BO cache lookups, hits, inserts, evictions and full flushes.
+
+The Darwin backend selects cached-coherent memory only when the kernel advertises `NativeAdrenoParamsOwnedCoherent`, matching its CPU mapping mode. Calibrated timestamps use the native GMU timestamp ABI after a successful monotonic clock probe. DEBUG logs record both capability sources. The local coherent-memory test profile requires `gpu-owned-coherent=1`; device rendering remains to be qualified.
