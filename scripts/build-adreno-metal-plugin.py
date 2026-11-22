@@ -59,14 +59,14 @@ if turnip_profile.is_file():
     (resources / 'gpu-build.json').write_text(json.dumps(manifest, indent=2)+'\n')
 if not TURNIP.is_file():
     raise SystemExit('Build Turnip first: python3 scripts/build-turnip-darwin.py --target ' + args.target)
-subprocess.run(['python3', ROOT / 'scripts/gen-turnip-smoke-shaders.py'], check=True)
+subprocess.run([sys.executable, ROOT / 'scripts/gen-turnip-smoke-shaders.py'], check=True)
 # Turnip's first submission, recorded on the host, for the plugin's prefix replay (build/turnip-smoke/TurnipReplay.h).
 if args.no_replay:
     (ROOT / 'build/turnip-smoke/TurnipReplay.h').unlink(missing_ok=True)
 else:
-    subprocess.run(['python3', ROOT / 'scripts/gen-turnip-replay.py'], check=True)
+    subprocess.run([sys.executable, ROOT / 'scripts/gen-turnip-replay.py'], check=True)
 BRIDGE_TARGET = args.target
-bridge_command = ['python3', ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
+bridge_command = [sys.executable, ROOT / 'scripts/build-adreno-metal-bridge.py', '--target', BRIDGE_TARGET]
 if args.translator_source:
     bridge_command += ['--source', args.translator_source]
 if args.check_runtime_draws:
@@ -120,7 +120,7 @@ subprocess.run([*(['xcrun', 'clang++'] + base[2:]), '-std=c++17', '-fobjc-arc', 
                 *(['-F', f'{sdk}/System/Library/PrivateFrameworks', '-framework', 'IOGPU', '-framework', 'IOKit'] if MACOS else []), '-o', exe],
                check=True)
 if IOS27:
-    subprocess.run(['python3', ROOT / 'scripts/rust-pac-rewrite.py', exe, OUT / 'NativeAdrenoMetal.map', 'libadreno_metal_bridge_pac.a'],
+    subprocess.run([sys.executable, ROOT / 'scripts/rust-pac-rewrite.py', exe, OUT / 'NativeAdrenoMetal.map', 'libadreno_metal_bridge_pac.a'],
                    check=True)
 subprocess.run(['strip', '-x', exe], check=True)
 # The linker writes the debug symbols of the Rust bridge next to the executable; keep them beside the bundle, not in the image.

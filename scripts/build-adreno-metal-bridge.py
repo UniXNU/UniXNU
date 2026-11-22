@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -62,7 +63,7 @@ for patch in PATCHES[states.index(current):]:
     subprocess.run(['git', '-C', str(SOURCE), 'apply', str(patch)], check=True)
 if git_tree(['add', '-A']) != states[-1]:
     raise SystemExit('Translator patch result differs from its exact recorded source')
-subprocess.run(['python3', ROOT / 'scripts/check-metal-runtime-interface.py', '--source', SOURCE], check=True)
+subprocess.run([sys.executable, ROOT / 'scripts/check-metal-runtime-interface.py', '--source', SOURCE], check=True)
 out = ROOT / 'build/adreno-metal-bridge'
 out.mkdir(parents=True, exist_ok=True)
 llvm_as = next((p for p in ['/opt/homebrew/opt/llvm/bin/llvm-as', shutil.which('llvm-as') or ''] if p and Path(p).exists()), None)
