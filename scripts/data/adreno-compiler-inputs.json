@@ -69,7 +69,6 @@
     "patches/mesa/turnip-shaders-shared-across-pipeline-caches.patch",
     "patches/mesa/turnip-darwin-sweep-retired-on-cache-miss.patch",
     "patches/mesa/turnip-darwin-bo-finish-clears-under-lock.patch",
-    "patches/mesa/turnip-darwin-loss-origin.patch",
     "patches/mesa/turnip-darwin-runtime-capabilities.patch"
   ],
   "integer_fma_reference": {
