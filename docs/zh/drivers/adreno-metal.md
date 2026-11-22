@@ -18,6 +18,8 @@ python3 scripts/build-adreno-metal-bridge.py --target macos27 --check-only
 
 目前未接入 memoryless 纹理、YCbCr 和扩展范围转换、tile 管线、只读 no-copy 导入，以及需要外部 stage helper 的内核。这些路径返回错误。新版没有资源重叠查询接口，前端保留保守的依赖等待。
 
+完成图像由原生显示驱动提交。runtime 使用显式的非呈现实例接口，不要求 surface 和 swapchain 扩展，其余渲染与内存校验保留。DEBUG 的设备初始化失败原因写入 stderr 和 `timing.log`。
+
 ## 渲染和接口
 
 | 项目 | 当前行为 |

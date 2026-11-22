@@ -38,7 +38,8 @@ PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
     '0069-runtime-descriptor-index-reservations.patch',
     '0070-runtime-consumer-placement-leases.patch',
     '0071-runtime-consumer-readonly-cache.patch',
-    '0072-runtime-cache-publication-hook.patch']]
+    '0072-runtime-cache-publication-hook.patch',
+    '0073-runtime-nonpresenting-instance.patch']]
 
 
 def git_tree(*steps):

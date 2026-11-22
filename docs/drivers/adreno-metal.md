@@ -21,6 +21,11 @@ read-only no-copy imports and kernels requiring the external stage helper are
 not integrated. These paths report errors. The rewritten runtime has no resource
 overlap query; the frontend retains its conservative dependency wait.
 
+The native display driver presents completed images. Runtime initialization
+uses the explicit nonpresenting instance contract, which omits surface and
+swapchain requirements and retains all rendering and memory checks. DEBUG
+device-open failures include the full runtime reason in stderr and `timing.log`.
+
 ## Rendering and interfaces
 
 | Area | Behavior |
