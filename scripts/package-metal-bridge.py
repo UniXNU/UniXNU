@@ -39,7 +39,8 @@ def main():
                     for name in names:
                         if name and (COMPONENT / name).is_file():
                             package.add(COMPONENT / name, arcname='sources/AdrenoMetal/' + name)
-                    for name in ('scripts/build-adreno-metal-bridge.py', 'scripts/data/gpu-metal-vulkan-inputs.json'):
+                    for name in ('scripts/build-adreno-metal-bridge.py', 'scripts/check-metal-runtime-interface.py',
+                                 'scripts/data/gpu-metal-vulkan-inputs.json'):
                         package.add(ROOT / name, arcname='sources/UniXNU/' + name)
             finally:
                 compressor.stdin.close()

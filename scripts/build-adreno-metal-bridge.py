@@ -27,10 +27,11 @@ args = parser.parse_args()
 SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
+subprocess.run(['python3', ROOT / 'scripts/check-metal-runtime-interface.py', '--source', SOURCE], check=True)
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in [
-    '0063-main-optimizations-on-development-46e7cc96.patch',
-    '0064-copies-leave-unreachable-pages-alone.patch',
-    '0065-lower-bfloat-to-bool-with-flush-to-zero.patch']]
+    '0066-development-shader-corrections.patch',
+    '0067-runtime-loss-source-location.patch',
+    '0068-runtime-bounded-completion-wait.patch']]
 
 
 def git_tree(*steps):
