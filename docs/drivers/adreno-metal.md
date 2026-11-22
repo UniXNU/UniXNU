@@ -2,13 +2,32 @@
 
 AdrenoMetal publishes a Metal device through `MTLAddDevice`. It translates AIR through metal2vulkan, compiles SPIR-V with Turnip, and submits work to [Adreno740](/drivers/adreno740). Firmware, power votes and display integration come from the board.
 
+## Development runtime integration
+
+This branch selects the rewritten `development` runtime. Its source revision and
+checksums are in `scripts/data/gpu-metal-vulkan-inputs.json`; the bridge build
+applies the recorded patch sequence before checking interfaces.
+
+```sh
+python3 scripts/check-metal2vulkan-pin.py --latest
+python3 scripts/build-adreno-metal-bridge.py --target macos27 --check-only
+```
+
+The target check type-checks arm64e without linking a plugin or assembling an
+image. Previous-runtime device results do not qualify this integration.
+
+Memoryless textures, YCbCr and extended-range conversions, tile pipelines,
+read-only no-copy imports and kernels requiring the external stage helper are
+not integrated. These paths report errors. The rewritten runtime has no resource
+overlap query; the frontend retains its conservative dependency wait.
+
 ## Rendering and interfaces
 
 | Area | Behavior |
 | --- | --- |
 | MSAA policy | All clients use one sample for textures, pipelines and render passes by default. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves a process's requested sample counts; `1` forces single-sample rendering. |
 | Heap resources | Buffer and texture `makeAliasable` release their heap ranges. |
-| Texture layout | Creation, heap size queries and texture views retain the caller's `allowGPUOptimizedContents` setting. |
+| Texture layout | The frontend retains `allowGPUOptimizedContents` metadata. Runtime v2 does not expose a separate layout-policy option. |
 | Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
 | Copies and raster state | Blits cover the requested mip and slice ranges. Viewport and scissor setters forward every entry, up to 16. |
 | Compressed input | A zero-length no-copy compressed texture infers its DroidVM layout size and retains the owner's deallocator through use. |
@@ -23,9 +42,12 @@ A render pass that fails encoding returns an encoder and reports a command-buffe
 Uniform shader arrays span the aligned device uniform range limit. This covers the residual offset of a binding within a shared descriptor range. The compiler cache identity includes the array layout semantics.
 
 
-Unused owned image backing is reused by pooled and dedicated images. Extra spares have no byte limit, expire after ten seconds, and go sooner under memory pressure or when a new block cannot be made. Blocks are freed off the releasing thread on the runtime's free thread, and on the releasing thread once its queue is full. An allocation failure releases kept spares and waits for posted frees before retrying. Imported memory and owner callbacks keep their release ordering. First-use allocations can still prepare new pages.
-
-On macOS, the runtime checks caller page access before comparing or writing back copied no-copy buffers. When the pages are unavailable, it retains the copy.
+Small buffers share 64 KiB blocks with 256-byte placement alignment. Placement
+leases live until the runtime releases every GPU reference. The runtime expires
+idle allocations after 250 ms and retains at most one 16 MiB reserve per memory
+class. Imported writable memory keeps a stable Darwin VM alias until Vulkan
+releases the import. Reusing the caller's address does not replace the live
+import's pages.
 
 ## Native half arithmetic
 
@@ -47,9 +69,8 @@ The report lists policy defaults, Turnip options and each arithmetic gate's avai
 
 Clients with the same UID use `Library/Caches/org.unixnu.metal` under their account home when writable. Sandbox restrictions select a private cache. `NATIVE_METAL_SHARED_CACHE_DIR` selects another shared root; an empty value disables sharing. The cache covers Apple frontend output, runtime artifacts and Turnip IR3. Concurrent pack imports use distinct temporary files. Pipeline journals are per process.
 
-`metal-flow=<bits>` selects render work placement. Bit 1 uses the lowering worker and bit 2 submits directly from commit; macOS defaults to 3. iPadOS also supports bit 4 for warming earlier pipeline records and defaults to 7.
-
-Any value of `metal-flow=` logs the `FL` counts to os_log every ten seconds when they change.
+Submission placement follows the rewritten runtime's device checks. The old
+`metal-flow` mode selection and v1 `FL` counters are unavailable.
 
 Turnip chooses tile memory or system memory for each render pass, and concurrent binning is on. `tu-debug=<flags>` sets `TU_DEBUG` for every Metal process: `gmem` renders every pass in tile memory and `nocb` turns concurrent binning off. `tum=a` alternates between Turnip's choice and tile memory every eight seconds for measurement.
 
@@ -80,7 +101,11 @@ python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
 
 On iPadOS, the render server compiles the inventory while idle and reports progress through `PR`, `PRb` and `PRc`.
 
-`FP` reports grouped submissions and batches, command pools made and reused, linear passes rendered in place and through copies, and region pipelines evicted. `CM` reports commit calls and cumulative microseconds in total, lowering, recording, pipeline waits, lock waits, scheduler passes and submission. Compare counter differences within the same controlled workload.
+With `diag=1`, `MEM2` records live memory gauges and `RT2` records submissions,
+copies, pipeline creation, cache activity, allocations and first-use waits. The
+old runtime-v1 statistics queries report an unavailable schema. The bounded bridge
+ring records commit and completion events; it does not provide Vulkan submission
+timestamps. Detailed sampling stays off in release configurations.
 
 With `diag=1` or `gpu-trace=1`, the system cache also holds bounded `timing.log` (512 KiB) and `runtime-policy.log` (64 KiB). The timing log contains per-encoder timings and command buffers taking at least 8 ms. The policy log records the actual device policy, float controls and runtime path checks. Both files are included in sheng's diagnostic export.
 
@@ -113,7 +138,7 @@ python3 scripts/check-native-metal-frontend-host.py
 
 `NMB_PREBUILT_BRIDGE` selects a bridge archive metadata file. The builder checks its target, translator tree, component, wrapper, fixtures, manifest and archive digest against the selected sources before reuse. Source builds retain a two-hour Cargo budget. `python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` packages the current archive, its identity and tracked component sources for CI reuse.
 
-The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. Host checks cover rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Hardware qualification covers frame pacing and preemption under concurrent clients.
+The normal build applies the recorded translator and Turnip patches and enables Mesa's disk shader cache. The host check programs exercise rendered pixels, resolves, resource aliasing, swizzles, copies, callbacks, queue limits and priority aggregation. Rendering, memory use, recovery and pacing need new device qualification for this runtime.
 
 See the [GPU adaptation procedure](/porting/gpu) for staging and board inputs.
 

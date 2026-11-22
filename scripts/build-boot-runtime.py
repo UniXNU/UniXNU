@@ -102,7 +102,7 @@ def make_prime_list(request, work, os_root):
 def build_plugin(target):
     translator = json.loads((ROOT / 'scripts/data/gpu-metal-vulkan-inputs.json').read_text())['translator']
     checkout(ROOT / '.cache/gpu-reference/metal2vulkan', translator)
-    script('check-metal-runtime-interface.py')
+    script('build-adreno-metal-bridge.py', '--target', target, '--manifest-only')
     pins = json.loads((ROOT / 'scripts/data/adreno-compiler-inputs.json').read_text())
     mesa = ROOT / '.cache/mesa-work'
     fresh = checkout(mesa, pins['mesa'])

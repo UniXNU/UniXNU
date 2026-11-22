@@ -41,8 +41,10 @@ def required_roots(bridge):
                 name = item.strip().split(' as ')[0].split('::')[0]
                 if name:
                     required.setdefault(name, set()).add(path.name)
-        for name in re.findall(r'\bmetal2vulkan_runtime::(\w+)', text):
-            required.setdefault(name, set()).add(path.name)
+        aliases = {'metal2vulkan_runtime'} | set(re.findall(r'\buse\s+metal2vulkan_runtime\s+as\s+(\w+)', text))
+        for alias in aliases:
+            for name in re.findall(r'\b' + re.escape(alias) + r'::(\w+)', text):
+                required.setdefault(name, set()).add(path.name)
     return required
 
 
