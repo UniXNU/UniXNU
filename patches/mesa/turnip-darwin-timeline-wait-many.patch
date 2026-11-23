@@ -1,0 +1,453 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+index 081f003..7461d2d 100644
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -128,6 +128,17 @@ struct darwin_retire_state {
+    uint64_t cache_bytes, cache_stamp, cache_cleaned_s;
+    uint32_t pressure_seen;
+    struct darwin_bo_cache_stats cache_stats;
++   /* Timeline WAIT_ANY support (protected by dev->submit_mutex): avoids Mesa's busy-spin fallback
++    * when waiting on GPU timeline fences alongside host-signaled wake semaphores. */
++   uint64_t timeline_seq;
++   bool fence_watcher_started;
++   bool fence_watcher_stop;
++   bool fence_watcher_has_done;
++   uint32_t fence_watcher_target;
++   uint32_t fence_watcher_done;
++   pthread_t fence_watcher_thread;
++   pthread_cond_t fence_watcher_cond;
++   struct tu_device *fence_watcher_dev;
+ };
+ static struct darwin_retire_state *darwin_stats_state;   /* for tu_darwin_bo_cache_stats */
+ 
+@@ -1365,6 +1376,274 @@ vk_darwin_sync_wait(struct vk_device *_device, struct vk_sync *sync, uint64_t wa
+    return darwin_sync_wait(device, s, abs_timeout_ns);
+ }
+ 
++static inline struct timespec
++darwin_realtime_deadline(uint64_t abs_timeout_ns)
++{
++   struct timespec abstime;
++   uint64_t now = os_time_get_nano();
++   uint64_t relative = abs_timeout_ns > now ? abs_timeout_ns - now : 0;
++   clock_gettime(CLOCK_REALTIME, &abstime);
++   uint64_t nsec = (uint64_t)abstime.tv_nsec + relative % 1000000000ull;
++   abstime.tv_sec += relative / 1000000000ull + nsec / 1000000000ull;
++   abstime.tv_nsec = nsec % 1000000000ull;
++   return abstime;
++}
++
++static void *
++darwin_fence_watcher_main(void *arg)
++{
++   struct darwin_retire_state *retire = (struct darwin_retire_state *)arg;
++   struct tu_device *dev = retire->fence_watcher_dev;
++   pthread_mutex_lock(&dev->submit_mutex);
++   while (!retire->fence_watcher_stop) {
++      uint32_t target = retire->fence_watcher_target;
++      if (!target || (retire->fence_watcher_has_done &&
++                      (int32_t)(retire->fence_watcher_done - target) >= 0)) {
++         pthread_cond_wait(&retire->fence_watcher_cond, &dev->submit_mutex);
++         continue;
++      }
++      pthread_mutex_unlock(&dev->submit_mutex);
++      /* Sleep in kernel on GPU fence interrupt with a 50 ms slice so device teardown joins promptly. */
++      uint64_t slice_deadline = os_time_get_nano() + 50000000ull;
++      VkResult res = dw_wait_fence_locked_free(dev, target, slice_deadline);
++      pthread_mutex_lock(&dev->submit_mutex);
++      if (res == VK_SUCCESS) {
++         if (!retire->fence_watcher_has_done ||
++             (int32_t)(target - retire->fence_watcher_done) > 0) {
++            retire->fence_watcher_done = target;
++            retire->fence_watcher_has_done = true;
++         }
++         if (retire->fence_watcher_target == target)
++            retire->fence_watcher_target = 0;
++         retire->timeline_seq++;
++         pthread_cond_broadcast(&dev->timeline_cond);
++      } else if (res != VK_TIMEOUT) {
++         retire->fence_watcher_target = 0;
++         retire->timeline_seq++;
++         pthread_cond_broadcast(&dev->timeline_cond);
++         break;
++      }
++   }
++   pthread_mutex_unlock(&dev->submit_mutex);
++   return NULL;
++}
++
++static VkResult (*darwin_timeline_signal_orig)(struct vk_device *, struct vk_sync *, uint64_t);
++static VkResult (*darwin_timeline_wait_orig)(struct vk_device *, struct vk_sync *, uint64_t,
++                                             enum vk_sync_wait_flags, uint64_t);
++
++static void
++vk_darwin_timeline_notify(struct vk_device *_device)
++{
++   struct tu_device *dev = container_of(_device, struct tu_device, vk);
++   pthread_mutex_lock(&dev->submit_mutex);
++   struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
++   if (retire)
++      retire->timeline_seq++;
++   pthread_cond_broadcast(&dev->timeline_cond);
++   pthread_mutex_unlock(&dev->submit_mutex);
++}
++
++static VkResult
++vk_darwin_timeline_signal(struct vk_device *_device, struct vk_sync *sync, uint64_t value)
++{
++   VkResult res = darwin_timeline_signal_orig(_device, sync, value);
++   if (res == VK_SUCCESS)
++      vk_darwin_timeline_notify(_device);
++   return res;
++}
++
++static VkResult
++vk_darwin_timeline_wait_many(struct vk_device *_device, uint32_t wait_count,
++                             const struct vk_sync_wait *waits,
++                             enum vk_sync_wait_flags wait_flags, uint64_t abs_timeout_ns)
++{
++   struct tu_device *device = container_of(_device, struct tu_device, vk);
++   struct darwin_retire_state *retire = (struct darwin_retire_state *)device->darwin_retire;
++
++   if (!(wait_flags & VK_SYNC_WAIT_ANY) || wait_count <= 1 || !retire) {
++      for (uint32_t i = 0; i < wait_count; i++) {
++         VkResult result = darwin_timeline_wait_orig(_device, waits[i].sync, waits[i].wait_value,
++                                                     (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), abs_timeout_ns);
++         if (result != VK_SUCCESS)
++            return result;
++      }
++      return VK_SUCCESS;
++   }
++
++   for (;;) {
++      if (vk_device_is_lost(_device))
++         return VK_ERROR_DEVICE_LOST;
++
++      pthread_mutex_lock(&device->submit_mutex);
++      uint64_t seq = retire->timeline_seq;
++      bool has_done = retire->fence_watcher_has_done;
++      uint32_t done_fence = retire->fence_watcher_done;
++      pthread_mutex_unlock(&device->submit_mutex);
++
++      bool has_fence = false;
++      bool has_unsubmitted = false;
++      uint32_t min_fence = 0;
++      uint32_t fence_wait_index = 0;
++
++      for (uint32_t i = 0; i < wait_count; i++) {
++         if (waits[i].wait_value == 0)
++            return VK_SUCCESS;
++         struct vk_sync_timeline *tl = vk_sync_as_timeline(waits[i].sync);
++         if (!tl) {
++            VkResult r = darwin_timeline_wait_orig(_device, waits[i].sync, waits[i].wait_value,
++                                                   (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), 0);
++            if (r != VK_TIMEOUT)
++               return r;
++            has_unsubmitted = true;
++            continue;
++         }
++         struct vk_sync_timeline_state *state = tl->state;
++         bool ready_now = false;
++         bool check_fence_now = false;
++         bool found_fence = false;
++         uint32_t found_fence_val = 0;
++
++         mtx_lock(&state->mutex);
++         if (state->highest_past >= waits[i].wait_value) {
++            ready_now = true;
++         } else if ((wait_flags & VK_SYNC_WAIT_PENDING) &&
++                    state->highest_pending >= waits[i].wait_value) {
++            ready_now = true;
++         } else {
++            bool matched = false;
++            bool blocked_unsubmitted = false;
++            bool need_fence = false;
++            uint32_t max_fence = 0;
++            list_for_each_entry(struct vk_sync_timeline_point, pt, &state->pending_points, link) {
++               struct vk_darwin_sync *s = container_of(&pt->sync, struct vk_darwin_sync, vk);
++               enum darwin_sync_state st = (enum darwin_sync_state)p_atomic_read(&s->state);
++               if (st == DARWIN_SYNC_UNSIGNALED) {
++                  blocked_unsubmitted = true;
++               } else if (st == DARWIN_SYNC_FENCE) {
++                  if (!need_fence || (int32_t)(s->fence - max_fence) > 0) {
++                     max_fence = s->fence;
++                     need_fence = true;
++                  }
++               }
++               if (pt->value >= waits[i].wait_value) {
++                  matched = true;
++                  break;
++               }
++            }
++            if (!matched || blocked_unsubmitted) {
++               has_unsubmitted = true;
++            } else if (!need_fence) {
++               check_fence_now = true;
++            } else {
++               found_fence = true;
++               found_fence_val = max_fence;
++               if (has_done && (int32_t)(done_fence - found_fence_val) >= 0)
++                  check_fence_now = true;
++            }
++         }
++         mtx_unlock(&state->mutex);
++
++         if (ready_now)
++            return VK_SUCCESS;
++         if (check_fence_now) {
++            VkResult r = darwin_timeline_wait_orig(_device, waits[i].sync, waits[i].wait_value,
++                                                   (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), 0);
++            if (r != VK_TIMEOUT)
++               return r;
++         }
++         if (found_fence && (!has_fence || (int32_t)(found_fence_val - min_fence) < 0)) {
++            has_fence = true;
++            min_fence = found_fence_val;
++            fence_wait_index = i;
++         }
++      }
++
++      if (abs_timeout_ns == 0) {
++         if (has_fence) {
++            VkResult r = darwin_timeline_wait_orig(_device, waits[fence_wait_index].sync,
++                                                   waits[fence_wait_index].wait_value,
++                                                   (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), 0);
++            if (r != VK_TIMEOUT)
++               return r;
++         }
++         return VK_TIMEOUT;
++      }
++
++      if (abs_timeout_ns != UINT64_MAX && os_time_get_nano() >= abs_timeout_ns)
++         return VK_TIMEOUT;
++
++      if (has_fence && !has_unsubmitted) {
++         VkResult r = dw_wait_fence_locked_free(device, min_fence, abs_timeout_ns);
++         if (r == VK_SUCCESS) {
++            pthread_mutex_lock(&device->submit_mutex);
++            if (!retire->fence_watcher_has_done ||
++                (int32_t)(min_fence - retire->fence_watcher_done) > 0) {
++               retire->fence_watcher_done = min_fence;
++               retire->fence_watcher_has_done = true;
++            }
++            pthread_mutex_unlock(&device->submit_mutex);
++            continue;
++         }
++         return r;
++      }
++
++      pthread_mutex_lock(&device->submit_mutex);
++      if (retire->timeline_seq != seq) {
++         pthread_mutex_unlock(&device->submit_mutex);
++         continue;
++      }
++      if (has_fence) {
++         if (retire->fence_watcher_has_done &&
++             (int32_t)(retire->fence_watcher_done - min_fence) >= 0) {
++            pthread_mutex_unlock(&device->submit_mutex);
++            continue;
++         }
++         if (!retire->fence_watcher_started && !retire->fence_watcher_stop) {
++            if (pthread_create(&retire->fence_watcher_thread, NULL,
++                               darwin_fence_watcher_main, retire) == 0)
++               retire->fence_watcher_started = true;
++         }
++         if (retire->fence_watcher_started) {
++            if (!retire->fence_watcher_target ||
++                (int32_t)(min_fence - retire->fence_watcher_target) < 0) {
++               retire->fence_watcher_target = min_fence;
++               pthread_cond_signal(&retire->fence_watcher_cond);
++            }
++         } else {
++            /* Fallback if thread creation failed: wait one short interrupt-backed slice. */
++            pthread_mutex_unlock(&device->submit_mutex);
++            uint64_t slice = os_time_get_nano() + 1000000ull;
++            if (abs_timeout_ns < slice)
++               slice = abs_timeout_ns;
++            VkResult r = dw_wait_fence_locked_free(device, min_fence, slice);
++            if (r != VK_SUCCESS && r != VK_TIMEOUT)
++               return r;
++            continue;
++         }
++      }
++      if (abs_timeout_ns == UINT64_MAX) {
++         pthread_cond_wait(&device->timeline_cond, &device->submit_mutex);
++      } else {
++         struct timespec abstime = darwin_realtime_deadline(abs_timeout_ns);
++         int ret = pthread_cond_timedwait(&device->timeline_cond, &device->submit_mutex, &abstime);
++         if (ret == ETIMEDOUT) {
++            pthread_mutex_unlock(&device->submit_mutex);
++            /* Re-check once after timeout in case the fence finished right at the deadline. */
++            if (has_fence) {
++               VkResult r = darwin_timeline_wait_orig(_device, waits[fence_wait_index].sync,
++                                                      waits[fence_wait_index].wait_value,
++                                                      (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), 0);
++               if (r != VK_TIMEOUT)
++                  return r;
++            }
++            return VK_TIMEOUT;
++         }
++      }
++      pthread_mutex_unlock(&device->submit_mutex);
++   }
++}
++
+ static VkResult
+ vk_darwin_sync_wait_many(struct vk_device *_device, uint32_t wait_count,
+                          const struct vk_sync_wait *waits,
+@@ -1375,17 +1654,31 @@ vk_darwin_sync_wait_many(struct vk_device *_device, uint32_t wait_count,
+    if (wait_flags & VK_SYNC_WAIT_PENDING)
+       return VK_SUCCESS;
+ 
+-   if (wait_flags & VK_SYNC_WAIT_ANY) {
+-      /* Poll every sync in turn until one is done or the deadline passes. */
++   if ((wait_flags & VK_SYNC_WAIT_ANY) && wait_count > 1) {
+       for (;;) {
++         bool all_fences = true;
++         uint32_t min_fence = 0;
++         bool have_min = false;
+          for (uint32_t i = 0; i < wait_count; i++) {
+             struct vk_darwin_sync *s = container_of(waits[i].sync, struct vk_darwin_sync, vk);
+-            if (darwin_sync_wait(device, s, 0) == VK_SUCCESS ||
+-                (s->state == DARWIN_SYNC_FENCE &&
+-                 dw_wait_fence_locked_free(device, s->fence, 0) == VK_SUCCESS))
++            enum darwin_sync_state st = (enum darwin_sync_state)p_atomic_read(&s->state);
++            if (st == DARWIN_SYNC_SIGNALED)
+                return VK_SUCCESS;
++            if (st == DARWIN_SYNC_FENCE) {
++               if (!have_min || (int32_t)(s->fence - min_fence) < 0) {
++                  min_fence = s->fence;
++                  have_min = true;
++               }
++            } else {
++               all_fences = false;
++            }
+          }
+-         if (abs_timeout_ns != UINT64_MAX && os_time_get_nano() >= abs_timeout_ns)
++         if (all_fences && have_min)
++            return dw_wait_fence_locked_free(device, min_fence, abs_timeout_ns);
++         if (have_min && dw_wait_fence_locked_free(device, min_fence, 0) == VK_SUCCESS)
++            return VK_SUCCESS;
++         if (abs_timeout_ns == 0 ||
++             (abs_timeout_ns != UINT64_MAX && os_time_get_nano() >= abs_timeout_ns))
+             return VK_TIMEOUT;
+          usleep(200);
+       }
+@@ -1611,8 +1904,11 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+       struct vk_darwin_sync *s = container_of(signals[i].sync, struct vk_darwin_sync, vk);
+       tu_frame_event(43,(uintptr_t)submit,1,(uintptr_t)s,s->state,fence,signals[i].signal_value);
+       s->fence = fence;
+-      s->state = fence ? DARWIN_SYNC_FENCE : DARWIN_SYNC_SIGNALED;
++      p_atomic_set(&s->state, fence ? DARWIN_SYNC_FENCE : DARWIN_SYNC_SIGNALED);
+    }
++   if (dev->darwin_retire)
++      ((struct darwin_retire_state *)dev->darwin_retire)->timeline_seq++;
++   pthread_cond_broadcast(&dev->timeline_cond);
+ 
+    if (u_trace_submission_data)
+       u_trace_submission_data->gpu_ts_offset = 0;
+@@ -1642,6 +1938,13 @@ darwin_device_init(struct tu_device *dev)
+       dw_close_connection();
+       return vk_error(dev, VK_ERROR_INITIALIZATION_FAILED);
+    }
++   if (pthread_cond_init(&retire->fence_watcher_cond, NULL)) {
++      pthread_mutex_destroy(&retire->lock);
++      vk_free(&dev->vk.alloc, retire);
++      dw_close_connection();
++      return vk_error(dev, VK_ERROR_INITIALIZATION_FAILED);
++   }
++   retire->fence_watcher_dev = dev;
+    dev->darwin_retire = retire;
+    darwin_stats_state = retire;
+    darwin_watch_memory_pressure();
+@@ -1652,9 +1955,19 @@ darwin_device_init(struct tu_device *dev)
+ static void
+ darwin_device_finish(struct tu_device *dev)
+ {
++   struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
++   if (retire) {
++      pthread_mutex_lock(&dev->submit_mutex);
++      bool join_watcher = retire->fence_watcher_started;
++      retire->fence_watcher_stop = true;
++      pthread_cond_broadcast(&retire->fence_watcher_cond);
++      pthread_mutex_unlock(&dev->submit_mutex);
++      if (join_watcher)
++         pthread_join(retire->fence_watcher_thread, NULL);
++      pthread_cond_destroy(&retire->fence_watcher_cond);
++   }
+    /* Closing the connection makes the kernel drain the GPU and free every object this client created. */
+    dw_close_connection();
+-   struct darwin_retire_state *retire = (struct darwin_retire_state *)dev->darwin_retire;
+    if (retire) {
+       /* Some CreateDevice failure paths already destroyed the VMA heap/mutex.
+        * Never return ranges here: they are either gone or about to be destroyed. */
+@@ -1853,6 +2166,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
+       info->macrotile_mode ? FDL_MACROTILE_8_CHANNEL : FDL_MACROTILE_4_CHANNEL;
+ 
+    device->timeline_type = vk_sync_timeline_get_type(&vk_darwin_sync_type);
++   darwin_timeline_signal_orig = device->timeline_type.sync.signal;
++   darwin_timeline_wait_orig = device->timeline_type.sync.wait;
++   device->timeline_type.sync.signal = vk_darwin_timeline_signal;
++   device->timeline_type.sync.wait_many = vk_darwin_timeline_wait_many;
++   device->timeline_type.on_point_install = vk_darwin_timeline_notify;
+    device->sync_types[0] = &vk_darwin_sync_type;
+    device->sync_types[1] = &device->timeline_type.sync;
+    device->sync_types[2] = NULL;
+diff --git a/src/vulkan/runtime/vk_sync_timeline.c b/src/vulkan/runtime/vk_sync_timeline.c
+index 4df11d8..de80171 100644
+--- a/src/vulkan/runtime/vk_sync_timeline.c
++++ b/src/vulkan/runtime/vk_sync_timeline.c
+@@ -101,7 +101,7 @@ vk_sync_timeline_init(struct vk_device *device,
+    struct vk_sync_timeline_state *state;
+    int ret;
+ 
+-   ASSERTED const struct vk_sync_timeline_type *ttype =
++   const struct vk_sync_timeline_type *ttype =
+       container_of(timeline->sync.type, struct vk_sync_timeline_type, sync);
+    vk_sync_timeline_type_validate(ttype);
+ 
+@@ -124,6 +124,7 @@ vk_sync_timeline_init(struct vk_device *device,
+    }
+ 
+    state->highest_past = state->highest_pending = initial_value;
++   state->on_point_install = ttype->on_point_install;
+    list_inithead(&state->pending_points);
+    list_inithead(&state->free_points);
+ 
+@@ -393,9 +394,13 @@ vk_sync_timeline_point_install(struct vk_device *device,
+    list_addtail(&point->link, &state->pending_points);
+ 
+    int ret = u_cnd_monotonic_broadcast(&state->cond);
++   void (*on_point_install)(struct vk_device *device) = state->on_point_install;
+ 
+    mtx_unlock(&state->mutex);
+ 
++   if (on_point_install)
++      on_point_install(device);
++
+    if (ret == thrd_error)
+       return vk_errorf(device, VK_ERROR_UNKNOWN, "cnd_broadcast failed");
+ 
+diff --git a/src/vulkan/runtime/vk_sync_timeline.h b/src/vulkan/runtime/vk_sync_timeline.h
+index 50642ef..354ee24 100644
+--- a/src/vulkan/runtime/vk_sync_timeline.h
++++ b/src/vulkan/runtime/vk_sync_timeline.h
+@@ -39,6 +39,9 @@ struct vk_sync_timeline_type {
+ 
+    /* Type of each individual time point */
+    const struct vk_sync_type *point_sync_type;
++
++   /* Optional driver hook called after a new pending point is installed. */
++   void (*on_point_install)(struct vk_device *device);
+ };
+ 
+ struct vk_sync_timeline_type
+@@ -73,6 +76,8 @@ struct vk_sync_timeline_state {
+ 
+    struct list_head pending_points;
+    struct list_head free_points;
++
++   void (*on_point_install)(struct vk_device *device);
+ };
+ 
+ /** Implements a timeline vk_sync type on top of a binary vk_sync
