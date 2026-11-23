@@ -25,6 +25,8 @@ python3 scripts/build-adreno-metal-bridge.py --target macos27 --check-only
 | 项目 | 当前行为 |
 | --- | --- |
 | MSAA 策略 | 所有客户端的纹理、管线和渲染通道默认使用单采样。resolve 目标接收渲染结果，load 和 store-and-resolve 保留源内容。`NATIVE_METAL_SINGLE_SAMPLE=0` 让进程保留请求的采样数，`1` 强制单采样。 |
+| 间接资源 | 单个和批量 `useResource`、`useHeap` 声明将资源保留到 GPU 完成。计算和渲染屏障使用 runtime 的依赖跟踪。 |
+| 原生显示 | IOSurface 写入在最后一次驱动提交后通知已调度，显示 fence 快照因此包含当前帧；通知无需等待 GPU 执行完成。 |
 | Heap 资源 | buffer 和 texture 的 `makeAliasable` 归还 heap 区间。 |
 | 纹理布局 | 前端保留 `allowGPUOptimizedContents` 元数据，runtime v2 未提供独立的布局策略选项。 |
 | 纹理通道 | 纹理描述符和 view 保留全部四个 swizzle，包括显式零和一。 |

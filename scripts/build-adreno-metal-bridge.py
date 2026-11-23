@@ -31,7 +31,10 @@ if args.manifest_only and args.check_only:
 SOURCE = args.source.resolve()
 if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text=True).strip() != PIN:
     raise SystemExit('Translator revision differs from the qualified source pin')
-PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches/0073-runtime-nonpresenting-instance.patch']
+PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in (
+    '0073-runtime-nonpresenting-instance.patch',
+    '0077-native-presentation-scheduling.patch',
+)]
 
 
 def git_tree(*steps):

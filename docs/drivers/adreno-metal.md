@@ -31,6 +31,8 @@ device-open failures include the full runtime reason in stderr and `timing.log`.
 | Area | Behavior |
 | --- | --- |
 | MSAA policy | All clients use one sample for textures, pipelines and render passes by default. Resolve targets receive the rendered output; load and store-and-resolve preserve the source. `NATIVE_METAL_SINGLE_SAMPLE=0` preserves a process's requested sample counts; `1` forces single-sample rendering. |
+| Indirect resources | Single and batch `useResource` and `useHeap` declarations retain their owners through GPU completion. Compute and render barriers use the runtime hazard tracking. |
+| Native display | IOSurface writes publish scheduling after the final driver submission, so the display fence snapshot includes the current frame without waiting for GPU completion. |
 | Heap resources | Buffer and texture `makeAliasable` release their heap ranges. |
 | Texture layout | The frontend retains `allowGPUOptimizedContents` metadata. Runtime v2 does not expose a separate layout-policy option. |
 | Texture channels | Texture descriptors and views preserve all four swizzles, including explicit zero and one. |
