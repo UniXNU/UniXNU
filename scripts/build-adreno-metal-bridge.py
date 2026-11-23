@@ -34,6 +34,7 @@ if subprocess.check_output(['git', '-C', str(SOURCE), 'rev-parse', 'HEAD'], text
 PATCHES = [ROOT / 'drivers/AdrenoMetal/bridge/patches' / name for name in (
     '0073-runtime-nonpresenting-instance.patch',
     '0077-native-presentation-scheduling.patch',
+    '0078-runtime-read-only-host-import.patch',
 )]
 
 
