@@ -1,8 +1,8 @@
 diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
-index 081f003..7461d2d 100644
+index 081f003..be9c50e 100644
 --- a/src/freedreno/vulkan/tu_knl_darwin.cc
 +++ b/src/freedreno/vulkan/tu_knl_darwin.cc
-@@ -128,6 +128,17 @@ struct darwin_retire_state {
+@@ -128,6 +128,18 @@ struct darwin_retire_state {
     uint64_t cache_bytes, cache_stamp, cache_cleaned_s;
     uint32_t pressure_seen;
     struct darwin_bo_cache_stats cache_stats;
@@ -12,6 +12,7 @@ index 081f003..7461d2d 100644
 +   bool fence_watcher_started;
 +   bool fence_watcher_stop;
 +   bool fence_watcher_has_done;
++   VkResult fence_watcher_error;
 +   uint32_t fence_watcher_target;
 +   uint32_t fence_watcher_done;
 +   pthread_t fence_watcher_thread;
@@ -20,21 +21,33 @@ index 081f003..7461d2d 100644
  };
  static struct darwin_retire_state *darwin_stats_state;   /* for tu_darwin_bo_cache_stats */
  
-@@ -1365,6 +1376,274 @@ vk_darwin_sync_wait(struct vk_device *_device, struct vk_sync *sync, uint64_t wa
+@@ -1365,6 +1377,297 @@ vk_darwin_sync_wait(struct vk_device *_device, struct vk_sync *sync, uint64_t wa
     return darwin_sync_wait(device, s, abs_timeout_ns);
  }
  
-+static inline struct timespec
-+darwin_realtime_deadline(uint64_t abs_timeout_ns)
++static inline int
++darwin_cond_timedwait_mono(pthread_cond_t *cond, pthread_mutex_t *mutex, uint64_t abs_timeout_ns)
 +{
-+   struct timespec abstime;
 +   uint64_t now = os_time_get_nano();
-+   uint64_t relative = abs_timeout_ns > now ? abs_timeout_ns - now : 0;
++   if (abs_timeout_ns <= now)
++      return ETIMEDOUT;
++   uint64_t relative = abs_timeout_ns - now;
++   const uint64_t max_rel_ns = 3600ull * 1000000000ull;
++   if (relative > max_rel_ns)
++      relative = max_rel_ns;
++   struct timespec rel_ts;
++   rel_ts.tv_sec = (time_t)(relative / 1000000000ull);
++   rel_ts.tv_nsec = (long)(relative % 1000000000ull);
++#ifdef __APPLE__
++   return pthread_cond_timedwait_relative_np(cond, mutex, &rel_ts);
++#else
++   struct timespec abstime;
 +   clock_gettime(CLOCK_REALTIME, &abstime);
-+   uint64_t nsec = (uint64_t)abstime.tv_nsec + relative % 1000000000ull;
-+   abstime.tv_sec += relative / 1000000000ull + nsec / 1000000000ull;
-+   abstime.tv_nsec = nsec % 1000000000ull;
-+   return abstime;
++   uint64_t nsec = (uint64_t)abstime.tv_nsec + (uint64_t)rel_ts.tv_nsec;
++   abstime.tv_sec += rel_ts.tv_sec + (time_t)(nsec / 1000000000ull);
++   abstime.tv_nsec = (long)(nsec % 1000000000ull);
++   return pthread_cond_timedwait(cond, mutex, &abstime);
++#endif
 +}
 +
 +static void *
@@ -61,15 +74,18 @@ index 081f003..7461d2d 100644
 +            retire->fence_watcher_done = target;
 +            retire->fence_watcher_has_done = true;
 +         }
++         retire->fence_watcher_error = VK_SUCCESS;
 +         if (retire->fence_watcher_target == target)
 +            retire->fence_watcher_target = 0;
 +         retire->timeline_seq++;
 +         pthread_cond_broadcast(&dev->timeline_cond);
 +      } else if (res != VK_TIMEOUT) {
++         /* Keep the watcher alive until device teardown so fence_watcher_started stays accurate
++          * and future waits never strand; propagate the error immediately to waiting callers. */
++         retire->fence_watcher_error = res;
 +         retire->fence_watcher_target = 0;
 +         retire->timeline_seq++;
 +         pthread_cond_broadcast(&dev->timeline_cond);
-+         break;
 +      }
 +   }
 +   pthread_mutex_unlock(&dev->submit_mutex);
@@ -242,6 +258,15 @@ index 081f003..7461d2d 100644
 +         continue;
 +      }
 +      if (has_fence) {
++         if (retire->fence_watcher_error != VK_SUCCESS) {
++            VkResult watcher_err = retire->fence_watcher_error;
++            retire->fence_watcher_error = VK_SUCCESS;
++            pthread_mutex_unlock(&device->submit_mutex);
++            VkResult r = darwin_timeline_wait_orig(_device, waits[fence_wait_index].sync,
++                                                   waits[fence_wait_index].wait_value,
++                                                   (enum vk_sync_wait_flags)(wait_flags & ~VK_SYNC_WAIT_ANY), 0);
++            return r != VK_TIMEOUT ? r : watcher_err;
++         }
 +         if (retire->fence_watcher_has_done &&
 +             (int32_t)(retire->fence_watcher_done - min_fence) >= 0) {
 +            pthread_mutex_unlock(&device->submit_mutex);
@@ -273,9 +298,8 @@ index 081f003..7461d2d 100644
 +      if (abs_timeout_ns == UINT64_MAX) {
 +         pthread_cond_wait(&device->timeline_cond, &device->submit_mutex);
 +      } else {
-+         struct timespec abstime = darwin_realtime_deadline(abs_timeout_ns);
-+         int ret = pthread_cond_timedwait(&device->timeline_cond, &device->submit_mutex, &abstime);
-+         if (ret == ETIMEDOUT) {
++         int ret = darwin_cond_timedwait_mono(&device->timeline_cond, &device->submit_mutex, abs_timeout_ns);
++         if (ret == ETIMEDOUT && os_time_get_nano() >= abs_timeout_ns) {
 +            pthread_mutex_unlock(&device->submit_mutex);
 +            /* Re-check once after timeout in case the fence finished right at the deadline. */
 +            if (has_fence) {
@@ -295,7 +319,7 @@ index 081f003..7461d2d 100644
  static VkResult
  vk_darwin_sync_wait_many(struct vk_device *_device, uint32_t wait_count,
                           const struct vk_sync_wait *waits,
-@@ -1375,17 +1654,31 @@ vk_darwin_sync_wait_many(struct vk_device *_device, uint32_t wait_count,
+@@ -1375,17 +1678,31 @@ vk_darwin_sync_wait_many(struct vk_device *_device, uint32_t wait_count,
     if (wait_flags & VK_SYNC_WAIT_PENDING)
        return VK_SUCCESS;
  
@@ -333,7 +357,7 @@ index 081f003..7461d2d 100644
              return VK_TIMEOUT;
           usleep(200);
        }
-@@ -1611,8 +1904,11 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
+@@ -1611,8 +1928,11 @@ darwin_queue_submit(struct tu_queue *queue, void *_submit,
        struct vk_darwin_sync *s = container_of(signals[i].sync, struct vk_darwin_sync, vk);
        tu_frame_event(43,(uintptr_t)submit,1,(uintptr_t)s,s->state,fence,signals[i].signal_value);
        s->fence = fence;
@@ -346,7 +370,7 @@ index 081f003..7461d2d 100644
  
     if (u_trace_submission_data)
        u_trace_submission_data->gpu_ts_offset = 0;
-@@ -1642,6 +1938,13 @@ darwin_device_init(struct tu_device *dev)
+@@ -1642,6 +1962,13 @@ darwin_device_init(struct tu_device *dev)
        dw_close_connection();
        return vk_error(dev, VK_ERROR_INITIALIZATION_FAILED);
     }
@@ -360,7 +384,7 @@ index 081f003..7461d2d 100644
     dev->darwin_retire = retire;
     darwin_stats_state = retire;
     darwin_watch_memory_pressure();
-@@ -1652,9 +1955,19 @@ darwin_device_init(struct tu_device *dev)
+@@ -1652,9 +1979,19 @@ darwin_device_init(struct tu_device *dev)
  static void
  darwin_device_finish(struct tu_device *dev)
  {
@@ -381,7 +405,7 @@ index 081f003..7461d2d 100644
     if (retire) {
        /* Some CreateDevice failure paths already destroyed the VMA heap/mutex.
         * Never return ranges here: they are either gone or about to be destroyed. */
-@@ -1853,6 +2166,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
+@@ -1853,6 +2190,11 @@ tu_knl_darwin_load(struct tu_instance *instance)
        info->macrotile_mode ? FDL_MACROTILE_8_CHANNEL : FDL_MACROTILE_4_CHANNEL;
  
     device->timeline_type = vk_sync_timeline_get_type(&vk_darwin_sync_type);
