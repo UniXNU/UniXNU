@@ -83,6 +83,9 @@ assemble_fixture(SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel
 # The GPU scanout's half-float conversion kernel (GpuScanoutPresenter.h), hand-written AIR.
 scanout_air = out / 'scanout_convert.air'
 assemble_fixture(ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll', scanout_air)
+# Two-plane YCbCr IOSurface conversion kernel (NativeMetalYCbCr.rs).
+ycbcr_air = out / 'ycbcr_convert.air'
+assemble_fixture(ROOT / 'drivers/AdrenoMetal/shaders/ycbcr_convert.ll', ycbcr_air)
 manifest = out / 'Cargo.toml'
 manifest.write_text('\n'.join([
     '[package]', 'name = "adreno-metal-bridge"', 'version = "0.1.0"', 'edition = "2024"', 'rust-version = "1.98"', '[workspace]',
@@ -121,10 +124,11 @@ identity = dict(target=args.target, translator=PIN, source_tree=states[-1], comp
                     **{str(path.relative_to(ROOT)): path for path in sorted((ROOT / 'drivers/AdrenoMetal/bridge').glob('*.rs'))},
                     'runtime_examples': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/examples/runtime_examples.ll',
                     'function_constant': SOURCE / 'crates/metal2vulkan-validation/fixtures/public/kernel_function_constant_gate_fold.ll',
-                    'scanout': ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll'}.items()})
+                    'scanout': ROOT / 'drivers/AdrenoMetal/shaders/scanout_convert.ll',
+                    'ycbcr': ROOT / 'drivers/AdrenoMetal/shaders/ycbcr_convert.ll'}.items()})
 final = out / args.target / 'libadreno_metal_bridge.a'
 final.parent.mkdir(exist_ok=True)
-env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
+env = dict(os.environ, NMB_COMPONENT_ID=component_id, NMB_RUNTIME_ID=runtime_id, NMB_FIXTURE_AIR=str(air), NMB_FC_AIR=str(fc_air), NMB_SCANOUT_AIR=str(scanout_air), NMB_YCBCR_AIR=str(ycbcr_air), IPHONEOS_DEPLOYMENT_TARGET='27.0' if args.target == 'ios27' else '17.0', MACOSX_DEPLOYMENT_TARGET='27.0' if args.target == 'macos27' else '14.0')
 if ARM64E:
     env['RUSTC_BOOTSTRAP'] = '1'
 if args.check_only:
