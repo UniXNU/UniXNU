@@ -664,6 +664,52 @@ ErrorBodyScale (
   return MAX ((UINTN)1, (FooterScale (Ui) + 1) / 2);
 }
 
+STATIC
+UINTN
+Line1ClearHeight (
+  IN UNIXNU_UI  *Ui
+  )
+{
+  return UNIXNU_OC_GLYPH_HEIGHT * Ui->Scale + FooterScale (Ui) * 2;
+}
+
+STATIC
+UINTN
+Line2Offset (
+  IN UNIXNU_UI  *Ui
+  )
+{
+  return UNIXNU_OC_GLYPH_HEIGHT * Ui->Scale + UNIXNU_OC_GLYPH_HEIGHT * FooterScale (Ui);
+}
+
+STATIC
+UINTN
+Line2ClearHeight (
+  IN UNIXNU_UI  *Ui
+  )
+{
+  UINTN  Fs;
+  UINTN  Fch;
+  UINTN  BodyH;
+
+  Fs    = FooterScale (Ui);
+  Fch   = UNIXNU_OC_GLYPH_HEIGHT * Fs;
+  BodyH = UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui);
+  return MAX (Fch, BodyH) + Fs * 2;
+}
+
+STATIC
+UINTN
+ExtraInfoOffset (
+  IN UNIXNU_UI  *Ui
+  )
+{
+  UINTN  Fch;
+
+  Fch = UNIXNU_OC_GLYPH_HEIGHT * FooterScale (Ui);
+  return Line2Offset (Ui) + Line2ClearHeight (Ui) + Fch / 2;
+}
+
 //
 // Draw the compact all-white uniXNU pixel wordmark at (X0, Y).
 // Returns rendered height in pixels.
@@ -881,7 +927,9 @@ DrawStatusSubtitle (
   )
 {
   UINTN                          Ch;
+  UINTN                          BaseScale;
   UINTN                          BaseCh;
+  UINTN                          ClearH;
   UINTN                          Scale;
   UINTN                          Y;
   UINTN                          AreaLeft;
@@ -895,25 +943,36 @@ DrawStatusSubtitle (
   CHAR16                         Fit[TEXT_FIT_MAX + 1];
   EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Color;
 
-  Scale     = Ui->Portrait ? FooterScale (Ui) : Ui->Scale;
-  BaseCh    = UNIXNU_OC_GLYPH_HEIGHT * Scale;
+  BaseScale = Ui->Portrait ? FooterScale (Ui) : Ui->Scale;
+  Scale     = BaseScale;
+  BaseCh    = UNIXNU_OC_GLYPH_HEIGHT * BaseScale;
   AreaLeft  = Ui->StatusLeft;
   AreaWidth = Ui->StatusWidth;
 
   //
-  // Clear only the status slot so the top-left uniXNU wordmark stays intact.
+  // Clear only the status slot so the top-left uniXNU wordmark and the top of
+  // the menu card stay intact.
   //
-  FillRect (Ui, AreaLeft, Ui->StatusTop, AreaWidth, BaseCh + Scale * 2, mBackground);
+  ClearH = BaseCh + BaseScale * 2;
+  if ((Ui->CardTop > Ui->StatusTop) && (ClearH > Ui->CardTop - Ui->StatusTop)) {
+    ClearH = Ui->CardTop - Ui->StatusTop;
+  }
+
+  FillRect (Ui, AreaLeft, Ui->StatusTop, AreaWidth, ClearH, mBackground);
   if ((Text[0] == L'\0') || (AreaWidth == 0)) {
     return;
   }
 
   //
-  // Shrink to footer scale automatically if a long confirmation prompt exceeds
-  // the right-hand header slot width.
+  // Shrink scale automatically if a long confirmation prompt or status exceeds
+  // the available header slot width.
   //
   if (!Ui->Portrait && (MeasureText (Text, Scale) > AreaWidth)) {
     Scale = FooterScale (Ui);
+  }
+
+  while ((Scale > 1) && (MeasureText (Text, Scale) > AreaWidth)) {
+    Scale--;
   }
 
   Ch = UNIXNU_OC_GLYPH_HEIGHT * Scale;
@@ -994,6 +1053,8 @@ UniXNUUiOcLikeDrawFrame (
   UINTN   WordBlock;
   UINTN   LogoW;
   UINTN   LogoH;
+  UINTN   HeaderH;
+  UINTN   LogoY;
   UINTN   PadTop;
   UINTN   PadBot;
   UINTN   MetaH;
@@ -1003,13 +1064,18 @@ UniXNUUiOcLikeDrawFrame (
   UINTN   CardGap;
   UINTN   FootGap;
   UINTN   Status0H;
+  UINTN   BodyH;
   UINTN   FooterBlockH;
+  UINTN   VerReserve;
+  UINTN   VerY;
+  UINTN   FixedH;
   UINTN   TotalH;
   UINTN   TopY;
   UINTN   CardY;
   UINTN   MetaY;
   UINTN   InnerX;
   UINTN   InnerW;
+  UINTN   UefiW;
   UINTN   X;
   UINTN   MaxRows;
   UINTN   ExtraY;
@@ -1061,6 +1127,7 @@ UniXNUUiOcLikeDrawFrame (
   WordBlock    = MAX ((UINTN)2, CardW / (WORDMARK_COLS * 5));
   LogoW        = Config->ShowLogo ? (WORDMARK_COLS * WordBlock) : MeasureText (Config->Title, Ui->Scale);
   LogoH        = Config->ShowLogo ? (WORDMARK_ROWS * WordBlock) : Ch;
+  HeaderH      = Ui->Portrait ? LogoH : MAX (LogoH, Ch);
   SubGap       = Ui->Portrait ? (Fch / 2) : 0;
   Status0H     = Ui->Portrait ? Fch : 0;
   CardGap      = Ch / 2 + Ui->Scale * 3;
@@ -1068,13 +1135,17 @@ UniXNUUiOcLikeDrawFrame (
   PadBot       = Ch / 2 + Ui->Scale * 3;
   MetaH        = Fch + Ui->Scale * 2;
   FootGap      = Fch;
-  FooterBlockH = Fch * 4;
+  BodyH        = UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui);
+  FooterBlockH = ExtraInfoOffset (Ui) + BodyH + Fch;
+  VerReserve   = Fch * 2;
+  VerY         = (Ui->Height > VerReserve) ? (Ui->Height - VerReserve) : Ui->Height;
 
   //
   // Determine how many entry rows fit comfortably inside the vertical budget.
   //
-  if (Ui->Height > LogoH + SubGap + Status0H + CardGap + PadTop + PadBot + MetaH + FootGap + FooterBlockH + Ch * 2) {
-    MaxRows = (Ui->Height - (LogoH + SubGap + Status0H + CardGap + PadTop + PadBot + MetaH + FootGap + FooterBlockH + Ch * 2)) / Ui->RowHeight;
+  FixedH = HeaderH + SubGap + Status0H + CardGap + PadTop + Ui->Scale * 5 + MetaH + PadBot + FootGap + FooterBlockH + VerReserve;
+  if (Ui->Height > FixedH + Ch) {
+    MaxRows = (Ui->Height - FixedH - Ch) / Ui->RowHeight;
   } else {
     MaxRows = 1;
   }
@@ -1083,16 +1154,17 @@ UniXNUUiOcLikeDrawFrame (
   CardH           = PadTop + Ui->VisibleRows * Ui->RowHeight + Ui->Scale * 5 + MetaH + PadBot;
   Ui->CardHeight  = CardH;
 
-  TotalH = LogoH + SubGap + Status0H + CardGap + CardH + FootGap + FooterBlockH;
-  TopY   = (Ui->Height > TotalH) ? (Ui->Height - TotalH) / 2 : Ch;
+  TotalH = HeaderH + SubGap + Status0H + CardGap + CardH + FootGap + FooterBlockH;
+  TopY   = (Ui->Height > TotalH + VerReserve) ? ((Ui->Height - VerReserve - TotalH) / 2) : Ch;
+  LogoY  = Ui->Portrait ? TopY : (TopY + HeaderH - LogoH);
 
   //
   // 1. Compact all-white uniXNU wordmark at top-left of the menu card.
   //
   if (Config->ShowLogo) {
-    DrawWordmarkAt (Ui, Ui->MenuLeft, TopY, WordBlock);
+    DrawWordmarkAt (Ui, Ui->MenuLeft, LogoY, WordBlock);
   } else {
-    DrawText (Ui, Ui->MenuLeft, TopY, Config->Title, Ui->Scale, mLogoWhite, mBackground, CardW / 2);
+    DrawText (Ui, Ui->MenuLeft, LogoY, Config->Title, Ui->Scale, mLogoWhite, mBackground, CardW / 2);
   }
 
   //
@@ -1100,15 +1172,15 @@ UniXNUUiOcLikeDrawFrame (
   // directly beneath the logo (portrait).
   //
   if (Ui->Portrait) {
-    Ui->StatusTop   = TopY + LogoH + SubGap;
+    Ui->StatusTop   = TopY + HeaderH + SubGap;
     Ui->StatusLeft  = Ui->MenuLeft;
     Ui->StatusWidth = CardW;
     CardY           = Ui->StatusTop + Status0H + CardGap;
   } else {
-    Ui->StatusTop   = (LogoH > Ch) ? (TopY + LogoH - Ch) : TopY;
+    Ui->StatusTop   = TopY + HeaderH - Ch;
     Ui->StatusLeft  = Ui->MenuLeft + LogoW + Cw;
     Ui->StatusWidth = (CardW > LogoW + Cw) ? (CardW - LogoW - Cw) : 0;
-    CardY           = TopY + LogoH + CardGap;
+    CardY           = TopY + HeaderH + CardGap;
   }
 
   //
@@ -1144,15 +1216,19 @@ UniXNUUiOcLikeDrawFrame (
       DrawText (Ui, X, MetaY, ResBuf, Fs, mDim, mSurface, 0);
     }
   } else if (InnerW > 12 * Fcw) {
-    UnicodeSPrint (ResBuf, sizeof (ResBuf), L"  %ux%u", Ui->Width, Ui->Height);
-    DrawText (Ui, X, MetaY, ResBuf, Fs, mDim, mSurface, InnerW - (X - InnerX) - MeasureText (L"UEFI", Fs) - 2 * Fcw);
+    UefiW = MeasureText (L"UEFI", Fs);
+    if (InnerW > (X - InnerX) + UefiW + 2 * Fcw) {
+      UnicodeSPrint (ResBuf, sizeof (ResBuf), L"  %ux%u", Ui->Width, Ui->Height);
+      DrawText (Ui, X, MetaY, ResBuf, Fs, mDim, mSurface, InnerW - (X - InnerX) - UefiW - 2 * Fcw);
+    }
   }
 
   //
   // Right-aligned warm amber badge ("UEFI") inside the card footer, matching OpenCode.
   //
-  if (InnerW > MeasureText (L"UEFI", Fs) + 2 * Fcw) {
-    DrawText (Ui, InnerX + InnerW - MeasureText (L"UEFI", Fs), MetaY, L"UEFI", Fs, mAmber, mSurface, 0);
+  UefiW = MeasureText (L"UEFI", Fs);
+  if (InnerW > UefiW + 2 * Fcw) {
+    DrawText (Ui, InnerX + InnerW - UefiW, MetaY, L"UEFI", Fs, mAmber, mSurface, 0);
   }
 
   //
@@ -1174,7 +1250,7 @@ UniXNUUiOcLikeDrawFrame (
   //
   // Error / Notice / Info lines below status line 2.
   //
-  ExtraY = Ui->FooterTop + 2 * (Fch + Fch / 2);
+  ExtraY  = Ui->FooterTop + ExtraInfoOffset (Ui);
   Line[0] = L'\0';
   if (Config->Error[0] != '\0') {
     UnicodeSPrint (Line, sizeof (Line), L"config error: %a", Config->Error);
@@ -1182,12 +1258,12 @@ UniXNUUiOcLikeDrawFrame (
     UnicodeSPrint (Line, sizeof (Line), L"%a", Config->Notice);
   }
 
-  if ((Line[0] != L'\0') && (ExtraY + UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui) < Ui->Height)) {
+  if ((Line[0] != L'\0') && (ExtraY + BodyH + Fch <= VerY)) {
     DrawBodyCenteredIn (Ui, Ui->MenuLeft, CardW, ExtraY, Line, ErrorBodyScale (Ui), mError, mBackground);
-    ExtraY += UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui) + Fch / 2;
+    ExtraY += BodyH + Fch / 2;
   }
 
-  if ((Ui->Info[0] != L'\0') && (ExtraY + UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui) < Ui->Height)) {
+  if ((Ui->Info[0] != L'\0') && (ExtraY + BodyH + Fch <= VerY)) {
     DrawBodyCenteredIn (Ui, Ui->MenuLeft, CardW, ExtraY, Ui->Info, ErrorBodyScale (Ui), mDim, mBackground);
   }
 
@@ -1195,11 +1271,11 @@ UniXNUUiOcLikeDrawFrame (
   // 5. Subtle version string tucked in the bottom-right corner (matching OpenCode).
   //
   UnicodeSPrint (VerBuf, sizeof (VerBuf), L"%a", UNIXNU_VERSION_STRING);
-  if ((Ui->Width > MeasureText (VerBuf, Fs) + 2 * Fcw) && (Ui->Height > Fch * 2)) {
+  if ((Ui->Width > MeasureText (VerBuf, Fs) + 2 * Fcw) && (Ui->Height > VerReserve)) {
     DrawText (
       Ui,
       Ui->Width - MeasureText (VerBuf, Fs) - 2 * Fcw,
-      Ui->Height - Fch - Fch,
+      VerY,
       VerBuf,
       Fs,
       mDim,
@@ -1301,7 +1377,10 @@ UniXNUUiOcLikeDrawStatus (
 {
   UINTN   Fs;
   UINTN   Fcw;
-  UINTN   Fch;
+  UINTN   ClearH;
+  UINTN   ChoiceScale;
+  UINTN   ChoiceH;
+  UINTN   Ch;
   UINTN   Y;
   UINTN   RightLeft;
   UINTN   RightW;
@@ -1322,11 +1401,11 @@ UniXNUUiOcLikeDrawStatus (
 
   Fs  = FooterScale (Ui);
   Fcw = UNIXNU_OC_GLYPH_WIDTH * Fs;
-  Fch = UNIXNU_OC_GLYPH_HEIGHT * Fs;
 
   if (Line == 1) {
-    Y = Ui->FooterTop;
-    FillRect (Ui, 0, Y, Ui->Width, Fch + Fs * 2, mBackground);
+    Y      = Ui->FooterTop;
+    ClearH = Line1ClearHeight (Ui);
+    FillRect (Ui, 0, Y, Ui->Width, ClearH, mBackground);
     if (!Ui->Portrait && (Text[0] != L'\0') && (Text[0] != L'<')) {
       //
       // Landscape OpenCode footer: SourceLabel on left, two-tone keybinds on right.
@@ -1339,7 +1418,7 @@ UniXNUUiOcLikeDrawStatus (
         //
         // Fall back to full-width centered two-tone or plain text if hints are wider than 2/3 card.
         //
-        FillRect (Ui, 0, Y, Ui->Width, Fch + Fs * 2, mBackground);
+        FillRect (Ui, 0, Y, Ui->Width, ClearH, mBackground);
         if (!DrawKeybindLine (Ui, Ui->MenuLeft, Ui->MenuWidth, Y, Text, Fs, FALSE)) {
           DrawCenteredIn (Ui, Ui->MenuLeft, Ui->MenuWidth, Y, Text, Fs, mDim, mBackground);
         }
@@ -1348,7 +1427,14 @@ UniXNUUiOcLikeDrawStatus (
       //
       // Confirmation choice selector ("<  Cancel  >").
       //
-      DrawCenteredIn (Ui, Ui->MenuLeft, Ui->MenuWidth, Y, Text, Ui->Scale, mAmber, mBackground);
+      Ch          = UNIXNU_OC_GLYPH_HEIGHT * Ui->Scale;
+      ChoiceScale = Ui->Scale;
+      while ((ChoiceScale > Fs) && (MeasureText (Text, ChoiceScale) > Ui->MenuWidth)) {
+        ChoiceScale--;
+      }
+
+      ChoiceH = UNIXNU_OC_GLYPH_HEIGHT * ChoiceScale;
+      DrawCenteredIn (Ui, Ui->MenuLeft, Ui->MenuWidth, Y + (Ch - ChoiceH) / 2, Text, ChoiceScale, mAmber, mBackground);
     } else if (Text[0] != L'\0') {
       if (!DrawKeybindLine (Ui, Ui->MenuLeft, Ui->MenuWidth, Y, Text, Fs, FALSE)) {
         DrawCenteredIn (Ui, Ui->MenuLeft, Ui->MenuWidth, Y, Text, Fs, mDim, mBackground);
@@ -1361,8 +1447,8 @@ UniXNUUiOcLikeDrawStatus (
   //
   // Line == 2: secondary notice/error (case-sensitive Spleen 8x16) or key hints.
   //
-  Y = Ui->FooterTop + Fch + Fch / 2;
-  FillRect (Ui, 0, Y, Ui->Width, MAX (Fch + Fs * 2, UNIXNU_OC_BODY_GLYPH_HEIGHT * ErrorBodyScale (Ui) + 2), mBackground);
+  Y = Ui->FooterTop + Line2Offset (Ui);
+  FillRect (Ui, 0, Y, Ui->Width, Line2ClearHeight (Ui), mBackground);
   if (Text[0] == L'\0') {
     return;
   }
