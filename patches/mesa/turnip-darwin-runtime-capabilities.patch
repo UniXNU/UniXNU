@@ -1,0 +1,40 @@
+diff --git a/src/freedreno/vulkan/tu_knl_darwin.cc b/src/freedreno/vulkan/tu_knl_darwin.cc
+--- a/src/freedreno/vulkan/tu_knl_darwin.cc
++++ b/src/freedreno/vulkan/tu_knl_darwin.cc
+@@ -1882,7 +1882,8 @@
+    device->has_raytracing = false;
+    device->has_preemption = false;
+    device->is_perf_cntr_selectable = false;
+-   device->has_cached_coherent_memory = !!(info->flags & NativeAdrenoDeviceCachedCoherent);
++   /* The CPU view and the kernel's owned mappings must use the same ABI contract. */
++   device->has_cached_coherent_memory = !!(dw.params.flags & NativeAdrenoParamsOwnedCoherent);
+    device->has_host_import = !!(dw.params.flags & NativeAdrenoParamsHostImport);
+    device->submitqueue_priority_count = 1;
+ 
+@@ -1903,6 +1904,26 @@
+    instance->knl = &darwin_knl_funcs;
+ 
+    result = tu_physical_device_init(device, instance);
++   if (result == VK_SUCCESS) {
++      /* NativeAdreno holds the GMU resident while the service is running. Its
++       * timestamp ABI reads that clock directly; the generic chip table instead
++       * describes CP counter persistence across Linux runtime suspend. */
++      NativeAdrenoAbiTimestamp first = {}, second = {};
++      const kern_return_t first_status = dw_call(NativeAdrenoMethodGetTimestamp,
++         NULL, 0, &first, sizeof(first));
++      const kern_return_t second_status = dw_call(NativeAdrenoMethodGetTimestamp,
++         NULL, 0, &second, sizeof(second));
++      const bool clock_available = first_status == KERN_SUCCESS &&
++         second_status == KERN_SUCCESS && first.ticks != 0 && second.ticks >= first.ticks;
++      device->vk.supported_extensions.KHR_calibrated_timestamps = clock_available;
++      device->vk.supported_extensions.EXT_calibrated_timestamps = clock_available;
++      if (getenv("SHENG_DIAG") && !strcmp(getenv("SHENG_DIAG"), "1")) {
++         mesa_logi("NativeAdreno contract: device_flags=0x%x params_flags=0x%x cached_coherent=%u clock_status=0x%x/0x%x ticks=%llu/%llu calibrated=%u",
++            info->flags, dw.params.flags, device->has_cached_coherent_memory,
++            first_status, second_status, (unsigned long long)first.ticks,
++            (unsigned long long)second.ticks, clock_available);
++      }
++   }
+    /* The enumeration probe only needed the facts; the device takes the slot again in device_init. */
+    dw_close_connection();
+    if (result != VK_SUCCESS) {
