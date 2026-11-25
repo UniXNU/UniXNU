@@ -37,7 +37,8 @@ def pad(data):
 
 def main():
     no_daemon = '--no-daemon' in sys.argv[1:]
-    args = [a for a in sys.argv[1:] if a not in ('--publish', '--no-daemon')]
+    allow_no_shader_cache = '--allow-no-shader-cache' in sys.argv[1:]
+    args = [a for a in sys.argv[1:] if a not in ('--publish', '--no-daemon', '--allow-no-shader-cache')]
     publish = '--publish' in sys.argv[1:]
     wallpaper = None
     floating = None
@@ -90,7 +91,8 @@ def main():
         sys.exit('Build the plugin first: python3 scripts/build-adreno-metal-plugin.py')
     files = []
     for path in sorted(p for p in BUNDLE.rglob('*') if p.is_file()):
-        mode = 0o755 if path.name in ('NativeAdrenoMetal', 'libvulkan_freedreno.dylib') else 0o644
+        is_macos_bin = path.parent.name == 'MacOS' or path.suffix == '.dylib'
+        mode = 0o755 if (path.name in ('NativeAdrenoMetal', 'libvulkan_freedreno.dylib') or is_macos_bin) else 0o644
         files.append((f'{prefix}/NativeAdrenoMetal.bundle/' + path.relative_to(BUNDLE).as_posix(), mode, path.read_bytes()))
     if publish:
         files.append((f'{prefix}/NativeAdrenoMetal.publish', 0o644, b'1\n'))
@@ -99,7 +101,12 @@ def main():
     if prefix == 'GPUBundles':
         application = PLUGIN / 'Shader Cache.app'
         if not application.is_dir():
-            sys.exit('Build the macOS Shader Cache app with the matching plugin')
+            if not allow_no_shader_cache:
+                sys.exit('Build the macOS Shader Cache app with the matching plugin')
+            application = None
+    else:
+        application = None
+    if application is not None:
         for path in sorted(p for p in application.rglob('*') if p.is_file()):
             mode = 0o755 if path.parent.name == 'MacOS' else 0o644
             files.append(('Applications/Shader Cache.app/' + path.relative_to(application).as_posix(), mode, path.read_bytes()))
