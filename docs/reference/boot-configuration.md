@@ -30,6 +30,7 @@ logo = true
 layout = "auto"
 portrait_below = 800
 console = "auto"
+theme = "default"
 ```
 
 ### [boot]
@@ -52,8 +53,11 @@ console = "auto"
 | `layout` | `auto` | `auto`, `landscape` or `portrait` |
 | `portrait_below` | 800 | With `auto`, portrait when width / height times 1000 is below this value |
 | `console` | `auto` | `auto`, `graphics`, `text` or `none` |
+| `theme` | `default` | `default` or `oc-like` (case-insensitive) |
 
 The portrait layout is a column for a tall panel such as a phone. The logo floats at the top, the entries are numbered cards at the bottom, and the status lines wrap under a rule. The logo carries the UniXNU wordmark, so the title text appears only when `logo` is false or `title` is not `UniXNU`. With `auto`, a 1080x2400 panel (ratio 450) is portrait, a 3:4 tablet (750) is portrait, and a 4:5 panel (800) or any wider one keeps the landscape layout. Without a `scale` value, the portrait layout picks a glyph scale of width / 270, so a 1080 pixel wide panel shows about 33 characters per line.
+
+Set `theme = "oc-like"` to switch graphics mode to the TUI card layout with the top-left `uniXNU` pixel wordmark, purple selection highlight, Silkscreen header/footer glyphs, Fusion Pixel 10px menu entries, and Spleen 8x16 error lines. Unknown values fall back to `default` and record a config error.
 
 ### [[driver]]
 

@@ -226,6 +226,7 @@ Linux 路径使用相同的选定 profile、归档配方和预链接检查。随
 | `--kernelcache FILE` | 原始解压 kernelcache。 |
 | `--kernel FILE` | 负载使用的预链接内核。 |
 | `--kernel-arg NAME[=VALUE]` | 额外内核参数；与 `[payload] kernel_args` 同名时替换，可重复。 |
+| `--boot-menu-theme THEME` | `EFI/UniXNU/unixnu.toml` 使用的启动菜单主题：`default` 或 `oc-like`。 |
 | `--trust-cache FILE` | trust cache 包。 |
 | `--owner-trust-cache FILE` | owner 签名的包，包含原始缓存和额外模块。替换 `--trust-cache`，并跳过板级允许列表。 |
 | `--data-ramdisk FILE` | Data ramdisk 种子。 |

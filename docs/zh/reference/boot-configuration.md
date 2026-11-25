@@ -30,6 +30,7 @@ logo = true
 layout = "auto"
 portrait_below = 800
 console = "auto"
+theme = "default"
 ```
 
 ### [boot]
@@ -52,8 +53,11 @@ console = "auto"
 | `layout` | `auto` | `auto`、`landscape` 或 `portrait` |
 | `portrait_below` | 800 | `auto` 时，宽 / 高乘以 1000 低于此值则使用竖屏 |
 | `console` | `auto` | `auto`、`graphics`、`text` 或 `none` |
+| `theme` | `default` | `default` 或 `oc-like`（不区分大小写） |
 
 竖屏布局是为手机等竖向屏幕设计的单列版式：标志位于顶部，菜单项是底部带编号的卡片，状态行在分隔线下自动换行。标志自带 UniXNU 字标，所以只有 `logo` 为 false 或 `title` 不是 `UniXNU` 时才绘制标题文字。`auto` 下，1080x2400 的屏幕（比值 450）和 3:4 平板（750）使用竖屏，4:5（800）及更宽的屏幕保持横屏布局。未设置 `scale` 时，竖屏布局取 宽度 / 270 作为字形缩放，1080 像素宽的屏幕每行约 33 个字符。
+
+将 `theme` 设为 `"oc-like"` 后，图形模式切换为 TUI 卡片布局，包含左上角 `uniXNU` 像素字标、紫色选中高亮、Silkscreen 标题/底栏字体、Fusion Pixel 10px 菜单正文和 Spleen 8x16 报错行。无效值会回退到 `default` 并记录配置错误。
 
 ### [[driver]]
 

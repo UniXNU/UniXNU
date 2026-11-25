@@ -10,4 +10,5 @@ data_ramdisk = "/path/to/data-seed.dbr"
 unique_chip_id = "<hex>"
 jobs = 8
 target = "DEBUG"
+# boot_menu_theme = "oc-like"
 kernel_args = ["-v", "serial=3", "debug=0x14e"]

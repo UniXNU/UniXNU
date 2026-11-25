@@ -236,6 +236,7 @@ The Linux path uses the same selected profiles, archive recipes and prelink chec
 | `--kernelcache FILE` | Original decompressed kernelcache. |
 | `--kernel FILE` | Prelinked kernel Mach-O for the payload. |
 | `--kernel-arg NAME[=VALUE]` | Extra kernel argument. A name already in `[payload] kernel_args` is replaced. Repeatable. |
+| `--boot-menu-theme THEME` | Boot menu theme for `EFI/UniXNU/unixnu.toml`: `default` or `oc-like`. |
 | `--trust-cache FILE` | Trust cache bundle. |
 | `--owner-trust-cache FILE` | Owner-signed bundle with the original caches and extra modules. Replaces `--trust-cache` and skips the board allow-list. |
 | `--data-ramdisk FILE` | Data ramdisk seed. |
