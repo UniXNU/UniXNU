@@ -114,3 +114,7 @@ python3 scripts/make-macos-autologin-addon.py INPUT.bin OUTPUT.bin \
 ```
 
 The helper configures automatic login and awake settings. The optional graphics capture records the boot UUID, streams selected graphics services for up to 120 seconds and retains at most 1,900,000 stream bytes. The files are `Users/Shared/unixnu-test/graphics-events.log` and `graphics-state.log` in the diagnostic export. The optional public key configures Remote Login for the selected account. `daemon.log` records battery state and network interfaces.
+
+## Device-loss origin
+
+The kernel retains its first 16 rejected submissions as event 66, with validation stage, IB index, handle and mapping bounds. Busy-ring retries are omitted. Recovery logs retain CP and SMMU state before reset; failed register reads are marked rather than reusing the previous snapshot. Match these records by PID and time when investigating lost devices.

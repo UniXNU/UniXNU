@@ -112,3 +112,7 @@ python3 scripts/make-macos-autologin-addon.py INPUT.bin OUTPUT.bin \
 ```
 
 工具配置自动登录和保持唤醒。可选的图形日志记录启动 UUID，采集指定图形服务最多 120 秒，保留最多 1,900,000 字节的日志流。导出文件位于 `Users/Shared/unixnu-test/graphics-events.log` 和 `graphics-state.log`。可选的公钥为指定账户配置远程登录。`daemon.log` 记录电池状态和网络接口。
+
+## 设备丢失原因
+
+内核用事件 66 保留前 16 次被拒绝的提交，记录校验阶段、IB 索引、句柄和映射边界，忽略 ring 忙碌时的重试。恢复日志保留复位前的 CP 和 SMMU 状态；寄存器读取失败时明确标记，不复用旧快照。排查设备丢失时，按 PID 和时间关联这些记录。

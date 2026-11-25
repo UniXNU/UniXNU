@@ -4,13 +4,30 @@
 
 AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻译为 SPIR-V，Turnip 完成编译，并向 [Adreno740](/zh/drivers/adreno740) 提交任务。固件、电源投票和显示集成由设备仓库提供。
 
+## development runtime 接入
+
+AdrenoMetal 基于 `UniXNU/metal2vulkan` 仓库的 `development` 分支构建，源码版本和校验值记录在 `scripts/data/gpu-metal-vulkan-inputs.json`。UniXNU 的 runtime 与翻译器改动直接维护在该 fork 中，`drivers/AdrenoMetal/bridge/patches` 不再携带补丁文件。
+
+```sh
+python3 scripts/check-metal2vulkan-pin.py --latest
+python3 scripts/build-adreno-metal-bridge.py --target macos27 --check-only
+```
+
+目标检查验证 arm64e 类型接口，不链接插件或组装镜像。
+
+memoryless 纹理使用池化私有存储；双平面 YCbCr IOSurface 通过 compute 转换并按 seed 变化刷新；已支持只读 no-copy 主机内存缓冲导入、基于主机内存导入的零拷贝原位线性纹理（启用 `VK_EXT_attachment_feedback_loop_layout`），以及 cubic sampler 到线性采样的回退。tile 管线、扩展范围转换和需要外部 stage helper 的内核仍未接入，会返回错误。runtime v2 未提供资源重叠查询接口，前端保留保守的依赖等待。
+
+完成图像由原生显示驱动提交。runtime 使用显式的非呈现实例接口，不要求 surface 和 swapchain 扩展，其余渲染与内存校验保留。DEBUG 的设备初始化失败原因写入 stderr 和 `timing.log`。
+
 ## 渲染和接口
 
 | 项目 | 当前行为 |
 | --- | --- |
 | MSAA 策略 | 所有客户端的纹理、管线和渲染通道默认使用单采样。resolve 目标接收渲染结果，load 和 store-and-resolve 保留源内容。`NATIVE_METAL_SINGLE_SAMPLE=0` 让进程保留请求的采样数，`1` 强制单采样。 |
+| 间接资源 | 单个和批量 `useResource`、`useHeap` 声明将资源保留到 GPU 完成。计算和渲染屏障使用 runtime 的依赖跟踪。 |
+| 原生显示 | IOSurface 写入在最后一次驱动提交后通知已调度，显示 fence 快照因此包含当前帧；通知无需等待 GPU 执行完成。 |
 | Heap 资源 | buffer 和 texture 的 `makeAliasable` 归还 heap 区间。 |
-| 纹理布局 | 创建纹理、查询 heap 大小和创建 view 时保留调用方的 `allowGPUOptimizedContents` 设置。 |
+| 纹理布局 | 前端保留 `allowGPUOptimizedContents` 元数据，runtime v2 未提供独立的布局策略选项。 |
 | 纹理通道 | 纹理描述符和 view 保留全部四个 swizzle，包括显式零和一。 |
 | 复制和光栅状态 | blit 覆盖指定 mip 和 slice 范围。viewport、scissor 传递完整数组，最多 16 项。 |
 | 压缩纹理输入 | 长度为零的 no-copy 压缩纹理按 DroidVM 布局推导大小，使用结束后调用所有者的 deallocator。 |
@@ -24,7 +41,7 @@ AdrenoMetal 通过 `MTLAddDevice` 发布 Metal 设备。metal2vulkan 将 AIR 翻
 
 Uniform 着色器数组覆盖对齐后的设备 uniform 范围上限，容纳 binding 在共享 descriptor 范围内的剩余偏移。编译器缓存标识包含数组布局语义。
 
-在 macOS 上，运行时会在比较或写回 no-copy 缓冲区的副本之前，检查调用者页面的访问权限。页面不可访问时保留副本。
+小缓冲共享 64 KiB 分配块，放置偏移按 256 字节对齐。GPU 使用期间保留放置区间。runtime 在空闲 250 ms 后释放分配，每类内存最多保留一个 16 MiB 备用分配。可写导入内存保留独立的 Darwin VM 映射，直到 Vulkan 释放导入；调用方重用原地址不会替换仍在使用的导入页面。
 
 ## 原生 half 运算
 
@@ -46,16 +63,12 @@ python3 drivers/AdrenoMetal/tools/audit-runtime-fast-paths.py \
 
 相同 UID 的客户端在可写时共用账户 home 下的 `Library/Caches/org.unixnu.metal`。沙箱限制写入时使用私有缓存。`NATIVE_METAL_SHARED_CACHE_DIR` 可指定共享目录，空值关闭共享。缓存覆盖 Apple 前端结果、runtime 产物和 Turnip IR3。并发导入使用独立临时文件，管线日志按进程分开。
 
-`metal-flow=<位>` 选择渲染工作路径。位 1 使用 lowering 线程，位 2 在 commit 线程直接提交；macOS 默认为 3。iPadOS 还支持位 4，用于预热历史管线记录，默认值为 7。
-
-`metal-flow=` 取任一值时，都会在 `FL` 计数变化后写入 os_log，每十秒最多一次。
+提交路径由重写后的 runtime 根据设备检查选择。旧版 `metal-flow` 模式选择和 v1 `FL` 计数已不可用。
 
 Turnip 为每个渲染通道选择瓦片内存或系统内存，并发分箱默认打开。`tu-debug=<标志>` 为所有 Metal 进程设置 `TU_DEBUG`：`gmem` 让每个通道都在瓦片内存中渲染，`nocb` 关闭并发分箱。`tum=a` 每八秒在 Turnip 的选择和瓦片内存之间轮换，用于测量。
 
 同一进程的 Metal 逻辑队列共用一个 Vulkan 队列和内核队列。前端汇总存活队列的当前请求，采用其中最高的优先级；队列降级或销毁后撤回提升。getter 返回各队列自身的请求，setter 返回后端是否接受。内核根据任务的 GPU role 选择前台或后台优先级，策略不使用进程名。
 
-
-已空闲的自有图像内存可供池化和独立图像复用。额外缓存没有字节上限，十秒后过期，遇到内存压力或无法分配新块时提前释放。内存块在 runtime 的释放线程上释放，不占用发起释放的线程，超过队列上限时由发起线程释放。分配失败时先释放保留内存并等待已提交的释放完成，再重试。导入内存和外部所有者回调保留原有释放顺序。首次使用仍可能需要准备新内存页。
 
 ## 着色器预编译和诊断
 
@@ -82,7 +95,7 @@ python3 scripts/analyze-metal-prime.py CAPTURED_CACHE_DIRECTORY
 
 iPadOS 的渲染服务在空闲时编译清单，通过 `PR`、`PRb` 和 `PRc` 报告进度。
 
-`FP` 记录合并提交与批次数量、创建与复用的 command pool 数量、原位渲染与经过复制的线性通道数量，以及被淘汰的区域管线数量。`CM` 记录 commit 调用次数，以及总耗时、lowering、命令记录、管线等待、锁等待、调度和提交的累计微秒数。在相同受控工作负载内比较计数差值。
+启用 `diag=1` 后，`MEM2` 记录实时内存计数，`RT2` 记录提交、复制、管线创建、缓存、分配和首次使用等待。旧 runtime-v1 统计接口返回该格式不可用。桥接层环形记录保存 commit 和完成事件，不提供 Vulkan 提交时间戳。release 配置默认关闭详细采样。
 
 使用 `diag=1` 或 `gpu-trace=1` 时，系统缓存还保存有大小限制的 `timing.log`（512 KiB）和 `runtime-policy.log`（64 KiB）。前者记录各 encoder 耗时和至少 8 ms 的 command buffer，后者记录实际设备策略、浮点控制能力和 runtime 路径检查。sheng 的诊断导出包含这两个文件。
 
@@ -113,7 +126,7 @@ python3 scripts/build-adreno-metal-plugin.py --target ios27
 python3 scripts/check-native-metal-frontend-host.py
 ```
 
-正常构建应用记录在仓库中的翻译器、Turnip 补丁，并开启 Mesa 磁盘 shader cache。主机检查覆盖渲染像素、resolve、资源回收、swizzle、复制、回调、队列容量及优先级汇总。上机验证项目是并发客户端下的帧间隔和抢占行为。
+正常构建使用固定的 `UniXNU/metal2vulkan` 源码与登记的 Turnip 补丁，并开启 Mesa 磁盘 shader cache。主机检查程序包含渲染像素、resolve、资源回收、swizzle、复制、回调、队列容量及优先级汇总用例。macOS 27.3 端到端渲染、零拷贝原位线性纹理和无 SMMU/GPU 故障运行已在 `sheng` 上通过实机验证。
 
 设备输入和打包方式见 [GPU 适配流程](/zh/porting/gpu)。
 
@@ -126,3 +139,5 @@ python3 scripts/check-native-metal-frontend-host.py
 细分延迟记录标出慢编码调用、回调入口地址和资源析构耗时。内核对渲染、编码和完成线程的采样关联上游等待。
 
 `python3 scripts/package-metal-bridge.py OUTPUT.tar.zst --target macos27` 将当前静态库、构建标识和组件源码打包，供 CI 复用。
+
+Darwin后端依据`NativeAdrenoParamsOwnedCoherent`枚举cached/coherent内存，与CPU映射模式保持一致。校准时间戳在原生GMU时钟探测成功后启用。DEBUG日志记录内存和时钟能力来源。本地一致性内存测试配置需要`gpu-owned-coherent=1`，渲染仍待实机验证。
