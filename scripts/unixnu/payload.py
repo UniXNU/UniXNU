@@ -246,9 +246,13 @@ def build(ctx, kernel=None):
                 raise Error(f'malformed text fixup in board.toml [payload] text_fixups: {fixup}')
             command += ['--text-fixup', fixup]
         run(command, cwd=ctx.tree, env=dict(os.environ, UNIXNU_UEFI=str(ctx.uefi or '')), log_file=ctx.logs / 'payload-adt.log')
+    theme = (getattr(args, 'boot_menu_theme', None) or os.environ.get('UNIXNU_BOOT_MENU_THEME') or spec.get('boot_menu_theme') or 'default').lower()
+    if theme not in ('default', 'oc-like'):
+        raise Error(f'boot_menu_theme must be default or oc-like, got {theme!r}')
+    ui_block = f'[ui]\ntheme = "{theme}"\n' if theme != 'default' else ''
     initrd = 'initrd = "Payloads/scratch-data.img"\n' if data else ''
     loader = '' if spec.get('loader', 'firmware') == 'firmware' else '[[driver]]\npath = "Payloads/DarwinBoot.efi"\n'
-    config = (f'version = 1\n[boot]\ntimeout = {spec.get("timeout", 3)}\ndefault = "xnu"\n[kits]\nautoload = false\n{loader}'
+    config = (f'version = 1\n[boot]\ntimeout = {spec.get("timeout", 3)}\ndefault = "xnu"\n{ui_block}[kits]\nautoload = false\n{loader}'
               f'[[entry]]\nid = "xnu"\ntitle = "{spec.get("title", "UniXNU")}"\ntype = "xnu"\npath = "Payloads/kernel.macho"\n{initrd}'
               f'args = "{line}"\n')
     install = spec.get('install')

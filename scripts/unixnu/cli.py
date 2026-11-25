@@ -35,6 +35,7 @@ def common():
     p.add_argument('--skip-preflight', action='store_true', help='skip the board preflight scripts of the firmware step')
     p.add_argument('--kernel', metavar='FILE', help='prelinked kernel Mach-O for the payload (default: the kernel step output)')
     p.add_argument('--kernel-arg', action='append', metavar='NAME[=VALUE]', help='extra kernel boot argument (repeatable)')
+    p.add_argument('--boot-menu-theme', metavar='THEME', help='boot menu theme: default or oc-like; or UNIXNU_BOOT_MENU_THEME')
     p.add_argument('--trust-cache', metavar='FILE', help='trust cache bundle for the payload')
     p.add_argument('--owner-trust-cache', metavar='FILE', help='owner-signed trust cache bundle that carries the original caches and extra modules; replaces --trust-cache and skips the board allow-list')
     p.add_argument('--skip-setup', action='store_true', help='mark Setup as done in the Data seed, so the Hello pages are skipped (needs --data-ramdisk; optional)')

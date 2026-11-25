@@ -35,7 +35,7 @@ BUILD_PATHS = {'clang_bin', 'kernel_sdk', 'kernel_tools', 'device', 'out', 'uefi
 BUILD_ENV = {'clang_bin': 'CLANG_BIN', 'kernel_sdk': 'UNIXNU_KERNEL_SDK', 'kernel_tools': 'UNIXNU_KERNEL_TOOLS', 'device': 'UNIXNU_DEVICE', 'out': 'UNIXNU_OUT', 'uefi': 'UNIXNU_UEFI',
              'edk2': 'UNIXNU_EDK2', 'kernelcache': 'UNIXNU_KERNELCACHE',
              'dtb': 'UNIXNU_DTB', 'ipsw': 'UNIXNU_IPSW',
-             'unique_chip_id': 'UNIXNU_UNIQUE_CHIP_ID', 'jobs': 'JOBS'}
+             'unique_chip_id': 'UNIXNU_UNIQUE_CHIP_ID', 'jobs': 'JOBS', 'boot_menu_theme': 'UNIXNU_BOOT_MENU_THEME'}
 
 
 def load_build_options(args):
@@ -50,7 +50,7 @@ def load_build_options(args):
     if set(document) - {'build'} or not isinstance(document.get('build'), dict):
         raise Error(f'{path}: expected a [build] table')
     options = document['build']
-    allowed = BUILD_PATHS | {'ipsw', 'unique_chip_id', 'jobs', 'target', 'kernel_args'}
+    allowed = BUILD_PATHS | {'ipsw', 'unique_chip_id', 'jobs', 'target', 'kernel_args', 'boot_menu_theme'}
     for key, value in options.items():
         if key not in allowed:
             raise Error(f'{path}: unknown build option {key}')
@@ -68,6 +68,10 @@ def load_build_options(args):
             raise Error(f'{path}: {key} must be a nonempty string')
         if key == 'target' and value not in ('DEBUG', 'RELEASE'):
             raise Error(f'{path}: target must be DEBUG or RELEASE')
+        if key == 'boot_menu_theme':
+            value = value.lower()
+            if value not in ('default', 'oc-like'):
+                raise Error(f'{path}: boot_menu_theme must be default or oc-like')
         if getattr(args, key, None) is not None or os.environ.get(BUILD_ENV.get(key, '')):
             continue
         if key in BUILD_PATHS or (key == 'ipsw' and '://' not in value):
