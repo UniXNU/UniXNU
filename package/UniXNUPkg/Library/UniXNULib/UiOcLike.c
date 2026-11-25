@@ -23,7 +23,6 @@ STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mTextSoft        = PIXEL (0x9C, 0xA3
 STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mDim             = PIXEL (0x5C, 0x63, 0x70);
 STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mError           = PIXEL (0xF8, 0x71, 0x71);
 STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mLogoWhite       = PIXEL (0xFF, 0xFF, 0xFF);
-STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mLogoShadow      = PIXEL (0x3A, 0x3A, 0x3A);
 
 //
 // Rows of the status area (UniXNUUiDrawStatus Line numbers).
@@ -33,13 +32,13 @@ STATIC CONST EFI_GRAPHICS_OUTPUT_BLT_PIXEL  mLogoShadow      = PIXEL (0x3A, 0x3A
 #define WORDMARK_COLS  25
 
 //
-// Compact all-white pixel wordmark ("uniXNU"): 5-row uni + slim XNU with dark inner shadows.
+// Compact all-white pixel wordmark ("uniXNU"): 5-row uni + slim XNU.
 //
 STATIC CONST CHAR8  *mWordmark[WORDMARK_ROWS] = {
   "W..W.WWWW.W..W.W.W..W.W.W",
-  "W..W.WssW....W.W.WW.W.W.W",
+  "W..W.W..W....W.W.WW.W.W.W",
   "W..W.W..W.W...W..W.WW.W.W",
-  "WssW.W..W.W..WsW.W..W.WsW",
+  "W..W.W..W.W..W.W.W..W.W.W",
   "WWWW.W..W.W..W.W.W..W.WWW"
 };
 
@@ -666,7 +665,7 @@ ErrorBodyScale (
 }
 
 //
-// Draw the compact all-white shadowed uniXNU pixel wordmark at (X0, Y).
+// Draw the compact all-white uniXNU pixel wordmark at (X0, Y).
 // Returns rendered height in pixels.
 //
 STATIC
@@ -678,23 +677,14 @@ DrawWordmarkAt (
   IN UINTN      Block
   )
 {
-  UINTN                          Row;
-  UINTN                          Col;
-  CHAR8                          Ch;
-  EFI_GRAPHICS_OUTPUT_BLT_PIXEL  Color;
+  UINTN  Row;
+  UINTN  Col;
 
   for (Row = 0; Row < WORDMARK_ROWS; Row++) {
     for (Col = 0; Col < WORDMARK_COLS; Col++) {
-      Ch = mWordmark[Row][Col];
-      if (Ch == 'W') {
-        Color = mLogoWhite;
-      } else if (Ch == 's') {
-        Color = mLogoShadow;
-      } else {
-        continue;
+      if (mWordmark[Row][Col] == 'W') {
+        FillRect (Ui, X0 + Col * Block, Y + Row * Block, Block, Block, mLogoWhite);
       }
-
-      FillRect (Ui, X0 + Col * Block, Y + Row * Block, Block, Block, Color);
     }
   }
 
@@ -1065,7 +1055,7 @@ UniXNUUiOcLikeDrawFrame (
   Ui->RowHeight = UNIXNU_OC_MENU_GLYPH_HEIGHT * Ui->Scale + Ui->Scale * 4;
 
   //
-  // Compact all-white shadowed uniXNU wordmark perched at the top-left of the
+  // Compact all-white uniXNU wordmark perched at the top-left of the
   // menu card. On landscape, Status line 0 sits right-aligned on the same bar.
   //
   WordBlock    = MAX ((UINTN)2, CardW / (WORDMARK_COLS * 5));
@@ -1097,7 +1087,7 @@ UniXNUUiOcLikeDrawFrame (
   TopY   = (Ui->Height > TotalH) ? (Ui->Height - TotalH) / 2 : Ch;
 
   //
-  // 1. Compact all-white shadowed uniXNU wordmark at top-left of the menu card.
+  // 1. Compact all-white uniXNU wordmark at top-left of the menu card.
   //
   if (Config->ShowLogo) {
     DrawWordmarkAt (Ui, Ui->MenuLeft, TopY, WordBlock);
