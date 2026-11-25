@@ -653,7 +653,8 @@ UniXNUUiInit (
   EFI_STATUS  Status;
 
   ZeroMem (Ui, sizeof (*Ui));
-  Ui->Mode = UniXNUUiHeadless;
+  Ui->Mode  = UniXNUUiHeadless;
+  Ui->Theme = Config->Theme;
 
   if ((Config->Console == UniXNUConsoleAuto) || (Config->Console == UniXNUConsoleGraphics)) {
     Status = EFI_NOT_FOUND;
@@ -670,7 +671,9 @@ UniXNUUiInit (
       Ui->Width  = Ui->Gop->Mode->Info->HorizontalResolution;
       Ui->Height = Ui->Gop->Mode->Info->VerticalResolution;
       Ui->Portrait = UniXNUUiChoosePortrait (Config->Layout, Config->PortraitBelow, Ui->Width, Ui->Height);
-      if (Ui->Portrait) {
+      if (Ui->Theme == UniXNUThemeOcLike) {
+        UniXNUUiOcLikeInit (Config, Ui);
+      } else if (Ui->Portrait) {
         //
         // The column is as wide as the short side: about 33 characters of
         // the normal size across a 1080 pixel panel.
@@ -690,7 +693,14 @@ UniXNUUiInit (
   }
 
   if (Ui->Mode == UniXNUUiGraphics) {
-    UniXNULog ("ui: graphics %ux%u, scale %u, %a layout", Ui->Width, Ui->Height, (UINT32)Ui->Scale, Ui->Portrait ? "portrait" : "landscape");
+    UniXNULog (
+      "ui: graphics %ux%u, scale %u, %a layout, %a theme",
+      Ui->Width,
+      Ui->Height,
+      (UINT32)Ui->Scale,
+      Ui->Portrait ? "portrait" : "landscape",
+      (Ui->Theme == UniXNUThemeOcLike) ? "oc-like" : "default"
+      );
   } else if (Ui->Mode == UniXNUUiText) {
     UniXNULog ("ui: text console %ux%u", (UINT32)Ui->TextColumns, (UINT32)Ui->TextRows);
   } else {
@@ -739,6 +749,11 @@ UniXNUUiDrawFrame (
   }
 
   if (Ui->Mode != UniXNUUiGraphics) {
+    return;
+  }
+
+  if (Ui->Theme == UniXNUThemeOcLike) {
+    UniXNUUiOcLikeDrawFrame (Ui, Config);
     return;
   }
 
@@ -850,6 +865,11 @@ UniXNUUiDrawEntry (
     return;
   }
 
+  if (Ui->Theme == UniXNUThemeOcLike) {
+    UniXNUUiOcLikeDrawEntry (Ui, Config, Index, Selected);
+    return;
+  }
+
   if (Ui->Portrait) {
     DrawEntryPortrait (Ui, Config, Index, Selected);
     return;
@@ -903,6 +923,11 @@ UniXNUUiDrawStatus (
   }
 
   if (Ui->Mode != UniXNUUiGraphics) {
+    return;
+  }
+
+  if (Ui->Theme == UniXNUThemeOcLike) {
+    UniXNUUiOcLikeDrawStatus (Ui, Line, Text);
     return;
   }
 
