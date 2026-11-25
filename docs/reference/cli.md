@@ -118,6 +118,7 @@ Runs the fixed steps `deps`, `preflight`, `patches`, `build`, `pack` and `verify
 | `--skip-preflight` | Skips the board preflight scripts |
 | `--kernel FILE` | Prelinked kernel for the payload |
 | `--kernel-arg NAME[=VALUE]` | Extra kernel argument. A name already in `[payload] kernel_args` is replaced. Repeatable |
+| `--boot-menu-theme THEME` | Boot menu theme written to `[ui]` in `EFI/UniXNU/unixnu.toml`: `default` or `oc-like` (`UNIXNU_BOOT_MENU_THEME`) |
 | `--trust-cache FILE` | Trust cache bundle |
 | `--owner-trust-cache FILE` | Owner-signed bundle with the original caches and extra modules. Replaces `--trust-cache` and skips the board allow-list |
 | `--skip-setup` | Marks Setup as done in a copy of the Data seed |
