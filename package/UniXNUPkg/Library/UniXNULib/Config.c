@@ -1378,6 +1378,7 @@ ApplyRoot (
   TOML_NODE    *Default;
   CONST CHAR8  *Console;
   CONST CHAR8  *Layout;
+  CONST CHAR8  *Theme;
   UINTN        Index;
 
   if (TomlGetInteger (Root, "version", 0) != UNIXNU_SCHEMA_VERSION) {
@@ -1416,6 +1417,16 @@ ApplyRoot (
     Config->Console = UniXNUConsoleNone;
   } else {
     Config->Console = UniXNUConsoleAuto;
+  }
+
+  Theme = TomlGetString (Ui, "theme", "default");
+  if (AsciiStriCmp (Theme, "default") == 0) {
+    Config->Theme = UniXNUThemeDefault;
+  } else if (AsciiStriCmp (Theme, "oc-like") == 0) {
+    Config->Theme = UniXNUThemeOcLike;
+  } else {
+    Config->Theme = UniXNUThemeDefault;
+    ConfigError (Config, "[ui] theme '%a' is not default or oc-like", Theme);
   }
 
   List = TomlGet (Root, "driver");

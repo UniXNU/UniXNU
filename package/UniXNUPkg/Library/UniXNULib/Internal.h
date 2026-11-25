@@ -247,6 +247,15 @@ typedef enum {
   UniXNULayoutPortrait
 } UNIXNU_LAYOUT;
 
+//
+// [ui] theme: default (upstream UniXNU boot menu) or oc-like (TUI card with
+// pixel wordmark and Silkscreen/Fusion Pixel/Spleen bitmap fonts).
+//
+typedef enum {
+  UniXNUThemeDefault,
+  UniXNUThemeOcLike
+} UNIXNU_THEME;
+
 #define UNIXNU_PORTRAIT_BELOW_DEFAULT  800   ///< width/height in thousandths.
 
 typedef struct {
@@ -267,6 +276,7 @@ typedef struct {
   BOOLEAN        ShowLogo;
   UNIXNU_LAYOUT      Layout;
   UINTN          PortraitBelow;    ///< Auto threshold, width/height in thousandths.
+  UNIXNU_THEME       Theme;
   //
   // Injection, after kits are merged in.
   //
@@ -492,6 +502,18 @@ UniXNUBootEntry (
 
 extern CONST UINT8  gCaFontGlyphs[95][UNIXNU_GLYPH_HEIGHT];
 
+#define UNIXNU_OC_GLYPH_WIDTH        6
+#define UNIXNU_OC_GLYPH_HEIGHT       7
+#define UNIXNU_OC_MENU_GLYPH_HEIGHT  10
+#define UNIXNU_OC_BODY_GLYPH_WIDTH   8
+#define UNIXNU_OC_BODY_GLYPH_HEIGHT  16
+
+extern CONST UINT8  gOcFontGlyphs[95][UNIXNU_OC_GLYPH_HEIGHT];
+extern CONST UINT8  gOcFontWidths[95];
+extern CONST UINT8  gOcMenuFontGlyphs[95][UNIXNU_OC_MENU_GLYPH_HEIGHT];
+extern CONST UINT8  gOcMenuFontWidths[95];
+extern CONST UINT8  gOcBodyFontGlyphs[95][UNIXNU_OC_BODY_GLYPH_HEIGHT];
+
 typedef enum {
   UniXNUUiGraphics,
   UniXNUUiText,
@@ -505,8 +527,13 @@ typedef struct {
   UINT32                          Height;
   UINTN                           Scale;
   BOOLEAN                         Portrait;         ///< Column layout for a tall panel.
+  UNIXNU_THEME                    Theme;
   UINTN                           Margin;           ///< Portrait side margin.
-  UINTN                           CardHeight;       ///< Portrait entry card height.
+  UINTN                           CardTop;          ///< Top of the TUI card surface (oc-like).
+  UINTN                           CardHeight;       ///< Portrait entry card height / TUI card height.
+  UINTN                           StatusTop;        ///< Top of status line 0 (oc-like).
+  UINTN                           StatusLeft;       ///< Left edge of status line 0 (oc-like).
+  UINTN                           StatusWidth;      ///< Width of status line 0 (oc-like).
   UINTN                           StatusLines;      ///< Portrait status lines in use.
   UINTN                           MenuTop;
   UINTN                           RowHeight;
@@ -520,6 +547,7 @@ typedef struct {
   UINTN                           TextRows;
   CHAR16                          Info[96];         ///< Injection summary line.
   CHAR16                          Notice[96];       ///< Result of the last boot attempt.
+  CHAR16                          SourceHint[96];   ///< Cached config source label for footer.
 } UNIXNU_UI;
 
 /**
@@ -560,6 +588,33 @@ UniXNUUiDrawStatus (
   IN UNIXNU_UI         *Ui,
   IN UINTN         Line,
   IN CONST CHAR16  *Text
+  );
+
+VOID
+UniXNUUiOcLikeInit (
+  IN  UNIXNU_CONFIG  *Config,
+  OUT UNIXNU_UI      *Ui
+  );
+
+VOID
+UniXNUUiOcLikeDrawFrame (
+  IN UNIXNU_UI      *Ui,
+  IN UNIXNU_CONFIG  *Config
+  );
+
+VOID
+UniXNUUiOcLikeDrawEntry (
+  IN UNIXNU_UI      *Ui,
+  IN UNIXNU_CONFIG  *Config,
+  IN UINTN          Index,
+  IN BOOLEAN        Selected
+  );
+
+VOID
+UniXNUUiOcLikeDrawStatus (
+  IN UNIXNU_UI      *Ui,
+  IN UINTN          Line,
+  IN CONST CHAR16   *Text
   );
 
 VOID

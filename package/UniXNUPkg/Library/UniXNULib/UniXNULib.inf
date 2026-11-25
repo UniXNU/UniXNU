@@ -18,6 +18,7 @@
   Boot.c
   Config.c
   Font.c
+  FontOcLike.c
   Inject.c
   Kext.c
   Logo.c
@@ -26,6 +27,7 @@
   Slice.c
   Toml.c
   Ui.c
+  UiOcLike.c
   Volume.c
 
 [Packages]
