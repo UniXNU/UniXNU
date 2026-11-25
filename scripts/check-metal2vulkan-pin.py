@@ -49,11 +49,13 @@ if sorted(names) != on_disk:
     fail('the build lists %s, the directory holds %s' % (names, on_disk))
 patches = [directory / name for name in names]
 
-git('fetch', '-q', 'origin', '+refs/heads/%s:refs/remotes/origin/%s' % (branch, branch))
-tip = git('rev-parse', 'origin/' + branch).stdout.strip()
-if git('merge-base', '--is-ancestor', pin, 'origin/' + branch, check=False).returncode:
+# Runtime checkouts fetched by hash need not have an origin remote.
+# Verify against the repository in the selected pin record.
+git('fetch', '-q', inputs['repository'], '+refs/heads/%s:refs/remotes/upstream/%s' % (branch, branch))
+tip = git('rev-parse', 'upstream/' + branch).stdout.strip()
+if git('merge-base', '--is-ancestor', pin, 'upstream/' + branch, check=False).returncode:
     fail('pin %s is no commit of upstream %s' % (pin, branch))
-behind = int(git('rev-list', '--count', '%s..origin/%s' % (pin, branch)).stdout)
+behind = int(git('rev-list', '--count', '%s..upstream/%s' % (pin, branch)).stdout)
 if args.latest and pin != tip:
     fail('pin %s is %d commits behind upstream %s %s' % (pin[:12], behind, branch, tip[:12]))
 head = git('rev-parse', 'HEAD').stdout.strip()
