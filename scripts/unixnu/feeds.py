@@ -213,6 +213,12 @@ def update_submodules(ctx):
     for base in bases:
         if not (base / '.gitmodules').is_file():
             continue
+        # Linked git worktrees share .git/modules/*/config with the primary checkout;
+        # running `git submodule update` inside a linked worktree overwrites core.worktree
+        # in the primary checkout. Skip when all submodules are already populated worktrees.
+        if (base / '.git').is_file():
+            log(f'submodules {base}: linked worktree, preserving primary .git/modules configs')
+            continue
         log(f'submodules {base}')
         # A submodule with modified tracked files is under local development; leave its checkout alone.
         dirty = git(base, 'submodule', 'foreach', '--quiet',
