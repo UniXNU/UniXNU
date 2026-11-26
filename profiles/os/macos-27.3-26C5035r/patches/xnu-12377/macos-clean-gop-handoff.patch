@@ -1,0 +1,33 @@
+Clear the UEFI GOP framebuffer to black on silent kPEGraphicsMode handoff
+using MMIO-safe volatile 64-bit/32-bit stores instead of bzero/memset so the
+compiler never emits `dc zva` (ESR=0x96000061 Alignment Fault) against Device
+memory mapped via ml_io_map_unmappable.
+--- a/osfmk/console/video_console.c
++++ b/osfmk/console/video_console.c
+@@ -2940,6 +2940,26 @@ initialize_screen(PE_Video * boot_vinfo, unsigned int op)
+ 	case kPEGraphicsMode:
+ 		gc_graphics_boot = TRUE;
+ 		gc_desire_text = FALSE;
++		if (!boot_progress_active() && vinfo.v_baseaddr && vinfo.v_depth == 32 &&
++		    vinfo.v_width && vinfo.v_height && vinfo.v_rowbytes >= vinfo.v_width * 4 &&
++		    ((vinfo.v_baseaddr | vinfo.v_rowbytes) & 3) == 0) {
++			if (((vinfo.v_baseaddr | vinfo.v_rowbytes) & 7) == 0 && (vinfo.v_width & 1) == 0) {
++				const unsigned int pairs = vinfo.v_width >> 1;
++				for (unsigned int y = 0; y < vinfo.v_height; ++y) {
++					volatile uint64_t *row64 = (volatile uint64_t *)(vinfo.v_baseaddr + (uintptr_t)y * vinfo.v_rowbytes);
++					for (unsigned int x = 0; x < pairs; ++x) {
++						row64[x] = 0;
++					}
++				}
++			} else {
++				for (unsigned int y = 0; y < vinfo.v_height; ++y) {
++					volatile uint32_t *row32 = (volatile uint32_t *)(vinfo.v_baseaddr + (uintptr_t)y * vinfo.v_rowbytes);
++					for (unsigned int x = 0; x < vinfo.v_width; ++x) {
++						row32[x] = 0;
++					}
++				}
++			}
++		}
+ 		break;
+ 
+ 	case kPETextMode:
