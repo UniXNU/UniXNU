@@ -139,7 +139,7 @@ diff --git a/bsd/kern/kern_exec.c b/bsd/kern/kern_exec.c
 + * (-[MobileActivationMacOS getUCRTDEPEnrollmentState:]) and the login stopped in MCXMechanism:login (macOS run41/run42). Without
 + * the stand-in the exec fails with EPERM as before.
   */
-+static TUNABLE_STR(native_deny_exec, 256, "deny-exec", "/usr/libexec/mobileactivationd,/usr/libexec/cryptexd");
++static TUNABLE_STR(native_deny_exec, 256, "deny-exec", "/usr/libexec/mobileactivationd,/usr/libexec/cryptexd,/usr/libexec/wifip2pd");
 +static bool
 +native_exec_denied(struct vnode *vp)
 +{
