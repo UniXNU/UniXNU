@@ -475,6 +475,54 @@ def main():
             script('addon-add-dir.py', addon, candidate, 'Library/User Template/Non_localized', template)
             addon = out / 'template-addon.bin'
             candidate.replace(addon)
+            # macOS: corebrightnessd selects VMBLControl under vmm-present, leaving the brightness slider disabled.
+            # Route its Foundation dependency through BacklightMode so initBLControl: receives mode 1 (physical),
+            # and stage it under libexec/ (union-mounted over /usr/libexec).
+            sys.path.insert(0, str(ROOT / 'scripts/appsync'))
+            from macho import add_dylib
+            cb_work = work / 'backlight-mode'
+            cb_lib = cb_work / 'lib'
+            cb_libexec = cb_work / 'libexec'
+            cb_os = cb_work / 'os'
+            for d in (cb_lib, cb_libexec, cb_os):
+                d.mkdir(parents=True)
+            sdk = subprocess.run(['xcrun', '--sdk', 'macosx', '--show-sdk-path'],
+                                 check=True, capture_output=True, text=True).stdout.strip()
+            dylib_path = cb_lib / 'libUniXNUBacklightMode.dylib'
+            run('xcrun', 'clang', '-target', 'arm64e-apple-macos27.0', '-isysroot', sdk,
+                '-fobjc-arc', '-O2', '-Wall', '-Wextra', '-Werror', '-framework', 'Foundation', '-framework', 'IOKit',
+                '-dynamiclib', ROOT / 'scripts/appsync/BacklightMode.m',
+                '-install_name', '/usr/lib/libUniXNUBacklightMode.dylib',
+                '-Wl,-reexport_framework,Foundation', '-o', dylib_path)
+            run('codesign', '--force', '--sign', '-', '--pagesize', '4096',
+                '--digest-algorithm', 'sha256', '--identifier', 'org.unixnu.backlight-mode', dylib_path)
+            run('codesign', '--verify', '--strict', dylib_path)
+            with os_mount(request['os_image'], cb_os) as mount:
+                orig_cb = mount / 'usr/libexec/corebrightnessd'
+                thin_cb = cb_work / 'corebrightnessd.arm64e'
+                run('lipo', orig_cb, '-thin', 'arm64e', '-output', thin_cb)
+                cb_bytes = thin_cb.read_bytes()
+                patched_cb = add_dylib(
+                    cb_bytes, '/usr/lib/libUniXNUBacklightMode.dylib',
+                    hashlib.sha256(cb_bytes).hexdigest(),
+                    b'/System/Library/Frameworks/Foundation.framework/Versions/C/Foundation')
+                dest_cb = cb_libexec / 'corebrightnessd'
+                dest_cb.write_bytes(patched_cb)
+                dest_cb.chmod(0o755)
+                run('codesign', '--force', '--sign', '-', '--pagesize', '4096',
+                    '--digest-algorithm', 'sha256',
+                    '--preserve-metadata=identifier,entitlements,flags', dest_cb)
+                run('codesign', '--verify', '--strict', dest_cb)
+                orig_ent = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(orig_cb)],
+                                          check=True, capture_output=True).stdout
+                new_ent = subprocess.run(['codesign', '-d', '--entitlements', ':-', str(dest_cb)],
+                                         check=True, capture_output=True).stdout
+                if orig_ent != new_ent:
+                    raise ValueError('corebrightnessd entitlements changed')
+            candidate = work / 'backlight-addon.bin'
+            script('addon-add-dir.py', addon, candidate, 'lib', cb_lib, 'libexec', cb_libexec)
+            addon = out / 'backlight-addon.bin'
+            candidate.replace(addon)
         test_scripts = os.environ.get('UNIXNU_MACOS_TEST')
         if request.get('target') == 'macos27' and addon is not None:
             jobs = work / 'desktop-jobs'

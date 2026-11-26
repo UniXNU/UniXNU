@@ -40,12 +40,28 @@ Accepted requests:
 
 | Property | Effect |
 | --- | --- |
-| `brightness-nits` | Signed 16.16 nits. Zero or less turns the LEDs off; other values map proportionally to a level of at least 1 |
+| `brightness-nits` | Signed 16.16 nits. iPadOS maps positive values proportionally to levels of at least 1 and turns the LEDs off at zero or below. macOS uses the response curve below |
 | `brightness`, `FadePeriod` | A level and a fade in 16.16 seconds, at most 5 s, stepped every 16 ms |
 
 Other keys, such as `brightness-nits-cap`, succeed with no effect. Requests reach the work loop through a timer, so `backboardd` never waits for a transfer.
 
-The range is 2, 140 and 500 nits. The panel's luminance has not been measured, so these values set the slider's scale, not an absolute brightness.
+The published minimum, midpoint and maximum are 15, 140 and 500 nits. The panel's luminance has not been measured, so these values set the control scale, not an absolute brightness.
+
+## macOS response curve
+
+On macOS, runtime register snapshots on both `KTZ8866A` and `KTZ8866B` confirm `CFG1` (`0x02`) = `0xB3` (`bit 3 = 0`, exponential mapping; `bit 0 = 1`, PWM enabled), `CFG2` (`0x03`) = `0xCD`, and `CurrentReg` (`0x15`) = `0xE9`. Requests between 15 and 500 nits map to hardware levels 892 to 2047 by inverting the KTZ8866 exponential response (`nits(code) = 1.003040572^code`) using a Q24 fixed-point binary-exponentiation table (`milliNitsForLevel`) and integer binary search (`levelForNits`). Requests at or below 15 nits retain level 892 (~3.0% current); requests at or above 500 nits retain level 2047 (100% current). `BrightnessMilliNits.value` uses `milliNitsForLevel` so the published value stays on the physical control scale. Sleep and lid closure still turn the backlight off through their existing path.
+
+`scripts/check-backlight-curve-host.py` in the device repository checks production functions with ASan/UBSan for monotonicity, bounds, roundtrip accuracy, exponential inverse matching, and unchanged iPadOS behavior. Photometer luminance and subjective visual acceptance on hardware remain to be verified by the user.
+
+## Controller diagnostics on macOS
+
+`IODisplayParameters` reports the requested control scale before the I2C write completes. It is not a hardware readback or a luminance measurement. `LastRequestedNitsFixed` records the original signed 16.16 request as 32 bits; `LastRequestWasNits` distinguishes it from a raw level request.
+
+When both engines are idle and the fade has finished, a timer samples the fixed registers 0x02, 0x03, 0x15, 0x04 and 0x05 once per second. `KTZ8866A` and `KTZ8866B` publish separate snapshots with validity, sequence and error state. A new level or a sleep/lid transition invalidates an unfinished snapshot; the current bounded transfer ends before brightness writes resume. Optional diagnostic failures do not prevent service publication.
+
+`ValidMask` bits 0 through 4 correspond to 0x02, 0x03, 0x15, 0x04 and 0x05. A complete sample has `ValidMask=31`, `SnapshotValid=true` and `InProgress=false`. Invalid raw keys are omitted. The snapshots distinguish `SnapshotTarget`, `LastSuccessfulWrite` and `ReadbackLevel`. Use `LastSuccessfulWriteValid` before interpreting the successful-write field, and compare a completed snapshot with its target and sequence. A successful write alone does not prove a later hardware readback.
+
+In register 0x02, bit 3 selects linear mapping when set and exponential mapping when clear; bit 0 enables PWM. Register 0x15 bits 7:3 select full-scale LED current. The driver reads these settings without changing them. Reset defaults do not establish the inherited runtime mode. The `KTZ` boot-log rows describe these controllers; the existing `L path` and `L2` mode fields describe GENI interrupt attachment.
 
 ## Brightness control on iPadOS 27
 

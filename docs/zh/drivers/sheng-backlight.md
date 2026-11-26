@@ -40,12 +40,28 @@ ShengBacklight 把 sheng 面板的两颗 KTZ8866 背光控制器接入 CoreBrigh
 
 | 属性 | 作用 |
 | --- | --- |
-| `brightness-nits` | 有符号 16.16 尼特。小于等于 0 时关闭 LED，其他值按比例换算为不低于 1 的等级 |
+| `brightness-nits` | 有符号 16.16 尼特。iPadOS 将正值按比例换算为不低于 1 的等级，小于等于 0 时关闭 LED；macOS 使用下述响应曲线 |
 | `brightness`、`FadePeriod` | 等级和以 16.16 秒表示的渐变时间，最长 5 秒，每 16 ms 一步 |
 
 其他属性（如 `brightness-nits-cap`）返回成功，不产生效果。请求通过定时器交给工作循环，`backboardd` 不会等待传输。
 
-范围是 2、140 和 500 尼特。面板亮度尚未实测，这些值只决定滑块刻度，不代表绝对亮度。
+发布的最小值、中间值和最大值为 15、140 和 500 尼特。面板亮度尚未实测，这些值只决定控制刻度，不代表绝对亮度。
+
+## macOS 响应曲线
+
+在 macOS 上，两颗 `KTZ8866A/B` 的运行时寄存器快照已确认 `CFG1`（`0x02`）=`0xB3`（`bit3=0` 为指数映射、`bit0=1` 启用 PWM）、`CFG2`（`0x03`）=`0xCD`、`CurrentReg`（`0x15`）=`0xE9`。驱动将 15 到 500 尼特的请求按 KTZ8866 指数响应逆曲线（`nits(code) = 1.003040572^code`）映射到 892 至 2047 的硬件等级，通过 Q24 定点二次幂查表（`milliNitsForLevel`）与整数二分查找（`levelForNits`）实现，不在内核使用浮点。小于等于 15 尼特时保持等级 892（约 3.0% 电流），大于等于 500 尼特时保持等级 2047（100% 电流）。`BrightnessMilliNits.value` 直接使用 `milliNitsForLevel` 回报，使发布值与物理控制刻度一致。睡眠和合盖仍通过既有路径关闭背光。
+
+设备仓库的 `scripts/check-backlight-curve-host.py` 抽取生产函数，以 ASan/UBSan 检查单调性、边界、往返精度、指数逆曲线匹配及 iPadOS 行为保持不变。绝对面板亮度与用户主观观感仍待实机确认。
+
+## macOS 控制器诊断
+
+`IODisplayParameters` 在 I2C 写入完成前发布请求刻度，不能作为硬件读回或亮度实测。`LastRequestedNitsFixed` 按 32 位原样记录有符号 16.16 请求；`LastRequestWasNits` 区分该请求与直接等级请求。
+
+两颗引擎空闲且渐变结束后，定时器每秒采样固定的 0x02、0x03、0x15、0x04 和 0x05 寄存器。`KTZ8866A`、`KTZ8866B` 分别发布带有效性、序号和错误状态的快照。新等级或睡眠/合盖变化使未完成的快照失效；当前有界传输结束后恢复亮度写入。可选诊断失败不会阻止服务发布。
+
+`ValidMask` 的 bits0..4 分别对应 0x02、0x03、0x15、0x04 和 0x05。完整样本满足 `ValidMask=31`、`SnapshotValid=true`、`InProgress=false`；无效原始字段不发布。快照分别以 `SnapshotTarget`、`LastSuccessfulWrite`、`ReadbackLevel` 记录目标、最近成功写入和硬件读回。解释成功写入值前应检查 `LastSuccessfulWriteValid`，并核对已完成快照的目标及序号。一次成功写入不能代替后续硬件读回。
+
+0x02 的 bit3 为 1 时采用线性映射，为 0 时采用指数映射；bit0 启用 PWM。0x15 的 bits7:3 选择满量程 LED 电流。驱动只读取这些设置，不修改它们。复位默认值不能证明接管时的运行模式。启动日志 `KTZ` 行描述两颗控制器；原有 `L path` 和 `L2` 的 mode 字段描述 GENI 中断接线。
 
 ## iPadOS 27 的亮度控制
 

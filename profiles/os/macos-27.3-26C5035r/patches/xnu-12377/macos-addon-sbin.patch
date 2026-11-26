@@ -35,7 +35,7 @@ index 06b8985..af3fdca 100644
 +static void
 +native_owner_macos_addon_sbin(proc_t p, user_addr_t scratch)
 +{
-+	static const char *const binds[][2] = {{"/private/var/ngpu/lib", "/usr/lib"}, {"/private/var/ngpu/sbin", "/usr/sbin"}};
++	static const char *const binds[][2] = {{"/private/var/ngpu/lib", "/usr/lib"}, {"/private/var/ngpu/sbin", "/usr/sbin"}, {"/private/var/ngpu/libexec", "/usr/libexec"}};
 +	int status = 0;
 +	for (size_t i = 0; i < sizeof(binds) / sizeof(binds[0]); ++i) {
 +		vnode_t directory = NULLVP;

@@ -8,7 +8,8 @@ import hashlib
 import struct
 
 
-def add_dylib(data, name, expected_sha256):
+def add_dylib(data, name, expected_sha256,
+              foundation=b'/System/Library/Frameworks/Foundation.framework/Foundation'):
     if hashlib.sha256(data).hexdigest() != expected_sha256:
         raise ValueError('OS executable does not match the 24A446 source pin')
     if len(data) < 32:
@@ -20,7 +21,6 @@ def add_dylib(data, name, expected_sha256):
     if end > len(data):
         raise ValueError('truncated load commands')
     at, replacements = 32, []
-    foundation = b'/System/Library/Frameworks/Foundation.framework/Foundation'
     for _ in range(count):
         if at + 8 > end:
             raise ValueError('truncated load command')
