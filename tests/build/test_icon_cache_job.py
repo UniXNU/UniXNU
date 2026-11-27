@@ -63,6 +63,23 @@ class IconCacheJob(unittest.TestCase):
         self.assertFalse(system.exists() or index.exists() or user.exists())
         self.assertEqual(self.clear(), 0)
 
+    def test_unreadable_zz_bucket_is_pruned(self):
+        system, index, user, dock, pipelines = self.stores()
+        zz_parent = self.root / 'private/var/folders/zz/zyxvpxvq6csfxvn_n0000000000000'
+        zz_store = zz_parent / 'C/com.apple.iconservices.store/z.isdata'
+        zz_store.parent.mkdir(parents=True, exist_ok=True)
+        zz_store.write_text('protected\n')
+        zz_parent.chmod(0)
+        try:
+            self.build('{"component": "one"}\n')
+            self.assertEqual(self.clear(), 0)
+            self.assertFalse(system.exists() or index.exists() or user.exists())
+            self.assertTrue(dock.exists() and pipelines.exists())
+            self.assertTrue((self.root / STAMP).read_text().strip())
+        finally:
+            zz_parent.chmod(0o755)
+        self.assertTrue(zz_store.exists())
+
     def test_an_image_without_the_plugin_keeps_its_stores(self):
         paths = self.stores()
         self.assertEqual(self.clear(), 0)

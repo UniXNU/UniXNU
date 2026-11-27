@@ -284,8 +284,9 @@ clear_stale_icon_caches() (
     /bin/rm -rf "$root/Library/Caches/com.apple.iconservices.store" || exit 1
     folders="$root/private/var/folders"
     if [ -d "$folders" ]; then
-        /usr/bin/find -P "$folders" -mindepth 4 -maxdepth 4 \
-            \( -path '*/C/com.apple.iconservices' -o -path '*/C/com.apple.iconservices.store' \) \
+        /usr/bin/find -P "$folders" -maxdepth 4 \
+            -path "$folders/zz" -prune -o \
+            \( -path "$folders/*/*/C/com.apple.iconservices" -o -path "$folders/*/*/C/com.apple.iconservices.store" \) \
             -execdir /bin/rm -rf -- {} + || exit 1
     fi
     restart_icon_services || exit 1
