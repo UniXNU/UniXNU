@@ -1,0 +1,95 @@
+Scope kern.hv_vmm_present per process with boot-arg vmm-hide.
+
+AMFI reads /defaults/vmm-present directly from the device tree, whereas userspace
+daemons read kern.hv_vmm_present through sysctl_vmm_present(). Allowing vmm-hide
+to return 0 for named daemons (matched against the 32-byte proc_best_name) lets
+adid, fairplayd, fairplaydeviceidentityd and akd take the physical FairPlayIOKit
+and Anisette paths without disturbing AMFI, watchdogd or WindowServer.
+
+diff --git a/bsd/kern/hvg_sysctl.c b/bsd/kern/hvg_sysctl.c
+index fb0b67c..aeae540 100644
+--- a/bsd/kern/hvg_sysctl.c
++++ b/bsd/kern/hvg_sysctl.c
+@@ -26,9 +26,11 @@
+  * @APPLE_OSREFERENCE_LICENSE_HEADER_END@
+  */
+ 
++#include <sys/proc.h>
+ #include <sys/sysctl.h>
+ #include <libkern/libkern.h>
+ #include <kern/hvg_hypercall.h>
++#include <pexpert/pexpert.h>
+ #include <stdbool.h>
+ 
+ /* Translate hypercall error code to syscall error code */
+@@ -132,6 +134,31 @@ sysctl_get_bootsessionuuid(__unused struct sysctl_oid *oidp,
+ 	return SYSCTL_OUT(req, &uuid, sizeof(uuid));
+ }
+ 
++extern const char *proc_best_name(proc_t p);
++volatile uint32_t native_vmm_hide_hits = 0;
++
++static bool
++native_vmm_present_hidden_in_list(const char *list, const char *pname)
++{
++	if (list == NULL || pname == NULL || pname[0] == '\0' ||
++	    list[0] == '\0' || strcmp(list, "0") == 0 || strcmp(list, "none") == 0) {
++		return false;
++	}
++	size_t plen = strlen(pname);
++	for (const char *item = list; *item != '\0';) {
++		const char *comma = strchr(item, ',');
++		size_t len = comma != NULL ? (size_t)(comma - item) : strlen(item);
++		if (len == plen && strncmp(item, pname, len) == 0) {
++			return true;
++		}
++		if (comma == NULL) {
++			break;
++		}
++		item = comma + 1;
++	}
++	return false;
++}
++
+ static int
+ sysctl_vmm_present(__unused struct sysctl_oid *oidp,
+     __unused void *arg1, __unused int arg2, struct sysctl_req *req)
+@@ -147,6 +174,38 @@ sysctl_vmm_present(__unused struct sysctl_oid *oidp,
+ #endif
+ 
+ 	vmm_present = !!vmm_present;
++	if (vmm_present != 0 && req != NULL && req->p != NULL) {
++		static char vmm_hide[256];
++		static int vmm_hide_state; /* 0 unread, 1 reading, 2 absent, 3 present */
++		int state = __atomic_load_n(&vmm_hide_state, __ATOMIC_ACQUIRE);
++		const char *active_list = NULL;
++		char fallback[256];
++		if (state < 2) {
++			int expected = 0;
++			if (__atomic_compare_exchange_n(&vmm_hide_state, &expected, 1, false,
++			    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
++				bool has_arg = PE_parse_boot_arg_str("vmm-hide", vmm_hide, sizeof(vmm_hide));
++				vmm_hide[sizeof(vmm_hide) - 1] = '\0';
++				state = has_arg ? 3 : 2;
++				__atomic_store_n(&vmm_hide_state, state, __ATOMIC_RELEASE);
++			} else if (expected < 2) {
++				if (PE_parse_boot_arg_str("vmm-hide", fallback, sizeof(fallback))) {
++					fallback[sizeof(fallback) - 1] = '\0';
++					active_list = fallback;
++				}
++			} else {
++				state = expected;
++			}
++		}
++		if (state == 3) {
++			active_list = vmm_hide;
++		}
++		if (active_list != NULL &&
++		    native_vmm_present_hidden_in_list(active_list, proc_best_name(req->p))) {
++			vmm_present = 0;
++			__atomic_fetch_add(&native_vmm_hide_hits, 1, __ATOMIC_RELAXED);
++		}
++	}
+ 	return SYSCTL_OUT(req, &vmm_present, sizeof(vmm_present));
+ }
+ 
