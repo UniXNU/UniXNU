@@ -1,0 +1,29 @@
+Drop iOS-only global code signing and library validation enforcement options from the macOS
+machine configuration so XNU matches Apple's MASTER.arm64.MacOSX behavior:
+- Without config_library_validation (CONFIG_ENFORCE_LIBRARY_VALIDATION=0), cs_require_lv()
+  honors per-process CS_REQUIRE_LV / Hardened Runtime instead of forcing library validation
+  on all processes (including ad-hoc macOS apps loading ad-hoc bundled frameworks).
+- Without config_enforce_signed_code (CONFIG_ENFORCE_SIGNED_CODE=0), cs_process_enforcement()
+  and csproc_disable_enforcement() follow macOS per-process CS_ENFORCEMENT semantics.
+Only the macOS profile applies this patch; iPadOS is unaffected.
+diff --git a/config/MASTER.arm64.bcm2837 b/config/MASTER.arm64.bcm2837
+--- a/config/MASTER.arm64.bcm2837
++++ b/config/MASTER.arm64.bcm2837
+@@ -17,7 +17,7 @@
+ #  -------- ----- -- ---------------
+ #
+ #  ARM_EXTRAS_BASE = [ config_pmap_ppl nos_arm_asm nos_arm_pmap ]
+-#  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_enforce_signed_code config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
++#  KERNEL_BASE =    [ arm64 xsmall msgb_small config_embedded config_code_signature_reconstitution config_requires_u32_munging config_darkboot ARM_EXTRAS_BASE ]
+ #  KERNEL_RELEASE = [ KERNEL_BASE release ]
+ #  KERNEL_DEV =     [ KERNEL_BASE development mach_assert config_xnupost proc_ref_debug config_proc_resource_limits config_ext_paniclog ]
+ #  KERNEL_DEBUG =   [ KERNEL_BASE debug mach_assert config_xnupost config_waitq_stats config_workloop_debug config_proc_resource_limits config_ext_paniclog ]
+@@ -69,7 +69,7 @@
+ #else
+ #  PARAVIRT_BASE =  [ ]
+ #endif
+-#  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_library_validation config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats config_arm_pfz phys_write_acct config_service_port_info PARAVIRT_BASE ]
++#  MACH_BASE =      [ mach config_ecc_logging vc_progress_white importance_inheritance config_atm config_coalitions config_iosched config_sysdiagnose config_telemetry config_mach_bridge_recv_time config_quiesce_counter config_io_compression_stats config_arm_pfz phys_write_acct config_service_port_info PARAVIRT_BASE ]
+ #  MACH_RELEASE =   [ MACH_BASE config_skip_precise_user_kernel_time debugger_for_zone_info ]
+ #  MACH_DEV =       [ MACH_BASE config_io_accounting importance_trace config_task_suspend_stats ]
+ #  MACH_DEBUG =     [ MACH_BASE config_io_accounting importance_trace importance_debug config_task_suspend_stats ]
