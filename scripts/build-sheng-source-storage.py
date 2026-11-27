@@ -254,6 +254,10 @@ OSDefineOperatorMethods(IOBlockStorageDevice)
     if latency:
         for name in ('BootLatencyStore.h','BootLatencyUnwind.h','BootLatencyTrace.h','BootLatencyFiles.h'):
             inputs[str(latency.with_name(name))] = build.sha(latency.with_name(name))
+    fairplay_diag = next((directory / 'FairPlayDiagExport.h' for directory in package_dirs
+                          if (directory / 'FairPlayDiagExport.h').is_file()), None)
+    if fairplay_diag:
+        inputs[str(fairplay_diag)] = build.sha(fairplay_diag)
     archive = out / 'libShengSourceStorage.a'
     archive.unlink(missing_ok=True)
     subprocess.run(['xcrun', 'ar', 'rcs', archive, *objects], check=True)

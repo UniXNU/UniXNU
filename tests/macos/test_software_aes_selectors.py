@@ -140,7 +140,11 @@ extern task_t kernel_task;
 ''',
     'corecrypto/cc.h': r'''#pragma once
 #include <cstddef>
+extern size_t gCcClearLastLen;
+extern size_t gCcClearKeyDataCount;
 inline void cc_clear(size_t len, void *dst) {
+  gCcClearLastLen = len;
+  if (len == 40) ++gCcClearKeyDataCount;
   volatile unsigned char *p = static_cast<volatile unsigned char *>(dst);
   while (len--) *p++ = 0;
 }
@@ -187,6 +191,10 @@ HARNESS_MAIN = r'''
 #include <vector>
 
 #include "NativeAES.cpp"
+
+size_t gCcClearLastLen = 0;
+size_t gCcClearKeyDataCount = 0;
+static_assert(sizeof(IOAESKeyData) == 40, "IOAESKeyData size matches cc_clear probe");
 
 static int dummy_cbc_fn = 1;
 static const crypto_functions kCryptoFuncs = { &dummy_cbc_fn, &dummy_cbc_fn };
@@ -288,19 +296,22 @@ int main() {
   assert(native_aes_last_unsupported_selector == 0);
   assert(provider->softwareKeysOnly);
 
-  // Selector support matrix
+  // Selector support matrix without unique-chip-id: derived selectors stay unsupported
   assert(provider->isKeySupported(0));
-  assert(provider->isKeySupported(0x899));
-  assert(provider->isKeySupported(0x8a4));
+  assert(!provider->isKeySupported(0x899));
+  assert(!provider->isKeySupported(0x8a4));
   assert(!provider->isKeySupported(0x8a1));
   assert(!provider->isKeySupported(1000));
   assert(!provider->isKeySupported(1001));
   assert(!provider->isKeySupported(2000));
   assert(!provider->isKeySupported(2001));
 
-  // Valid non-zero chip ID: test 0x899 across 4096-byte chunk boundary (4160 bytes)
+  // Valid non-zero chip ID enables 0x899/0x8a4 capability reporting and derivation
   const uint64_t kChip = 0x1122334455667788ULL;
   setChipU64(kChip);
+  assert(provider->isKeySupported(0x899));
+  assert(provider->isKeySupported(0x8a4));
+  assert(!provider->isKeySupported(0x8a1));
   std::vector<uint8_t> plain(4160), cipher899(4160), roundtrip(4160), cipher8a4(4160);
   for (size_t i = 0; i < plain.size(); ++i) plain[i] = static_cast<uint8_t>((i * 37 + 11) & 0xff);
 
@@ -365,10 +376,12 @@ int main() {
                  plain.data(), plain.size(), refCipher8a4.data(), refCipher8a4.size(), &moved) == kCCSuccess);
   assert(cipher8a4 == refCipher8a4);
 
-  // Review Focus #1: zero or short or missing unique-chip-id must refuse 0x899
+  // Review Focus #1: zero or short or missing unique-chip-id must refuse 0x899 and report unsupported
   std::vector<uint8_t> untouched(64, 0x5a);
   const std::vector<uint8_t> sentinel(64, 0x5a);
   setChipU64(0);
+  assert(!provider->isKeySupported(0x899));
+  assert(!provider->isKeySupported(0x8a4));
   uint32_t unsupBefore = native_aes_unsupported_key;
   native_aes_last_unsupported_selector = 0;
   iv = ivOrig;
@@ -379,16 +392,28 @@ int main() {
   assert(untouched == sentinel);
 
   gChipIdBytes.assign(4, 0x11); // < 8 bytes
+  assert(!provider->isKeySupported(0x899));
   assert(provider->performAES(plain.data(), untouched.data(), kernel_task, 64,
                               &iv, IOAESEncrypt, &key899, nullptr, nullptr) == kIOReturnUnsupported);
   assert(native_aes_unsupported_key == unsupBefore + 2);
   assert(native_aes_last_unsupported_selector == 0x899);
 
   gChosenPresent = false;
+  assert(!provider->isKeySupported(0x899));
   assert(provider->performAES(plain.data(), untouched.data(), kernel_task, 64,
                               &iv, IOAESEncrypt, &key899, nullptr, nullptr) == kIOReturnUnsupported);
   assert(native_aes_unsupported_key == unsupBefore + 3);
   assert(native_aes_last_unsupported_selector == 0x899);
+
+  // Early-return error path after deriving 0x899 must still scrub derived key on stack
+  setChipU64(kChip);
+  auto *inDesc = IOMemoryDescriptor::withAddressRange(reinterpret_cast<mach_vm_address_t>(plain.data()), 64, kIODirectionOut, kernel_task);
+  auto *outDesc = IOMemoryDescriptor::withAddressRange(reinterpret_cast<mach_vm_address_t>(untouched.data()), 64, kIODirectionIn, kernel_task);
+  size_t clearsBefore = gCcClearKeyDataCount;
+  assert(provider->performAES(inDesc, outDesc, 64, &iv, IOAESEncrypt, &key899, 128, 0, nullptr, nullptr) == kIOReturnBadArgument);
+  assert(gCcClearKeyDataCount > clearsBefore);
+  inDesc->release();
+  outDesc->release();
 
   // Review Focus #2: 0x899 with non-128-bit length (bits = 256) must fail with kIOReturnUnsupported
   setChipU64(kChip);
