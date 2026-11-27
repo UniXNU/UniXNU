@@ -120,7 +120,7 @@ def check(device, base=None):
     board = tomllib.loads((device / 'board.toml').read_text())
     validate(record, board, str(device))
     for area in record['area']:
-        for item in area['evidence']:
+        for item in area.get('evidence', []):
             if not item['reference'].startswith('https://'):
                 need((device / item['reference']).is_file(), f'{area["id"]}: evidence file missing: {item["reference"]}')
     if base and set(base) != {'0'}:
@@ -137,7 +137,7 @@ def check(device, base=None):
 def published_evidence_matches(device, area, paths):
     if device is None:
         return False
-    for item in area['evidence']:
+    for item in area.get('evidence', []):
         revision = item.get('revision', '')
         if item['kind'] not in ('host', 'device') or not re.fullmatch(r'[0-9a-f]{40}', revision):
             continue
@@ -196,7 +196,7 @@ def render(record, repository, revision, zh=False):
         for key, labels in FIELDS.items():
             lines += [f'### {labels[locale]}', ''] + ['- ' + markdown_text(entry) for entry in area[key]] + ['']
         lines += ['### ' + ('证据' if zh else 'Evidence'), '']
-        for item in area['evidence']:
+        for item in area.get('evidence', []):
             ref = item['reference']
             link = ref if ref.startswith('https://') else f'{url}/{ref}'
             link = quote(link, safe='/:?&=+%~@#')
@@ -204,7 +204,7 @@ def render(record, repository, revision, zh=False):
             if item.get('command'):
                 command = escape(item['command'], quote=False).replace('{', '&#123;').replace('}', '&#125;')
                 lines += [f'  Command: <code>{command}</code>. Revision: `{item["revision"]}`.']
-        if not area['evidence']:
+        if not area.get('evidence'):
             lines += [('按下一步操作收集证据。' if zh else 'Collect evidence using the next action.')]
     return '\n'.join(lines + ['', '</div>']) + '\n'
 
