@@ -5775,3 +5775,18 @@ board = "zorn"
 os_profile = "ipados-17.7.11-21H461"
 components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "AppleKeyStoreState", "RamBlock", "VerifiedRoot", "GopFramebuffer", "XnuPrelink", "DarwinBoot"]
 record_state = "available"
+
+[[device]]
+name = "nx769j-orange381"
+repository = "Orange381/UniXNU-nx769j"
+title = "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J) (Orange381)"
+title_zh = "nubia RedMagic 9 Pro / 9 Pro+ / 9S Pro / 9S Pro+ (NX769J)（Orange381）"
+format = 2
+legacy_page = "link"
+repository_id = 1475080928
+revision = "51d5299f6e6d1f1af944abbcdd95f3364fe07403"
+board = "nx769j"
+soc = "SM8650"
+os_profile = "ipados-27.0.1-24A446"
+components = ["ArmDTPlatform", "ArmCpu", "SoftwareAES", "XnuPrelink", "DarwinBoot", "ShengUfs", "VirtioMmioBlock", "VerifiedRoot", "GopFramebuffer", "AppleKeyStoreState", "RamBlock"]
+record_state = "available"
